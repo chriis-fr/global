@@ -26,37 +26,43 @@ const benefits = [
     icon: FileText,
     title: 'Smart Invoicing',
     description: 'Create, manage, and get paid with blockchain-powered smart invoices',
-    link: '/invoicing'
+    link: '/auth'
   },
   {
     icon: LockKeyhole,
     title: 'Immutable Records',
-    description: 'Every transaction is permanently recorded and cannot be altered'
+    description: 'Every transaction is permanently recorded and cannot be altered',
+    link: '/auth'
   },
   {
     icon: History,
     title: 'Audit Trail',
-    description: 'Complete history of all business operations and changes'
+    description: 'Complete history of all business operations and changes',
+    link: '/auth'
   },
   {
     icon: Banknote,
     title: 'Smart Payments',
-    description: 'Automated payments and settlements using smart contracts'
+    description: 'Automated payments and settlements using smart contracts',
+    link: '/auth'
   },
   {
     icon: Network,
     title: 'Decentralized',
-    description: 'No single point of failure in data storage and processing'
+    description: 'No single point of failure in data storage and processing',
+    link: '/auth'
   },
   {
     icon: ShieldCheck,
     title: 'Enhanced Security',
-    description: 'Cryptographic security for all business transactions'
+    description: 'Cryptographic security for all business transactions',
+    link: '/auth'
   },
   {
     icon: Fingerprint,
     title: 'Identity Management',
-    description: 'Secure and verifiable digital identities for all users'
+    description: 'Secure and verifiable digital identities for all users',
+    link: '/auth'
   }
 ]
 
@@ -65,37 +71,43 @@ const businessSolutions = [
     icon: ArrowLeft,
     title: 'Accounts Payable',
     description: 'Manage your business payments',
-    category: 'For Companies'
+    category: 'For Companies',
+    link: '/auth'
   },
   {
     icon: ArrowRight,
     title: 'Accounts Receivable',
     description: 'Create invoices & get paid in crypto & fiat legally',
-    category: 'For Companies'
+    category: 'For Companies',
+    link: '/auth'
   },
   {
     icon: Receipt,
     title: 'Expenses',
     description: 'Easily manage your corporate expenses in crypto & fiat',
-    category: 'For Companies'
+    category: 'For Companies',
+    link: '/auth'
   },
   {
     icon: Users,
     title: 'Payroll',
     description: 'Pay your team salaries and bonuses in crypto & fiat',
-    category: 'For Companies'
+    category: 'For Companies',
+    link: '/auth'
   },
   {
     icon: Receipt,
     title: 'Expenses',
     description: 'Get reimbursed for your corporate expenses',
-    category: 'For Freelancers'
+    category: 'For Freelancers',
+    link: '/auth'
   },
   {
     icon: FileText,
     title: 'Invoicing',
     description: 'The easiest way for freelancers and contractors to get paid in crypto & fiat',
-    category: 'For Freelancers'
+    category: 'For Freelancers',
+    link: '/auth'
   }
 ]
 
@@ -104,25 +116,29 @@ const integrations = [
     icon: Calculator,
     title: 'Accounting',
     description: 'Import, categorize, and sync your crypto and fiat transactions with QuickBooks, Xero and more',
-    module: 'Integrations'
+    module: 'Integrations',
+    link: '/auth'
   },
   {
     icon: Code,
     title: 'Accounts Payable & Receivable API',
     description: 'Build custom finance processes and let users manage payables and receivables on your platform',
-    module: 'API Solutions'
+    module: 'API Solutions',
+    link: '/auth'
   },
   {
     icon: Coins,
     title: 'Crypto-to-Fiat',
     description: 'Pay in Crypto and your beneficiary receives Fiat',
-    module: 'Payment Solutions'
+    module: 'Payment Solutions',
+    link: '/auth'
   },
   {
     icon: Globe2,
     title: 'Offramp API',
     description: 'Add worldwide offramp capabilities to your platform and unlock a new revenue stream for your business',
-    module: 'API Solutions'
+    module: 'API Solutions',
+    link: '/auth'
   }
 ]
 
@@ -160,14 +176,13 @@ export function BlockchainBenefits() {
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {benefits.map((benefit, index) => {
               const Icon = benefit.icon
-              const isClickable = benefit.link
               const cardContent = (
                 <motion.div
                   key={benefit.title}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.1 }}
-                  className={`p-6 rounded-xl bg-white/5 hover:bg-white/10 transition-colors ${isClickable ? 'cursor-pointer ring-2 ring-blue-400/50 hover:ring-blue-500' : ''}`}
+                  className="p-6 rounded-xl bg-white/5 hover:bg-white/10 transition-colors cursor-pointer ring-2 ring-blue-400/50 hover:ring-blue-500"
                 >
                   <div className="w-12 h-12 bg-blue-500/20 rounded-lg flex items-center justify-center mb-4">
                     <Icon className="h-6 w-6 text-blue-400" />
@@ -180,11 +195,11 @@ export function BlockchainBenefits() {
                   </p>
                 </motion.div>
               )
-              return isClickable ? (
-                <Link href={benefit.link!} key={benefit.title} legacyBehavior>
+              return (
+                <Link href={benefit.link} key={benefit.title} legacyBehavior>
                   <a style={{ textDecoration: 'none' }}>{cardContent}</a>
                 </Link>
-              ) : cardContent
+              )
             })}
           </div>
         </div>
@@ -203,7 +218,7 @@ export function BlockchainBenefits() {
                 .filter(solution => solution.category === 'For Companies')
                 .map((solution, index) => {
                   const Icon = solution.icon
-                  return (
+                  const cardContent = (
                     <motion.div
                       key={solution.title}
                       initial={{ opacity: 0, y: 20 }}
@@ -222,6 +237,11 @@ export function BlockchainBenefits() {
                       </p>
                     </motion.div>
                   )
+                  return (
+                    <Link href={solution.link} key={solution.title} legacyBehavior>
+                      <a style={{ textDecoration: 'none' }}>{cardContent}</a>
+                    </Link>
+                  )
                 })}
             </div>
           </div>
@@ -234,7 +254,7 @@ export function BlockchainBenefits() {
                 .filter(solution => solution.category === 'For Freelancers')
                 .map((solution, index) => {
                   const Icon = solution.icon
-                  return (
+                  const cardContent = (
                     <motion.div
                       key={solution.title}
                       initial={{ opacity: 0, y: 20 }}
@@ -252,6 +272,11 @@ export function BlockchainBenefits() {
                         {solution.description}
                       </p>
                     </motion.div>
+                  )
+                  return (
+                    <Link href={solution.link} key={solution.title} legacyBehavior>
+                      <a style={{ textDecoration: 'none' }}>{cardContent}</a>
+                    </Link>
                   )
                 })}
             </div>
@@ -267,7 +292,7 @@ export function BlockchainBenefits() {
           <div className="grid md:grid-cols-2 gap-8">
             {integrations.map((integration, index) => {
               const Icon = integration.icon
-              return (
+              const cardContent = (
                 <motion.div
                   key={integration.title}
                   initial={{ opacity: 0, x: index % 2 === 0 ? -20 : 20 }}
@@ -290,6 +315,11 @@ export function BlockchainBenefits() {
                     </p>
                   </div>
                 </motion.div>
+              )
+              return (
+                <Link href={integration.link} key={integration.title} legacyBehavior>
+                  <a style={{ textDecoration: 'none' }}>{cardContent}</a>
+                </Link>
               )
             })}
           </div>
