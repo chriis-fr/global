@@ -18,13 +18,14 @@ import { AnimatePresence } from 'framer-motion'
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isProductsOpen, setIsProductsOpen] = useState(false)
+  const [isSolutionsOpen, setIsSolutionsOpen] = useState(false)
 
   const navigation = [
     { name: 'Home', href: '/' },
     { name: 'Products', href: '#', hasDropdown: true },
-    { name: 'Solutions', href: '#' },
-    { name: 'About', href: '#' },
-    { name: 'Contact', href: '#' }
+    { name: 'Solutions', href: '#', hasDropdown: true },
+    { name: 'Use Cases', href: '/use-cases' },
+    { name: 'Pricing', href: '/pricing' }
   ]
 
   const products = [
@@ -54,6 +55,33 @@ export function Header() {
     }
   ]
 
+  const solutions = [
+    {
+      name: 'For Companies',
+      description: 'Enterprise solutions for large organizations',
+      icon: Building,
+      href: '/auth'
+    },
+    {
+      name: 'For Freelancers',
+      description: 'Simple tools for independent contractors',
+      icon: Shield,
+      href: '/auth'
+    },
+    {
+      name: 'For Startups',
+      description: 'Scalable solutions for growing businesses',
+      icon: Zap,
+      href: '/auth'
+    },
+    {
+      name: 'For Enterprises',
+      description: 'Custom solutions for complex needs',
+      icon: Globe,
+      href: '/auth'
+    }
+  ]
+
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-200/50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -78,8 +106,14 @@ export function Header() {
               <div key={item.name} className="relative">
                 {item.hasDropdown ? (
                   <div
-                    onMouseEnter={() => setIsProductsOpen(true)}
-                    onMouseLeave={() => setIsProductsOpen(false)}
+                    onMouseEnter={() => {
+                      if (item.name === 'Products') setIsProductsOpen(true)
+                      if (item.name === 'Solutions') setIsSolutionsOpen(true)
+                    }}
+                    onMouseLeave={() => {
+                      if (item.name === 'Products') setIsProductsOpen(false)
+                      if (item.name === 'Solutions') setIsSolutionsOpen(false)
+                    }}
                     className="relative"
                   >
                     <button className="flex items-center space-x-1 text-gray-700 hover:text-blue-600 transition-colors">
@@ -89,7 +123,7 @@ export function Header() {
                     
                     {/* Dropdown */}
                     <AnimatePresence>
-                      {isProductsOpen && (
+                      {((item.name === 'Products' && isProductsOpen) || (item.name === 'Solutions' && isSolutionsOpen)) && (
                         <motion.div
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
@@ -97,20 +131,20 @@ export function Header() {
                           className="absolute top-full left-0 mt-2 w-80 bg-white rounded-xl shadow-lg border border-gray-200 p-4"
                         >
                           <div className="grid grid-cols-1 gap-3">
-                            {products.map((product) => {
-                              const Icon = product.icon
+                            {(item.name === 'Products' ? products : solutions).map((item) => {
+                              const Icon = item.icon
                               return (
                                 <Link
-                                  key={product.name}
-                                  href={product.href}
+                                  key={item.name}
+                                  href={item.href}
                                   className="flex items-start space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors"
                                 >
                                   <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
                                     <Icon className="h-5 w-5 text-blue-600" />
                                   </div>
                                   <div>
-                                    <h3 className="text-sm font-medium text-gray-900">{product.name}</h3>
-                                    <p className="text-xs text-gray-500 mt-1">{product.description}</p>
+                                    <h3 className="text-sm font-medium text-gray-900">{item.name}</h3>
+                                    <p className="text-xs text-gray-500 mt-1">{item.description}</p>
                                   </div>
                                 </Link>
                               )
