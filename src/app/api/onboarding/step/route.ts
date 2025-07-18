@@ -1,0 +1,76 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { UserService } from '@/lib/services/userService';
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { userId, step, stepData, completedSteps } = body;
+
+    if (!userId || !step) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: 'User ID and step are required' 
+        },
+        { status: 400 }
+      );
+    }
+
+    const user = await UserService.getUserById(userId);
+    if (!user) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: 'User not found' 
+        },
+        { status: 404 }
+      );
+    }
+
+    // Update onboarding progress
+    const updatedOnboarding = {
+      ...user.onboarding,
+      currentStep: step,
+      completedSteps: completedSteps || [...user.onboarding.completedSteps, step],
+      serviceOnboarding: {
+        ...user.onboarding.serviceOnboarding,
+        ...stepData
+      }
+    };
+
+    const updatedUser = await UserService.updateUser(userId, {
+      onboarding: updatedOnboarding
+    });
+
+    if (!updatedUser) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: 'Failed to update onboarding progress' 
+        },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        onboarding: updatedUser.onboarding,
+        userType: updatedUser.userType,
+        services: updatedUser.services
+      },
+      message: 'Onboarding step completed successfully',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error updating onboarding step:', error);
+    return NextResponse.json(
+      { 
+        success: false, 
+        message: 'Failed to update onboarding step',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      },
+      { status: 500 }
+    );
+  }
+} 

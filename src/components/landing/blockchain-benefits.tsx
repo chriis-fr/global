@@ -26,43 +26,43 @@ const benefits = [
     icon: FileText,
     title: 'Smart Invoicing',
     description: 'Create, manage, and get paid with blockchain-powered smart invoices',
-    link: '/auth'
+    link: '/services'
   },
   {
     icon: LockKeyhole,
     title: 'Immutable Records',
     description: 'Every transaction is permanently recorded and cannot be altered',
-    link: '/auth'
+    link: '/services'
   },
   {
     icon: History,
     title: 'Audit Trail',
     description: 'Complete history of all business operations and changes',
-    link: '/auth'
+    link: '/services'
   },
   {
     icon: Banknote,
     title: 'Smart Payments',
     description: 'Automated payments and settlements using smart contracts',
-    link: '/auth'
+    link: '/services'
   },
   {
     icon: Network,
     title: 'Decentralized',
     description: 'No single point of failure in data storage and processing',
-    link: '/auth'
+    link: '/services'
   },
   {
     icon: ShieldCheck,
     title: 'Enhanced Security',
     description: 'Cryptographic security for all business transactions',
-    link: '/auth'
+    link: '/services'
   },
   {
     icon: Fingerprint,
     title: 'Identity Management',
     description: 'Secure and verifiable digital identities for all users',
-    link: '/auth'
+    link: '/services'
   }
 ]
 
@@ -72,42 +72,42 @@ const businessSolutions = [
     title: 'Accounts Payable',
     description: 'Manage your business payments',
     category: 'For Companies',
-    link: '/auth'
+    link: '/services'
   },
   {
     icon: ArrowRight,
     title: 'Accounts Receivable',
     description: 'Create invoices & get paid in crypto & fiat legally',
     category: 'For Companies',
-    link: '/auth'
+    link: '/services'
   },
   {
     icon: Receipt,
     title: 'Expenses',
     description: 'Easily manage your corporate expenses in crypto & fiat',
     category: 'For Companies',
-    link: '/auth'
+    link: '/services'
   },
   {
     icon: Users,
     title: 'Payroll',
     description: 'Pay your team salaries and bonuses in crypto & fiat',
     category: 'For Companies',
-    link: '/auth'
+    link: '/services'
   },
   {
     icon: Receipt,
     title: 'Expenses',
     description: 'Get reimbursed for your corporate expenses',
     category: 'For Freelancers',
-    link: '/auth'
+    link: '/services'
   },
   {
     icon: FileText,
     title: 'Invoicing',
     description: 'The easiest way for freelancers and contractors to get paid in crypto & fiat',
     category: 'For Freelancers',
-    link: '/auth'
+    link: '/services'
   }
 ]
 
@@ -117,28 +117,28 @@ const integrations = [
     title: 'Accounting',
     description: 'Import, categorize, and sync your crypto and fiat transactions with QuickBooks, Xero and more',
     module: 'Integrations',
-    link: '/auth'
+    link: '/services'
   },
   {
     icon: Code,
     title: 'Accounts Payable & Receivable API',
     description: 'Build custom finance processes and let users manage payables and receivables on your platform',
     module: 'API Solutions',
-    link: '/auth'
+    link: '/services'
   },
   {
     icon: Coins,
     title: 'Crypto-to-Fiat',
     description: 'Pay in Crypto and your beneficiary receives Fiat',
     module: 'Payment Solutions',
-    link: '/auth'
+    link: '/services'
   },
   {
     icon: Globe2,
     title: 'Offramp API',
     description: 'Add worldwide offramp capabilities to your platform and unlock a new revenue stream for your business',
     module: 'API Solutions',
-    link: '/auth'
+    link: '/services'
   }
 ]
 

@@ -10,11 +10,14 @@
     "db:init": "bun run src/scripts/init-database.ts"
   },
   "dependencies": {
+    "@auth/mongodb-adapter": "^3.10.0",
     "@types/mongodb": "^4.0.7",
+    "bcryptjs": "^3.0.2",
     "framer-motion": "^12.16.0",
     "lucide-react": "^0.514.0",
     "mongodb": "^6.17.0",
     "next": "15.3.3",
+    "next-auth": "^4.24.11",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hot-toast": "^2.5.2",
@@ -23,6 +26,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
+    "@types/bcryptjs": "^3.0.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
