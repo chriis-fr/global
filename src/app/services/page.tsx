@@ -28,6 +28,7 @@ interface ServiceDefinition {
   description: string;
   category: string;
   icon: string;
+  ready: boolean;
 }
 
 interface User {
@@ -176,14 +177,38 @@ export default function ServicesPage() {
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-7xl mx-auto px-4">
-        {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            Manage Your Services
-          </h1>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+                 {/* Header */}
+         <div className="text-center mb-12">
+           <div className="flex justify-between items-center mb-6">
+             <button
+               onClick={() => window.location.href = '/dashboard'}
+               className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+             >
+               <ArrowLeft className="h-4 w-4" />
+               <span>Back to Dashboard</span>
+             </button>
+             <div></div> {/* Spacer for centering */}
+           </div>
+           <h1 className="text-4xl font-bold text-gray-900 mb-4">
+             Manage Your Services
+           </h1>
+          <p className="text-xl text-gray-600 max-w-3xl mx-auto mb-4">
             Enable or disable the blockchain-powered services you need for your business operations.
           </p>
+          <div className="flex items-center justify-center space-x-6 text-sm text-gray-500">
+            <div className="flex items-center space-x-2">
+              <Check className="h-4 w-4 text-green-500" />
+              <span>Ready & Available</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <LockKeyhole className="h-4 w-4 text-yellow-500" />
+              <span>Coming Soon</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <X className="h-4 w-4 text-gray-400" />
+              <span>Disabled</span>
+            </div>
+          </div>
           {user && (
             <div className="mt-4 p-4 bg-blue-50 rounded-lg inline-block">
               <p className="text-blue-800">
@@ -213,12 +238,16 @@ export default function ServicesPage() {
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: (categoryIndex * 0.1) + (index * 0.05) }}
-                      className={`p-6 rounded-xl border-2 transition-all cursor-pointer ${
+                      className={`p-6 rounded-xl border-2 transition-all ${
+                        service.ready 
+                          ? 'cursor-pointer' 
+                          : 'cursor-not-allowed opacity-60'
+                      } ${
                         isEnabled 
                           ? 'bg-green-50 border-green-200 hover:border-green-300' 
                           : 'bg-white border-gray-200 hover:border-gray-300'
                       }`}
-                      onClick={() => toggleService(serviceKey)}
+                      onClick={() => service.ready ? toggleService(serviceKey) : null}
                     >
                       <div className="flex items-start justify-between mb-4">
                         <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
@@ -231,6 +260,8 @@ export default function ServicesPage() {
                         <div className="flex items-center space-x-2">
                           {isUpdating ? (
                             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                          ) : !service.ready ? (
+                            <LockKeyhole className="h-5 w-5 text-yellow-500" />
                           ) : isEnabled ? (
                             <Check className="h-5 w-5 text-green-500" />
                           ) : (
@@ -241,6 +272,11 @@ export default function ServicesPage() {
                       
                       <h3 className="text-lg font-semibold mb-2 text-gray-900">
                         {service.title}
+                        {!service.ready && (
+                          <span className="ml-2 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                            Coming Soon
+                          </span>
+                        )}
                       </h3>
                       <p className="text-gray-600 text-sm mb-4">
                         {service.description}
@@ -248,22 +284,30 @@ export default function ServicesPage() {
                       
                       <div className="flex items-center justify-between">
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          isEnabled 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-gray-100 text-gray-600'
+                          !service.ready
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : isEnabled 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-gray-100 text-gray-600'
                         }`}>
-                          {isEnabled ? 'Enabled' : 'Disabled'}
+                          {!service.ready ? 'Coming Soon' : (isEnabled ? 'Enabled' : 'Disabled')}
                         </span>
-                        <button
-                          disabled={isUpdating}
-                          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                            isEnabled
-                              ? 'bg-red-500 text-white hover:bg-red-600'
-                              : 'bg-green-500 text-white hover:bg-green-600'
-                          } disabled:opacity-50`}
-                        >
-                          {isUpdating ? 'Updating...' : (isEnabled ? 'Disable' : 'Enable')}
-                        </button>
+                        {service.ready ? (
+                          <button
+                            disabled={isUpdating}
+                            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                              isEnabled
+                                ? 'bg-red-500 text-white hover:bg-red-600'
+                                : 'bg-green-500 text-white hover:bg-green-600'
+                            } disabled:opacity-50`}
+                          >
+                            {isUpdating ? 'Updating...' : (isEnabled ? 'Disable' : 'Enable')}
+                          </button>
+                        ) : (
+                          <span className="px-4 py-2 rounded-md text-sm font-medium bg-gray-300 text-gray-500 cursor-not-allowed">
+                            Not Available
+                          </span>
+                        )}
                       </div>
                     </motion.div>
                   );
