@@ -31,6 +31,13 @@ interface User {
   email: string;
   name: string;
   userType: 'individual' | 'business';
+  address: {
+    street: string;
+    city: string;
+    country: string;
+    postalCode: string;
+  };
+  taxId?: string;
   onboarding: {
     completed: boolean;
     currentStep: number;
@@ -82,6 +89,7 @@ export default function OnboardingPage() {
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+  const [taxID, setTaxID] = useState('');
 
   const loadUserAndServices = useCallback(async () => {
     try {
@@ -96,6 +104,13 @@ export default function OnboardingPage() {
         email: session.user.email,
         name: session.user.name,
         userType: session.user.userType,
+        address: session.user.address || {
+          street: '',
+          city: '',
+          country: '',
+          postalCode: ''
+        },
+        taxId: session.user.taxId || '',
         onboarding: session.user.onboarding,
         services: session.user.services
       };
@@ -110,7 +125,7 @@ export default function OnboardingPage() {
       }
 
       // Load onboarding status
-      const onboardingResponse = await fetch(`/api/onboarding/status?userId=${userObj._id}`);
+      const onboardingResponse = await fetch('/api/onboarding/status');
       const onboardingData = await onboardingResponse.json();
       if (onboardingData.success) {
         setCurrentStep(onboardingData.data.onboarding.currentStep);
@@ -131,7 +146,28 @@ export default function OnboardingPage() {
     }
 
     if (session?.user) {
-      loadUserAndServices();
+      // Check if user has already completed onboarding
+      const checkOnboardingStatus = async () => {
+        try {
+          const response = await fetch('/api/onboarding/status');
+          const data = await response.json();
+          
+          if (data.success && data.data.onboarding.completed) {
+            console.log('✅ [Onboarding] User has already completed onboarding, redirecting to dashboard');
+            window.location.href = '/dashboard';
+            return;
+          }
+          
+          // If not completed, continue with normal flow
+          loadUserAndServices();
+        } catch (error) {
+          console.error('❌ [Onboarding] Error checking onboarding status:', error);
+          // Continue with normal flow if check fails
+          loadUserAndServices();
+        }
+      };
+      
+      checkOnboardingStatus();
     }
   }, [session, status, loadUserAndServices]);
 
@@ -340,6 +376,21 @@ export default function OnboardingPage() {
                   </div>
                 </div>
               </div>
+              {user.address.country === 'KE' && (
+                <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 lg:p-6 mb-8 mx-4">
+                  <h3 className="text-lg font-semibold text-white mb-4">Tax ID (KRA PIN)</h3>
+                  <p className="text-blue-200 text-sm mb-2">
+                    Please enter your KRA PIN (Personal Identification Number) to verify your identity.
+                  </p>
+                  <input
+                    type="text"
+                    placeholder="Enter your KRA PIN"
+                    value={taxID}
+                    onChange={(e) => setTaxID(e.target.value)}
+                    className="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              )}
               <button
                 onClick={() => updateOnboardingStep(2)}
                 disabled={updating}
@@ -355,15 +406,14 @@ export default function OnboardingPage() {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
+              className="text-center"
             >
-              <div className="text-center mb-8 px-4">
-                <h2 className="text-2xl lg:text-3xl font-bold text-white mb-4">
-                  Choose Your Services
-                </h2>
-                <p className="text-lg lg:text-xl text-blue-200">
-                  Select the blockchain-powered services you need for your business
-                </p>
-              </div>
+              <h2 className="text-2xl lg:text-3xl font-bold text-white mb-4">
+                Choose Your Services
+              </h2>
+              <p className="text-lg lg:text-xl text-blue-200">
+                Select the blockchain-powered services you need for your business
+              </p>
 
               {/* Services by Category */}
               {categories.map((category, categoryIndex) => (

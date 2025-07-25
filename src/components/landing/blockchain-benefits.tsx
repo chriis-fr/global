@@ -196,8 +196,8 @@ export function BlockchainBenefits() {
                 </motion.div>
               )
               return (
-                <Link href={benefit.link} key={benefit.title} legacyBehavior>
-                  <a style={{ textDecoration: 'none' }}>{cardContent}</a>
+                <Link href={benefit.link} key={benefit.title} style={{ textDecoration: 'none' }}>
+                  {cardContent}
                 </Link>
               )
             })}
@@ -238,8 +238,8 @@ export function BlockchainBenefits() {
                     </motion.div>
                   )
                   return (
-                    <Link href={solution.link} key={solution.title} legacyBehavior>
-                      <a style={{ textDecoration: 'none' }}>{cardContent}</a>
+                    <Link href={solution.link} key={solution.title} style={{ textDecoration: 'none' }}>
+                      {cardContent}
                     </Link>
                   )
                 })}
@@ -274,8 +274,8 @@ export function BlockchainBenefits() {
                     </motion.div>
                   )
                   return (
-                    <Link href={solution.link} key={solution.title} legacyBehavior>
-                      <a style={{ textDecoration: 'none' }}>{cardContent}</a>
+                    <Link href={solution.link} key={solution.title} style={{ textDecoration: 'none' }}>
+                      {cardContent}
                     </Link>
                   )
                 })}
@@ -317,8 +317,8 @@ export function BlockchainBenefits() {
                 </motion.div>
               )
               return (
-                <Link href={integration.link} key={integration.title} legacyBehavior>
-                  <a style={{ textDecoration: 'none' }}>{cardContent}</a>
+                <Link href={integration.link} key={integration.title} style={{ textDecoration: 'none' }}>
+                  {cardContent}
                 </Link>
               )
             })}

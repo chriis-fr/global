@@ -9,6 +9,13 @@ declare module "next-auth" {
       image?: string
       userType: 'individual' | 'business'
       role: string
+      address: {
+        street: string
+        city: string
+        country: string
+        postalCode: string
+      }
+      taxId?: string
       onboarding: {
         completed: boolean
         currentStep: number
@@ -26,7 +33,13 @@ declare module "next-auth" {
     image?: string
     userType: 'individual' | 'business'
     role: string
-    googleId?: string
+    address: {
+      street: string
+      city: string
+      country: string
+      postalCode: string
+    }
+    taxId?: string
     onboarding: {
       completed: boolean
       currentStep: number

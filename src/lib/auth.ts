@@ -68,6 +68,8 @@ export const authOptions: NextAuthOptions = {
             image: user.profilePicture || user.avatar,
             userType: user.userType,
             role: user.role,
+            address: user.address,
+            taxId: user.taxId,
             onboarding: user.onboarding,
             services: user.services as unknown as Record<string, boolean>
           }
@@ -153,6 +155,8 @@ export const authOptions: NextAuthOptions = {
           session.user.image = dbUser.profilePicture || dbUser.avatar
           session.user.userType = dbUser.userType
           session.user.role = dbUser.role
+          session.user.address = dbUser.address
+          session.user.taxId = dbUser.taxId
           session.user.onboarding = dbUser.onboarding
           session.user.services = dbUser.services as unknown as Record<string, boolean>
         }

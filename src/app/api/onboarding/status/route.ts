@@ -1,22 +1,23 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import { UserService } from '@/lib/services/userService';
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
-
-    if (!userId) {
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user?.email) {
       return NextResponse.json(
         { 
           success: false, 
-          message: 'User ID is required' 
+          message: 'Unauthorized' 
         },
-        { status: 400 }
+        { status: 401 }
       );
     }
 
-    const user = await UserService.getUserById(userId);
+    const user = await UserService.getUserByEmail(session.user.email);
     if (!user) {
       return NextResponse.json(
         { 

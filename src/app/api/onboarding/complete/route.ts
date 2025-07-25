@@ -4,13 +4,13 @@ import { UserService } from '@/lib/services/userService';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { userId, step, stepData, completedSteps } = body;
+    const { userId } = body;
 
-    if (!userId || !step) {
+    if (!userId) {
       return NextResponse.json(
         { 
           success: false, 
-          message: 'User ID and step are required' 
+          message: 'User ID is required' 
         },
         { status: 400 }
       );
@@ -27,17 +27,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Update onboarding progress
+    // Mark onboarding as completed
     const updatedOnboarding = {
       ...user.onboarding,
-      currentStep: step,
-      completedSteps: completedSteps || [...user.onboarding.completedSteps, step],
-      serviceOnboarding: {
-        ...user.onboarding.serviceOnboarding,
-        ...stepData
-      },
-      // Mark onboarding as completed when user reaches step 4 (final step)
-      completed: step === 4 ? true : user.onboarding.completed
+      completed: true,
+      currentStep: 4,
+      completedSteps: ['1', '2', '3', '4']
     };
 
     const updatedUser = await UserService.updateUser(userId, {
@@ -48,7 +43,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { 
           success: false, 
-          message: 'Failed to update onboarding progress' 
+          message: 'Failed to complete onboarding' 
         },
         { status: 500 }
       );
@@ -58,18 +53,16 @@ export async function POST(request: NextRequest) {
       success: true,
       data: {
         onboarding: updatedUser.onboarding,
-        userType: updatedUser.userType,
-        services: updatedUser.services
+        message: 'Onboarding completed successfully'
       },
-      message: 'Onboarding step completed successfully',
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Error updating onboarding step:', error);
+    console.error('Error completing onboarding:', error);
     return NextResponse.json(
       { 
         success: false, 
-        message: 'Failed to update onboarding step',
+        message: 'Failed to complete onboarding',
         error: error instanceof Error ? error.message : 'Unknown error'
       },
       { status: 500 }

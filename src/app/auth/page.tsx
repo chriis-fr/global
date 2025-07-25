@@ -165,8 +165,26 @@ export default function AuthPage() {
         console.error('❌ [Auth] Google sign-in error:', result.error)
         setError('Google sign-in failed. Please try again.')
       } else if (result?.ok) {
-        console.log('✅ [Auth] Google sign-in successful')
-        window.location.href = '/onboarding'
+        console.log('✅ [Auth] Google sign-in successful, checking onboarding status...')
+        // For Google sign-in, we need to check if user exists and has completed onboarding
+        try {
+          // Wait a moment for session to update
+          setTimeout(async () => {
+            const response = await fetch('/api/onboarding/status')
+            const data = await response.json()
+            
+            if (data.success && data.data.onboarding.completed) {
+              console.log('✅ [Auth] Onboarding completed, redirecting to dashboard')
+              window.location.href = '/dashboard'
+            } else {
+              console.log('⚠️ [Auth] Onboarding not completed, redirecting to onboarding')
+              window.location.href = '/onboarding'
+            }
+          }, 1000)
+        } catch (error) {
+          console.error('❌ [Auth] Error checking onboarding status:', error)
+          window.location.href = '/onboarding'
+        }
       }
     } catch (error) {
       console.error('❌ [Auth] Google sign-in error:', error)
@@ -179,8 +197,34 @@ export default function AuthPage() {
   // Redirect if already authenticated
   useEffect(() => {
     if (status === 'authenticated' && session) {
-      console.log('✅ [Auth] User already authenticated, redirecting to onboarding')
-      window.location.href = '/onboarding'
+      console.log('✅ [Auth] User already authenticated, checking onboarding status...')
+      
+      // Check if user has completed onboarding
+      const checkOnboardingStatus = async () => {
+        try {
+          const response = await fetch('/api/onboarding/status')
+          const data = await response.json()
+          
+          if (data.success) {
+            if (data.data.onboarding.completed) {
+              console.log('✅ [Auth] Onboarding completed, redirecting to dashboard')
+              window.location.href = '/dashboard'
+            } else {
+              console.log('⚠️ [Auth] Onboarding not completed, redirecting to onboarding')
+              window.location.href = '/onboarding'
+            }
+          } else {
+            console.log('⚠️ [Auth] Could not check onboarding status, redirecting to onboarding')
+            window.location.href = '/onboarding'
+          }
+        } catch (error) {
+          console.error('❌ [Auth] Error checking onboarding status:', error)
+          // Fallback to onboarding
+          window.location.href = '/onboarding'
+        }
+      }
+      
+      checkOnboardingStatus()
     }
   }, [session, status])
 
@@ -211,8 +255,23 @@ export default function AuthPage() {
           console.error('❌ [Auth] Login failed:', loginResult.error)
           setError('Invalid email or password')
         } else if (loginResult?.ok) {
-          console.log('✅ [Auth] Login successful, redirecting to onboarding...')
-          window.location.href = '/onboarding'
+          console.log('✅ [Auth] Login successful, checking onboarding status...')
+          // Check onboarding status and redirect accordingly
+          try {
+            const response = await fetch('/api/onboarding/status')
+            const data = await response.json()
+            
+            if (data.success && data.data.onboarding.completed) {
+              console.log('✅ [Auth] Onboarding completed, redirecting to dashboard')
+              window.location.href = '/dashboard'
+            } else {
+              console.log('⚠️ [Auth] Onboarding not completed, redirecting to onboarding')
+              window.location.href = '/onboarding'
+            }
+          } catch (error) {
+            console.error('❌ [Auth] Error checking onboarding status:', error)
+            window.location.href = '/onboarding'
+          }
         }
       } else {
         // Handle signup
@@ -267,7 +326,8 @@ export default function AuthPage() {
                 localStorage.setItem('user', JSON.stringify(data.data))
                 window.location.href = '/onboarding'
               } else if (loginResult?.ok) {
-                console.log('✅ [Auth] Automatic login successful, redirecting to onboarding...')
+                console.log('✅ [Auth] Automatic login successful, checking onboarding status...')
+                // For new users, they should always go to onboarding
                 window.location.href = '/onboarding'
               }
             } catch (loginError) {

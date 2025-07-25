@@ -16,26 +16,22 @@ export interface UserSettings {
 }
 
 export interface UserServices {
-  // Core Blockchain Benefits
+  // Core Invoicing & Payments
   smartInvoicing: boolean;
-  immutableRecords: boolean;
-  auditTrail: boolean;
-  smartPayments: boolean;
-  decentralized: boolean;
-  enhancedSecurity: boolean;
-  identityManagement: boolean;
-  
-  // Business Solutions - Companies
-  accountsPayable: boolean;
   accountsReceivable: boolean;
+  accountsPayable: boolean;
+  
+  // Business Operations
   expenses: boolean;
   payroll: boolean;
   
-  // Business Solutions - Freelancers
-  freelancerExpenses: boolean;
-  freelancerInvoicing: boolean;
+  // Blockchain Benefits
+  immutableRecords: boolean;
+  auditTrail: boolean;
+  smartPayments: boolean;
+  enhancedSecurity: boolean;
   
-  // Integrations and API Solutions
+  // Integrations & APIs
   accounting: boolean;
   accountsPayableReceivableAPI: boolean;
   cryptoToFiat: boolean;
