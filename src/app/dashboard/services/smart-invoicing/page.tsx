@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
+import { useRouter } from 'next/navigation';
 import { 
   Plus, 
   FileText, 
@@ -10,9 +11,9 @@ import {
   ArrowRight,
   Building2,
   Users,
-  TrendingUp
+  TrendingUp,
+  List
 } from 'lucide-react';
-import InvoiceWalkthrough from '@/components/invoicing/InvoiceWalkthrough';
 import { Invoice } from '@/models/Invoice';
 
 // Add a local type for invoices with an id
@@ -21,19 +22,15 @@ interface InvoiceWithId extends Partial<Invoice> {
 }
 
 export default function SmartInvoicingPage() {
-  const [showWalkthrough, setShowWalkthrough] = useState(false);
-  const [invoices, setInvoices] = useState<InvoiceWithId[]>([]);
+  const router = useRouter();
+  const [invoices] = useState<InvoiceWithId[]>([]);
 
   const handleCreateInvoice = () => {
-    setShowWalkthrough(true);
+    router.push('/dashboard/services/smart-invoicing/create');
   };
 
-  const handleWalkthroughComplete = (walkthroughData: { step: number; completed: boolean; data?: Partial<Invoice> }) => {
-    console.log('Walkthrough completed:', walkthroughData);
-    if (walkthroughData.data) {
-      setInvoices(prev => [...prev, { ...walkthroughData.data, id: Date.now(), status: 'draft' }]);
-    }
-    setShowWalkthrough(false);
+  const handleViewInvoices = () => {
+    router.push('/dashboard/services/smart-invoicing/invoices');
   };
 
   return (
@@ -46,15 +43,26 @@ export default function SmartInvoicingPage() {
             Create, manage, and get paid with both fiat and blockchain payments seamlessly
           </p>
         </div>
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={handleCreateInvoice}
-          className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <Plus className="h-5 w-5" />
-          <span>Create Invoice</span>
-        </motion.button>
+        <div className="flex space-x-3">
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={handleViewInvoices}
+            className="flex items-center space-x-2 bg-white/10 backdrop-blur-sm text-white px-4 py-2 rounded-lg hover:bg-white/20 transition-colors border border-white/20"
+          >
+            <List className="h-5 w-5" />
+            <span>View Invoices</span>
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={handleCreateInvoice}
+            className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <Plus className="h-5 w-5" />
+            <span>Create Invoice</span>
+          </motion.button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -249,12 +257,6 @@ export default function SmartInvoicingPage() {
         </motion.div>
       )}
 
-      {/* Invoice Walkthrough Modal */}
-      <InvoiceWalkthrough
-        isOpen={showWalkthrough}
-        onCloseAction={() => setShowWalkthrough(false)}
-        onCompleteAction={handleWalkthroughComplete}
-      />
     </div>
   );
 } 
