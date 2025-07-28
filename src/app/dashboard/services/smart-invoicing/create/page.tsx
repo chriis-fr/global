@@ -166,6 +166,14 @@ export default function CreateInvoicePage() {
   const printRef = useRef<HTMLDivElement>(null);
   const pdfRef = useRef<HTMLDivElement>(null);
 
+  // Currency dropdown state
+  const [showCurrencyDropdown, setShowCurrencyDropdown] = useState(false);
+  const [currencySearch, setCurrencySearch] = useState('');
+  
+  // Network dropdown state
+  const [showNetworkDropdown, setShowNetworkDropdown] = useState(false);
+  const [networkSearch, setNetworkSearch] = useState('');
+
   // Check if we're editing an existing invoice
   const invoiceId = searchParams.get('id');
 
@@ -176,8 +184,29 @@ export default function CreateInvoicePage() {
       loadServiceOnboardingData();
       loadOrganizationData();
       loadClients();
+      loadLogoFromSettings();
     }
   }, [invoiceId, session]);
+
+  // Handle click outside for dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (!target.closest('.currency-dropdown-container')) {
+        setShowCurrencyDropdown(false);
+        setCurrencySearch('');
+      }
+      if (!target.closest('.network-dropdown-container')) {
+        setShowNetworkDropdown(false);
+        setNetworkSearch('');
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const loadInvoice = async (id: string) => {
     try {
@@ -263,6 +292,23 @@ export default function CreateInvoicePage() {
       }
     } catch (error) {
       console.error('Failed to load clients:', error);
+    }
+  };
+
+  const loadLogoFromSettings = async () => {
+    try {
+      const response = await fetch('/api/user/logo');
+      const data = await response.json();
+      
+      if (data.success && data.logoUrl) {
+        setFormData(prev => ({
+          ...prev,
+          companyLogo: data.logoUrl
+        }));
+        console.log('✅ [Invoice Create] Logo loaded from:', data.logoSource);
+      }
+    } catch (error) {
+      console.error('Failed to load logo from settings:', error);
     }
   };
 
@@ -811,27 +857,32 @@ export default function CreateInvoicePage() {
                     <Edit3 className="h-4 w-4" />
                   </button>
                 </h3>
-                <div className="space-y-2">
-                  <div className="font-medium">
-                    {formData.companyName || 'Company Name'}
-                  </div>
-                  <div className="text-gray-600 space-y-1">
-                    <div>{formData.companyAddress.street || 'Street Address'}</div>
-                    <div className="flex flex-wrap space-x-2">
-                      <span>{formData.companyAddress.city || 'City'}</span>
-                      <span>{formData.companyAddress.state || 'State'}</span>
-                      <span>{formData.companyAddress.zipCode || 'ZIP'}</span>
+                <div className="flex items-start space-x-4">
+                 
+                  
+                  {/* Company Details */}
+                  <div className="flex-1 space-y-2">
+                    <div className="font-medium">
+                      {formData.companyName || 'Company Name'}
                     </div>
-                    <div>{formData.companyAddress.country || 'Country'}</div>
-                  </div>
-                  <div className="text-gray-600">
-                    Tax: {formData.companyTaxNumber || 'Tax Number'}
-                  </div>
-                  <div className="text-gray-600">
-                    {formData.companyEmail || 'Email'}
-                  </div>
-                  <div className="text-gray-600">
-                    {formData.companyPhone || 'Phone'}
+                    <div className="text-gray-600 space-y-1">
+                      <div>{formData.companyAddress.street || 'Street Address'}</div>
+                      <div className="flex flex-wrap space-x-2">
+                        <span>{formData.companyAddress.city || 'City'}</span>
+                        <span>{formData.companyAddress.state || 'State'}</span>
+                        <span>{formData.companyAddress.zipCode || 'ZIP'}</span>
+                      </div>
+                      <div>{formData.companyAddress.country || 'Country'}</div>
+                    </div>
+                    <div className="text-gray-600">
+                      Tax: {formData.companyTaxNumber || 'Tax Number'}
+                    </div>
+                    <div className="text-gray-600">
+                      {formData.companyEmail || 'Email'}
+                    </div>
+                    <div className="text-gray-600">
+                      {formData.companyPhone || 'Phone'}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -933,26 +984,99 @@ export default function CreateInvoicePage() {
               {/* Currency */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Currency</label>
-                <select
-                  value={formData.currency}
-                  onChange={(e) => handleInputChange('currency', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <optgroup label="Fiat Currencies">
-                    {fiatCurrencies.map(currency => (
-                      <option key={currency.code} value={currency.code}>
-                        {currency.name} ({currency.symbol})
-                      </option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Cryptocurrencies">
-                    {cryptoCurrencies.map(currency => (
-                      <option key={currency.code} value={currency.code}>
-                        {currency.name} ({currency.symbol})
-                      </option>
-                    ))}
-                  </optgroup>
-                </select>
+                <div className="relative currency-dropdown-container">
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrencyDropdown(!showCurrencyDropdown)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-left flex items-center justify-between bg-white"
+                  >
+                    <span className={formData.currency ? 'text-gray-900' : 'text-gray-500'}>
+                      {formData.currency 
+                        ? `${formData.currency} - ${getCurrencyByCode(formData.currency)?.name || 'Unknown'}`
+                        : 'Select currency'}
+                    </span>
+                    <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${showCurrencyDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  
+                  {showCurrencyDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto z-20">
+                      {/* Search input */}
+                      <div className="p-2 border-b border-gray-200 bg-gray-50">
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                          <input
+                            type="text"
+                            value={currencySearch}
+                            onChange={(e) => setCurrencySearch(e.target.value)}
+                            placeholder="Search currencies..."
+                            className="w-full pl-10 pr-3 py-2 bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      </div>
+                      
+                      {/* Currency list */}
+                      <div className="max-h-48 overflow-y-auto">
+                        {/* Fiat Currencies */}
+                        <div className="px-2 py-1 bg-gray-100 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                          Fiat Currencies
+                        </div>
+                        {fiatCurrencies
+                          .filter(currency => 
+                            currency.name.toLowerCase().includes(currencySearch.toLowerCase()) ||
+                            currency.code.toLowerCase().includes(currencySearch.toLowerCase()) ||
+                            currency.symbol.toLowerCase().includes(currencySearch.toLowerCase())
+                          )
+                          .map(currency => (
+                          <button
+                            key={currency.code}
+                            type="button"
+                            onClick={() => {
+                              handleInputChange('currency', currency.code);
+                              setShowCurrencyDropdown(false);
+                              setCurrencySearch('');
+                            }}
+                            className="w-full px-3 py-2 text-left text-gray-900 hover:bg-blue-50 transition-colors flex items-center justify-between border-b border-gray-100 last:border-b-0"
+                          >
+                            <div className="flex items-center space-x-3">
+                              <span className="text-sm">{currency.name}</span>
+                              <span className="text-blue-600 text-xs font-medium">{currency.symbol}</span>
+                            </div>
+                            <span className="text-gray-500 text-xs font-medium">{currency.code}</span>
+                          </button>
+                        ))}
+                        
+                        {/* Cryptocurrencies */}
+                        <div className="px-2 py-1 bg-gray-100 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                          Cryptocurrencies
+                        </div>
+                        {cryptoCurrencies
+                          .filter(currency => 
+                            currency.name.toLowerCase().includes(currencySearch.toLowerCase()) ||
+                            currency.code.toLowerCase().includes(currencySearch.toLowerCase()) ||
+                            currency.symbol.toLowerCase().includes(currencySearch.toLowerCase())
+                          )
+                          .map(currency => (
+                          <button
+                            key={currency.code}
+                            type="button"
+                            onClick={() => {
+                              handleInputChange('currency', currency.code);
+                              setShowCurrencyDropdown(false);
+                              setCurrencySearch('');
+                            }}
+                            className="w-full px-3 py-2 text-left text-gray-900 hover:bg-blue-50 transition-colors flex items-center justify-between border-b border-gray-100 last:border-b-0"
+                          >
+                            <div className="flex items-center space-x-3">
+                              <span className="text-sm">{currency.name}</span>
+                              <span className="text-blue-600 text-xs font-medium">{currency.symbol}</span>
+                            </div>
+                            <span className="text-gray-500 text-xs font-medium">{currency.code}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Invoice Type */}
@@ -1048,18 +1172,64 @@ export default function CreateInvoicePage() {
                   <div className="space-y-4">
                     <div>
                       <label className="block text-sm text-gray-600 mb-1">Choose your payment network</label>
-                      <select
-                        value={formData.paymentNetwork || ''}
-                        onChange={(e) => handleInputChange('paymentNetwork', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="">Select Network</option>
-                        {networks.map(network => (
-                          <option key={network.id} value={network.id}>
-                            {network.name}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="relative network-dropdown-container">
+                        <button
+                          type="button"
+                          onClick={() => setShowNetworkDropdown(!showNetworkDropdown)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-left flex items-center justify-between bg-white"
+                        >
+                          <span className={formData.paymentNetwork ? 'text-gray-900' : 'text-gray-500'}>
+                            {formData.paymentNetwork 
+                              ? networks.find(n => n.id === formData.paymentNetwork)?.name || formData.paymentNetwork
+                              : 'Select network'}
+                          </span>
+                          <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${showNetworkDropdown ? 'rotate-180' : ''}`} />
+                        </button>
+                        
+                        {showNetworkDropdown && (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto z-20">
+                            {/* Search input */}
+                            <div className="p-2 border-b border-gray-200 bg-gray-50">
+                              <div className="relative">
+                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                <input
+                                  type="text"
+                                  value={networkSearch}
+                                  onChange={(e) => setNetworkSearch(e.target.value)}
+                                  placeholder="Search networks..."
+                                  className="w-full pl-10 pr-3 py-2 bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                              </div>
+                            </div>
+                            
+                            {/* Network list */}
+                            <div className="max-h-48 overflow-y-auto">
+                              {networks
+                                .filter(network => 
+                                  network.name.toLowerCase().includes(networkSearch.toLowerCase()) ||
+                                  network.id.toLowerCase().includes(networkSearch.toLowerCase())
+                                )
+                                .map(network => (
+                                <button
+                                  key={network.id}
+                                  type="button"
+                                  onClick={() => {
+                                    handleInputChange('paymentNetwork', network.id);
+                                    setShowNetworkDropdown(false);
+                                    setNetworkSearch('');
+                                  }}
+                                  className="w-full px-3 py-2 text-left text-gray-900 hover:bg-blue-50 transition-colors flex items-center justify-between border-b border-gray-100 last:border-b-0"
+                                >
+                                  <div className="flex items-center space-x-3">
+                                    <span className="text-sm">{network.name}</span>
+                                  </div>
+                                  <span className="text-gray-500 text-xs font-medium">{network.id}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div>
                       <label className="block text-sm text-gray-600 mb-1">Where do you want to receive your payment?</label>
@@ -1522,10 +1692,14 @@ function CompanyEditForm({
       zipCode: formData.companyAddress.zipCode,
       country: formData.companyAddress.country
     },
-    companyTaxNumber: formData.companyTaxNumber
+    companyTaxNumber: formData.companyTaxNumber,
+    companyLogo: formData.companyLogo
   });
   const [showCountryDropdown, setShowCountryDropdown] = useState(false);
   const [countrySearch, setCountrySearch] = useState('');
+  const [logoPreview, setLogoPreview] = useState<string | null>(formData.companyLogo || null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1550,8 +1724,141 @@ function CompanyEditForm({
     }
   };
 
+  const handleLogoUpload = async (file: File) => {
+    setIsUploading(true);
+    setUploadError(null);
+    
+    try {
+      const formData = new FormData();
+      formData.append('logo', file);
+      
+      const response = await fetch('/api/upload/logo', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        setLogoPreview(result.logoUrl);
+        setEditData(prev => ({
+          ...prev,
+          companyLogo: result.logoUrl
+        }));
+      } else {
+        setUploadError(result.error || 'Upload failed');
+      }
+    } catch {
+      setUploadError('Upload failed. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleLogoUpload(file);
+    }
+  };
+
+  const removeLogo = () => {
+    setLogoPreview(null);
+    setEditData(prev => ({
+      ...prev,
+      companyLogo: undefined
+    }));
+  };
+
+  const loadLogoFromSettings = async () => {
+    try {
+      const response = await fetch('/api/user/logo');
+      const data = await response.json();
+      
+      if (data.success && data.logoUrl) {
+        setLogoPreview(data.logoUrl);
+        setEditData(prev => ({
+          ...prev,
+          companyLogo: data.logoUrl
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to load logo from settings:', error);
+    }
+  };
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Logo Upload Section */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">Company Logo</label>
+        <div className="space-y-3">
+          {/* Logo Preview */}
+          {logoPreview && (
+            <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-md">
+              <Image 
+                src={logoPreview} 
+                alt="Company logo" 
+                width={48}
+                height={48}
+                className="object-contain rounded"
+              />
+              <div className="flex-1">
+                <p className="text-sm text-gray-600">Logo uploaded successfully</p>
+              </div>
+              <button
+                type="button"
+                onClick={removeLogo}
+                className="text-red-500 hover:text-red-700 text-sm"
+              >
+                Remove
+              </button>
+            </div>
+          )}
+          
+          {/* Upload Button */}
+          {!logoPreview && (
+            <div className="space-y-3">
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  className="hidden"
+                  id="logo-upload"
+                  disabled={isUploading}
+                />
+                <label 
+                  htmlFor="logo-upload" 
+                  className="cursor-pointer flex flex-col items-center"
+                >
+                  <Upload className="h-8 w-8 text-gray-400 mb-2" />
+                  <p className="text-sm text-gray-600">
+                    {isUploading ? 'Uploading...' : 'Click to upload logo'}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">PNG, JPG up to 5MB</p>
+                </label>
+              </div>
+              
+              {/* Load from Settings Button */}
+              <button
+                type="button"
+                onClick={loadLogoFromSettings}
+                className="w-full py-2 px-4 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 flex items-center justify-center"
+              >
+                <Building2 className="h-4 w-4 mr-2" />
+                Load from Settings
+              </button>
+            </div>
+          )}
+          
+          {/* Error Message */}
+          {uploadError && (
+            <p className="text-red-500 text-sm">{uploadError}</p>
+          )}
+        </div>
+      </div>
+
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
         <input

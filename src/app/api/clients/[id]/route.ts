@@ -14,18 +14,20 @@ export async function GET(
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
 
-    const organizationId = session.user.organizationId;
-    if (!organizationId) {
-      return NextResponse.json({ success: false, message: 'No organization found' }, { status: 400 });
-    }
-
     const db = await connectToDatabase();
     const collection = db.collection('clients');
 
-    const client = await collection.findOne({
-      _id: new ObjectId(params.id),
-      organizationId
-    });
+    let query = { _id: new ObjectId(params.id) };
+    
+    // For business users, filter by organizationId
+    if (session.user.userType === 'business' && session.user.organizationId) {
+      query = { ...query, organizationId: session.user.organizationId };
+    } else {
+      // For individual users, filter by userId
+      query = { ...query, userId: session.user.email };
+    }
+
+    const client = await collection.findOne(query);
 
     if (!client) {
       return NextResponse.json(
@@ -57,11 +59,6 @@ export async function PUT(
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
 
-    const organizationId = session.user.organizationId;
-    if (!organizationId) {
-      return NextResponse.json({ success: false, message: 'No organization found' }, { status: 400 });
-    }
-
     const body = await request.json();
     const {
       name,
@@ -83,11 +80,21 @@ export async function PUT(
     const db = await connectToDatabase();
     const collection = db.collection('clients');
 
-    // Check if client exists and belongs to organization
-    const existingClient = await collection.findOne({
-      _id: new ObjectId(params.id),
-      organizationId
-    });
+    let query = { _id: new ObjectId(params.id) };
+    let emailConflictQuery = { email, _id: { $ne: new ObjectId(params.id) } };
+    
+    // For business users, filter by organizationId
+    if (session.user.userType === 'business' && session.user.organizationId) {
+      query = { ...query, organizationId: session.user.organizationId };
+      emailConflictQuery = { ...emailConflictQuery, organizationId: session.user.organizationId };
+    } else {
+      // For individual users, filter by userId
+      query = { ...query, userId: session.user.email };
+      emailConflictQuery = { ...emailConflictQuery, userId: session.user.email };
+    }
+
+    // Check if client exists and belongs to user/organization
+    const existingClient = await collection.findOne(query);
 
     if (!existingClient) {
       return NextResponse.json(
@@ -96,12 +103,8 @@ export async function PUT(
       );
     }
 
-    // Check if email is already used by another client in the same organization
-    const emailConflict = await collection.findOne({
-      email,
-      organizationId,
-      _id: { $ne: new ObjectId(params.id) }
-    });
+    // Check if email is already used by another client for the same user/organization
+    const emailConflict = await collection.findOne(emailConflictQuery);
 
     if (emailConflict) {
       return NextResponse.json(
@@ -157,18 +160,20 @@ export async function DELETE(
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
 
-    const organizationId = session.user.organizationId;
-    if (!organizationId) {
-      return NextResponse.json({ success: false, message: 'No organization found' }, { status: 400 });
-    }
-
     const db = await connectToDatabase();
     const collection = db.collection('clients');
 
-    const result = await collection.deleteOne({
-      _id: new ObjectId(params.id),
-      organizationId
-    });
+    let query = { _id: new ObjectId(params.id) };
+    
+    // For business users, filter by organizationId
+    if (session.user.userType === 'business' && session.user.organizationId) {
+      query = { ...query, organizationId: session.user.organizationId };
+    } else {
+      // For individual users, filter by userId
+      query = { ...query, userId: session.user.email };
+    }
+
+    const result = await collection.deleteOne(query);
 
     if (result.deletedCount === 0) {
       return NextResponse.json(

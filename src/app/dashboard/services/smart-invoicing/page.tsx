@@ -71,6 +71,11 @@ export default function SmartInvoicingPage() {
     router.push('/dashboard/services/smart-invoicing/onboarding');
   };
 
+  const handleManageClients = () => {
+    console.log('👥 [Smart Invoicing] Navigating to client management');
+    router.push('/dashboard/clients');
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -227,6 +232,7 @@ export default function SmartInvoicingPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
           className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20 hover:bg-white/20 transition-colors cursor-pointer"
+          onClick={handleManageClients}
         >
           <div className="flex items-center space-x-4">
             <div className="w-12 h-12 bg-green-600 rounded-lg flex items-center justify-center">
@@ -240,23 +246,27 @@ export default function SmartInvoicingPage() {
           </div>
         </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6 }}
-          className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20 hover:bg-white/20 transition-colors cursor-pointer"
-        >
-          <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center">
-              <Users className="h-6 w-6 text-white" />
+        {/* Only show Team Settings for business users with organizations */}
+        {session?.user?.userType === 'business' && session?.user?.organizationId && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6 }}
+            className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20 hover:bg-white/20 transition-colors cursor-pointer"
+            onClick={() => router.push('/dashboard/settings/organization')}
+          >
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center">
+                <Users className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-white">Team Settings</h3>
+                <p className="text-blue-200 text-sm">Configure team permissions</p>
+              </div>
+              <ArrowRight className="h-5 w-5 text-blue-400 ml-auto" />
             </div>
-            <div>
-              <h3 className="text-lg font-semibold text-white">Team Settings</h3>
-              <p className="text-blue-200 text-sm">Configure team permissions</p>
-            </div>
-            <ArrowRight className="h-5 w-5 text-blue-400 ml-auto" />
-          </div>
-        </motion.div>
+          </motion.div>
+        )}
       </div>
 
       {/* Recent Invoices */}

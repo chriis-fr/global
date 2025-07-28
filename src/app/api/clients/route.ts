@@ -13,7 +13,7 @@ interface Client {
   company?: string;
   taxId?: string;
   notes?: string;
-  organizationId: string;
+  organizationId?: string; // Optional for individual users
   userId: string;
   createdAt: Date;
   updatedAt: Date;
@@ -26,16 +26,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
 
-    const organizationId = session.user.organizationId;
-    if (!organizationId) {
-      return NextResponse.json({ success: false, message: 'No organization found' }, { status: 400 });
-    }
-
     const db = await connectToDatabase();
     const collection = db.collection('clients');
 
+    let query = {};
+    
+    // For business users, filter by organizationId
+    if (session.user.userType === 'business' && session.user.organizationId) {
+      query = { organizationId: session.user.organizationId };
+    } else {
+      // For individual users, filter by userId (email)
+      query = { userId: session.user.email };
+    }
+
     const clients = await collection
-      .find({ organizationId })
+      .find(query)
       .sort({ createdAt: -1 })
       .toArray();
 
@@ -77,28 +82,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const organizationId = session.user.organizationId;
-    if (!organizationId) {
-      return NextResponse.json({ success: false, message: 'No organization found' }, { status: 400 });
-    }
-
     const db = await connectToDatabase();
     const collection = db.collection('clients');
 
-    // Check if client with same email already exists for this organization
-    const existingClient = await collection.findOne({
-      email,
-      organizationId
-    });
-
-    if (existingClient) {
-      return NextResponse.json(
-        { success: false, message: 'Client with this email already exists' },
-        { status: 400 }
-      );
-    }
-
-    const clientData: Client = {
+    let query = {};
+    let clientData: any = {
       name,
       email,
       phone,
@@ -106,11 +94,29 @@ export async function POST(request: NextRequest) {
       company,
       taxId,
       notes,
-      organizationId,
       userId: session.user.email,
       createdAt: new Date(),
       updatedAt: new Date()
     };
+
+    // For business users, use organizationId
+    if (session.user.userType === 'business' && session.user.organizationId) {
+      query = { email, organizationId: session.user.organizationId };
+      clientData.organizationId = session.user.organizationId;
+    } else {
+      // For individual users, use userId
+      query = { email, userId: session.user.email };
+    }
+
+    // Check if client with same email already exists for this user/organization
+    const existingClient = await collection.findOne(query);
+
+    if (existingClient) {
+      return NextResponse.json(
+        { success: false, message: 'Client with this email already exists' },
+        { status: 400 }
+      );
+    }
 
     const result = await collection.insertOne(clientData);
 
