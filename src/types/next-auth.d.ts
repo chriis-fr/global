@@ -23,6 +23,7 @@ declare module "next-auth" {
         serviceOnboarding: Record<string, unknown>
       }
       services: Record<string, boolean>
+      organizationId?: string
     }
   }
 
@@ -47,6 +48,7 @@ declare module "next-auth" {
       serviceOnboarding: Record<string, unknown>
     }
     services: Record<string, boolean>
+    organizationId?: string
   }
 }
 
@@ -55,6 +57,13 @@ declare module "next-auth/jwt" {
     googleId?: string
     userType?: 'individual' | 'business'
     role?: string
+    address?: {
+      street: string
+      city: string
+      country: string
+      postalCode: string
+    }
+    taxId?: string
     onboarding?: {
       completed: boolean
       currentStep: number
@@ -62,5 +71,6 @@ declare module "next-auth/jwt" {
       serviceOnboarding: Record<string, unknown>
     }
     services?: Record<string, boolean>
+    organizationId?: string
   }
 } 

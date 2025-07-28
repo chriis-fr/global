@@ -1,9 +1,23 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/dashboard/Sidebar';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const { data: session, status } = useSession();
+  const router = useRouter();
   const [sidebarState, setSidebarState] = useState<'expanded' | 'collapsed' | 'auto-hidden'>('expanded');
+
+  // Redirect to auth page if not authenticated
+  useEffect(() => {
+    if (status === 'loading') return; // Still loading
+    
+    if (!session) {
+      router.push('/auth');
+      return;
+    }
+  }, [session, status, router]);
 
   // Listen for sidebar state changes
   useEffect(() => {
@@ -37,6 +51,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, []);
 
+  // Show loading while checking authentication
+  if (status === 'loading') {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gradient-to-br from-blue-900 to-blue-950">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto"></div>
+          <p className="mt-4 text-white">Checking authentication...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render anything if not authenticated (will redirect)
+  if (!session) {
+    return null;
+  }
+
   return (
     <div className="h-screen flex bg-gradient-to-br from-blue-900 to-blue-950 overflow-hidden">
       <Sidebar />
@@ -47,6 +78,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {children}
         </div>
       </main>
+      
+
     </div>
   );
 } 

@@ -9,13 +9,16 @@ import {
   Globe,
   Shield,
   Zap,
-  Building
+  Building,
+  LayoutDashboard
 } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { AnimatePresence } from 'framer-motion'
+import { useSession } from 'next-auth/react'
 
 export function Header() {
+  const { data: session } = useSession();
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isProductsOpen, setIsProductsOpen] = useState(false)
   const [isSolutionsOpen, setIsSolutionsOpen] = useState(false)
@@ -168,11 +171,21 @@ export function Header() {
 
           {/* CTA Buttons */}
           <div className="hidden md:flex items-center space-x-4">
+            {/* Only show Dashboard button if user is authenticated */}
+            {session && (
+              <Link
+                href="/dashboard"
+                className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 transition-colors font-medium"
+              >
+                <LayoutDashboard className="h-4 w-4" />
+                <span>Dashboard</span>
+              </Link>
+            )}
             <Link
               href="/auth"
               className="text-gray-700 hover:text-blue-600 transition-colors font-medium"
             >
-              Sign In
+              {session ? 'Sign Out' : 'Sign In'}
             </Link>
             <motion.div
               whileHover={{ scale: 1.05 }}
@@ -182,7 +195,7 @@ export function Header() {
                 href="/auth"
                 className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors"
               >
-                Get Started
+                {session ? 'Go to Dashboard' : 'Get Started'}
               </Link>
             </motion.div>
           </div>
@@ -193,7 +206,11 @@ export function Header() {
               onClick={() => setIsMenuOpen(!isMenuOpen)}
               className="text-gray-700 hover:text-blue-600 transition-colors"
             >
-              {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+              {isMenuOpen ? (
+                <X className="h-6 w-6" />
+              ) : (
+                <Menu className="h-6 w-6" />
+              )}
             </button>
           </div>
         </div>
@@ -205,9 +222,9 @@ export function Header() {
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
-              className="md:hidden border-t border-gray-200 py-4"
+              className="md:hidden border-t border-gray-200"
             >
-              <div className="space-y-4">
+              <div className="py-4 space-y-4">
                 {navigation.map((item) => (
                   <Link
                     key={item.name}
@@ -218,20 +235,33 @@ export function Header() {
                     {item.name}
                   </Link>
                 ))}
+                
+                {/* Mobile Dashboard button - only show if authenticated */}
+                {session && (
+                  <Link
+                    href="/dashboard"
+                    className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 transition-colors"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    <LayoutDashboard className="h-4 w-4" />
+                    <span>Dashboard</span>
+                  </Link>
+                )}
+                
                 <div className="pt-4 border-t border-gray-200 space-y-3">
                   <Link
                     href="/auth"
-                    className="block text-gray-700 hover:text-blue-600 transition-colors font-medium"
+                    className="block text-gray-700 hover:text-blue-600 transition-colors"
                     onClick={() => setIsMenuOpen(false)}
                   >
-                    Sign In
+                    {session ? 'Sign Out' : 'Sign In'}
                   </Link>
                   <Link
                     href="/auth"
                     className="block bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors text-center"
                     onClick={() => setIsMenuOpen(false)}
                   >
-                    Get Started
+                    {session ? 'Go to Dashboard' : 'Get Started'}
                   </Link>
                 </div>
               </div>

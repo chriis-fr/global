@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { 
   Plus, 
   FileText, 
@@ -12,7 +13,8 @@ import {
   Building2,
   Users,
   TrendingUp,
-  List
+  List,
+  LayoutDashboard
 } from 'lucide-react';
 import { Invoice } from '@/models/Invoice';
 
@@ -204,28 +206,18 @@ export default function SmartInvoicingPage() {
           </div>
           <div className="p-6">
             <div className="space-y-4">
-              {invoices.slice(0, 5).map(invoice => (
+              {invoices.slice(0, 5).map((invoice) => (
                 <div key={invoice.id} className="flex items-center justify-between p-4 bg-white/5 rounded-lg">
                   <div className="flex items-center space-x-4">
-                    <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                      <FileText className="h-5 w-5 text-white" />
-                    </div>
+                    <FileText className="h-5 w-5 text-blue-400" />
                     <div>
-                      <p className="text-white font-medium">
-                        Invoice #{invoice.id}
-                      </p>
-                      <p className="text-blue-200 text-sm">
-                        {invoice.clientDetails?.email || 'Client'}
-                      </p>
+                      <p className="text-white font-medium">{invoice.invoiceNumber}</p>
+                      <p className="text-blue-200 text-sm">{invoice.clientDetails?.companyName || 'Client'}</p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-white font-medium">
-                      ${invoice.totalAmount?.toFixed(2) || '0.00'}
-                    </p>
-                    <p className="text-blue-200 text-sm capitalize">
-                      {invoice.status || 'draft'}
-                    </p>
+                    <p className="text-white font-medium">${invoice.totalAmount?.toLocaleString()}</p>
+                    <p className="text-blue-200 text-sm">{invoice.status}</p>
                   </div>
                 </div>
               ))}
@@ -257,6 +249,13 @@ export default function SmartInvoicingPage() {
         </motion.div>
       )}
 
+      {/* Floating Dashboard Button */}
+      <Link
+        href="/dashboard"
+        className="fixed bottom-6 right-6 z-50 flex items-center justify-center w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-all duration-300 hover:scale-110"
+      >
+        <LayoutDashboard className="h-6 w-6" />
+      </Link>
     </div>
   );
 } 

@@ -144,22 +144,30 @@ export const authOptions: NextAuthOptions = {
       }
       return true
     },
-    async session({ session }) {
+    async session({ session, token }) {
       if (session.user) {
-        // Get full user data from database
-        const dbUser = await UserService.getUserByEmail(session.user.email!)
-        if (dbUser) {
-          session.user.id = dbUser._id!.toString()
-          session.user.name = dbUser.name
-          session.user.email = dbUser.email
-          session.user.image = dbUser.profilePicture || dbUser.avatar
-          session.user.userType = dbUser.userType
-          session.user.role = dbUser.role
-          session.user.address = dbUser.address
-          session.user.taxId = dbUser.taxId
-          session.user.onboarding = dbUser.onboarding
-          session.user.services = dbUser.services as unknown as Record<string, boolean>
+        // Use token data to avoid database calls
+        session.user.id = token.sub!
+        session.user.name = token.name as string
+        session.user.email = token.email as string
+        session.user.image = token.picture as string
+        session.user.userType = token.userType as 'individual' | 'business'
+        session.user.role = token.role as string
+        session.user.address = token.address as {
+          street: string
+          city: string
+          country: string
+          postalCode: string
         }
+        session.user.taxId = token.taxId as string
+        session.user.onboarding = token.onboarding as {
+          completed: boolean
+          currentStep: number
+          completedSteps: string[]
+          serviceOnboarding: Record<string, unknown>
+        }
+        session.user.services = token.services as Record<string, boolean>
+        session.user.organizationId = token.organizationId as string
       }
       return session
     },
@@ -168,8 +176,11 @@ export const authOptions: NextAuthOptions = {
         // Add custom user data to token
         token.userType = user.userType
         token.role = user.role
+        token.address = user.address
+        token.taxId = user.taxId
         token.onboarding = user.onboarding
         token.services = user.services
+        token.organizationId = user.organizationId
       }
       return token
     }

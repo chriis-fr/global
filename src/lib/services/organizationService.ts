@@ -16,7 +16,21 @@ export class OrganizationService {
     const newOrganization: Organization = {
       ...orgData,
       members: orgData.members || [],
-      services: orgData.services || {},
+      services: {
+        smartInvoicing: orgData.services?.smartInvoicing ?? false,
+        accountsReceivable: orgData.services?.accountsReceivable ?? false,
+        accountsPayable: orgData.services?.accountsPayable ?? false,
+        expenses: orgData.services?.expenses ?? false,
+        payroll: orgData.services?.payroll ?? false,
+        immutableRecords: orgData.services?.immutableRecords ?? false,
+        auditTrail: orgData.services?.auditTrail ?? false,
+        smartPayments: orgData.services?.smartPayments ?? false,
+        enhancedSecurity: orgData.services?.enhancedSecurity ?? false,
+        accounting: orgData.services?.accounting ?? false,
+        accountsPayableReceivableAPI: orgData.services?.accountsPayableReceivableAPI ?? false,
+        cryptoToFiat: orgData.services?.cryptoToFiat ?? false,
+        offrampAPI: orgData.services?.offrampAPI ?? false,
+      },
       onboarding: {
         completed: orgData.onboarding?.completed ?? false,
         currentStep: orgData.onboarding?.currentStep ?? 1,

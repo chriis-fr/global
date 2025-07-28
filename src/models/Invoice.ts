@@ -74,7 +74,8 @@ export interface RecurringSettings {
 
 export interface Invoice {
   _id?: ObjectId;
-  invoiceNumber: string;
+  invoiceNumber: string; // Unique per organization
+  organizationId: ObjectId; // Reference to organization
   issuerId: ObjectId; // Reference to Users or Organizations
   clientId?: ObjectId; // Reference to Clients (optional for new clients)
   
@@ -118,6 +119,7 @@ export interface Invoice {
 
 export interface CreateInvoiceInput {
   invoiceNumber: string;
+  organizationId: ObjectId;
   issuerId: ObjectId;
   clientId?: ObjectId;
   type: InvoiceType;
@@ -186,4 +188,24 @@ export const CRYPTO_NETWORKS = [
   { id: 'binance', name: 'Binance Smart Chain', symbol: 'BNB' },
   { id: 'arbitrum', name: 'Arbitrum', symbol: 'ARB' },
   { id: 'optimism', name: 'Optimism', symbol: 'OP' }
-]; 
+];
+
+// Invoice number generation utility
+export const generateInvoiceNumber = (organizationId: string, lastInvoiceNumber?: string): string => {
+  const currentYear = new Date().getFullYear();
+  const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+  
+  if (!lastInvoiceNumber) {
+    return `INV-${organizationId.slice(-6)}-${currentYear}${currentMonth}-0001`;
+  }
+  
+  // Extract the sequence number from the last invoice
+  const match = lastInvoiceNumber.match(/-(\d{4})$/);
+  if (match) {
+    const sequence = parseInt(match[1]) + 1;
+    return `INV-${organizationId.slice(-6)}-${currentYear}${currentMonth}-${String(sequence).padStart(4, '0')}`;
+  }
+  
+  // Fallback if parsing fails
+  return `INV-${organizationId.slice(-6)}-${currentYear}${currentMonth}-0001`;
+}; 

@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { 
   ArrowLeft, 
   Save,
@@ -18,28 +19,33 @@ import {
   Calendar,
   Clock,
   Edit3,
-  Loader2
+  Loader2,
+  Download,
+  Send,
+  AlertCircle,
+  LayoutDashboard
 } from 'lucide-react';
 import { fiatCurrencies, cryptoCurrencies, getCurrencyByCode } from '@/data/currencies';
 import { countries } from '@/data/countries';
 import { networks } from '@/data/networks';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
+import InvoicePdfView from '@/components/invoicing/InvoicePdfView';
 
 interface Client {
-  id: string;
+  _id: string;
   name: string;
   email: string;
-  phone: string;
-  address: {
-    street: string;
-    city: string;
-    state: string;
-    zipCode: string;
-    country: string;
-  };
+  phone?: string;
+  address?: string;
+  company?: string;
+  taxId?: string;
+  notes?: string;
 }
 
 interface InvoiceFormData {
   _id?: string;
+  invoiceNumber?: string;
   invoiceName: string;
   issueDate: string;
   dueDate: string;
@@ -92,6 +98,7 @@ interface InvoiceFormData {
 }
 
 const defaultInvoiceData: InvoiceFormData = {
+  invoiceNumber: '',
   invoiceName: 'Invoice',
   issueDate: new Date().toISOString().split('T')[0],
   dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 1 week from now
@@ -152,6 +159,9 @@ export default function CreateInvoicePage() {
   const [showNewClientModal, setShowNewClientModal] = useState(false);
   const [showCompanyEditModal, setShowCompanyEditModal] = useState(false);
   const [showClientEditModal, setShowClientEditModal] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const printRef = useRef<HTMLDivElement>(null);
+  const pdfRef = useRef<HTMLDivElement>(null);
 
   // Check if we're editing an existing invoice
   const invoiceId = searchParams.get('id');
@@ -234,8 +244,14 @@ export default function CreateInvoicePage() {
       ...prev,
       clientName: client.name,
       clientEmail: client.email,
-      clientPhone: client.phone,
-      clientAddress: client.address
+      clientPhone: client.phone || '',
+      clientAddress: {
+        street: client.address || '',
+        city: '',
+        state: '',
+        zipCode: '',
+        country: ''
+      }
     }));
     setShowClientSelector(false);
   };
@@ -245,7 +261,7 @@ export default function CreateInvoicePage() {
     setShowClientSelector(false);
   };
 
-  const handleCreateClient = async (clientData: Omit<Client, 'id'>) => {
+  const handleCreateClient = async (clientData: Omit<Client, '_id'>) => {
     try {
       const response = await fetch('/api/clients', {
         method: 'POST',
@@ -340,8 +356,13 @@ export default function CreateInvoicePage() {
       if (response.ok) {
         const data = await response.json();
         if (!isEditing && data.success) {
-          // Redirect to edit mode with the new invoice ID
-          router.push(`/dashboard/services/smart-invoicing/create?id=${data.data.id}`);
+          // Update formData with the new invoice ID and invoice number
+          setFormData(prev => ({
+            ...prev,
+            _id: data.data.id,
+            invoiceNumber: data.data.invoiceNumber
+          }));
+          setIsEditing(true);
         }
       }
     } catch (error) {
@@ -443,7 +464,172 @@ export default function CreateInvoicePage() {
     );
   };
 
+  const validateInvoiceForPdf = () => {
+    const errors: string[] = [];
+    
+    // Required fields validation
+    if (!formData.invoiceName || formData.invoiceName.trim() === '') {
+      errors.push('Invoice name is required');
+    }
+    if (!formData.companyName || formData.companyName.trim() === '') {
+      errors.push('Company name is required');
+    }
+    if (!formData.clientName || formData.clientName.trim() === '') {
+      errors.push('Client name is required');
+    }
+    if (!formData.companyAddress.street || formData.companyAddress.street.trim() === '') {
+      errors.push('Company address is required');
+    }
+    if (!formData.clientAddress.street || formData.clientAddress.street.trim() === '') {
+      errors.push('Client address is required');
+    }
+    
+    // Items validation
+    const hasValidItems = formData.items.some((item: { description: string; quantity: number; unitPrice: number }) => 
+      item.description && item.description.trim() !== '' && 
+      item.quantity > 0 && item.unitPrice > 0
+    );
+    if (!hasValidItems) {
+      errors.push('At least one item with description, quantity, and unit price is required');
+    }
+    
+    return errors;
+  };
 
+  const handleDownloadPdf = async () => {
+    const errors = validateInvoiceForPdf();
+    if (errors.length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
+    setValidationErrors([]);
+
+    const element = pdfRef.current;
+    if (!element) {
+      return;
+    }
+
+    try {
+      // Clone the element to avoid modifying the live DOM
+      const clone = element.cloneNode(true) as HTMLElement;
+      
+      // Create a style element with explicit CSS overrides for oklch colors
+      const style = document.createElement('style');
+      style.textContent = `
+        .bg-gray-50 { background-color: #f9fafb !important; }
+        .bg-white { background-color: #ffffff !important; }
+        .text-gray-900 { color: #111827 !important; }
+        .text-gray-600 { color: #4b5563 !important; }
+        .text-gray-500 { color: #6b7280 !important; }
+        .text-green-600 { color: #059669 !important; }
+        .text-blue-600 { color: #2563eb !important; }
+        .border-gray-200 { border-color: #e5e7eb !important; }
+        .border-t { border-top-width: 1px !important; }
+        .divide-y > * + * { border-top-width: 1px !important; border-color: #e5e7eb !important; }
+        .divide-gray-200 > * + * { border-color: #e5e7eb !important; }
+      `;
+      clone.appendChild(style);
+      
+      // Temporarily append to body for rendering
+      clone.style.position = 'absolute';
+      clone.style.left = '-9999px';
+      clone.style.top = '0';
+      document.body.appendChild(clone);
+      
+      const canvas = await html2canvas(clone, {
+        logging: false,
+        removeContainer: true
+      });
+      
+      // Remove the clone
+      document.body.removeChild(clone);
+      
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'px',
+        format: 'a4'
+      });
+      
+      const imgWidth = pdf.internal.pageSize.getWidth();
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+      pdf.save(`invoice-${formData.invoiceName || 'document'}.pdf`);
+    } catch (error) {
+      console.error('Failed to generate PDF:', error);
+    }
+  };
+
+  const handleSendPdf = async () => {
+    const errors = validateInvoiceForPdf();
+    if (errors.length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
+    setValidationErrors([]);
+
+    const element = pdfRef.current;
+    if (!element) {
+      return;
+    }
+
+    try {
+      // Clone the element to avoid modifying the live DOM
+      const clone = element.cloneNode(true) as HTMLElement;
+      
+      // Create a style element with explicit CSS overrides for oklch colors
+      const style = document.createElement('style');
+      style.textContent = `
+        .bg-gray-50 { background-color: #f9fafb !important; }
+        .bg-white { background-color: #ffffff !important; }
+        .text-gray-900 { color: #111827 !important; }
+        .text-gray-600 { color: #4b5563 !important; }
+        .text-gray-500 { color: #6b7280 !important; }
+        .text-green-600 { color: #059669 !important; }
+        .text-blue-600 { color: #2563eb !important; }
+        .border-gray-200 { border-color: #e5e7eb !important; }
+        .border-t { border-top-width: 1px !important; }
+        .divide-y > * + * { border-top-width: 1px !important; border-color: #e5e7eb !important; }
+        .divide-gray-200 > * + * { border-color: #e5e7eb !important; }
+      `;
+      clone.appendChild(style);
+      
+      // Temporarily append to body for rendering
+      clone.style.position = 'absolute';
+      clone.style.left = '-9999px';
+      clone.style.top = '0';
+      document.body.appendChild(clone);
+      
+      const canvas = await html2canvas(clone, {
+        logging: false,
+        removeContainer: true
+      });
+      
+      // Remove the clone
+      document.body.removeChild(clone);
+      
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'px',
+        format: 'a4'
+      });
+      
+      const imgWidth = pdf.internal.pageSize.getWidth();
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+      
+      // For now, just save the PDF (in a real app, you'd send it via email)
+      pdf.save(`invoice-${formData.invoiceName || 'document'}-sent.pdf`);
+      
+      // You could add email sending logic here
+      console.log('PDF generated and ready to send');
+    } catch (error) {
+      console.error('Failed to generate PDF:', error);
+    }
+  };
 
   if (loading && invoiceId) {
     return (
@@ -460,7 +646,7 @@ export default function CreateInvoicePage() {
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-4xl mx-auto px-4">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 space-y-4 sm:space-y-0">
           <button
             onClick={() => router.back()}
             className="flex items-center space-x-2 px-4 py-2 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
@@ -469,11 +655,19 @@ export default function CreateInvoicePage() {
             <span>Back to Dashboard</span>
           </button>
           
-          <div className="flex space-x-4">
+          <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4 w-full sm:w-auto">
+            <Link
+              href="/dashboard"
+              className="flex items-center justify-center space-x-2 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              <LayoutDashboard className="h-4 w-4" />
+              <span>Dashboard</span>
+            </Link>
+            
             <button
               onClick={handleSaveDraft}
               disabled={loading}
-              className="flex items-center space-x-2 px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+              className="flex items-center justify-center space-x-2 px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               <span>{isEditing ? 'Update Draft' : 'Save Draft'}</span>
@@ -482,7 +676,7 @@ export default function CreateInvoicePage() {
             <button
               onClick={handleSendInvoice}
               disabled={loading}
-              className="flex items-center space-x-2 px-6 py-2 bg-blue-800 text-white rounded-lg hover:bg-blue-900 transition-colors"
+              className="flex items-center justify-center space-x-2 px-6 py-2 bg-blue-800 text-white rounded-lg hover:bg-blue-900 transition-colors"
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
               <span>Send Invoice</span>
@@ -490,19 +684,36 @@ export default function CreateInvoicePage() {
           </div>
         </div>
 
+
+
+        {/* Validation Errors */}
+        {validationErrors.length > 0 && (
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-center space-x-2 mb-2">
+              <AlertCircle className="h-5 w-5 text-red-600" />
+              <h3 className="text-sm font-medium text-red-800">Please fix the following errors before generating PDF:</h3>
+            </div>
+            <ul className="list-disc list-inside text-sm text-red-700 space-y-1">
+              {validationErrors.map((error, index) => (
+                <li key={index}>{error}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* Invoice Document */}
-        <div className="bg-white rounded-lg shadow-lg border max-w-4xl mx-auto">
+        <div ref={printRef} className="bg-white rounded-lg shadow-lg border max-w-4xl mx-auto">
           {/* Document Header */}
-          <div className="p-8 border-b border-gray-200">
-            <div className="flex justify-between items-start">
+          <div className="p-4 sm:p-8 border-b border-gray-200">
+            <div className="flex flex-col sm:flex-row justify-between items-start space-y-4 sm:space-y-0">
               {/* Left Side - Invoice Name */}
               <div className="flex-1">
                 {renderEditableField('invoiceName', formData.invoiceName, 'Invoice')}
               </div>
 
               {/* Right Side - Dates and Logo */}
-              <div className="text-right space-y-2">
-                <div className="flex items-center space-x-4">
+              <div className="text-right space-y-2 w-full sm:w-auto">
+                <div className="flex flex-col sm:flex-row items-end sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
                   <div className="text-sm text-gray-600">
                     <div className="flex items-center space-x-2">
                       <Calendar className="h-4 w-4" />
@@ -513,7 +724,7 @@ export default function CreateInvoicePage() {
                       {renderEditableDateField('dueDate', formData.dueDate, 'Payment due by')}
                     </div>
                   </div>
-                  <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors cursor-pointer">
+                  <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors cursor-pointer flex-shrink-0">
                     {formData.companyLogo ? (
                       <Image 
                         src={formData.companyLogo} 
@@ -532,8 +743,8 @@ export default function CreateInvoicePage() {
           </div>
 
           {/* Company Information */}
-          <div className="p-8 border-b border-gray-200">
-            <div className="flex justify-between">
+          <div className="p-4 sm:p-8 border-b border-gray-200">
+            <div className="flex flex-col lg:flex-row justify-between space-y-6 lg:space-y-0">
               <div className="flex-1">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center justify-between">
                   <div className="flex items-center">
@@ -553,7 +764,7 @@ export default function CreateInvoicePage() {
                   </div>
                   <div className="text-gray-600 space-y-1">
                     <div>{formData.companyAddress.street || 'Street Address'}</div>
-                    <div className="flex space-x-2">
+                    <div className="flex flex-wrap space-x-2">
                       <span>{formData.companyAddress.city || 'City'}</span>
                       <span>{formData.companyAddress.state || 'State'}</span>
                       <span>{formData.companyAddress.zipCode || 'ZIP'}</span>
@@ -573,7 +784,7 @@ export default function CreateInvoicePage() {
               </div>
 
               {/* Client Information */}
-              <div className="flex-1 ml-8">
+              <div className="flex-1 lg:ml-8">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-900 flex items-center">
                     <User className="h-5 w-5 mr-2" />
@@ -598,7 +809,7 @@ export default function CreateInvoicePage() {
                 
                 {/* Client Selector Dropdown */}
                 {showClientSelector && (
-                  <div className="absolute z-10 mt-2 w-80 bg-white border border-gray-300 rounded-lg shadow-lg">
+                  <div className="absolute z-10 mt-2 w-full sm:w-80 bg-white border border-gray-300 rounded-lg shadow-lg">
                     <div className="p-4">
                       <div className="flex justify-between items-center mb-3">
                         <h4 className="font-medium text-gray-900">Select Client</h4>
@@ -614,7 +825,7 @@ export default function CreateInvoicePage() {
                         <div className="space-y-2 max-h-48 overflow-y-auto">
                           {clients.map((client) => (
                             <button
-                              key={client.id}
+                              key={client._id}
                               onClick={() => selectClient(client)}
                               className="w-full text-left p-2 hover:bg-gray-100 rounded border"
                             >
@@ -664,8 +875,8 @@ export default function CreateInvoicePage() {
           </div>
 
           {/* Invoice Settings */}
-          <div className="p-8 border-b border-gray-200">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="p-4 sm:p-8 border-b border-gray-200">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
               {/* Currency */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Currency</label>
@@ -737,9 +948,9 @@ export default function CreateInvoicePage() {
           </div>
 
           {/* Payment Method */}
-          <div className="p-8 border-b border-gray-200">
+          <div className="p-4 sm:p-8 border-b border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Payment Method</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Payment Type</label>
                 <div className="space-y-3">
@@ -849,8 +1060,8 @@ export default function CreateInvoicePage() {
           </div>
 
           {/* Invoice Items */}
-          <div className="p-8 border-b border-gray-200">
-            <div className="flex items-center justify-between mb-6">
+          <div className="p-4 sm:p-8 border-b border-gray-200">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 space-y-4 sm:space-y-0">
               <h3 className="text-lg font-semibold text-gray-900">Invoice Items</h3>
               <button
                 onClick={addItem}
@@ -953,7 +1164,7 @@ export default function CreateInvoicePage() {
 
             {/* Totals */}
             <div className="mt-6 flex justify-end">
-              <div className="w-64 space-y-2">
+              <div className="w-full sm:w-64 space-y-2">
                 <div className="flex justify-between text-gray-600">
                   <span>Amount without tax</span>
                   <span>{getCurrencySymbol()}{formData.subtotal.toFixed(2)}</span>
@@ -975,8 +1186,8 @@ export default function CreateInvoicePage() {
           </div>
 
           {/* Memo and Files */}
-          <div className="p-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="p-4 sm:p-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Memo</label>
                 <textarea
@@ -999,10 +1210,29 @@ export default function CreateInvoicePage() {
           </div>
         </div>
 
+        {/* PDF Buttons */}
+        <div className="flex flex-col sm:flex-row justify-center space-y-2 sm:space-y-0 sm:space-x-4 mt-8 mb-6">
+          <button
+            onClick={handleDownloadPdf}
+            className="flex items-center justify-center space-x-2 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+          >
+            <Download className="h-4 w-4" />
+            <span>Download PDF</span>
+          </button>
+          
+          <button
+            onClick={handleSendPdf}
+            className="flex items-center justify-center space-x-2 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+          >
+            <Send className="h-4 w-4" />
+            <span>Send PDF</span>
+          </button>
+        </div>
+
         {/* Client Creation Modal */}
         {showNewClientModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">Create New Client</h3>
                 <button
@@ -1023,8 +1253,8 @@ export default function CreateInvoicePage() {
 
         {/* Company Edit Modal */}
         {showCompanyEditModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">Edit Company Information</h3>
                 <button
@@ -1049,8 +1279,8 @@ export default function CreateInvoicePage() {
 
         {/* Client Edit Modal */}
         {showClientEditModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">Edit Client Information</h3>
                 <button
@@ -1073,6 +1303,11 @@ export default function CreateInvoicePage() {
           </div>
         )}
       </div>
+
+      {/* Hidden PDF View for PDF Generation */}
+      <div ref={pdfRef} className="hidden">
+        <InvoicePdfView formData={formData} invoiceNumber={formData.invoiceNumber} />
+      </div>
     </div>
   );
 }
@@ -1082,20 +1317,17 @@ function ClientCreationForm({
   onSubmit, 
   onCancel 
 }: { 
-  onSubmit: (clientData: Omit<Client, 'id'>) => void;
+  onSubmit: (clientData: Omit<Client, '_id'>) => void;
   onCancel: () => void;
 }) {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
-    address: {
-      street: '',
-      city: '',
-      state: '',
-      zipCode: '',
-      country: ''
-    }
+    address: '',
+    company: '',
+    taxId: '',
+    notes: ''
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -1104,21 +1336,10 @@ function ClientCreationForm({
   };
 
   const handleInputChange = (field: string, value: string) => {
-    if (field.startsWith('address.')) {
-      const addressField = field.split('.')[1];
-      setFormData(prev => ({
-        ...prev,
-        address: {
-          ...prev.address,
-          [addressField]: value
-        }
-      }));
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        [field]: value
-      }));
-    }
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
   };
 
   return (
@@ -1156,61 +1377,43 @@ function ClientCreationForm({
       </div>
       
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Street Address</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Company</label>
         <input
           type="text"
-          value={formData.address.street}
-          onChange={(e) => handleInputChange('address.street', e.target.value)}
+          value={formData.company}
+          onChange={(e) => handleInputChange('company', e.target.value)}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+        <textarea
+          value={formData.address}
+          onChange={(e) => handleInputChange('address', e.target.value)}
+          rows={3}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
       
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
-          <input
-            type="text"
-            value={formData.address.city}
-            onChange={(e) => handleInputChange('address.city', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
-          <input
-            type="text"
-            value={formData.address.state}
-            onChange={(e) => handleInputChange('address.state', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Tax ID</label>
+        <input
+          type="text"
+          value={formData.taxId}
+          onChange={(e) => handleInputChange('taxId', e.target.value)}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
       </div>
-      
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">ZIP Code</label>
-          <input
-            type="text"
-            value={formData.address.zipCode}
-            onChange={(e) => handleInputChange('address.zipCode', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
-          <select
-            value={formData.address.country}
-            onChange={(e) => handleInputChange('address.country', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">Select Country</option>
-            {countries.map(country => (
-              <option key={country.code} value={country.code}>
-                {country.name}
-              </option>
-            ))}
-          </select>
-        </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+        <textarea
+          value={formData.notes}
+          onChange={(e) => handleInputChange('notes', e.target.value)}
+          rows={3}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
       </div>
       
       <div className="flex space-x-3 pt-4">

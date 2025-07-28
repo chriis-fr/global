@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Building2, Users, Edit, User } from 'lucide-react';
+import { Building2, Users, Edit, User, Plus } from 'lucide-react';
 
 interface OrganizationAddress {
   street: string;
@@ -10,12 +10,18 @@ interface OrganizationAddress {
 }
 
 interface Organization {
+  _id: string;
   name: string;
   industry: string;
-  companySize: string;
-  businessType: string;
+  companySize: '1-10' | '11-50' | '51-200' | '200+';
+  businessType: 'LLC' | 'Corporation' | 'Partnership' | 'Sole Proprietorship';
   phone: string;
+  billingEmail: string;
   address: OrganizationAddress;
+  status: 'pending' | 'active' | 'suspended';
+  verified: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface OrganizationInfo {
@@ -25,10 +31,41 @@ interface OrganizationInfo {
   userRole: string | null;
 }
 
+interface CreateOrganizationForm {
+  name: string;
+  industry: string;
+  companySize: '1-10' | '11-50' | '51-200' | '200+';
+  businessType: 'LLC' | 'Corporation' | 'Partnership' | 'Sole Proprietorship';
+  phone: string;
+  billingEmail: string;
+  address: {
+    street: string;
+    city: string;
+    country: string;
+    postalCode: string;
+  };
+}
+
 export default function OrganizationSettingsPage() {
   const [orgInfo, setOrgInfo] = useState<OrganizationInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [formData, setFormData] = useState<CreateOrganizationForm>({
+    name: '',
+    industry: '',
+    companySize: '1-10',
+    businessType: 'LLC',
+    phone: '',
+    billingEmail: '',
+    address: {
+      street: '',
+      city: '',
+      country: '',
+      postalCode: ''
+    }
+  });
 
   useEffect(() => {
     fetchOrganizationData();
@@ -44,10 +81,63 @@ export default function OrganizationSettingsPage() {
       } else {
         setMessage({ type: 'error', text: 'Failed to load organization data' });
       }
-    } catch {
+    } catch (error) {
+      console.error('Error fetching organization data:', error);
       setMessage({ type: 'error', text: 'Failed to load organization data' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCreateOrganization = async () => {
+    if (!formData.name || !formData.industry || !formData.billingEmail) {
+      setMessage({ type: 'error', text: 'Please fill in all required fields (Name, Industry, and Billing Email)' });
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const response = await fetch('/api/organization', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setMessage({ type: 'success', text: 'Organization created successfully! You can now collaborate with team members.' });
+        setShowCreateForm(false);
+        // Refresh organization data
+        await fetchOrganizationData();
+      } else {
+        setMessage({ type: 'error', text: data.message || 'Failed to create organization' });
+      }
+    } catch (error) {
+      console.error('Error creating organization:', error);
+      setMessage({ type: 'error', text: 'Failed to create organization. Please try again.' });
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleInputChange = (field: string, value: string) => {
+    if (field.includes('.')) {
+      const [parent, child] = field.split('.');
+      setFormData(prev => ({
+        ...prev,
+        [parent]: {
+          ...(prev[parent as keyof CreateOrganizationForm] as Record<string, string>),
+          [child]: value
+        }
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [field]: value
+      }));
     }
   };
 
@@ -91,28 +181,241 @@ export default function OrganizationSettingsPage() {
         </div>
       )}
 
-      {/* Personal Account View */}
-      {!orgInfo?.hasOrganization && (
-        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-3">
-              <User className="h-6 w-6 text-blue-400" />
-              <h2 className="text-xl font-semibold text-white">Personal Account</h2>
+      {/* Individual User - No Organization */}
+      {orgInfo?.userType === 'individual' && !orgInfo?.hasOrganization && (
+        <div className="space-y-6">
+          {/* Personal Account Info */}
+          <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <User className="h-6 w-6 text-blue-400" />
+                <h2 className="text-xl font-semibold text-white">Personal Account</h2>
+              </div>
             </div>
-            <button
-              onClick={() => {
-                // TODO: Implement organization creation
-                setMessage({ type: 'success', text: 'Organization creation coming soon!' });
-              }}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
-            >
-              <Building2 className="h-4 w-4" />
-              <span>Create Organization</span>
-            </button>
+                         <p className="text-blue-200 mb-4">
+               You&apos;re currently using a personal account. Create an organization to collaborate with team members and manage business operations together.
+             </p>
+            <div className="bg-blue-600/10 border border-blue-500/30 rounded-lg p-4">
+              <h3 className="text-blue-300 font-medium mb-2">Benefits of creating an organization:</h3>
+              <ul className="text-blue-200 text-sm space-y-1">
+                <li>• Collaborate with team members</li>
+                <li>• Manage invoices and payments together</li>
+                <li>• Role-based access control</li>
+                <li>• Shared client management</li>
+                <li>• Team analytics and reporting</li>
+              </ul>
+            </div>
           </div>
-                     <p className="text-blue-200">
-             You&apos;re currently using a personal account. Create an organization to collaborate with team members and manage business operations together.
-           </p>
+
+          {/* Create Organization Section */}
+          {!showCreateForm ? (
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
+              <div className="text-center">
+                <Building2 className="h-12 w-12 text-blue-400 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-white mb-2">Ready to scale your business?</h3>
+                <p className="text-blue-200 mb-6">
+                  Create an organization to unlock team collaboration features and manage your business operations more effectively.
+                </p>
+                <button
+                  onClick={() => setShowCreateForm(true)}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 mx-auto"
+                >
+                  <Plus className="h-5 w-5" />
+                  <span>Create Organization</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold text-white">Create Organization</h3>
+                <button
+                  onClick={() => setShowCreateForm(false)}
+                  className="text-blue-300 hover:text-white transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-blue-300 text-sm font-medium mb-2">
+                    Organization Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => handleInputChange('name', e.target.value)}
+                    className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter organization name"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-blue-300 text-sm font-medium mb-2">
+                    Industry *
+                  </label>
+                  <select
+                    value={formData.industry}
+                    onChange={(e) => handleInputChange('industry', e.target.value)}
+                    className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select Industry</option>
+                    <option value="technology">Technology</option>
+                    <option value="healthcare">Healthcare</option>
+                    <option value="finance">Finance</option>
+                    <option value="education">Education</option>
+                    <option value="retail">Retail</option>
+                    <option value="manufacturing">Manufacturing</option>
+                    <option value="consulting">Consulting</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-blue-300 text-sm font-medium mb-2">
+                    Company Size
+                  </label>
+                                     <select
+                     value={formData.companySize}
+                     onChange={(e) => handleInputChange('companySize', e.target.value as '1-10' | '11-50' | '51-200' | '200+')}
+                     className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                   >
+                     <option value="1-10">1-10 employees</option>
+                     <option value="11-50">11-50 employees</option>
+                     <option value="51-200">51-200 employees</option>
+                     <option value="200+">200+ employees</option>
+                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-blue-300 text-sm font-medium mb-2">
+                    Business Type
+                  </label>
+                                     <select
+                     value={formData.businessType}
+                     onChange={(e) => handleInputChange('businessType', e.target.value as 'LLC' | 'Corporation' | 'Partnership' | 'Sole Proprietorship')}
+                     className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                   >
+                     <option value="LLC">LLC</option>
+                     <option value="Corporation">Corporation</option>
+                     <option value="Partnership">Partnership</option>
+                     <option value="Sole Proprietorship">Sole Proprietorship</option>
+                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-blue-300 text-sm font-medium mb-2">
+                    Phone
+                  </label>
+                  <input
+                    type="tel"
+                    value={formData.phone}
+                    onChange={(e) => handleInputChange('phone', e.target.value)}
+                    className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter phone number"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-blue-300 text-sm font-medium mb-2">
+                    Billing Email *
+                  </label>
+                  <input
+                    type="email"
+                    value={formData.billingEmail}
+                    onChange={(e) => handleInputChange('billingEmail', e.target.value)}
+                    className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter billing email"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6">
+                <h4 className="text-blue-300 font-medium mb-3">Address Information</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="block text-blue-300 text-sm font-medium mb-2">
+                      Street Address
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.address.street}
+                      onChange={(e) => handleInputChange('address.street', e.target.value)}
+                      className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Enter street address"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-blue-300 text-sm font-medium mb-2">
+                      City
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.address.city}
+                      onChange={(e) => handleInputChange('address.city', e.target.value)}
+                      className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Enter city"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-blue-300 text-sm font-medium mb-2">
+                      Country
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.address.country}
+                      onChange={(e) => handleInputChange('address.country', e.target.value)}
+                      className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Enter country"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-blue-300 text-sm font-medium mb-2">
+                      Postal Code
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.address.postalCode}
+                      onChange={(e) => handleInputChange('address.postalCode', e.target.value)}
+                      className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Enter postal code"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowCreateForm(false)}
+                  className="px-4 py-2 text-blue-300 hover:text-white transition-colors"
+                  disabled={creating}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreateOrganization}
+                  disabled={creating}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 disabled:opacity-50"
+                >
+                  {creating ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      <span>Creating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Building2 className="h-4 w-4" />
+                      <span>Create Organization</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -168,6 +471,10 @@ export default function OrganizationSettingsPage() {
               <div>
                 <span className="text-blue-300">Phone:</span>
                 <span className="text-white ml-2">{orgInfo.organization.phone}</span>
+              </div>
+              <div>
+                <span className="text-blue-300">Billing Email:</span>
+                <span className="text-white ml-2">{orgInfo.organization.billingEmail}</span>
               </div>
               <div className="md:col-span-2">
                 <span className="text-blue-300">Address:</span>

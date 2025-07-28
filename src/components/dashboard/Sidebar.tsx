@@ -169,8 +169,11 @@ export default function Sidebar() {
 
       {/* Scrollable Navigation Area - Services Only */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
-        {/* Services Navigation */}
+        {/* Dashboard Navigation */}
         <nav className="p-4 space-y-2">
+
+
+          {/* Services Navigation */}
           <div className="mb-4">
             {(!isCollapsed || isAutoHidden) && (
               <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wider mb-2 px-2">

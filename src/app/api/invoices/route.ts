@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
-import { Invoice } from '@/models/Invoice';
+import { Invoice, generateInvoiceNumber } from '@/models/Invoice';
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,11 +16,16 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '50');
     const page = parseInt(searchParams.get('page') || '1');
 
+    const organizationId = session.user.organizationId;
+    if (!organizationId) {
+      return NextResponse.json({ success: false, message: 'No organization found' }, { status: 400 });
+    }
+
     const db = await connectToDatabase();
     const collection = db.collection('invoices');
 
     // Build query
-    const query: any = { userId: session.user.email };
+    const query: any = { organizationId };
     if (status && status !== 'all') {
       query.status = status;
     }
@@ -103,14 +108,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const organizationId = session.user.organizationId;
+    if (!organizationId) {
+      return NextResponse.json({ success: false, message: 'No organization found' }, { status: 400 });
+    }
+
     const db = await connectToDatabase();
-    const collection = db.collection('invoices');
+    const invoiceCollection = db.collection('invoices');
+    const lastInvoice = await invoiceCollection
+      .findOne({ organizationId }, { sort: { createdAt: -1 } });
+    
+    const invoiceNumber = generateInvoiceNumber(
+      organizationId.toString(), 
+      lastInvoice?.invoiceNumber
+    );
 
     const invoiceData = {
+      invoiceNumber,
+      organizationId,
       userId: session.user.email,
       invoiceName,
-      issueDate,
-      dueDate,
+      issueDate: new Date(issueDate),
+      dueDate: new Date(dueDate),
       companyName,
       companyEmail,
       companyPhone,
@@ -138,7 +157,7 @@ export async function POST(request: NextRequest) {
       updatedAt: new Date()
     };
 
-    const result = await collection.insertOne(invoiceData);
+    const result = await invoiceCollection.insertOne(invoiceData);
 
     return NextResponse.json({
       success: true,
