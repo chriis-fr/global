@@ -13,7 +13,8 @@ import {
   HelpCircle,
   LogOut,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  CreditCard
 } from 'lucide-react';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import Image from 'next/image';
@@ -40,6 +41,12 @@ const SETTINGS_LINKS = [
     label: 'Organization',
     icon: Building2,
     href: '/dashboard/settings/organization',
+  },
+  {
+    key: 'payment-methods',
+    label: 'Payment Methods',
+    icon: CreditCard,
+    href: '/dashboard/settings/payment-methods',
   },
   {
     key: 'notifications',

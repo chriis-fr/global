@@ -52,6 +52,16 @@ export interface Organization {
   // Services
   services: UserServices;
   
+  // Payment Methods
+  paymentMethodSettings?: {
+    defaultFiatMethod?: ObjectId;
+    defaultCryptoMethod?: ObjectId;
+    autoSelectPaymentMethod: boolean;
+    allowMultipleMethods: boolean;
+    supportedCurrencies: string[];
+    supportedNetworks: string[];
+  };
+  
   // Onboarding
   onboarding: {
     completed: boolean;

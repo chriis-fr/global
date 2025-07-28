@@ -94,6 +94,16 @@ export interface User {
   settings: UserSettings;
   services: UserServices;
   
+  // Payment Methods (for individual users)
+  paymentMethodSettings?: {
+    defaultFiatMethod?: ObjectId;
+    defaultCryptoMethod?: ObjectId;
+    autoSelectPaymentMethod: boolean;
+    allowMultipleMethods: boolean;
+    supportedCurrencies: string[];
+    supportedNetworks: string[];
+  };
+  
   // Onboarding
   onboarding: {
     completed: boolean;

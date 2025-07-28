@@ -50,6 +50,7 @@ export interface ClientDetails {
 
 export interface PaymentSettings {
   method: PaymentMethod;
+  paymentMethodId?: ObjectId; // Reference to PaymentMethod
   currency: string;
   enableMultiCurrency?: boolean;
   cryptoNetwork?: string;

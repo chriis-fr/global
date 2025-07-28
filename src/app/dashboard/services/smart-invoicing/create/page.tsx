@@ -656,14 +656,6 @@ export default function CreateInvoicePage() {
           </button>
           
           <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4 w-full sm:w-auto">
-            <Link
-              href="/dashboard"
-              className="flex items-center justify-center space-x-2 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-            >
-              <LayoutDashboard className="h-4 w-4" />
-              <span>Dashboard</span>
-            </Link>
-            
             <button
               onClick={handleSaveDraft}
               disabled={loading}
@@ -1308,6 +1300,14 @@ export default function CreateInvoicePage() {
       <div ref={pdfRef} className="hidden">
         <InvoicePdfView formData={formData} invoiceNumber={formData.invoiceNumber} />
       </div>
+
+      {/* Floating Dashboard Button */}
+      <Link
+        href="/dashboard"
+        className="fixed bottom-6 right-6 z-50 flex items-center justify-center w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-all duration-300 hover:scale-110"
+      >
+        <LayoutDashboard className="h-6 w-6" />
+      </Link>
     </div>
   );
 }
