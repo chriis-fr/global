@@ -18,6 +18,7 @@ export interface UserSettings {
 export interface UserServices {
   // Core Invoicing & Payments
   smartInvoicing: boolean;
+  emailService: boolean;
   accountsReceivable: boolean;
   accountsPayable: boolean;
   

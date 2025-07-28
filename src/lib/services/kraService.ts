@@ -32,7 +32,7 @@ export class KRAService {
   private static readonly TAXPAYER_TYPE = 'KE';
 
   /**
-   * Verify KRA tax ID against the official KRA API
+   * Verify KRA tax ID against the official KRA APIthe das
    */
   static async verifyTaxID(taxID: string): Promise<KRAVerificationResult> {
     console.log('🔍 [KRA] Starting tax ID verification for:', taxID);

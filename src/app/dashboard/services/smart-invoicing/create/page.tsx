@@ -160,6 +160,7 @@ export default function CreateInvoicePage() {
   const [showCompanyEditModal, setShowCompanyEditModal] = useState(false);
   const [showClientEditModal, setShowClientEditModal] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [sendingInvoice, setSendingInvoice] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
   const pdfRef = useRef<HTMLDivElement>(null);
 
@@ -574,6 +575,8 @@ export default function CreateInvoicePage() {
       return;
     }
 
+    setSendingInvoice(true);
+
     try {
       // Clone the element to avoid modifying the live DOM
       const clone = element.cloneNode(true) as HTMLElement;
@@ -621,13 +624,36 @@ export default function CreateInvoicePage() {
       
       pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
       
-      // For now, just save the PDF (in a real app, you'd send it via email)
-      pdf.save(`invoice-${formData.invoiceName || 'document'}-sent.pdf`);
+      // Convert PDF to base64 for email attachment
+      const pdfBase64 = pdf.output('datauristring').split(',')[1];
       
-      // You could add email sending logic here
-      console.log('PDF generated and ready to send');
+      // Send invoice via email
+      const response = await fetch('/api/invoices/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          invoiceId: formData._id,
+          recipientEmail: formData.clientEmail,
+          pdfBuffer: pdfBase64
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert('Invoice sent successfully!');
+        // Optionally redirect to dashboard or invoice list
+        router.push('/dashboard/services/smart-invoicing');
+      } else {
+        alert(`Failed to send invoice: ${result.message}`);
+      }
     } catch (error) {
-      console.error('Failed to generate PDF:', error);
+      console.error('Failed to send invoice:', error);
+      alert('Failed to send invoice. Please try again.');
+    } finally {
+      setSendingInvoice(false);
     }
   };
 
@@ -1214,10 +1240,15 @@ export default function CreateInvoicePage() {
           
           <button
             onClick={handleSendPdf}
-            className="flex items-center justify-center space-x-2 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+            disabled={sendingInvoice}
+            className="flex items-center justify-center space-x-2 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Send className="h-4 w-4" />
-            <span>Send PDF</span>
+            {sendingInvoice ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+            <span>{sendingInvoice ? 'Sending...' : 'Send PDF'}</span>
           </button>
         </div>
 

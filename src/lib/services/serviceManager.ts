@@ -11,6 +11,14 @@ export const SERVICE_DEFINITIONS = {
     icon: 'FileText',
     ready: true // Ready for production
   },
+  emailService: {
+    key: 'emailService',
+    title: 'Email Service',
+    description: 'Send automated emails for invoices, notifications, and system interactions',
+    category: 'Core Invoicing & Payments',
+    icon: 'Mail',
+    ready: true // Ready for production
+  },
   accountsReceivable: {
     key: 'accountsReceivable',
     title: 'Accounts Receivable',
@@ -123,6 +131,7 @@ export function createDefaultServices(): UserServices {
   return {
     // Core Invoicing & Payments
     smartInvoicing: true, // Enable by default so users can see it in sidebar
+    emailService: true, // Enable by default for email notifications
     accountsReceivable: false,
     accountsPayable: false,
     

@@ -16,7 +16,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const user = await UserService.getUserById(userId);
+    // Try to get user by email first (more reliable), then by ID
+    let user = await UserService.getUserByEmail(userId);
+    if (!user) {
+      // If userId is not an email, try to get user by ID
+      try {
+        user = await UserService.getUserById(userId);
+      } catch {
+        console.error('Invalid user ID format:', userId);
+      }
+    }
     if (!user) {
       return NextResponse.json(
         { 
@@ -40,7 +49,17 @@ export async function POST(request: NextRequest) {
       completed: step === 4 ? true : user.onboarding.completed
     };
 
-    const updatedUser = await UserService.updateUser(userId, {
+    if (!user._id) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: 'User ID not found' 
+        },
+        { status: 500 }
+      );
+    }
+
+    const updatedUser = await UserService.updateUser(user._id.toString(), {
       onboarding: updatedOnboarding
     });
 

@@ -6,6 +6,25 @@ import { createDefaultServices } from './services/serviceManager'
 import { defaultCountry } from '@/data/countries'
 import bcrypt from 'bcryptjs'
 
+// Extended Google user interface with additional fields
+interface GoogleUserExtended {
+  email: string
+  name: string
+  image?: string
+  given_name?: string
+  family_name?: string
+  locale?: string
+  verified_email?: boolean
+  hd?: string
+  phoneNumbers?: Array<{ value: string; type?: string }>
+  addresses?: Array<{
+    streetAddress?: string
+    locality?: string
+    country?: string
+    postalCode?: string
+  }>
+}
+
 export const authOptions: NextAuthOptions = {
   providers: [
     GoogleProvider({
@@ -15,7 +34,13 @@ export const authOptions: NextAuthOptions = {
         params: {
           prompt: "consent",
           access_type: "offline",
-          response_type: "code"
+          response_type: "code",
+          scope: [
+            "https://www.googleapis.com/auth/userinfo.profile",
+            "https://www.googleapis.com/auth/userinfo.email",
+            "https://www.googleapis.com/auth/user.addresses.read",
+            "https://www.googleapis.com/auth/user.phoneNumbers.read"
+          ].join(" ")
         }
       }
     }),
@@ -101,20 +126,31 @@ export const authOptions: NextAuthOptions = {
 
           // Create new user from Google data
           console.log('📝 [Auth] Creating new user from Google data')
+          const googleUser = user as GoogleUserExtended
+          console.log('🔍 [Auth] Google user data:', {
+            email: googleUser.email,
+            name: googleUser.name,
+            given_name: googleUser.given_name,
+            family_name: googleUser.family_name,
+            locale: googleUser.locale,
+            verified_email: googleUser.verified_email,
+            hd: googleUser.hd
+          })
+          
           const userData = {
-            email: user.email!,
-            name: user.name!,
+            email: googleUser.email!,
+            name: googleUser.name!,
             role: 'user',
             userType: 'individual' as const,
-            profilePicture: user.image || undefined,
-            avatar: user.image || undefined,
-            phone: '',
+            profilePicture: googleUser.image || undefined,
+            avatar: googleUser.image || undefined,
+            phone: googleUser.phoneNumbers?.[0]?.value || '',
             industry: '',
             address: {
-              street: '',
-              city: '',
-              country: defaultCountry.code,
-              postalCode: ''
+              street: googleUser.addresses?.[0]?.streetAddress || '',
+              city: googleUser.addresses?.[0]?.locality || '',
+              country: googleUser.addresses?.[0]?.country || defaultCountry.code,
+              postalCode: googleUser.addresses?.[0]?.postalCode || ''
             },
             taxId: '',
             walletAddresses: [],
@@ -166,7 +202,7 @@ export const authOptions: NextAuthOptions = {
           completedSteps: string[]
           serviceOnboarding: Record<string, unknown>
         }
-        session.user.services = token.services as Record<string, boolean>
+        session.user.services = (token.services as Record<string, boolean>) || createDefaultServices()
         session.user.organizationId = token.organizationId as string
       }
       return session
@@ -179,8 +215,10 @@ export const authOptions: NextAuthOptions = {
         token.address = user.address
         token.taxId = user.taxId
         token.onboarding = user.onboarding
-        token.services = user.services
+        token.services = user.services || createDefaultServices()
         token.organizationId = user.organizationId
+        
+        console.log('🔐 [Auth] JWT token updated with services:', token.services)
       }
       return token
     }

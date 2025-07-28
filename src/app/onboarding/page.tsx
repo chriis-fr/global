@@ -103,7 +103,7 @@ export default function OnboardingPage() {
         _id: session.user.id,
         email: session.user.email,
         name: session.user.name,
-        userType: session.user.userType,
+        userType: session.user.userType || 'individual', // Fallback to 'individual' if not set
         address: session.user.address || {
           street: '',
           city: '',
@@ -111,9 +111,21 @@ export default function OnboardingPage() {
           postalCode: ''
         },
         taxId: session.user.taxId || '',
-        onboarding: session.user.onboarding,
-        services: session.user.services
+        onboarding: session.user.onboarding || {
+          completed: false,
+          currentStep: 1,
+          completedSteps: [],
+          serviceOnboarding: {}
+        },
+        services: session.user.services || {}
       };
+      
+      console.log('🔍 [Onboarding] Session user data:', {
+        id: session.user.id,
+        userType: session.user.userType,
+        email: session.user.email,
+        name: session.user.name
+      });
       setUser(userObj);
 
       // Load services
@@ -182,10 +194,10 @@ export default function OnboardingPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          userId: user._id,
+          userId: user.email, // Use email instead of _id for more reliable identification
           step,
           stepData,
-          completedSteps: [...user.onboarding.completedSteps, step.toString()]
+          completedSteps: [...(user.onboarding.completedSteps || []), step.toString()]
         }),
       });
 
@@ -368,7 +380,7 @@ export default function OnboardingPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
                   <div>
                     <p className="text-blue-200 text-sm">Account Type</p>
-                    <p className="text-white font-medium capitalize">{user.userType}</p>
+                    <p className="text-white font-medium capitalize">{user.userType || 'Individual'}</p>
                   </div>
                   <div>
                     <p className="text-blue-200 text-sm">Email</p>
@@ -426,7 +438,7 @@ export default function OnboardingPage() {
                       .filter(([, service]) => service.category === category)
                       .map(([serviceKey, service]) => {
                         const Icon = iconMap[service.icon];
-                        const isEnabled = user?.services[serviceKey] || false;
+                        const isEnabled = user?.services?.[serviceKey] || false;
                         const isReady = service.ready || false;
 
                         return (
