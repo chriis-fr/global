@@ -23,7 +23,9 @@ import {
   Download,
   Send,
   AlertCircle,
-  LayoutDashboard
+  LayoutDashboard,
+  ChevronDown,
+  Search
 } from 'lucide-react';
 import { fiatCurrencies, cryptoCurrencies, getCurrencyByCode } from '@/data/currencies';
 import { countries } from '@/data/countries';
@@ -102,17 +104,17 @@ const defaultInvoiceData: InvoiceFormData = {
   invoiceName: 'Invoice',
   issueDate: new Date().toISOString().split('T')[0],
   dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 1 week from now
-  companyName: 'Chains ERP',
-  companyEmail: 'caspianodhis@gmail.com',
+  companyName: '',
+  companyEmail: '',
   companyPhone: '',
   companyAddress: {
-    street: 'munae road',
-    city: '00100 Nairobi',
-    state: 'Central',
+    street: '',
+    city: '',
+    state: '',
     zipCode: '',
-    country: 'Kenya'
+    country: 'US'
   },
-  companyTaxNumber: 'A018277503R',
+  companyTaxNumber: '',
   clientName: '',
   clientEmail: '',
   clientPhone: '',
@@ -123,7 +125,7 @@ const defaultInvoiceData: InvoiceFormData = {
     zipCode: '',
     country: 'US'
   },
-  currency: 'EUR',
+  currency: 'USD',
   paymentMethod: 'fiat',
   enableMultiCurrency: false,
   invoiceType: 'regular',
@@ -171,6 +173,7 @@ export default function CreateInvoicePage() {
     if (invoiceId) {
       loadInvoice(invoiceId);
     } else if (session?.user) {
+      loadServiceOnboardingData();
       loadOrganizationData();
       loadClients();
     }
@@ -193,6 +196,38 @@ export default function CreateInvoicePage() {
     }
   };
 
+  const loadServiceOnboardingData = async () => {
+    try {
+      const response = await fetch('/api/onboarding/service?service=smartInvoicing');
+      const data = await response.json();
+      
+      if (data.success && data.data.serviceOnboarding) {
+        const onboardingData = data.data.serviceOnboarding;
+        
+        // Update form data with service onboarding information
+        setFormData(prev => ({
+          ...prev,
+          companyName: onboardingData.businessInfo?.name || prev.companyName,
+          companyEmail: onboardingData.businessInfo?.email || prev.companyEmail,
+          companyPhone: onboardingData.businessInfo?.phone || prev.companyPhone,
+          companyAddress: {
+            street: onboardingData.businessInfo?.address?.street || prev.companyAddress.street,
+            city: onboardingData.businessInfo?.address?.city || prev.companyAddress.city,
+            state: onboardingData.businessInfo?.address?.state || prev.companyAddress.state,
+            zipCode: onboardingData.businessInfo?.address?.zipCode || prev.companyAddress.zipCode,
+            country: onboardingData.businessInfo?.address?.country || prev.companyAddress.country
+          },
+          companyTaxNumber: onboardingData.businessInfo?.taxId || prev.companyTaxNumber,
+          currency: onboardingData.invoiceSettings?.defaultCurrency || prev.currency
+        }));
+        
+        console.log('✅ [Invoice Create] Service onboarding data loaded from:', data.data.storageLocation);
+      }
+    } catch (error) {
+      console.error('Error loading service onboarding data:', error);
+    }
+  };
+
   const loadOrganizationData = async () => {
     try {
       const response = await fetch('/api/user/settings');
@@ -202,15 +237,15 @@ export default function CreateInvoicePage() {
         const org = data.data.organization;
         setFormData(prev => ({
           ...prev,
-          companyName: org.name || 'Chains ERP',
-          companyEmail: org.email || 'caspianodhis@gmail.com',
-          companyPhone: org.phone || '',
+          companyName: org.name || prev.companyName,
+          companyEmail: org.email || prev.companyEmail,
+          companyPhone: org.phone || prev.companyPhone,
           companyAddress: {
-            street: org.address?.street || 'munae road',
-            city: org.address?.city || '00100 Nairobi',
-            state: org.address?.state || 'Central',
-            zipCode: org.address?.zipCode || '',
-            country: org.address?.country || 'Kenya'
+            street: org.address?.street || prev.companyAddress.street,
+            city: org.address?.city || prev.companyAddress.city,
+            state: org.address?.state || prev.companyAddress.state,
+            zipCode: org.address?.zipCode || prev.companyAddress.zipCode,
+            country: org.address?.country || prev.companyAddress.country
           }
         }));
       }
@@ -1489,6 +1524,8 @@ function CompanyEditForm({
     },
     companyTaxNumber: formData.companyTaxNumber
   });
+  const [showCountryDropdown, setShowCountryDropdown] = useState(false);
+  const [countrySearch, setCountrySearch] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1600,18 +1637,63 @@ function CompanyEditForm({
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
-          <select
-            value={editData.companyAddress.country}
-            onChange={(e) => handleInputChange('companyAddress.country', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">Select Country</option>
-            {countries.map(country => (
-              <option key={country.code} value={country.code}>
-                {country.name}
-              </option>
-            ))}
-          </select>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowCountryDropdown(!showCountryDropdown)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-left flex items-center justify-between bg-white"
+            >
+              <span className={editData.companyAddress.country ? 'text-gray-900' : 'text-gray-500'}>
+                {editData.companyAddress.country 
+                  ? countries.find(c => c.code === editData.companyAddress.country)?.name 
+                  : 'Select Country'}
+              </span>
+              <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${showCountryDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            
+            {showCountryDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md max-h-60 overflow-y-auto z-20 shadow-lg">
+                {/* Search input */}
+                <div className="p-2 border-b border-gray-200 bg-gray-50">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input
+                      type="text"
+                      value={countrySearch}
+                      onChange={(e) => setCountrySearch(e.target.value)}
+                      placeholder="Search countries..."
+                      className="w-full pl-10 pr-3 py-2 bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+                
+                {/* Country list */}
+                <div className="max-h-48 overflow-y-auto">
+                  {countries
+                    .filter(country => 
+                      country.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                      country.phoneCode.includes(countrySearch) ||
+                      country.code.toLowerCase().includes(countrySearch.toLowerCase())
+                    )
+                    .map(country => (
+                    <button
+                      key={country.code}
+                      type="button"
+                      onClick={() => {
+                        handleInputChange('companyAddress.country', country.code);
+                        setShowCountryDropdown(false);
+                        setCountrySearch('');
+                      }}
+                      className="w-full px-3 py-2 text-left text-gray-700 hover:bg-gray-100 transition-colors flex items-center justify-between border-b border-gray-100 last:border-b-0"
+                    >
+                      <span className="text-sm">{country.name}</span>
+                      <span className="text-blue-600 text-xs font-medium">{country.phoneCode}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1656,6 +1738,8 @@ function ClientEditForm({
       country: formData.clientAddress.country
     }
   });
+  const [showCountryDropdown, setShowCountryDropdown] = useState(false);
+  const [countrySearch, setCountrySearch] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1757,18 +1841,63 @@ function ClientEditForm({
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
-          <select
-            value={editData.clientAddress.country}
-            onChange={(e) => handleInputChange('clientAddress.country', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">Select Country</option>
-            {countries.map(country => (
-              <option key={country.code} value={country.code}>
-                {country.name}
-              </option>
-            ))}
-          </select>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowCountryDropdown(!showCountryDropdown)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-left flex items-center justify-between bg-white"
+            >
+              <span className={editData.clientAddress.country ? 'text-gray-900' : 'text-gray-500'}>
+                {editData.clientAddress.country 
+                  ? countries.find(c => c.code === editData.clientAddress.country)?.name 
+                  : 'Select Country'}
+              </span>
+              <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${showCountryDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            
+            {showCountryDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md max-h-60 overflow-y-auto z-20 shadow-lg">
+                {/* Search input */}
+                <div className="p-2 border-b border-gray-200 bg-gray-50">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input
+                      type="text"
+                      value={countrySearch}
+                      onChange={(e) => setCountrySearch(e.target.value)}
+                      placeholder="Search countries..."
+                      className="w-full pl-10 pr-3 py-2 bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+                
+                {/* Country list */}
+                <div className="max-h-48 overflow-y-auto">
+                  {countries
+                    .filter(country => 
+                      country.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                      country.phoneCode.includes(countrySearch) ||
+                      country.code.toLowerCase().includes(countrySearch.toLowerCase())
+                    )
+                    .map(country => (
+                    <button
+                      key={country.code}
+                      type="button"
+                      onClick={() => {
+                        handleInputChange('clientAddress.country', country.code);
+                        setShowCountryDropdown(false);
+                        setCountrySearch('');
+                      }}
+                      className="w-full px-3 py-2 text-left text-gray-700 hover:bg-gray-100 transition-colors flex items-center justify-between border-b border-gray-100 last:border-b-0"
+                    >
+                      <span className="text-sm">{country.name}</span>
+                      <span className="text-blue-600 text-xs font-medium">{country.phoneCode}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

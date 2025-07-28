@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { 
   Plus, 
@@ -14,7 +15,9 @@ import {
   Users,
   TrendingUp,
   List,
-  LayoutDashboard
+  LayoutDashboard,
+  Settings,
+  AlertCircle
 } from 'lucide-react';
 import { Invoice } from '@/models/Invoice';
 
@@ -25,14 +28,47 @@ interface InvoiceWithId extends Partial<Invoice> {
 
 export default function SmartInvoicingPage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const [invoices] = useState<InvoiceWithId[]>([]);
+  const [serviceOnboarding, setServiceOnboarding] = useState<{
+    completed?: boolean;
+    businessInfo?: Record<string, unknown>;
+    invoiceSettings?: Record<string, unknown>;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    checkServiceOnboarding();
+  }, [session]);
+
+  const checkServiceOnboarding = async () => {
+    try {
+      const response = await fetch('/api/onboarding/service?service=smartInvoicing');
+      const data = await response.json();
+      if (data.success) {
+        setServiceOnboarding(data.data.serviceOnboarding);
+      }
+    } catch (error) {
+      console.error('Error checking service onboarding:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleCreateInvoice = () => {
-    router.push('/dashboard/services/smart-invoicing/create');
+    if (!serviceOnboarding?.completed) {
+      router.push('/dashboard/services/smart-invoicing/onboarding');
+    } else {
+      router.push('/dashboard/services/smart-invoicing/create');
+    }
   };
 
   const handleViewInvoices = () => {
     router.push('/dashboard/services/smart-invoicing/invoices');
+  };
+
+  const handleServiceSetup = () => {
+    router.push('/dashboard/services/smart-invoicing/onboarding');
   };
 
   return (
@@ -66,6 +102,36 @@ export default function SmartInvoicingPage() {
           </motion.button>
         </div>
       </div>
+
+      {/* Service Onboarding Check */}
+      {!loading && !serviceOnboarding?.completed && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-yellow-600/20 border border-yellow-500/50 rounded-xl p-6"
+        >
+          <div className="flex items-start space-x-4">
+            <AlertCircle className="h-6 w-6 text-yellow-400 mt-1 flex-shrink-0" />
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-yellow-100 mb-2">
+                Service Setup Required
+              </h3>
+              <p className="text-yellow-200 mb-4">
+                Before you can create invoices, you need to configure your business information and invoice settings.
+              </p>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleServiceSetup}
+                className="flex items-center space-x-2 bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 transition-colors"
+              >
+                <Settings className="h-4 w-4" />
+                <span>Complete Setup</span>
+              </motion.button>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">

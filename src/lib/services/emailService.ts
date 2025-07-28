@@ -22,6 +22,15 @@ const getFrontendUrl = () => {
   return 'http://localhost:3000';
 };
 
+// Function to get email headers for profile picture support
+const getEmailHeaders = () => {
+  return {
+    'X-Profile-Picture': 'https://chains-erp.com/chainsnobg.png',
+    'X-Organization': 'Chains ERP-Global',
+    'X-Organization-Logo': 'https://chains-erp.com/chainsnobg.png'
+  };
+};
+
 // Test email configuration
 export const testEmailConnection = async () => {
   try {
@@ -45,6 +54,7 @@ export const sendNotificationPreferencesConfirmation = async (
     from: `"Chains ERP-Global" <${emailConfig.auth.user}>`,
     to: userEmail,
     subject: `Notification Preferences Updated - ${organizationName}`,
+    headers: getEmailHeaders(),
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
@@ -167,6 +177,7 @@ export const sendInvoiceNotification = async (
     from: `"${companyName} via Chains ERP-Global" <${emailConfig.auth.user}>`,
     to: userEmail,
     subject: `Invoice #${invoiceNumber} from ${companyName}`,
+    headers: getEmailHeaders(),
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
@@ -320,6 +331,7 @@ export const sendApprovalRequest = async (
     from: `"Chains ERP-Global" <${emailConfig.auth.user}>`,
     to: approverEmail,
     subject: `Approval Request: ${requestTitle} - ${getUrgencyText(urgency)}`,
+    headers: getEmailHeaders(),
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
@@ -463,6 +475,7 @@ export const sendApprovalStatusUpdate = async (
     from: `"Chains ERP-Global" <${emailConfig.auth.user}>`,
     to: requesterEmail,
     subject: `Approval Update: ${requestTitle} - ${getStatusText(status)}`,
+    headers: getEmailHeaders(),
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
@@ -601,6 +614,7 @@ export const sendAppNotification = async (
     from: `"Chains ERP-Global${organizationName ? ` - ${organizationName}` : ''}" <${emailConfig.auth.user}>`,
     to: userEmail,
     subject: `Chains ERP-Global Notification: ${notificationTitle}`,
+    headers: getEmailHeaders(),
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
@@ -694,6 +708,7 @@ export const sendTestEmail = async (toEmail: string) => {
     from: `"Chains ERP-Global" <${emailConfig.auth.user}>`,
     to: toEmail,
     subject: 'Test Email from Chains ERP-Global System',
+    headers: getEmailHeaders(),
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
