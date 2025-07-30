@@ -1,6 +1,9 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Building2, Users, Edit, User, Plus } from 'lucide-react';
+import { Building2, Users, Edit, User, Plus, Image } from 'lucide-react';
+import { LogoManager } from '@/components/LogoManager';
+import DashboardFloatingButton from '@/components/DashboardFloatingButton';
+import { LogoDisplay } from '@/components/LogoDisplay';
 
 interface OrganizationAddress {
   street: string;
@@ -46,12 +49,21 @@ interface CreateOrganizationForm {
   };
 }
 
+interface Logo {
+  id: string;
+  name: string;
+  url: string;
+  isDefault: boolean;
+  createdAt: Date;
+}
+
 export default function OrganizationSettingsPage() {
   const [orgInfo, setOrgInfo] = useState<OrganizationInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [selectedLogo, setSelectedLogo] = useState<Logo | null>(null);
   const [formData, setFormData] = useState<CreateOrganizationForm>({
     name: '',
     industry: '',
@@ -155,6 +167,7 @@ export default function OrganizationSettingsPage() {
             <div className="h-10 bg-white/20 rounded mb-6"></div>
           </div>
         </div>
+        <DashboardFloatingButton />
       </div>
     );
   }
@@ -484,8 +497,47 @@ export default function OrganizationSettingsPage() {
               </div>
             </div>
           </div>
+
+          {/* Logo Management Section */}
+          <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <Image className="h-6 w-6 text-blue-400" aria-label="Logo management icon" />
+                <h3 className="text-lg font-semibold text-white">Logo Management</h3>
+              </div>
+            </div>
+            <p className="text-blue-200 text-sm mb-6">
+              Upload and manage your organization logos for use in invoices and other business documents. 
+              You can have multiple logos for different occasions and set one as your default.
+            </p>
+            <LogoManager 
+              onLogoSelectAction={setSelectedLogo}
+              selectedLogoId={selectedLogo?.id}
+            />
+
+            {selectedLogo && (
+              <div className="mt-6 p-4 bg-blue-600/10 border border-blue-500/30 rounded-lg">
+                <h3 className="text-blue-300 font-medium mb-2">Selected Logo:</h3>
+                                              <div className="flex items-center space-x-3">
+                  <LogoDisplay
+                    logoUrl={selectedLogo.url}
+                    alt={selectedLogo.name}
+                    size={48}
+                  />
+                  <div>
+                    <p className="text-white font-medium">{selectedLogo.name}</p>
+                    <p className="text-blue-200 text-sm">
+                      {selectedLogo.isDefault ? 'Default Logo' : 'Custom Logo'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
+
+      <DashboardFloatingButton />
     </div>
   );
 } 

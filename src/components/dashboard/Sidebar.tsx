@@ -14,7 +14,8 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
-  CreditCard
+  CreditCard,
+  ImageIcon
 } from 'lucide-react';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import Image from 'next/image';
@@ -41,6 +42,12 @@ const SETTINGS_LINKS = [
     label: 'Organization',
     icon: Building2,
     href: '/dashboard/settings/organization',
+  },
+  {
+    key: 'logos',
+    label: 'Logo Management',
+    icon: ImageIcon,
+    href: '/dashboard/settings/logos',
   },
   {
     key: 'payment-methods',

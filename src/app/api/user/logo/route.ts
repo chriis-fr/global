@@ -2,10 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
-import { User } from '@/models/User';
-import { Organization } from '@/models/Organization';
 
-export async function GET(request: NextRequest) {
+interface Logo {
+  id: string;
+  name: string;
+  url: string;
+  isDefault: boolean;
+  createdAt: Date;
+}
+
+// GET /api/user/logo - Get user's logos
+export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     
@@ -15,59 +22,219 @@ export async function GET(request: NextRequest) {
 
     const db = await connectToDatabase();
     const usersCollection = db.collection('users');
-    const organizationsCollection = db.collection('organizations');
 
-    // Get user data
     const user = await usersCollection.findOne({ email: session.user.email });
     
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    let logoUrl = null;
-    let logoSource = null;
-
-    // For business users, try to get logo from organization first
-    if (user.userType === 'business' && user.organizationId) {
-      const organization = await organizationsCollection.findOne({ _id: user.organizationId });
-      
-      if (organization) {
-        // Check organization logo fields
-        if (organization.logo) {
-          logoUrl = organization.logo;
-          logoSource = 'organization';
-        } else if (organization.logoUrl) {
-          logoUrl = organization.logoUrl;
-          logoSource = 'organization';
-        }
-      }
-    }
-
-    // If no organization logo, check user's service onboarding data
-    if (!logoUrl && user.onboarding?.serviceOnboarding?.smartInvoicing?.logo) {
-      logoUrl = user.onboarding.serviceOnboarding.smartInvoicing.logo;
-      logoSource = 'user_service';
-    }
-
-    // If still no logo, check user's profile picture
-    if (!logoUrl && user.profilePicture) {
-      logoUrl = user.profilePicture;
-      logoSource = 'user_profile';
-    } else if (!logoUrl && user.avatar) {
-      logoUrl = user.avatar;
-      logoSource = 'user_avatar';
-    }
-
+    // Get logos from user's settings
+    const logos = user.logos || [];
+    const defaultLogo = logos.find((logo: Logo) => logo.isDefault) || logos[0] || null;
+    
     return NextResponse.json({ 
       success: true, 
-      logoUrl,
-      logoSource,
-      userType: user.userType,
-      hasOrganization: !!user.organizationId
+      logos,
+      defaultLogo,
+      logoUrl: defaultLogo?.url || null,
+      logoSource: defaultLogo ? 'user_logos' : null
     });
 
   } catch (error) {
     console.error('Logo retrieval error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+// POST /api/user/logo - Add a new logo
+export async function POST(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { name, url, isDefault = false } = await request.json();
+    
+    if (!name || !url) {
+      return NextResponse.json({ error: 'Name and URL are required' }, { status: 400 });
+    }
+
+    const db = await connectToDatabase();
+    const usersCollection = db.collection('users');
+
+    const user = await usersCollection.findOne({ email: session.user.email });
+    
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    const newLogo: Logo = {
+      id: Date.now().toString(),
+      name,
+      url,
+      isDefault,
+      createdAt: new Date()
+    };
+
+    const currentLogos: Logo[] = user.logos || [];
+    
+    // If this is the default logo, unset other defaults
+    if (isDefault) {
+      currentLogos.forEach((logo: Logo) => logo.isDefault = false);
+    }
+
+    const updatedLogos = [...currentLogos, newLogo];
+
+    const result = await usersCollection.updateOne(
+      { email: session.user.email },
+      { 
+        $set: { 
+          logos: updatedLogos,
+          updatedAt: new Date()
+        } 
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ 
+      success: true, 
+      message: 'Logo added successfully',
+      logo: newLogo
+    });
+
+  } catch (error) {
+    console.error('Logo save error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+// PUT /api/user/logo - Update a logo
+export async function PUT(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { id, name, isDefault } = await request.json();
+    
+    if (!id) {
+      return NextResponse.json({ error: 'Logo ID is required' }, { status: 400 });
+    }
+
+    const db = await connectToDatabase();
+    const usersCollection = db.collection('users');
+
+    const user = await usersCollection.findOne({ email: session.user.email });
+    
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    const currentLogos: Logo[] = user.logos || [];
+    const logoIndex = currentLogos.findIndex((logo: Logo) => logo.id === id);
+    
+    if (logoIndex === -1) {
+      return NextResponse.json({ error: 'Logo not found' }, { status: 404 });
+    }
+
+    // If this is the default logo, unset other defaults
+    if (isDefault) {
+      currentLogos.forEach((logo: Logo) => logo.isDefault = false);
+    }
+
+    currentLogos[logoIndex] = {
+      ...currentLogos[logoIndex],
+      name: name || currentLogos[logoIndex].name,
+      isDefault: isDefault !== undefined ? isDefault : currentLogos[logoIndex].isDefault
+    };
+
+    const result = await usersCollection.updateOne(
+      { email: session.user.email },
+      { 
+        $set: { 
+          logos: currentLogos,
+          updatedAt: new Date()
+        } 
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ 
+      success: true, 
+      message: 'Logo updated successfully',
+      logo: currentLogos[logoIndex]
+    });
+
+  } catch (error) {
+    console.error('Logo update error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+// DELETE /api/user/logo - Delete a logo
+export async function DELETE(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    
+    if (!id) {
+      return NextResponse.json({ error: 'Logo ID is required' }, { status: 400 });
+    }
+
+    const db = await connectToDatabase();
+    const usersCollection = db.collection('users');
+
+    const user = await usersCollection.findOne({ email: session.user.email });
+    
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    const currentLogos: Logo[] = user.logos || [];
+    const updatedLogos = currentLogos.filter((logo: Logo) => logo.id !== id);
+    
+    if (updatedLogos.length === currentLogos.length) {
+      return NextResponse.json({ error: 'Logo not found' }, { status: 404 });
+    }
+
+    const result = await usersCollection.updateOne(
+      { email: session.user.email },
+      { 
+        $set: { 
+          logos: updatedLogos,
+          updatedAt: new Date()
+        } 
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ 
+      success: true, 
+      message: 'Logo deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('Logo delete error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 } 

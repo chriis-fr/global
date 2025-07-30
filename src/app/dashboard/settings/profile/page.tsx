@@ -1,10 +1,22 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { LogoManager } from '@/components/LogoManager';
+import { Image } from 'lucide-react';
+import NextImage from 'next/image';
+import DashboardFloatingButton from '@/components/DashboardFloatingButton';
 
 interface ProfileData {
   name: string;
   email: string;
   phone: string;
+}
+
+interface Logo {
+  id: string;
+  name: string;
+  url: string;
+  isDefault: boolean;
+  createdAt: Date;
 }
 
 export default function ProfileSettingsPage() {
@@ -16,6 +28,7 @@ export default function ProfileSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [selectedLogo, setSelectedLogo] = useState<Logo | null>(null);
 
   // Fetch user data on component mount
   useEffect(() => {
@@ -93,6 +106,7 @@ export default function ProfileSettingsPage() {
             <div className="h-10 bg-white/20 rounded mb-6"></div>
           </div>
         </div>
+        <DashboardFloatingButton />
       </div>
     );
   }
@@ -114,7 +128,7 @@ export default function ProfileSettingsPage() {
         </div>
       )}
       
-      <form onSubmit={handleSubmit} className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
+      <form onSubmit={handleSubmit} className="bg-white/10 backdrop-blur-sm rounded-xl p-6 mb-8">
         <h2 className="text-xl font-semibold text-white mb-6">Personal Information</h2>
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -167,6 +181,48 @@ export default function ProfileSettingsPage() {
           </div>
         </div>
       </form>
+
+      {/* Logo Management Section */}
+      <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
+        <div className="flex items-center space-x-3 mb-6">
+          <Image className="h-6 w-6 text-blue-400" aria-label="Logo management icon" />
+          <h2 className="text-xl font-semibold text-white">Logo Management</h2>
+        </div>
+        <p className="text-blue-200 text-sm mb-6">
+          Upload and manage your logos for use in invoices and other business documents. 
+          You can have multiple logos for different occasions and set one as your default.
+        </p>
+
+        <LogoManager 
+          onLogoSelectAction={setSelectedLogo}
+          selectedLogoId={selectedLogo?.id}
+        />
+
+        {selectedLogo && (
+          <div className="mt-6 p-4 bg-blue-600/10 border border-blue-500/30 rounded-lg">
+            <h3 className="text-blue-300 font-medium mb-2">Selected Logo:</h3>
+            <div className="flex items-center space-x-3">
+              <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center overflow-hidden">
+                <NextImage
+                  src={selectedLogo.url}
+                  alt={selectedLogo.name}
+                  width={48}
+                  height={48}
+                  className="object-contain"
+                />
+              </div>
+              <div>
+                <p className="text-white font-medium">{selectedLogo.name}</p>
+                <p className="text-blue-200 text-sm">
+                  {selectedLogo.isDefault ? 'Default Logo' : 'Custom Logo'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <DashboardFloatingButton />
     </div>
   );
 } 

@@ -1,18 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { 
   ArrowLeft, 
   Edit3,
-  Download,
   Trash2,
   Building2,
   User,
   Calendar,
   Clock,
-  DollarSign,
   Loader2
 } from 'lucide-react';
 import { countries } from '@/data/countries';
@@ -78,13 +76,7 @@ export default function InvoiceViewPage() {
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (params.id && session?.user) {
-      loadInvoice(params.id as string);
-    }
-  }, [params.id, session]);
-
-  const loadInvoice = async (id: string) => {
+  const loadInvoice = useCallback(async (id: string) => {
     try {
       setLoading(true);
       const response = await fetch(`/api/invoices/${id}`);
@@ -101,7 +93,13 @@ export default function InvoiceViewPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [router]);
+
+  useEffect(() => {
+    if (params.id && session?.user) {
+      loadInvoice(params.id as string);
+    }
+  }, [params.id, session, loadInvoice]);
 
   const handleDeleteInvoice = async () => {
     if (!invoice || !confirm('Are you sure you want to delete this invoice?')) return;

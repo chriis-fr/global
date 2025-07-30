@@ -30,23 +30,36 @@ export default function SmartInvoicingPage() {
   const router = useRouter();
   const { data: session } = useSession();
   const [invoices] = useState<InvoiceWithId[]>([]);
-  const [serviceOnboarding, setServiceOnboarding] = useState<{
-    completed?: boolean;
-    businessInfo?: Record<string, unknown>;
-    invoiceSettings?: Record<string, unknown>;
-  } | null>(null);
+  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     checkServiceOnboarding();
   }, [session]);
 
+  // Refresh completion status when returning from onboarding
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('refresh') === 'true') {
+      // Remove the refresh parameter from URL
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, '', newUrl);
+      // Re-check onboarding status
+      checkServiceOnboarding();
+    }
+  }, []);
+
   const checkServiceOnboarding = async () => {
     try {
       const response = await fetch('/api/onboarding/service?service=smartInvoicing');
       const data = await response.json();
       if (data.success) {
-        setServiceOnboarding(data.data.serviceOnboarding);
+        setIsOnboardingCompleted(data.data.isCompleted);
+        console.log('✅ [Smart Invoicing] Service onboarding check:', {
+          serviceOnboarding: data.data.serviceOnboarding,
+          isCompleted: data.data.isCompleted,
+          storageLocation: data.data.storageLocation
+        });
       }
     } catch (error) {
       console.error('Error checking service onboarding:', error);
@@ -56,20 +69,27 @@ export default function SmartInvoicingPage() {
   };
 
   const handleCreateInvoice = () => {
-    if (!serviceOnboarding?.completed) {
+    // Check if onboarding is completed
+    if (!isOnboardingCompleted) {
       router.push('/dashboard/services/smart-invoicing/onboarding');
     } else {
       router.push('/dashboard/services/smart-invoicing/create');
     }
   };
 
+  const handleManageInvoiceInfo = () => {
+    router.push('/dashboard/services/smart-invoicing/onboarding');
+  };
+
+  const handleSetupService = () => {
+    router.push('/dashboard/services/smart-invoicing/onboarding');
+  };
+
   const handleViewInvoices = () => {
     router.push('/dashboard/services/smart-invoicing/invoices');
   };
 
-  const handleServiceSetup = () => {
-    router.push('/dashboard/services/smart-invoicing/onboarding');
-  };
+
 
   const handleManageClients = () => {
     console.log('👥 [Smart Invoicing] Navigating to client management');
@@ -103,13 +123,13 @@ export default function SmartInvoicingPage() {
             className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
           >
             <Plus className="h-5 w-5" />
-            <span>Create Invoice</span>
+            <span>{isOnboardingCompleted ? 'Create Invoice' : 'Setup & Create Invoice'}</span>
           </motion.button>
         </div>
       </div>
 
       {/* Service Onboarding Check */}
-      {!loading && !serviceOnboarding?.completed && (
+      {!loading && !isOnboardingCompleted && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -122,12 +142,13 @@ export default function SmartInvoicingPage() {
                 Service Setup Required
               </h3>
               <p className="text-yellow-200 mb-4">
-                Before you can create invoices, you need to configure your business information and invoice settings.
+                Before you can create invoices, you need to configure your business information and invoice settings. 
+                Click &quot;Manage Invoice Info&quot; above or &quot;Complete Setup&quot; below to get started.
               </p>
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                onClick={handleServiceSetup}
+                onClick={handleSetupService}
                 className="flex items-center space-x-2 bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 transition-colors"
               >
                 <Settings className="h-4 w-4" />
@@ -232,6 +253,25 @@ export default function SmartInvoicingPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
           className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20 hover:bg-white/20 transition-colors cursor-pointer"
+          onClick={handleManageInvoiceInfo}
+        >
+          <div className="flex items-center space-x-4">
+            <div className="w-12 h-12 bg-orange-600 rounded-lg flex items-center justify-center">
+              <Settings className="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-white">Manage Invoice Info</h3>
+              <p className="text-blue-200 text-sm">Configure business information and settings</p>
+            </div>
+            <ArrowRight className="h-5 w-5 text-blue-400 ml-auto" />
+          </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
+          className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20 hover:bg-white/20 transition-colors cursor-pointer"
           onClick={handleManageClients}
         >
           <div className="flex items-center space-x-4">
@@ -251,7 +291,7 @@ export default function SmartInvoicingPage() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6 }}
+            transition={{ delay: 0.7 }}
             className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20 hover:bg-white/20 transition-colors cursor-pointer"
             onClick={() => router.push('/dashboard/settings/organization')}
           >
@@ -274,7 +314,7 @@ export default function SmartInvoicingPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.7 }}
+          transition={{ delay: 0.8 }}
           className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20"
         >
           <div className="p-6 border-b border-white/10">
@@ -307,7 +347,7 @@ export default function SmartInvoicingPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.7 }}
+          transition={{ delay: 0.8 }}
           className="bg-white/10 backdrop-blur-sm rounded-xl p-12 border border-white/20 text-center"
         >
           <FileText className="h-16 w-16 text-blue-400 mx-auto mb-4" />

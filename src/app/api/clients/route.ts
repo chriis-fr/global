@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
     const collection = db.collection('clients');
 
     let query = {};
-    let clientData: any = {
+    const clientData: any = {
       name,
       email,
       phone,

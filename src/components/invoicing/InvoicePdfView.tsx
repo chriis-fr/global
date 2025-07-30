@@ -102,19 +102,21 @@ const InvoicePdfView = forwardRef<HTMLDivElement, InvoicePdfViewProps>(
                     <span>Payment due by {formatDate(formData.dueDate)}</span>
                   </div>
                 </div>
-                <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center">
-                  {formData.companyLogo ? (
-                    <Image 
-                      src={formData.companyLogo} 
-                      alt="Company Logo" 
-                      width={64}
-                      height={64}
-                      className="w-full h-full object-cover rounded-lg" 
-                    />
-                  ) : (
-                    <Building2 className="h-8 w-8 text-gray-400" />
-                  )}
-                </div>
+                                 <div className="w-16 h-16 bg-white rounded-lg flex items-center justify-center overflow-hidden border border-gray-200">
+                   {formData.companyLogo ? (
+                     <Image 
+                       src={formData.companyLogo} 
+                       alt="Company Logo" 
+                       width={64}
+                       height={64}
+                       className="object-contain w-full h-full"
+                       unoptimized={formData.companyLogo.startsWith('data:')}
+                       style={{ backgroundColor: 'white' }}
+                     />
+                   ) : (
+                     <Building2 className="h-8 w-8 text-gray-400" />
+                   )}
+                 </div>
               </div>
             </div>
           </div>

@@ -32,6 +32,13 @@ export async function GET() {
           name: user.name,
           email: user.email,
           phone: user.phone || '',
+          address: user.address || {
+            street: '',
+            city: '',
+            state: '',
+            zipCode: '',
+            country: '',
+          },
         },
         organization: {
           industry: user.industry || '',
@@ -91,6 +98,7 @@ export async function PUT(request: NextRequest) {
       updateData = {
         name: data.name,
         phone: data.phone,
+        address: data.address,
       };
     } else if (type === 'organization') {
       updateData = {

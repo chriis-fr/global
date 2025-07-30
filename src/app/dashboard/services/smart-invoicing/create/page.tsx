@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import Image from 'next/image';
+
 import Link from 'next/link';
+import Image from 'next/image';
 import { 
   ArrowLeft, 
   Save,
@@ -33,6 +34,7 @@ import { networks } from '@/data/networks';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import InvoicePdfView from '@/components/invoicing/InvoicePdfView';
+import { LogoSelector } from '@/components/LogoSelector';
 
 interface Client {
   _id: string;
@@ -178,15 +180,22 @@ export default function CreateInvoicePage() {
   const invoiceId = searchParams.get('id');
 
   useEffect(() => {
+    console.log('🔄 [Invoice Create] useEffect triggered - invoiceId:', invoiceId, 'session:', !!session?.user);
     if (invoiceId) {
       loadInvoice(invoiceId);
     } else if (session?.user) {
+      console.log('✅ [Invoice Create] Loading data for user:', session.user.email);
       loadServiceOnboardingData();
       loadOrganizationData();
       loadClients();
       loadLogoFromSettings();
     }
   }, [invoiceId, session]);
+
+  // Monitor formData changes for debugging
+  useEffect(() => {
+    console.log('📊 [Invoice Create] FormData updated - companyLogo:', formData.companyLogo);
+  }, [formData.companyLogo]);
 
   // Handle click outside for dropdowns
   useEffect(() => {
@@ -234,23 +243,27 @@ export default function CreateInvoicePage() {
         const onboardingData = data.data.serviceOnboarding;
         
         // Update form data with service onboarding information
-        setFormData(prev => ({
-          ...prev,
-          companyName: onboardingData.businessInfo?.name || prev.companyName,
-          companyEmail: onboardingData.businessInfo?.email || prev.companyEmail,
-          companyPhone: onboardingData.businessInfo?.phone || prev.companyPhone,
-          companyAddress: {
-            street: onboardingData.businessInfo?.address?.street || prev.companyAddress.street,
-            city: onboardingData.businessInfo?.address?.city || prev.companyAddress.city,
-            state: onboardingData.businessInfo?.address?.state || prev.companyAddress.state,
-            zipCode: onboardingData.businessInfo?.address?.zipCode || prev.companyAddress.zipCode,
-            country: onboardingData.businessInfo?.address?.country || prev.companyAddress.country
-          },
-          companyTaxNumber: onboardingData.businessInfo?.taxId || prev.companyTaxNumber,
-          currency: onboardingData.invoiceSettings?.defaultCurrency || prev.currency
-        }));
-        
-        console.log('✅ [Invoice Create] Service onboarding data loaded from:', data.data.storageLocation);
+        setFormData(prev => {
+          const finalCountry = onboardingData.businessInfo?.address?.country || prev.companyAddress.country;
+          
+          console.log('✅ [Invoice Create] Service onboarding data loaded from:', data.data.storageLocation);
+          
+          return {
+            ...prev,
+            companyName: onboardingData.businessInfo?.name || prev.companyName,
+            companyEmail: onboardingData.businessInfo?.email || prev.companyEmail,
+            companyPhone: onboardingData.businessInfo?.phone || prev.companyPhone,
+            companyAddress: {
+              street: onboardingData.businessInfo?.address?.street || prev.companyAddress.street,
+              city: onboardingData.businessInfo?.address?.city || prev.companyAddress.city,
+              state: onboardingData.businessInfo?.address?.state || prev.companyAddress.state,
+              zipCode: onboardingData.businessInfo?.address?.zipCode || prev.companyAddress.zipCode,
+              country: finalCountry
+            },
+            companyTaxNumber: onboardingData.businessInfo?.taxId || prev.companyTaxNumber,
+            currency: onboardingData.invoiceSettings?.defaultCurrency || prev.currency
+          };
+        });
       }
     } catch (error) {
       console.error('Error loading service onboarding data:', error);
@@ -264,19 +277,29 @@ export default function CreateInvoicePage() {
       
       if (data.success && data.data?.organization) {
         const org = data.data.organization;
-        setFormData(prev => ({
-          ...prev,
-          companyName: org.name || prev.companyName,
-          companyEmail: org.email || prev.companyEmail,
-          companyPhone: org.phone || prev.companyPhone,
-          companyAddress: {
-            street: org.address?.street || prev.companyAddress.street,
-            city: org.address?.city || prev.companyAddress.city,
-            state: org.address?.state || prev.companyAddress.state,
-            zipCode: org.address?.zipCode || prev.companyAddress.zipCode,
-            country: org.address?.country || prev.companyAddress.country
-          }
-        }));
+        setFormData(prev => {
+          const finalCountry = org.address?.country && org.address.country !== 'US' ? org.address.country : prev.companyAddress.country;
+          
+          console.log('✅ [Invoice Create] Organization data loaded:', {
+            orgCountry: org.address?.country,
+            prevCountry: prev.companyAddress.country,
+            finalCountry: finalCountry
+          });
+          
+          return {
+            ...prev,
+            companyName: org.name || prev.companyName,
+            companyEmail: org.email || prev.companyEmail,
+            companyPhone: org.phone || prev.companyPhone,
+            companyAddress: {
+              street: org.address?.street || prev.companyAddress.street,
+              city: org.address?.city || prev.companyAddress.city,
+              state: org.address?.state || prev.companyAddress.state,
+              zipCode: org.address?.zipCode || prev.companyAddress.zipCode,
+              country: finalCountry
+            }
+          };
+        });
       }
     } catch (error) {
       console.error('Failed to load organization data:', error);
@@ -297,18 +320,39 @@ export default function CreateInvoicePage() {
 
   const loadLogoFromSettings = async () => {
     try {
+      console.log('🔄 [Invoice Create] Loading logo from settings...');
       const response = await fetch('/api/user/logo');
       const data = await response.json();
+      
+      console.log('📊 [Invoice Create] Logo API response:', data);
       
       if (data.success && data.logoUrl) {
         setFormData(prev => ({
           ...prev,
           companyLogo: data.logoUrl
         }));
-        console.log('✅ [Invoice Create] Logo loaded from:', data.logoSource);
+        console.log('✅ [Invoice Create] Logo loaded from settings:', data.logoSource, 'URL:', data.logoUrl);
+      } else {
+        console.log('⚠️ [Invoice Create] No logo in settings, trying logos API...');
+        // If no logo is set in settings, try to load from logos API
+        const logosResponse = await fetch('/api/user/logos');
+        const logosData = await logosResponse.json();
+        
+        console.log('📊 [Invoice Create] Logos API response:', logosData);
+        
+        if (logosData.success && logosData.logos && logosData.logos.length > 0) {
+          const defaultLogo = logosData.logos.find((logo: {isDefault: boolean, url: string}) => logo.isDefault) || logosData.logos[0];
+          setFormData(prev => ({
+            ...prev,
+            companyLogo: defaultLogo.url
+          }));
+          console.log('✅ [Invoice Create] Logo loaded from logos API:', defaultLogo);
+        } else {
+          console.log('⚠️ [Invoice Create] No logos found in any API');
+        }
       }
     } catch (error) {
-      console.error('Failed to load logo from settings:', error);
+      console.error('❌ [Invoice Create] Failed to load logo from settings:', error);
     }
   };
 
@@ -586,61 +630,346 @@ export default function CreateInvoicePage() {
     }
     setValidationErrors([]);
 
-    const element = pdfRef.current;
-    if (!element) {
-      return;
+    // Generate invoice number if not exists
+    if (!formData.invoiceNumber) {
+      const invoiceNumber = generateInvoiceNumber();
+      handleInputChange('invoiceNumber', invoiceNumber);
     }
 
     try {
-      // Clone the element to avoid modifying the live DOM
-      const clone = element.cloneNode(true) as HTMLElement;
-      
-      // Create a style element with explicit CSS overrides for oklch colors
-      const style = document.createElement('style');
-      style.textContent = `
-        .bg-gray-50 { background-color: #f9fafb !important; }
-        .bg-white { background-color: #ffffff !important; }
-        .text-gray-900 { color: #111827 !important; }
-        .text-gray-600 { color: #4b5563 !important; }
-        .text-gray-500 { color: #6b7280 !important; }
-        .text-green-600 { color: #059669 !important; }
-        .text-blue-600 { color: #2563eb !important; }
-        .border-gray-200 { border-color: #e5e7eb !important; }
-        .border-t { border-top-width: 1px !important; }
-        .divide-y > * + * { border-top-width: 1px !important; border-color: #e5e7eb !important; }
-        .divide-gray-200 > * + * { border-color: #e5e7eb !important; }
+      // Create a simplified version of the invoice for PDF generation
+      const pdfContainer = document.createElement('div');
+      pdfContainer.style.cssText = `
+        position: absolute;
+        left: -9999px;
+        top: 0;
+        width: 800px;
+        background: white;
+        color: black;
+        font-family: Arial, sans-serif;
+        padding: 32px;
+        border: none;
+        outline: none;
       `;
-      clone.appendChild(style);
-      
-      // Temporarily append to body for rendering
-      clone.style.position = 'absolute';
-      clone.style.left = '-9999px';
-      clone.style.top = '0';
-      document.body.appendChild(clone);
-      
-      const canvas = await html2canvas(clone, {
+
+      // Create the exact invoice structure
+      pdfContainer.innerHTML = `
+        <div style="border-bottom: 1px solid #e5e7eb; padding-bottom: 32px; margin-bottom: 32px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div style="flex: 1;">
+              <h1 style="font-size: 30px; font-weight: bold; color: #111827; margin: 0;">
+                ${formData.invoiceName || 'Invoice'}
+              </h1>
+            </div>
+            <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end;">
+              <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 16px;">
+                <div>
+                  <div style="font-size: 14px; color: #6b7280; margin-bottom: 4px;">
+                    Issued on ${formatDate(formData.issueDate)}
+                  </div>
+                  <div style="font-size: 14px; color: #6b7280;">
+                    Payment due by ${formatDate(formData.dueDate)}
+                  </div>
+                  ${formData.invoiceNumber ? `
+                    <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                      Invoice: ${formData.invoiceNumber}
+                    </div>
+                  ` : ''}
+                </div>
+                ${formData.companyLogo ? `
+                  <div style="width: 64px; height: 64px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                    <img src="${formData.companyLogo}" alt="Company Logo" style="width: 100%; height: 100%; object-fit: contain; background: white;" />
+                  </div>
+                ` : `
+                  <div style="width: 64px; height: 64px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                    <svg style="width: 32px; height: 32px; color: #9ca3af;" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 2L2 7v10c0 5.55 3.84 9.74 9 11 5.16-1.26 9-5.45 9-11V7l-10-5zM12 22c-4.75-1.11-8-4.67-8-9V8l8-4v18z"/>
+                    </svg>
+                  </div>
+                `}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
+          <div style="display: flex; justify-content: space-between; gap: 48px;">
+            <div style="flex: 1;">
+              <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0; display: flex; align-items: center;">
+                <svg style="width: 20px; height: 20px; color: #6b7280; margin-right: 8px;" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2L2 7v10c0 5.55 3.84 9.74 9 11 5.16-1.26 9-5.45 9-11V7l-10-5zM12 22c-4.75-1.11-8-4.67-8-9V8l8-4v18z"/>
+                </svg>
+                From
+              </h3>
+              <div style="font-weight: 500; margin-bottom: 8px;">
+                ${formData.companyName || 'Company Name'}
+              </div>
+              <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
+                <div>${formData.companyAddress.street || 'Street Address'}</div>
+                <div>${formData.companyAddress.city || 'City'}, ${formData.companyAddress.state || 'State'} ${formData.companyAddress.zipCode || 'ZIP'}</div>
+                <div>${formData.companyAddress.country || 'Country'}</div>
+                <div>Tax: ${formData.companyTaxNumber || 'Tax Number'}</div>
+                <div>${formData.companyEmail || 'Email'}</div>
+                <div>${formData.companyPhone || 'Phone'}</div>
+              </div>
+            </div>
+            <div style="flex: 1;">
+              <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0; display: flex; align-items: center;">
+                <svg style="width: 20px; height: 20px; color: #6b7280; margin-right: 8px;" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                </svg>
+                Bill To
+              </h3>
+              <div style="font-weight: 500; margin-bottom: 8px;">
+                ${formData.clientName || 'Client Name'}
+              </div>
+              <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
+                <div>${formData.clientAddress.street || 'Street Address'}</div>
+                <div>${formData.clientAddress.city || 'City'}, ${formData.clientAddress.state || 'State'} ${formData.clientAddress.zipCode || 'ZIP'}</div>
+                <div>${formData.clientAddress.country || 'Country'}</div>
+                <div>${formData.clientEmail || 'Email'}</div>
+                <div>${formData.clientPhone || 'Phone'}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
+          <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 24px 0;">Invoice Items</h3>
+          
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
+            <thead style="background: #f9fafb;">
+              <tr>
+                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Description</th>
+                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Qty</th>
+                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Unit Price</th>
+                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Discount</th>
+                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Tax</th>
+                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${formData.items.map(item => `
+                <tr style="border-bottom: 1px solid #e5e7eb;">
+                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.description || 'Item description'}</td>
+                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.quantity}</td>
+                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${getCurrencySymbol()}${item.unitPrice.toFixed(2)}</td>
+                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.discount}%</td>
+                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.tax}%</td>
+                  <td style="padding: 12px 16px; font-size: 14px; font-weight: 500; color: #111827;">${getCurrencySymbol()}${item.amount.toFixed(2)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+
+          <div style="display: flex; justify-content: flex-end;">
+            <div style="width: 256px;">
+              <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 14px; margin-bottom: 8px;">
+                <span>Amount without tax</span>
+                <span>${getCurrencySymbol()}${formData.subtotal.toFixed(2)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 14px; margin-bottom: 8px;">
+                <span>Total Tax amount</span>
+                <span>${getCurrencySymbol()}${formData.totalTax.toFixed(2)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 600; border-top: 1px solid #e5e7eb; padding-top: 8px; margin-bottom: 8px;">
+                <span>Total amount</span>
+                <span>${getCurrencySymbol()}${formData.total.toFixed(2)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 600; color: #2563eb;">
+                <span>Due</span>
+                <span>${getCurrencySymbol()}${formData.total.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
+          <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0;">Payment Information</h3>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+            <div>
+              <h4 style="font-weight: 500; color: #111827; margin: 0 0 8px 0;">Payment Method</h4>
+              <div style="font-size: 14px; color: #6b7280;">
+                ${formData.paymentMethod === 'crypto' ? 'Cryptocurrency' : 'Bank Transfer'}
+              </div>
+              ${formData.paymentMethod === 'crypto' && formData.paymentNetwork ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Network: ${formData.paymentNetwork}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'crypto' && formData.paymentAddress ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Address: ${formData.paymentAddress}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.bankName ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Bank: ${formData.bankName}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.accountNumber ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Account: ${formData.accountNumber}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.routingNumber ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Routing: ${formData.routingNumber}
+                </div>
+              ` : ''}
+            </div>
+            <div>
+              <h4 style="font-weight: 500; color: #111827; margin: 0 0 8px 0;">Currency</h4>
+              <div style="font-size: 14px; color: #6b7280;">
+                ${formData.currency} (${getCurrencySymbol()})
+              </div>
+            </div>
+          </div>
+        </div>
+
+        ${formData.memo ? `
+          <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
+            <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0;">Memo</h3>
+            <div style="font-size: 14px; color: #374151; white-space: pre-wrap;">
+              ${formData.memo}
+            </div>
+          </div>
+        ` : ''}
+
+        ${formData.invoiceNumber ? `
+          <div style="padding: 32px 0; text-align: center;">
+            <div style="font-size: 14px; color: #6b7280;">
+              Invoice Number: ${formData.invoiceNumber}
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- Footer with watermark and security info -->
+        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center;">
+          <div style="font-size: 12px; color: #9ca3af; line-height: 1.5;">
+            <div style="margin-bottom: 8px;">
+              Generated by Chains-ERP for ${formData.companyName || 'Company'}
+            </div>
+            <div style="margin-bottom: 8px;">
+              Enhanced security features prevent forgery and ensure authenticity
+            </div>
+            <div style="font-size: 10px; color: #d1d5db;">
+              Digital Invoice | Secure Payment Processing | Blockchain Verification
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Append to body temporarily
+      document.body.appendChild(pdfContainer);
+
+      // Wait for images to load
+      const images = pdfContainer.querySelectorAll('img');
+      if (images.length > 0) {
+        await Promise.all(Array.from(images).map(img => {
+          return new Promise((resolve) => {
+            if (img.complete) {
+              resolve(null);
+            } else {
+              img.onload = () => resolve(null);
+              img.onerror = () => resolve(null);
+            }
+          });
+        }));
+      }
+
+      // Generate PDF using html2canvas with safe options
+      const canvas = await html2canvas(pdfContainer, {
         logging: false,
-        removeContainer: true
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        scale: 2, // Higher quality
+        width: 800,
+        height: pdfContainer.scrollHeight,
+        scrollX: 0,
+        scrollY: 0
       });
-      
-      // Remove the clone
-      document.body.removeChild(clone);
-      
-      const imgData = canvas.toDataURL('image/png');
+
+      // Remove the temporary element
+      document.body.removeChild(pdfContainer);
+
+      // Create PDF
       const pdf = new jsPDF({
         orientation: 'portrait',
-        unit: 'px',
+        unit: 'mm',
         format: 'a4'
       });
-      
+
       const imgWidth = pdf.internal.pageSize.getWidth();
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      // If the content is too tall, split into multiple pages
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 10;
+      const contentHeight = pageHeight - (2 * margin);
       
-      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+      if (imgHeight <= contentHeight) {
+        // Single page
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', margin, margin, imgWidth - (2 * margin), imgHeight);
+      } else {
+        // Multiple pages
+        const pages = Math.ceil(imgHeight / contentHeight);
+        for (let i = 0; i < pages; i++) {
+          if (i > 0) pdf.addPage();
+          
+          const sourceY = i * contentHeight * (canvas.width / (imgWidth - (2 * margin)));
+          const sourceHeight = Math.min(contentHeight * (canvas.width / (imgWidth - (2 * margin))), canvas.height - sourceY);
+          
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = canvas.width;
+          tempCanvas.height = sourceHeight;
+          const tempCtx = tempCanvas.getContext('2d');
+          tempCtx?.drawImage(canvas, 0, sourceY, canvas.width, sourceHeight, 0, 0, canvas.width, sourceHeight);
+          
+          pdf.addImage(tempCanvas.toDataURL('image/png'), 'PNG', margin, margin, imgWidth - (2 * margin), Math.min(contentHeight, imgHeight - (i * contentHeight)));
+        }
+      }
+
+      // Add watermark
+      addWatermark(pdf);
+
+      // Save invoice to database
+      await saveInvoiceToDatabase(formData);
+
       pdf.save(`invoice-${formData.invoiceName || 'document'}.pdf`);
     } catch (error) {
       console.error('Failed to generate PDF:', error);
     }
+  };
+
+  // Generate unique invoice number
+  const generateInvoiceNumber = () => {
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 1000);
+    return `INV-${timestamp}-${random}`;
+  };
+
+  // Add watermark to PDF
+  const addWatermark = (pdf: jsPDF) => {
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    
+    // Add watermark text
+    pdf.setTextColor(200, 200, 200);
+    pdf.setFontSize(40);
+    pdf.setFont('helvetica', 'normal');
+    
+    // Add watermark in center
+    const text = 'DIGITAL INVOICE';
+    const textWidth = pdf.getTextWidth(text);
+    const x = (pageWidth - textWidth) / 2;
+    const y = pageHeight / 2;
+    
+    pdf.text(text, x, y);
+    
+    // Reset text color
+    pdf.setTextColor(0, 0, 0);
   };
 
   const handleSendPdf = async () => {
@@ -651,60 +980,315 @@ export default function CreateInvoicePage() {
     }
     setValidationErrors([]);
 
-    const element = pdfRef.current;
-    if (!element) {
-      return;
+    // Generate invoice number if not exists
+    if (!formData.invoiceNumber) {
+      const invoiceNumber = generateInvoiceNumber();
+      handleInputChange('invoiceNumber', invoiceNumber);
     }
 
     setSendingInvoice(true);
 
     try {
-      // Clone the element to avoid modifying the live DOM
-      const clone = element.cloneNode(true) as HTMLElement;
-      
-      // Create a style element with explicit CSS overrides for oklch colors
-      const style = document.createElement('style');
-      style.textContent = `
-        .bg-gray-50 { background-color: #f9fafb !important; }
-        .bg-white { background-color: #ffffff !important; }
-        .text-gray-900 { color: #111827 !important; }
-        .text-gray-600 { color: #4b5563 !important; }
-        .text-gray-500 { color: #6b7280 !important; }
-        .text-green-600 { color: #059669 !important; }
-        .text-blue-600 { color: #2563eb !important; }
-        .border-gray-200 { border-color: #e5e7eb !important; }
-        .border-t { border-top-width: 1px !important; }
-        .divide-y > * + * { border-top-width: 1px !important; border-color: #e5e7eb !important; }
-        .divide-gray-200 > * + * { border-color: #e5e7eb !important; }
+      // Create a simplified version of the invoice for PDF generation (same as handleDownloadPdf)
+      const pdfContainer = document.createElement('div');
+      pdfContainer.style.cssText = `
+        position: absolute;
+        left: -9999px;
+        top: 0;
+        width: 800px;
+        background: white;
+        color: black;
+        font-family: Arial, sans-serif;
+        padding: 32px;
+        border: none;
+        outline: none;
       `;
-      clone.appendChild(style);
-      
-      // Temporarily append to body for rendering
-      clone.style.position = 'absolute';
-      clone.style.left = '-9999px';
-      clone.style.top = '0';
-      document.body.appendChild(clone);
-      
-      const canvas = await html2canvas(clone, {
+
+      // Create the exact invoice structure
+      pdfContainer.innerHTML = `
+        <div style="border-bottom: 1px solid #e5e7eb; padding-bottom: 32px; margin-bottom: 32px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div style="flex: 1;">
+              <h1 style="font-size: 30px; font-weight: bold; color: #111827; margin: 0;">
+                ${formData.invoiceName || 'Invoice'}
+              </h1>
+            </div>
+            <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end;">
+              <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 16px;">
+                <div>
+                  <div style="font-size: 14px; color: #6b7280; margin-bottom: 4px;">
+                    Issued on ${formatDate(formData.issueDate)}
+                  </div>
+                  <div style="font-size: 14px; color: #6b7280;">
+                    Payment due by ${formatDate(formData.dueDate)}
+                  </div>
+                  ${formData.invoiceNumber ? `
+                    <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                      Invoice: ${formData.invoiceNumber}
+                    </div>
+                  ` : ''}
+                </div>
+                ${formData.companyLogo ? `
+                  <div style="width: 64px; height: 64px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                    <img src="${formData.companyLogo}" alt="Company Logo" style="width: 100%; height: 100%; object-fit: contain; background: white;" />
+                  </div>
+                ` : `
+                  <div style="width: 64px; height: 64px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                    <svg style="width: 32px; height: 32px; color: #9ca3af;" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 2L2 7v10c0 5.55 3.84 9.74 9 11 5.16-1.26 9-5.45 9-11V7l-10-5zM12 22c-4.75-1.11-8-4.67-8-9V8l8-4v18z"/>
+                    </svg>
+                  </div>
+                `}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
+          <div style="display: flex; justify-content: space-between; gap: 48px;">
+            <div style="flex: 1;">
+              <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0; display: flex; align-items: center;">
+                <svg style="width: 20px; height: 20px; color: #6b7280; margin-right: 8px;" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2L2 7v10c0 5.55 3.84 9.74 9 11 5.16-1.26 9-5.45 9-11V7l-10-5zM12 22c-4.75-1.11-8-4.67-8-9V8l8-4v18z"/>
+                </svg>
+                From
+              </h3>
+              <div style="font-weight: 500; margin-bottom: 8px;">
+                ${formData.companyName || 'Company Name'}
+              </div>
+              <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
+                <div>${formData.companyAddress.street || 'Street Address'}</div>
+                <div>${formData.companyAddress.city || 'City'}, ${formData.companyAddress.state || 'State'} ${formData.companyAddress.zipCode || 'ZIP'}</div>
+                <div>${formData.companyAddress.country || 'Country'}</div>
+                <div>Tax: ${formData.companyTaxNumber || 'Tax Number'}</div>
+                <div>${formData.companyEmail || 'Email'}</div>
+                <div>${formData.companyPhone || 'Phone'}</div>
+              </div>
+            </div>
+            <div style="flex: 1;">
+              <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0; display: flex; align-items: center;">
+                <svg style="width: 20px; height: 20px; color: #6b7280; margin-right: 8px;" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                </svg>
+                Bill To
+              </h3>
+              <div style="font-weight: 500; margin-bottom: 8px;">
+                ${formData.clientName || 'Client Name'}
+              </div>
+              <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
+                <div>${formData.clientAddress.street || 'Street Address'}</div>
+                <div>${formData.clientAddress.city || 'City'}, ${formData.clientAddress.state || 'State'} ${formData.clientAddress.zipCode || 'ZIP'}</div>
+                <div>${formData.clientAddress.country || 'Country'}</div>
+                <div>${formData.clientEmail || 'Email'}</div>
+                <div>${formData.clientPhone || 'Phone'}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
+          <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 24px 0;">Invoice Items</h3>
+          
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
+            <thead style="background: #f9fafb;">
+              <tr>
+                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Description</th>
+                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Qty</th>
+                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Unit Price</th>
+                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Discount</th>
+                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Tax</th>
+                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${formData.items.map(item => `
+                <tr style="border-bottom: 1px solid #e5e7eb;">
+                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.description || 'Item description'}</td>
+                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.quantity}</td>
+                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${getCurrencySymbol()}${item.unitPrice.toFixed(2)}</td>
+                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.discount}%</td>
+                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.tax}%</td>
+                  <td style="padding: 12px 16px; font-size: 14px; font-weight: 500; color: #111827;">${getCurrencySymbol()}${item.amount.toFixed(2)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+
+          <div style="display: flex; justify-content: flex-end;">
+            <div style="width: 256px;">
+              <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 14px; margin-bottom: 8px;">
+                <span>Amount without tax</span>
+                <span>${getCurrencySymbol()}${formData.subtotal.toFixed(2)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 14px; margin-bottom: 8px;">
+                <span>Total Tax amount</span>
+                <span>${getCurrencySymbol()}${formData.totalTax.toFixed(2)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 600; border-top: 1px solid #e5e7eb; padding-top: 8px; margin-bottom: 8px;">
+                <span>Total amount</span>
+                <span>${getCurrencySymbol()}${formData.total.toFixed(2)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 600; color: #2563eb;">
+                <span>Due</span>
+                <span>${getCurrencySymbol()}${formData.total.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
+          <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0;">Payment Information</h3>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+            <div>
+              <h4 style="font-weight: 500; color: #111827; margin: 0 0 8px 0;">Payment Method</h4>
+              <div style="font-size: 14px; color: #6b7280;">
+                ${formData.paymentMethod === 'crypto' ? 'Cryptocurrency' : 'Bank Transfer'}
+              </div>
+              ${formData.paymentMethod === 'crypto' && formData.paymentNetwork ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Network: ${formData.paymentNetwork}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'crypto' && formData.paymentAddress ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Address: ${formData.paymentAddress}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.bankName ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Bank: ${formData.bankName}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.accountNumber ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Account: ${formData.accountNumber}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.routingNumber ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Routing: ${formData.routingNumber}
+                </div>
+              ` : ''}
+            </div>
+            <div>
+              <h4 style="font-weight: 500; color: #111827; margin: 0 0 8px 0;">Currency</h4>
+              <div style="font-size: 14px; color: #6b7280;">
+                ${formData.currency} (${getCurrencySymbol()})
+              </div>
+            </div>
+          </div>
+        </div>
+
+        ${formData.memo ? `
+          <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
+            <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0;">Memo</h3>
+            <div style="font-size: 14px; color: #374151; white-space: pre-wrap;">
+              ${formData.memo}
+            </div>
+          </div>
+        ` : ''}
+
+        ${formData.invoiceNumber ? `
+          <div style="padding: 32px 0; text-align: center;">
+            <div style="font-size: 14px; color: #6b7280;">
+              Invoice Number: ${formData.invoiceNumber}
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- Footer with watermark and security info -->
+        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center;">
+          <div style="font-size: 12px; color: #9ca3af; line-height: 1.5;">
+            <div style="margin-bottom: 8px;">
+              Generated by Chains-ERP for ${formData.companyName || 'Company'}
+            </div>
+            <div style="margin-bottom: 8px;">
+              Enhanced security features prevent forgery and ensure authenticity
+            </div>
+            <div style="font-size: 10px; color: #d1d5db;">
+              Digital Invoice | Secure Payment Processing | Blockchain Verification
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Append to body temporarily
+      document.body.appendChild(pdfContainer);
+
+      // Wait for images to load
+      const images = pdfContainer.querySelectorAll('img');
+      if (images.length > 0) {
+        await Promise.all(Array.from(images).map(img => {
+          return new Promise((resolve) => {
+            if (img.complete) {
+              resolve(null);
+            } else {
+              img.onload = () => resolve(null);
+              img.onerror = () => resolve(null);
+            }
+          });
+        }));
+      }
+
+      // Generate PDF using html2canvas with safe options
+      const canvas = await html2canvas(pdfContainer, {
         logging: false,
-        removeContainer: true
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        scale: 2, // Higher quality
+        width: 800,
+        height: pdfContainer.scrollHeight,
+        scrollX: 0,
+        scrollY: 0
       });
-      
-      // Remove the clone
-      document.body.removeChild(clone);
-      
-      const imgData = canvas.toDataURL('image/png');
+
+      // Remove the temporary element
+      document.body.removeChild(pdfContainer);
+
+      // Create PDF
       const pdf = new jsPDF({
         orientation: 'portrait',
-        unit: 'px',
+        unit: 'mm',
         format: 'a4'
       });
-      
+
       const imgWidth = pdf.internal.pageSize.getWidth();
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      // If the content is too tall, split into multiple pages
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 10;
+      const contentHeight = pageHeight - (2 * margin);
       
-      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
-      
+      if (imgHeight <= contentHeight) {
+        // Single page
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', margin, margin, imgWidth - (2 * margin), imgHeight);
+      } else {
+        // Multiple pages
+        const pages = Math.ceil(imgHeight / contentHeight);
+        for (let i = 0; i < pages; i++) {
+          if (i > 0) pdf.addPage();
+          
+          const sourceY = i * contentHeight * (canvas.width / (imgWidth - (2 * margin)));
+          const sourceHeight = Math.min(contentHeight * (canvas.width / (imgWidth - (2 * margin))), canvas.height - sourceY);
+          
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = canvas.width;
+          tempCanvas.height = sourceHeight;
+          const tempCtx = tempCanvas.getContext('2d');
+          tempCtx?.drawImage(canvas, 0, sourceY, canvas.width, sourceHeight, 0, 0, canvas.width, sourceHeight);
+          
+          pdf.addImage(tempCanvas.toDataURL('image/png'), 'PNG', margin, margin, imgWidth - (2 * margin), Math.min(contentHeight, imgHeight - (i * contentHeight)));
+        }
+      }
+
+      // Add watermark
+      addWatermark(pdf);
+
+      // Save invoice to database
+      await saveInvoiceToDatabase(formData);
+
       // Convert PDF to base64 for email attachment
       const pdfBase64 = pdf.output('datauristring').split(',')[1];
       
@@ -735,6 +1319,36 @@ export default function CreateInvoicePage() {
       alert('Failed to send invoice. Please try again.');
     } finally {
       setSendingInvoice(false);
+    }
+  };
+
+  // Save invoice to database
+  const saveInvoiceToDatabase = async (invoiceData: InvoiceFormData) => {
+    try {
+      const response = await fetch('/api/invoices', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...invoiceData,
+          status: 'sent',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        console.log('Invoice saved to database:', result.invoice);
+        return result.invoice;
+      } else {
+        console.error('Failed to save invoice:', result.message);
+        return null;
+      }
+    } catch (error) {
+      console.error('Error saving invoice:', error);
+      return null;
     }
   };
 
@@ -807,7 +1421,7 @@ export default function CreateInvoicePage() {
             <div className="flex flex-col sm:flex-row justify-between items-start space-y-4 sm:space-y-0">
               {/* Left Side - Invoice Name */}
               <div className="flex-1">
-                {renderEditableField('invoiceName', formData.invoiceName, 'Invoice')}
+                {renderEditableField('invoiceName', formData.invoiceName, 'Invoice #')}
               </div>
 
               {/* Right Side - Dates and Logo */}
@@ -823,17 +1437,29 @@ export default function CreateInvoicePage() {
                       {renderEditableDateField('dueDate', formData.dueDate, 'Payment due by')}
                     </div>
                   </div>
-                  <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors cursor-pointer flex-shrink-0">
+                  <div 
+                    onClick={() => setShowCompanyEditModal(true)}
+                    className="w-16 h-16 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors cursor-pointer flex-shrink-0 group relative overflow-hidden"
+                  >
                     {formData.companyLogo ? (
-                      <Image 
-                        src={formData.companyLogo} 
-                        alt="Company Logo" 
-                        width={64}
-                        height={64}
-                        className="w-full h-full object-cover rounded-lg" 
-                      />
+                      <>
+                        <Image 
+                          src={formData.companyLogo} 
+                          alt="Company Logo" 
+                          width={64}
+                          height={64}
+                          className="object-contain w-full h-full"
+                          unoptimized={formData.companyLogo.startsWith('data:')}
+                          style={{ backgroundColor: 'white' }}
+                        />
+                        <div className="absolute inset-0  bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 rounded-lg flex items-center justify-center">
+                          <Edit3 className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+                        </div>
+                      </>
                     ) : (
-                      <Upload className="h-6 w-6 text-gray-400" />
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Upload className="h-6 w-6 text-gray-400" />
+                      </div>
                     )}
                   </div>
                 </div>
@@ -872,7 +1498,12 @@ export default function CreateInvoicePage() {
                         <span>{formData.companyAddress.state || 'State'}</span>
                         <span>{formData.companyAddress.zipCode || 'ZIP'}</span>
                       </div>
-                      <div>{formData.companyAddress.country || 'Country'}</div>
+                      <div>
+                        {formData.companyAddress.country 
+                          ? countries.find(c => c.code === formData.companyAddress.country)?.name || formData.companyAddress.country
+                          : 'Country'
+                        }
+                      </div>
                     </div>
                     <div className="text-gray-600">
                       Tax: {formData.companyTaxNumber || 'Tax Number'}
@@ -1459,8 +2090,8 @@ export default function CreateInvoicePage() {
 
         {/* Client Creation Modal */}
         {showNewClientModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto">
+          <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">Create New Client</h3>
                 <button
@@ -1482,12 +2113,12 @@ export default function CreateInvoicePage() {
         {/* Company Edit Modal */}
         {showCompanyEditModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative shadow-xl">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">Edit Company Information</h3>
                 <button
                   onClick={() => setShowCompanyEditModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
                 >
                   ×
                 </button>
@@ -1508,12 +2139,12 @@ export default function CreateInvoicePage() {
         {/* Client Edit Modal */}
         {showClientEditModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative shadow-xl">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">Edit Client Information</h3>
                 <button
                   onClick={() => setShowClientEditModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
                 >
                   ×
                 </button>
@@ -1697,9 +2328,31 @@ function CompanyEditForm({
   });
   const [showCountryDropdown, setShowCountryDropdown] = useState(false);
   const [countrySearch, setCountrySearch] = useState('');
-  const [logoPreview, setLogoPreview] = useState<string | null>(formData.companyLogo || null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [selectedLogoId, setSelectedLogoId] = useState<string | undefined>(undefined);
+
+  // Load logos and find the currently selected logo
+  useEffect(() => {
+    const loadLogos = async () => {
+      try {
+        const response = await fetch('/api/user/logos');
+        const data = await response.json();
+        
+        if (data.success && data.logos) {
+          // Find the logo that matches the current companyLogo URL
+          if (editData.companyLogo) {
+            const currentLogo = data.logos.find((logo: {id: string, name: string, url: string, isDefault: boolean, createdAt: Date}) => logo.url === editData.companyLogo);
+            if (currentLogo) {
+              setSelectedLogoId(currentLogo.id);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error loading logos:', error);
+      }
+    };
+
+    loadLogos();
+  }, [editData.companyLogo]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1724,139 +2377,24 @@ function CompanyEditForm({
     }
   };
 
-  const handleLogoUpload = async (file: File) => {
-    setIsUploading(true);
-    setUploadError(null);
-    
-    try {
-      const formData = new FormData();
-      formData.append('logo', file);
-      
-      const response = await fetch('/api/upload/logo', {
-        method: 'POST',
-        body: formData,
-      });
-      
-      const result = await response.json();
-      
-      if (result.success) {
-        setLogoPreview(result.logoUrl);
-        setEditData(prev => ({
-          ...prev,
-          companyLogo: result.logoUrl
-        }));
-      } else {
-        setUploadError(result.error || 'Upload failed');
-      }
-    } catch {
-      setUploadError('Upload failed. Please try again.');
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      handleLogoUpload(file);
-    }
-  };
-
-  const removeLogo = () => {
-    setLogoPreview(null);
+  const handleLogoSelect = (logo: {id: string, name: string, url: string, isDefault: boolean, createdAt: Date}) => {
     setEditData(prev => ({
       ...prev,
-      companyLogo: undefined
+      companyLogo: logo.url
     }));
-  };
-
-  const loadLogoFromSettings = async () => {
-    try {
-      const response = await fetch('/api/user/logo');
-      const data = await response.json();
-      
-      if (data.success && data.logoUrl) {
-        setLogoPreview(data.logoUrl);
-        setEditData(prev => ({
-          ...prev,
-          companyLogo: data.logoUrl
-        }));
-      }
-    } catch (error) {
-      console.error('Failed to load logo from settings:', error);
-    }
+    setSelectedLogoId(logo.id);
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {/* Logo Upload Section */}
+      {/* Logo Selection Section */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">Company Logo</label>
-        <div className="space-y-3">
-          {/* Logo Preview */}
-          {logoPreview && (
-            <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-md">
-              <Image 
-                src={logoPreview} 
-                alt="Company logo" 
-                width={48}
-                height={48}
-                className="object-contain rounded"
-              />
-              <div className="flex-1">
-                <p className="text-sm text-gray-600">Logo uploaded successfully</p>
-              </div>
-              <button
-                type="button"
-                onClick={removeLogo}
-                className="text-red-500 hover:text-red-700 text-sm"
-              >
-                Remove
-              </button>
-            </div>
-          )}
-          
-          {/* Upload Button */}
-          {!logoPreview && (
-            <div className="space-y-3">
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileChange}
-                  className="hidden"
-                  id="logo-upload"
-                  disabled={isUploading}
-                />
-                <label 
-                  htmlFor="logo-upload" 
-                  className="cursor-pointer flex flex-col items-center"
-                >
-                  <Upload className="h-8 w-8 text-gray-400 mb-2" />
-                  <p className="text-sm text-gray-600">
-                    {isUploading ? 'Uploading...' : 'Click to upload logo'}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">PNG, JPG up to 5MB</p>
-                </label>
-              </div>
-              
-              {/* Load from Settings Button */}
-              <button
-                type="button"
-                onClick={loadLogoFromSettings}
-                className="w-full py-2 px-4 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 flex items-center justify-center"
-              >
-                <Building2 className="h-4 w-4 mr-2" />
-                Load from Settings
-              </button>
-            </div>
-          )}
-          
-          {/* Error Message */}
-          {uploadError && (
-            <p className="text-red-500 text-sm">{uploadError}</p>
-          )}
-        </div>
+        <LogoSelector
+          onLogoSelectAction={handleLogoSelect}
+          selectedLogoId={selectedLogoId}
+          className="mb-4"
+        />
       </div>
 
       <div>
@@ -2225,4 +2763,4 @@ function ClientEditForm({
       </div>
     </form>
   );
-} 
+}

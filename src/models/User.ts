@@ -121,6 +121,13 @@ export interface User {
   createdAt: Date;
   updatedAt: Date;
   lastLoginAt?: Date;
+  logos?: Array<{
+    id: string;
+    name: string;
+    url: string;
+    isDefault: boolean;
+    createdAt: Date;
+  }>;
 }
 
 export interface CreateUserInput {

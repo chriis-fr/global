@@ -36,8 +36,13 @@ export interface Organization {
   address: Address;
   
   // Branding
-  logo?: string; // URL to organization logo
-  logoUrl?: string; // Alternative logo field
+  logos?: Array<{
+    id: string;
+    name: string;
+    url: string;
+    isDefault: boolean;
+    createdAt: Date;
+  }>;
   
   // Legal
   taxId: string;

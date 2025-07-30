@@ -97,13 +97,61 @@ export default function SmartInvoicingOnboardingPage() {
           ...prev.businessInfo,
           name: session.user.name || '',
           email: session.user.email || '',
+          phone: '',
           address: {
             ...prev.businessInfo.address,
             ...session.user.address
-          }
+          },
+          taxId: session.user.taxId || ''
         }
       }));
     }
+  }, [session]);
+
+  // Load existing onboarding data if available
+  useEffect(() => {
+    const loadExistingOnboarding = async () => {
+      if (session?.user) {
+        try {
+          const response = await fetch('/api/onboarding/service?service=smartInvoicing');
+          const data = await response.json();
+          
+          if (data.success && data.data.serviceOnboarding) {
+            const existingData = data.data.serviceOnboarding;
+            setFormData(prev => ({
+              ...prev,
+              businessInfo: {
+                ...prev.businessInfo,
+                name: existingData.businessInfo?.name || prev.businessInfo.name,
+                email: existingData.businessInfo?.email || prev.businessInfo.email,
+                phone: existingData.businessInfo?.phone || prev.businessInfo.phone,
+                website: existingData.businessInfo?.website || prev.businessInfo.website,
+                address: {
+                  street: existingData.businessInfo?.address?.street || prev.businessInfo.address.street,
+                  city: existingData.businessInfo?.address?.city || prev.businessInfo.address.city,
+                  state: existingData.businessInfo?.address?.state || prev.businessInfo.address.state,
+                  zipCode: existingData.businessInfo?.address?.zipCode || prev.businessInfo.address.zipCode,
+                  country: existingData.businessInfo?.address?.country || prev.businessInfo.address.country
+                },
+                taxId: existingData.businessInfo?.taxId || prev.businessInfo.taxId,
+                logo: existingData.businessInfo?.logo || prev.businessInfo.logo
+              },
+              invoiceSettings: {
+                defaultCurrency: existingData.invoiceSettings?.defaultCurrency || prev.invoiceSettings.defaultCurrency,
+                paymentTerms: existingData.invoiceSettings?.paymentTerms || prev.invoiceSettings.paymentTerms,
+                taxRates: existingData.invoiceSettings?.taxRates || prev.invoiceSettings.taxRates,
+                invoiceTemplate: existingData.invoiceSettings?.invoiceTemplate || prev.invoiceSettings.invoiceTemplate
+              }
+            }));
+            console.log('✅ [Onboarding] Loaded existing onboarding data:', existingData);
+          }
+        } catch (error) {
+          console.error('Error loading existing onboarding data:', error);
+        }
+      }
+    };
+
+    loadExistingOnboarding();
   }, [session]);
 
   const handleInputChange = (section: 'businessInfo' | 'invoiceSettings', field: string, value: string | number) => {
@@ -184,7 +232,8 @@ export default function SmartInvoicingOnboardingPage() {
 
       const data = await response.json();
       if (data.success) {
-        router.push('/dashboard/services/smart-invoicing');
+        console.log('✅ [Onboarding] Service onboarding completed successfully');
+        router.push('/dashboard/services/smart-invoicing?refresh=true');
       } else {
         console.error('Failed to complete service onboarding:', data.message);
       }
