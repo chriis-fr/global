@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 
@@ -9,7 +9,6 @@ import Image from 'next/image';
 import { 
   ArrowLeft, 
   Save,
-  Check,
   Plus,
   Trash2,
   Building2,
@@ -26,7 +25,8 @@ import {
   AlertCircle,
   LayoutDashboard,
   ChevronDown,
-  Search
+  Search,
+  Mail
 } from 'lucide-react';
 import { fiatCurrencies, cryptoCurrencies, getCurrencyByCode } from '@/data/currencies';
 import { countries } from '@/data/countries';
@@ -356,12 +356,12 @@ export default function CreateInvoicePage() {
     }
   };
 
-  const handleInputChange = (field: string, value: string | number | boolean) => {
+  const handleInputChange = useCallback((field: string, value: string | number | boolean) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
     }));
-  };
+  }, []);
 
 
 
@@ -499,27 +499,374 @@ export default function CreateInvoicePage() {
   };
 
   const handleSendInvoice = async () => {
-    setLoading(true);
+    const errors = validateInvoiceForPdf();
+    if (errors.length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
+    setValidationErrors([]);
+
+    // Generate invoice number if not exists
+    if (!formData.invoiceNumber) {
+      const invoiceNumber = generateInvoiceNumber();
+      handleInputChange('invoiceNumber', invoiceNumber);
+      console.log('📝 [Smart Invoicing] Generated invoice number for email send:', invoiceNumber);
+    }
+
+    setSendingInvoice(true);
+
     try {
-      const url = isEditing ? `/api/invoices/${formData._id}` : '/api/invoices';
-      const method = isEditing ? 'PUT' : 'POST';
+      console.log('📧 [Smart Invoicing] Starting invoice email send...', {
+        invoiceNumber: formData.invoiceNumber,
+        clientEmail: formData.clientEmail,
+        clientName: formData.clientName,
+        total: formData.total,
+        paymentMethod: formData.paymentMethod
+      });
+
+      // Create a simplified version of the invoice for PDF generation (same as handleDownloadPdf)
+      const pdfContainer = document.createElement('div');
+      pdfContainer.style.cssText = `
+        position: absolute;
+        left: -9999px;
+        top: 0;
+        width: 800px;
+        background: white;
+        color: black;
+        font-family: Arial, sans-serif;
+        padding: 32px;
+        border: none;
+        outline: none;
+      `;
+
+      // Create the exact invoice structure (same as handleDownloadPdf)
+      pdfContainer.innerHTML = `
+        <div style="border-bottom: 1px solid #e5e7eb; padding-bottom: 32px; margin-bottom: 32px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div style="flex: 1;">
+              <h1 style="font-size: 30px; font-weight: bold; color: #111827; margin: 0;">
+                ${formData.invoiceName || 'Invoice'}
+              </h1>
+            </div>
+            <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end;">
+              <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 16px;">
+                <div>
+                  <div style="font-size: 14px; color: #6b7280; margin-bottom: 4px;">
+                    Issued on ${formatDate(formData.issueDate)}
+                  </div>
+                  <div style="font-size: 14px; color: #6b7280;">
+                    Payment due by ${formatDate(formData.dueDate)}
+                  </div>
+                  ${formData.invoiceNumber ? `
+                    <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                      Invoice: ${formData.invoiceNumber}
+                    </div>
+                  ` : ''}
+                </div>
+                ${formData.companyLogo ? `
+                  <div style="width: 64px; height: 64px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                    <img src="${formData.companyLogo}" alt="Company Logo" style="width: 100%; height: 100%; object-fit: contain; background: white;" />
+                  </div>
+                ` : `
+                  <div style="width: 64px; height: 64px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                    <svg style="width: 32px; height: 32px; color: #9ca3af;" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 2L2 7v10c0 5.55 3.84 9.74 9 11 5.16-1.26 9-5.45 9-11V7l-10-5zM12 22c-4.75-1.11-8-4.67-8-9V8l8-4v18z"/>
+                    </svg>
+                  </div>
+                `}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
+          <div style="display: flex; justify-content: space-between; gap: 48px;">
+            <div style="flex: 1;">
+              <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0; display: flex; align-items: center;">
+                <svg style="width: 20px; height: 20px; color: #6b7280; margin-right: 8px;" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2L2 7v10c0 5.55 3.84 9.74 9 11 5.16-1.26 9-5.45 9-11V7l-10-5zM12 22c-4.75-1.11-8-4.67-8-9V8l8-4v18z"/>
+                </svg>
+                From
+              </h3>
+              <div style="font-weight: 500; margin-bottom: 8px;">
+                ${formData.companyName || 'Company Name'}
+              </div>
+              <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
+                <div>${formData.companyAddress.street || 'Street Address'}</div>
+                <div>${formData.companyAddress.city || 'City'}, ${formData.companyAddress.state || 'State'} ${formData.companyAddress.zipCode || 'ZIP'}</div>
+                <div>${formData.companyAddress.country || 'Country'}</div>
+                <div>Tax: ${formData.companyTaxNumber || 'Tax Number'}</div>
+                <div>${formData.companyEmail || 'Email'}</div>
+                <div>${formData.companyPhone || 'Phone'}</div>
+              </div>
+            </div>
+            <div style="flex: 1;">
+              <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0; display: flex; align-items: center;">
+                <svg style="width: 20px; height: 20px; color: #6b7280; margin-right: 8px;" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                </svg>
+                Bill To
+              </h3>
+              <div style="font-weight: 500; margin-bottom: 8px;">
+                ${formData.clientName || 'Client Name'}
+              </div>
+              <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
+                <div>${formData.clientAddress.street || 'Street Address'}</div>
+                <div>${formData.clientAddress.city || 'City'}, ${formData.clientAddress.state || 'State'} ${formData.clientAddress.zipCode || 'ZIP'}</div>
+                <div>${formData.clientAddress.country || 'Country'}</div>
+                <div>${formData.clientEmail || 'Email'}</div>
+                <div>${formData.clientPhone || 'Phone'}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
+          <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 24px 0;">Invoice Items</h3>
+          
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
+            <thead style="background: #f9fafb;">
+              <tr>
+                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Description</th>
+                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Qty</th>
+                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Unit Price</th>
+                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Discount</th>
+                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Tax</th>
+                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${formData.items.map(item => `
+                <tr style="border-bottom: 1px solid #e5e7eb;">
+                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.description || 'Item description'}</td>
+                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.quantity}</td>
+                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${getCurrencySymbol()}${item.unitPrice.toFixed(2)}</td>
+                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.discount}%</td>
+                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.tax}%</td>
+                  <td style="padding: 12px 16px; font-size: 14px; font-weight: 500; color: #111827;">${getCurrencySymbol()}${item.amount.toFixed(2)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+
+          <div style="display: flex; justify-content: flex-end;">
+            <div style="width: 256px;">
+              <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 14px; margin-bottom: 8px;">
+                <span>Amount without tax</span>
+                <span>${getCurrencySymbol()}${formData.subtotal.toFixed(2)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 14px; margin-bottom: 8px;">
+                <span>Total Tax amount</span>
+                <span>${getCurrencySymbol()}${formData.totalTax.toFixed(2)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 600; border-top: 1px solid #e5e7eb; padding-top: 8px; margin-bottom: 8px;">
+                <span>Total amount</span>
+                <span>${getCurrencySymbol()}${formData.total.toFixed(2)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 600; color: #2563eb;">
+                <span>Due</span>
+                <span>${getCurrencySymbol()}${formData.total.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
+          <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0;">Payment Information</h3>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+            <div>
+              <h4 style="font-weight: 500; color: #111827; margin: 0 0 8px 0;">Payment Method</h4>
+              <div style="font-size: 14px; color: #6b7280;">
+                ${formData.paymentMethod === 'crypto' ? 'Cryptocurrency' : 'Bank Transfer'}
+              </div>
+              ${formData.paymentMethod === 'crypto' && formData.paymentNetwork ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Network: ${formData.paymentNetwork}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'crypto' && formData.paymentAddress ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Address: ${formData.paymentAddress}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.bankName ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Bank: ${formData.bankName}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.accountNumber ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Account: ${formData.accountNumber}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.routingNumber ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Routing: ${formData.routingNumber}
+                </div>
+              ` : ''}
+            </div>
+            <div>
+              <h4 style="font-weight: 500; color: #111827; margin: 0 0 8px 0;">Currency</h4>
+              <div style="font-size: 14px; color: #6b7280;">
+                ${formData.currency} (${getCurrencySymbol()})
+              </div>
+            </div>
+          </div>
+        </div>
+
+        ${formData.memo ? `
+          <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
+            <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0;">Memo</h3>
+            <div style="font-size: 14px; color: #374151; white-space: pre-wrap;">
+              ${formData.memo}
+            </div>
+          </div>
+        ` : ''}
+
+        ${formData.invoiceNumber ? `
+          <div style="padding: 32px 0; text-align: center;">
+            <div style="font-size: 14px; color: #6b7280;">
+              Invoice Number: ${formData.invoiceNumber}
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- Footer with watermark and security info -->
+        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center;">
+          <div style="font-size: 12px; color: #9ca3af; line-height: 1.5;">
+            <div style="margin-bottom: 8px; font-weight: 500;">
+              Generated by Chains-ERP for ${formData.companyName || 'Company'}
+            </div>
+            <div style="margin-bottom: 8px; font-size: 11px;">
+              Invoice Number: ${formData.invoiceNumber || 'N/A'} | Date: ${formatDate(formData.issueDate)}
+            </div>
+            <div style="font-size: 10px; color: #d1d5db;">
+              Digital Invoice | Secure Payment Processing | Blockchain Verification
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Append to body temporarily
+      document.body.appendChild(pdfContainer);
+
+      // Wait for images to load
+      const images = pdfContainer.querySelectorAll('img');
+      if (images.length > 0) {
+        await Promise.all(Array.from(images).map(img => {
+          return new Promise((resolve) => {
+            if (img.complete) {
+              resolve(null);
+            } else {
+              img.onload = () => resolve(null);
+              img.onerror = () => resolve(null);
+            }
+          });
+        }));
+      }
+
+      // Generate PDF using html2canvas with safe options
+      const canvas = await html2canvas(pdfContainer, {
+        logging: false,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        scale: 2, // Higher quality
+        width: 800,
+        height: pdfContainer.scrollHeight,
+        scrollX: 0,
+        scrollY: 0
+      });
+
+      // Remove the temporary element
+      document.body.removeChild(pdfContainer);
+
+      // Create PDF
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const imgWidth = pdf.internal.pageSize.getWidth();
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      // If the content is too tall, split into multiple pages
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 10;
+      const contentHeight = pageHeight - (2 * margin);
       
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          status: 'sent'
-        })
+      if (imgHeight <= contentHeight) {
+        // Single page
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', margin, margin, imgWidth - (2 * margin), imgHeight);
+      } else {
+        // Multiple pages
+        const pages = Math.ceil(imgHeight / contentHeight);
+        for (let i = 0; i < pages; i++) {
+          if (i > 0) pdf.addPage();
+          
+          const sourceY = i * contentHeight * (canvas.width / (imgWidth - (2 * margin)));
+          const sourceHeight = Math.min(contentHeight * (canvas.width / (imgWidth - (2 * margin))), canvas.height - sourceY);
+          
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = canvas.width;
+          tempCanvas.height = sourceHeight;
+          const tempCtx = tempCanvas.getContext('2d');
+          tempCtx?.drawImage(canvas, 0, sourceY, canvas.width, sourceHeight, 0, 0, canvas.width, sourceHeight);
+          
+          pdf.addImage(tempCanvas.toDataURL('image/png'), 'PNG', margin, margin, imgWidth - (2 * margin), Math.min(contentHeight, imgHeight - (i * contentHeight)));
+        }
+      }
+
+      // Add watermark
+      addWatermark(pdf);
+
+      // Save invoice to database
+      const savedInvoice = await saveInvoiceToDatabase(formData);
+
+      // Convert PDF to base64 for email attachment
+      const pdfBase64 = pdf.output('datauristring').split(',')[1];
+      
+      console.log('📧 [Smart Invoicing] Sending invoice via email...', {
+        recipientEmail: formData.clientEmail,
+        invoiceNumber: formData.invoiceNumber,
+        invoiceId: savedInvoice?._id,
+        pdfSize: pdfBase64.length
       });
       
-      if (response.ok) {
-        router.push('/dashboard/services/smart-invoicing');
+      // Send invoice via email
+      const response = await fetch('/api/invoices/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          invoiceId: savedInvoice?._id || formData._id,
+          recipientEmail: formData.clientEmail,
+          pdfBuffer: pdfBase64
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        console.log('✅ [Smart Invoicing] Invoice sent successfully:', {
+          invoiceNumber: formData.invoiceNumber,
+          recipientEmail: formData.clientEmail,
+          total: formData.total
+        });
+        alert('Invoice sent successfully! Check your email for confirmation.');
+        // Redirect to invoices page
+        router.push('/dashboard/services/smart-invoicing/invoices');
+      } else {
+        console.error('❌ [Smart Invoicing] Failed to send invoice:', result.message);
+        alert(`Failed to send invoice: ${result.message}`);
       }
     } catch (error) {
-      console.error('Failed to send invoice:', error);
+      console.error('❌ [Smart Invoicing] Failed to send invoice:', error);
+      alert('Failed to send invoice. Please try again.');
     } finally {
-      setLoading(false);
+      setSendingInvoice(false);
     }
   };
 
@@ -634,9 +981,18 @@ export default function CreateInvoicePage() {
     if (!formData.invoiceNumber) {
       const invoiceNumber = generateInvoiceNumber();
       handleInputChange('invoiceNumber', invoiceNumber);
+      console.log('📝 [Smart Invoicing] Generated invoice number for download:', invoiceNumber);
     }
 
+    setSendingInvoice(true);
+
     try {
+      console.log('📤 [Smart Invoicing] Starting PDF download...', {
+        invoiceNumber: formData.invoiceNumber,
+        clientEmail: formData.clientEmail,
+        total: formData.total
+      });
+
       // Create a simplified version of the invoice for PDF generation
       const pdfContainer = document.createElement('div');
       pdfContainer.style.cssText = `
@@ -847,11 +1203,11 @@ export default function CreateInvoicePage() {
         <!-- Footer with watermark and security info -->
         <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center;">
           <div style="font-size: 12px; color: #9ca3af; line-height: 1.5;">
-            <div style="margin-bottom: 8px;">
+            <div style="margin-bottom: 8px; font-weight: 500;">
               Generated by Chains-ERP for ${formData.companyName || 'Company'}
             </div>
-            <div style="margin-bottom: 8px;">
-              Enhanced security features prevent forgery and ensure authenticity
+            <div style="margin-bottom: 8px; font-size: 11px;">
+              Invoice Number: ${formData.invoiceNumber || 'N/A'} | Date: ${formatDate(formData.issueDate)}
             </div>
             <div style="font-size: 10px; color: #d1d5db;">
               Digital Invoice | Secure Payment Processing | Blockchain Verification
@@ -900,10 +1256,10 @@ export default function CreateInvoicePage() {
         unit: 'mm',
         format: 'a4'
       });
-
+      
       const imgWidth = pdf.internal.pageSize.getWidth();
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
+      
       // If the content is too tall, split into multiple pages
       const pageHeight = pdf.internal.pageSize.getHeight();
       const margin = 10;
@@ -938,6 +1294,13 @@ export default function CreateInvoicePage() {
       await saveInvoiceToDatabase(formData);
 
       pdf.save(`invoice-${formData.invoiceName || 'document'}.pdf`);
+      
+      // Show success message but don't redirect
+      alert('Invoice saved and downloaded successfully!');
+      console.log('✅ [Smart Invoicing] Invoice downloaded successfully:', {
+        invoiceNumber: formData.invoiceNumber,
+        total: formData.total
+      });
     } catch (error) {
       console.error('Failed to generate PDF:', error);
     }
@@ -950,14 +1313,23 @@ export default function CreateInvoicePage() {
     return `INV-${timestamp}-${random}`;
   };
 
+  // Generate invoice number on component mount if not exists
+  useEffect(() => {
+    if (!formData.invoiceNumber) {
+      const invoiceNumber = generateInvoiceNumber();
+      handleInputChange('invoiceNumber', invoiceNumber);
+      console.log('📝 [Smart Invoicing] Generated invoice number:', invoiceNumber);
+    }
+  }, [formData.invoiceNumber, handleInputChange]);
+
   // Add watermark to PDF
   const addWatermark = (pdf: jsPDF) => {
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
     
-    // Add watermark text
-    pdf.setTextColor(200, 200, 200);
-    pdf.setFontSize(40);
+    // Add watermark text with better styling
+    pdf.setTextColor(240, 240, 240); // Very light gray
+    pdf.setFontSize(24);
     pdf.setFont('helvetica', 'normal');
     
     // Add watermark in center
@@ -966,9 +1338,10 @@ export default function CreateInvoicePage() {
     const x = (pageWidth - textWidth) / 2;
     const y = pageHeight / 2;
     
+    // Add watermark with transparency effect
     pdf.text(text, x, y);
     
-    // Reset text color
+    // Reset text color for normal content
     pdf.setTextColor(0, 0, 0);
   };
 
@@ -984,11 +1357,18 @@ export default function CreateInvoicePage() {
     if (!formData.invoiceNumber) {
       const invoiceNumber = generateInvoiceNumber();
       handleInputChange('invoiceNumber', invoiceNumber);
+      console.log('📝 [Smart Invoicing] Generated invoice number for PDF share:', invoiceNumber);
     }
 
     setSendingInvoice(true);
 
     try {
+      console.log('📤 [Smart Invoicing] Starting PDF generation and sharing...', {
+        invoiceNumber: formData.invoiceNumber,
+        clientEmail: formData.clientEmail,
+        total: formData.total
+      });
+
       // Create a simplified version of the invoice for PDF generation (same as handleDownloadPdf)
       const pdfContainer = document.createElement('div');
       pdfContainer.style.cssText = `
@@ -1199,11 +1579,11 @@ export default function CreateInvoicePage() {
         <!-- Footer with watermark and security info -->
         <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center;">
           <div style="font-size: 12px; color: #9ca3af; line-height: 1.5;">
-            <div style="margin-bottom: 8px;">
+            <div style="margin-bottom: 8px; font-weight: 500;">
               Generated by Chains-ERP for ${formData.companyName || 'Company'}
             </div>
-            <div style="margin-bottom: 8px;">
-              Enhanced security features prevent forgery and ensure authenticity
+            <div style="margin-bottom: 8px; font-size: 11px;">
+              Invoice Number: ${formData.invoiceNumber || 'N/A'} | Date: ${formatDate(formData.issueDate)}
             </div>
             <div style="font-size: 10px; color: #d1d5db;">
               Digital Invoice | Secure Payment Processing | Blockchain Verification
@@ -1252,10 +1632,10 @@ export default function CreateInvoicePage() {
         unit: 'mm',
         format: 'a4'
       });
-
+      
       const imgWidth = pdf.internal.pageSize.getWidth();
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
+      
       // If the content is too tall, split into multiple pages
       const pageHeight = pdf.internal.pageSize.getHeight();
       const margin = 10;
@@ -1289,34 +1669,30 @@ export default function CreateInvoicePage() {
       // Save invoice to database
       await saveInvoiceToDatabase(formData);
 
-      // Convert PDF to base64 for email attachment
-      const pdfBase64 = pdf.output('datauristring').split(',')[1];
+      // Generate secure shareable link
+      const pdfBase64 = pdf.output('datauristring');
       
-      // Send invoice via email
-      const response = await fetch('/api/invoices/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          invoiceId: formData._id,
-          recipientEmail: formData.clientEmail,
-          pdfBuffer: pdfBase64
-        }),
+      // Create a shareable link (you can implement your own file sharing service)
+      const shareableLink = `data:application/pdf;base64,${pdfBase64.split(',')[1]}`;
+      
+      // Copy to clipboard
+      navigator.clipboard.writeText(shareableLink).then(() => {
+        console.log('📤 [Smart Invoicing] PDF shared successfully:', {
+          invoiceNumber: formData.invoiceNumber,
+          shareableLink: shareableLink.substring(0, 100) + '...'
+        });
+        alert('PDF generated and link copied to clipboard! You can now share this secure link.');
+      }).catch(() => {
+        console.log('📤 [Smart Invoicing] PDF generated but clipboard access denied');
+        alert('PDF generated successfully! You can download and share the file.');
       });
 
-      const result = await response.json();
+      // Redirect to invoices page
+      router.push('/dashboard/services/smart-invoicing/invoices');
 
-      if (result.success) {
-        alert('Invoice sent successfully!');
-        // Optionally redirect to dashboard or invoice list
-        router.push('/dashboard/services/smart-invoicing');
-      } else {
-        alert(`Failed to send invoice: ${result.message}`);
-      }
     } catch (error) {
-      console.error('Failed to send invoice:', error);
-      alert('Failed to send invoice. Please try again.');
+      console.error('❌ [Smart Invoicing] Failed to share PDF:', error);
+      alert('Failed to share PDF. Please try again.');
     } finally {
       setSendingInvoice(false);
     }
@@ -1325,6 +1701,11 @@ export default function CreateInvoicePage() {
   // Save invoice to database
   const saveInvoiceToDatabase = async (invoiceData: InvoiceFormData) => {
     try {
+      console.log('💾 [Smart Invoicing] Saving invoice to database:', {
+        invoiceNumber: invoiceData.invoiceNumber,
+        total: invoiceData.total
+      });
+
       const response = await fetch('/api/invoices', {
         method: 'POST',
         headers: {
@@ -1332,7 +1713,7 @@ export default function CreateInvoicePage() {
         },
         body: JSON.stringify({
           ...invoiceData,
-          status: 'sent',
+          status: 'pending', // Set as pending when sent
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         }),
@@ -1340,14 +1721,19 @@ export default function CreateInvoicePage() {
 
       const result = await response.json();
       if (result.success) {
-        console.log('Invoice saved to database:', result.invoice);
+        console.log('✅ [Smart Invoicing] Invoice saved to database:', {
+          id: result.invoice._id,
+          invoiceNumber: result.invoice.invoiceNumber
+        });
+        // Update the form data with the saved invoice ID
+        handleInputChange('_id', result.invoice._id);
         return result.invoice;
       } else {
-        console.error('Failed to save invoice:', result.message);
+        console.error('❌ [Smart Invoicing] Failed to save invoice:', result.message);
         return null;
       }
     } catch (error) {
-      console.error('Error saving invoice:', error);
+      console.error('❌ [Smart Invoicing] Error saving invoice:', error);
       return null;
     }
   };
@@ -1388,10 +1774,10 @@ export default function CreateInvoicePage() {
             
             <button
               onClick={handleSendInvoice}
-              disabled={loading}
+              disabled={loading || sendingInvoice}
               className="flex items-center justify-center space-x-2 px-6 py-2 bg-blue-800 text-white rounded-lg hover:bg-blue-900 transition-colors"
             >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              {sendingInvoice ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
               <span>Send Invoice</span>
             </button>
           </div>
@@ -2763,4 +3149,4 @@ function ClientEditForm({
       </div>
     </form>
   );
-}
+} 

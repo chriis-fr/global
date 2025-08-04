@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import Image from 'next/image';
 import { 
   ArrowLeft, 
   Edit3,
@@ -11,62 +12,95 @@ import {
   User,
   Calendar,
   Clock,
-  Loader2
+  Loader2,
+  CheckCircle
 } from 'lucide-react';
 import { countries } from '@/data/countries';
 import { getCurrencyByCode } from '@/data/currencies';
 
 interface Invoice {
   _id: string;
-  invoiceName: string;
-  issueDate: string;
-  dueDate: string;
-  companyName: string;
-  companyEmail: string;
-  companyPhone: string;
-  companyAddress: {
-    street: string;
-    city: string;
-    state: string;
-    zipCode: string;
-    country: string;
+  invoiceNumber?: string;
+  invoiceName?: string;
+  issueDate?: string;
+  dueDate?: string;
+  companyLogo?: string;
+  companyName?: string;
+  companyEmail?: string;
+  companyPhone?: string;
+  companyAddress?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+    country?: string;
   };
-  companyTaxNumber: string;
-  clientName: string;
-  clientEmail: string;
-  clientPhone: string;
-  clientAddress: {
-    street: string;
-    city: string;
-    state: string;
-    zipCode: string;
-    country: string;
+  companyTaxNumber?: string;
+  clientName?: string;
+  clientEmail?: string;
+  clientPhone?: string;
+  clientAddress?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+    country?: string;
   };
-  currency: string;
-  paymentMethod: 'fiat' | 'crypto';
+  currency?: string;
+  paymentMethod?: 'fiat' | 'crypto';
   paymentNetwork?: string;
   paymentAddress?: string;
   bankName?: string;
   accountNumber?: string;
   routingNumber?: string;
-  enableMultiCurrency: boolean;
-  invoiceType: 'regular' | 'recurring';
-  items: Array<{
-    id: string;
-    description: string;
-    quantity: number;
-    unitPrice: number;
-    discount: number;
-    tax: number;
-    amount: number;
+  enableMultiCurrency?: boolean;
+  invoiceType?: 'regular' | 'recurring';
+  items?: Array<{
+    id?: string;
+    description?: string;
+    quantity?: number;
+    unitPrice?: number;
+    discount?: number;
+    tax?: number;
+    amount?: number;
   }>;
-  subtotal: number;
-  totalTax: number;
-  total: number;
-  memo: string;
-  status: 'draft' | 'sent' | 'paid' | 'overdue';
-  createdAt: string;
-  updatedAt: string;
+  subtotal?: number;
+  totalTax?: number;
+  total?: number;
+  totalAmount?: number;
+  memo?: string;
+  status?: 'draft' | 'sent' | 'pending' | 'paid' | 'overdue';
+  createdAt?: string;
+  updatedAt?: string;
+  companyDetails?: {
+    name: string;
+    addressLine1?: string;
+    city?: string;
+    region?: string;
+    postalCode?: string;
+    country?: string;
+    taxNumber?: string;
+  };
+  clientDetails?: {
+    companyName: string;
+    addressLine1?: string;
+    city?: string;
+    region?: string;
+    postalCode?: string;
+    country?: string;
+  };
+  paymentSettings?: {
+    method: 'fiat' | 'crypto';
+    cryptoNetwork?: string;
+    walletAddress?: string;
+    bankAccount?: {
+      bankName?: string;
+      accountNumber?: string;
+      routingNumber?: string;
+    };
+    currency?: string;
+    enableMultiCurrency?: boolean;
+  };
 }
 
 export default function InvoiceViewPage() {
@@ -75,6 +109,7 @@ export default function InvoiceViewPage() {
   const { data: session } = useSession();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
 
   const loadInvoice = useCallback(async (id: string) => {
     try {
@@ -83,23 +118,37 @@ export default function InvoiceViewPage() {
       const data = await response.json();
       
       if (data.success && data.data) {
+        console.log('📊 [Invoice View] Loaded invoice data:', {
+          id: data.data._id,
+          invoiceNumber: data.data.invoiceNumber,
+          status: data.data.status,
+          total: data.data.total,
+          totalAmount: data.data.totalAmount,
+          subtotal: data.data.subtotal,
+          totalTax: data.data.totalTax,
+          items: data.data.items?.length || 0,
+          itemsData: data.data.items
+        });
         setInvoice(data.data);
       } else {
+        console.error('❌ [Invoice View] Failed to load invoice:', data.message);
         router.push('/dashboard/services/smart-invoicing/invoices');
       }
     } catch (error) {
-      console.error('Failed to load invoice:', error);
+      console.error('❌ [Invoice View] Error loading invoice:', error);
       router.push('/dashboard/services/smart-invoicing/invoices');
     } finally {
       setLoading(false);
     }
   }, [router]);
 
+  // Load invoice only once when component mounts and ID is available
   useEffect(() => {
-    if (params.id && session?.user) {
-      loadInvoice(params.id as string);
+    const invoiceId = params.id as string;
+    if (invoiceId && session?.user && !invoice) {
+      loadInvoice(invoiceId);
     }
-  }, [params.id, session, loadInvoice]);
+  }, [params.id, session?.user, invoice, loadInvoice]);
 
   const handleDeleteInvoice = async () => {
     if (!invoice || !confirm('Are you sure you want to delete this invoice?')) return;
@@ -134,9 +183,66 @@ export default function InvoiceViewPage() {
     switch (status) {
       case 'draft': return 'bg-gray-100 text-gray-800';
       case 'sent': return 'bg-blue-100 text-blue-800';
+      case 'pending': return 'bg-yellow-100 text-yellow-800';
       case 'paid': return 'bg-green-100 text-green-800';
       case 'overdue': return 'bg-red-100 text-red-800';
+      case 'cancelled': return 'bg-gray-100 text-gray-800';
       default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  // Check if user has permission to mark invoice as paid
+  const canMarkAsPaid = () => {
+    if (!session?.user) return false;
+    
+    // Individual users can always mark their own invoices as paid
+    if (!session.user.organizationId || session.user.organizationId === session.user.id) {
+      return true;
+    }
+    
+    // For organization users, check if they are admin or have proper rights
+    // For now, we'll allow organization members to mark invoices as paid
+    // You can add more specific permission checks here later
+    return true;
+  };
+
+  // Check if invoice can be marked as paid
+  const canMarkInvoiceAsPaid = () => {
+    if (!invoice) return false;
+    
+    // Only allow marking as paid if status is 'sent' or 'pending'
+    const allowedStatuses = ['sent', 'pending'];
+    return allowedStatuses.includes(invoice.status || '') && canMarkAsPaid();
+  };
+
+  const handleMarkAsPaid = async () => {
+    if (!invoice || !canMarkInvoiceAsPaid() || !confirm('Are you sure you want to mark this invoice as paid?')) return;
+    
+    try {
+      setUpdatingStatus(true);
+      const response = await fetch(`/api/invoices/${invoice._id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'paid'
+        }),
+      });
+      
+      if (response.ok) {
+        // Reload the invoice to get updated status
+        await loadInvoice(invoice._id);
+        alert('Invoice marked as paid successfully!');
+      } else {
+        const errorData = await response.json();
+        alert(`Failed to mark invoice as paid: ${errorData.message || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Failed to mark invoice as paid:', error);
+      alert('Failed to mark invoice as paid');
+    } finally {
+      setUpdatingStatus(false);
     }
   };
 
@@ -169,9 +275,9 @@ export default function InvoiceViewPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-4xl mx-auto px-4">
+      <div className="max-w-4xl mx-auto px-2 sm:px-4">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 space-y-4 sm:space-y-0">
           <button
             onClick={() => router.back()}
             className="flex items-center space-x-2 px-4 py-2 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
@@ -181,8 +287,8 @@ export default function InvoiceViewPage() {
           </button>
           
           <div className="flex space-x-4">
-            <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(invoice.status)}`}>
-              {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
+            <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(invoice.status || 'draft')}`}>
+              {invoice.status ? (invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)) : 'Draft'}
             </span>
             <button
               onClick={() => router.push(`/dashboard/services/smart-invoicing/create?id=${invoice._id}`)}
@@ -191,6 +297,20 @@ export default function InvoiceViewPage() {
               <Edit3 className="h-4 w-4" />
               <span>Edit</span>
             </button>
+            {canMarkInvoiceAsPaid() && (
+              <button
+                onClick={handleMarkAsPaid}
+                disabled={updatingStatus}
+                className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {updatingStatus ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCircle className="h-4 w-4" />
+                )}
+                <span>{updatingStatus ? 'Updating...' : 'Mark as Paid'}</span>
+              </button>
+            )}
             <button
               onClick={handleDeleteInvoice}
               className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
@@ -204,11 +324,14 @@ export default function InvoiceViewPage() {
         {/* Invoice Document */}
         <div className="bg-white rounded-lg shadow-lg border max-w-4xl mx-auto">
           {/* Document Header */}
-          <div className="p-8 border-b border-gray-200">
-            <div className="flex justify-between items-start">
+          <div className="p-4 sm:p-8 border-b border-gray-200">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 md:gap-0">
               {/* Left Side - Invoice Name */}
               <div className="flex-1">
-                <h1 className="text-3xl font-bold text-gray-900">{invoice.invoiceName}</h1>
+                <h1 className="text-3xl font-bold text-gray-900">{invoice.invoiceName || 'Invoice'}</h1>
+                {invoice.invoiceNumber && (
+                  <p className="text-lg text-gray-600 mt-2">Invoice #: {invoice.invoiceNumber}</p>
+                )}
               </div>
 
               {/* Right Side - Dates */}
@@ -216,11 +339,11 @@ export default function InvoiceViewPage() {
                 <div className="text-sm text-gray-600">
                   <div className="flex items-center space-x-2">
                     <Calendar className="h-4 w-4" />
-                    <span>Issued on {formatDate(invoice.issueDate)}</span>
+                    <span>Issued on {formatDate(invoice.issueDate || new Date().toISOString())}</span>
                   </div>
                   <div className="flex items-center space-x-2 mt-1">
                     <Clock className="h-4 w-4" />
-                    <span>Payment due by {formatDate(invoice.dueDate)}</span>
+                    <span>Payment due by {formatDate(invoice.dueDate || new Date().toISOString())}</span>
                   </div>
                 </div>
               </div>
@@ -228,28 +351,40 @@ export default function InvoiceViewPage() {
           </div>
 
           {/* Company Information */}
-          <div className="p-8 border-b border-gray-200">
-            <div className="flex justify-between">
+          <div className="p-4 sm:p-8 border-b border-gray-200">
+            <div className="flex flex-col md:flex-row justify-between">
               <div className="flex-1">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                   <Building2 className="h-5 w-5 mr-2" />
                   From
                 </h3>
                 <div className="space-y-2">
-                  <div className="font-medium text-gray-900">{invoice.companyName}</div>
+                  {invoice.companyLogo && (
+                    <div className="mb-4">
+                      <Image 
+                        src={invoice.companyLogo} 
+                        alt="Company Logo" 
+                        width={48}
+                        height={48}
+                        className="h-12 w-auto object-contain rounded-md"
+                        style={{ backgroundColor: 'white' }}
+                        unoptimized
+                      />
+                    </div>
+                  )}
+                  <div className="font-medium text-gray-900">{invoice.companyName || invoice.companyDetails?.name || 'Company Name'}</div>
                   <div className="text-gray-600">
-                    {invoice.companyAddress.street && <div>{invoice.companyAddress.street}</div>}
-                    {(invoice.companyAddress.city || invoice.companyAddress.state || invoice.companyAddress.zipCode) && (
+                    {invoice.companyAddress?.street || invoice.companyDetails?.addressLine1 ? <div>{invoice.companyAddress?.street || invoice.companyDetails?.addressLine1}</div> : null}
+                    {(invoice.companyAddress?.city || invoice.companyDetails?.city || invoice.companyAddress?.state || invoice.companyDetails?.region || invoice.companyAddress?.zipCode || invoice.companyDetails?.postalCode) && (
                       <div>
-                        {[invoice.companyAddress.city, invoice.companyAddress.state, invoice.companyAddress.zipCode]
-                          .filter(Boolean).join(', ')}
+                        {[invoice.companyAddress?.city || invoice.companyDetails?.city, invoice.companyAddress?.state || invoice.companyDetails?.region, invoice.companyAddress?.zipCode || invoice.companyDetails?.postalCode].filter(Boolean).join(', ')}
                       </div>
                     )}
-                    {invoice.companyAddress.country && (
-                      <div>{countries.find(c => c.code === invoice.companyAddress.country)?.name}</div>
-                    )}
+                    {invoice.companyAddress?.country || invoice.companyDetails?.country ? (
+                      <div>{countries.find(c => c.code === (invoice.companyAddress?.country || invoice.companyDetails?.country))?.name}</div>
+                    ) : null}
                   </div>
-                  {invoice.companyTaxNumber && <div className="text-gray-600">Tax: {invoice.companyTaxNumber}</div>}
+                  {invoice.companyTaxNumber || invoice.companyDetails?.taxNumber ? <div className="text-gray-600">Tax: {invoice.companyTaxNumber || invoice.companyDetails?.taxNumber}</div> : null}
                   {invoice.companyEmail && <div className="text-gray-600">{invoice.companyEmail}</div>}
                   {invoice.companyPhone && <div className="text-gray-600">{invoice.companyPhone}</div>}
                 </div>
@@ -262,18 +397,17 @@ export default function InvoiceViewPage() {
                   Bill To
                 </h3>
                 <div className="space-y-2">
-                  <div className="font-medium text-gray-900">{invoice.clientName}</div>
+                  <div className="font-medium text-gray-900">{invoice.clientName || invoice.clientDetails?.companyName || 'Client Name'}</div>
                   <div className="text-gray-600">
-                    {invoice.clientAddress.street && <div>{invoice.clientAddress.street}</div>}
-                    {(invoice.clientAddress.city || invoice.clientAddress.state || invoice.clientAddress.zipCode) && (
+                    {invoice.clientAddress?.street || invoice.clientDetails?.addressLine1 ? <div>{invoice.clientAddress?.street || invoice.clientDetails?.addressLine1}</div> : null}
+                    {(invoice.clientAddress?.city || invoice.clientDetails?.city || invoice.clientAddress?.state || invoice.clientDetails?.region || invoice.clientAddress?.zipCode || invoice.clientDetails?.postalCode) && (
                       <div>
-                        {[invoice.clientAddress.city, invoice.clientAddress.state, invoice.clientAddress.zipCode]
-                          .filter(Boolean).join(', ')}
+                        {[invoice.clientAddress?.city || invoice.clientDetails?.city, invoice.clientAddress?.state || invoice.clientDetails?.region, invoice.clientAddress?.zipCode || invoice.clientDetails?.postalCode].filter(Boolean).join(', ')}
                       </div>
                     )}
-                    {invoice.clientAddress.country && (
-                      <div>{countries.find(c => c.code === invoice.clientAddress.country)?.name}</div>
-                    )}
+                    {invoice.clientAddress?.country || invoice.clientDetails?.country ? (
+                      <div>{countries.find(c => c.code === (invoice.clientAddress?.country || invoice.clientDetails?.country))?.name}</div>
+                    ) : null}
                   </div>
                   {invoice.clientEmail && <div className="text-gray-600">{invoice.clientEmail}</div>}
                   {invoice.clientPhone && <div className="text-gray-600">{invoice.clientPhone}</div>}
@@ -283,25 +417,34 @@ export default function InvoiceViewPage() {
           </div>
 
           {/* Payment Information */}
-          <div className="p-8 border-b border-gray-200">
+          <div className="p-4 sm:p-8 border-b border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Payment Information</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <p className="text-sm text-gray-600 mb-2">Payment Method</p>
                 <p className="font-medium">
-                  {invoice.paymentMethod === 'crypto' ? 'Cryptocurrency' : 'Bank Transfer'}
+                  {invoice.paymentMethod === 'crypto' || invoice.paymentSettings?.method === 'crypto' ? 'Cryptocurrency' : 'Bank Transfer'}
                 </p>
-                {invoice.paymentMethod === 'crypto' && invoice.paymentNetwork && (
-                  <p className="text-sm text-gray-600">Network: {invoice.paymentNetwork}</p>
+                {(invoice.paymentMethod === 'crypto' || invoice.paymentSettings?.method === 'crypto') && (invoice.paymentNetwork || invoice.paymentSettings?.cryptoNetwork) && (
+                  <p className="text-sm text-gray-600">Network: {invoice.paymentNetwork || invoice.paymentSettings?.cryptoNetwork}</p>
                 )}
-                {invoice.paymentMethod === 'fiat' && invoice.bankName && (
-                  <p className="text-sm text-gray-600">Bank: {invoice.bankName}</p>
+                {(invoice.paymentMethod === 'crypto' || invoice.paymentSettings?.method === 'crypto') && (invoice.paymentAddress || invoice.paymentSettings?.walletAddress) && (
+                  <p className="text-sm text-gray-600">Address: {invoice.paymentAddress || invoice.paymentSettings?.walletAddress}</p>
+                )}
+                {(invoice.paymentMethod === 'fiat' || invoice.paymentSettings?.method === 'fiat') && (invoice.bankName || invoice.paymentSettings?.bankAccount?.bankName) && (
+                  <p className="text-sm text-gray-600">Bank: {invoice.bankName || invoice.paymentSettings?.bankAccount?.bankName}</p>
+                )}
+                {(invoice.paymentMethod === 'fiat' || invoice.paymentSettings?.method === 'fiat') && (invoice.accountNumber || invoice.paymentSettings?.bankAccount?.accountNumber) && (
+                  <p className="text-sm text-gray-600">Account: {invoice.accountNumber || invoice.paymentSettings?.bankAccount?.accountNumber}</p>
+                )}
+                {(invoice.paymentMethod === 'fiat' || invoice.paymentSettings?.method === 'fiat') && (invoice.routingNumber || invoice.paymentSettings?.bankAccount?.routingNumber) && (
+                  <p className="text-sm text-gray-600">Routing: {invoice.routingNumber || invoice.paymentSettings?.bankAccount?.routingNumber}</p>
                 )}
               </div>
               <div>
                 <p className="text-sm text-gray-600 mb-2">Currency</p>
-                <p className="font-medium">{invoice.currency}</p>
-                {invoice.enableMultiCurrency && (
+                <p className="font-medium">{invoice.currency || invoice.paymentSettings?.currency || 'USD'}</p>
+                {(invoice.enableMultiCurrency || invoice.paymentSettings?.enableMultiCurrency) && (
                   <p className="text-sm text-blue-600">Multi-currency enabled</p>
                 )}
               </div>
@@ -309,12 +452,12 @@ export default function InvoiceViewPage() {
           </div>
 
           {/* Invoice Items */}
-          <div className="p-8 border-b border-gray-200">
+          <div className="p-4 sm:p-8 border-b border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900 mb-6">Invoice Items</h3>
             
             {/* Items Table */}
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full min-w-[600px]">
                 <thead>
                   <tr className="border-b border-gray-200">
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Description</th>
@@ -326,28 +469,30 @@ export default function InvoiceViewPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {invoice.items.map((item) => (
-                    <tr key={item.id} className="border-b border-gray-100">
-                      <td className="py-3 px-4">
-                        <div className="text-gray-900">{item.description}</div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="text-gray-900">{item.quantity}</div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="text-gray-900">{getCurrencySymbol(invoice.currency)}{item.unitPrice.toFixed(2)}</div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="text-gray-900">{item.discount}%</div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="text-gray-900">{item.tax}%</div>
-                      </td>
-                      <td className="py-3 px-4 font-medium">
-                        <div className="text-gray-900">{getCurrencySymbol(invoice.currency)}{item.amount.toFixed(2)}</div>
-                      </td>
-                    </tr>
-                  ))}
+                  {invoice.items?.map((item, index) => {
+                    return (
+                      <tr key={item.id || `item-${index}`} className="border-b border-gray-100">
+                        <td className="py-3 px-4">
+                          <div className="text-gray-900">{item.description}</div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="text-gray-900">{item.quantity}</div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="text-gray-900">{getCurrencySymbol(invoice.currency || '')}{item.unitPrice?.toFixed(2) || '0.00'}</div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="text-gray-900">{item.discount || 0}%</div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="text-gray-900">{item.tax || 0}%</div>
+                        </td>
+                        <td className="py-3 px-4 font-medium">
+                          <div className="text-gray-900">{getCurrencySymbol(invoice.currency || '')}{item.amount?.toFixed(2) || '0.00'}</div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -357,19 +502,19 @@ export default function InvoiceViewPage() {
               <div className="w-64 space-y-2">
                 <div className="flex justify-between text-gray-600">
                   <span>Amount without tax</span>
-                  <span>{getCurrencySymbol(invoice.currency)}{invoice.subtotal.toFixed(2)}</span>
+                  <span>{getCurrencySymbol(invoice.currency || '')}{invoice.subtotal?.toFixed(2) || '0.00'}</span>
                 </div>
                 <div className="flex justify-between text-gray-600">
                   <span>Total Tax amount</span>
-                  <span>{getCurrencySymbol(invoice.currency)}{invoice.totalTax.toFixed(2)}</span>
+                  <span>{getCurrencySymbol(invoice.currency || '')}{invoice.totalTax?.toFixed(2) || '0.00'}</span>
                 </div>
                 <div className="flex justify-between text-lg font-semibold border-t pt-2">
                   <span>Total amount</span>
-                  <span>{getCurrencySymbol(invoice.currency)}{invoice.total.toFixed(2)}</span>
+                  <span>{getCurrencySymbol(invoice.currency || '')}{invoice.totalAmount?.toFixed(2) || '0.00'}</span>
                 </div>
                 <div className="flex justify-between text-lg font-semibold text-blue-600">
                   <span>Due</span>
-                  <span>{getCurrencySymbol(invoice.currency)}{invoice.total.toFixed(2)}</span>
+                  <span>{getCurrencySymbol(invoice.currency || '')}{invoice.totalAmount?.toFixed(2) || '0.00'}</span>
                 </div>
               </div>
             </div>
@@ -377,17 +522,17 @@ export default function InvoiceViewPage() {
 
           {/* Memo */}
           {invoice.memo && (
-            <div className="p-8 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Memo</h3>
+            <div className="p-4 sm:p-8 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Notes</h3>
               <p className="text-gray-700 whitespace-pre-wrap">{invoice.memo}</p>
             </div>
           )}
 
           {/* Footer */}
-          <div className="p-8 text-center text-sm text-gray-500">
-            <p>Invoice created on {formatDate(invoice.createdAt)}</p>
+          <div className="p-4 sm:p-8 text-center text-sm text-gray-500">
+            <p>Invoice created on {formatDate(invoice.createdAt || '')}</p>
             {invoice.updatedAt !== invoice.createdAt && (
-              <p>Last updated on {formatDate(invoice.updatedAt)}</p>
+              <p>Last updated on {formatDate(invoice.updatedAt || '')}</p>
             )}
           </div>
         </div>

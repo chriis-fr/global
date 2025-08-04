@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { sendInvoiceEmail } from '@/lib/services/emailService';
+import { sendInvoiceNotification } from '@/lib/services/emailService';
 import { connectToDatabase } from '@/lib/database';
-import { Invoice } from '@/models';
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,24 +30,41 @@ export async function POST(request: NextRequest) {
     const invoicesCollection = db.collection('invoices');
 
     // Get the invoice
-    const invoice = await invoicesCollection.findOne({
-      _id: invoiceId,
-      organizationId: session.user.organizationId || session.user.id
-    });
+    const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
+    const query = isOrganization 
+      ? { _id: invoiceId, organizationId: session.user.organizationId }
+      : { _id: invoiceId, userId: session.user.email };
+
+    const invoice = await invoicesCollection.findOne(query);
 
     if (!invoice) {
+      console.log('❌ [Send Invoice] Invoice not found:', {
+        invoiceId,
+        ownerType: isOrganization ? 'organization' : 'individual',
+        ownerId: isOrganization ? session.user.organizationId : session.user.email,
+        userEmail: session.user.email
+      });
       return NextResponse.json(
         { success: false, message: 'Invoice not found' },
         { status: 404 }
       );
     }
 
+    console.log('✅ [Send Invoice] Invoice found for sending:', {
+      invoiceId,
+      invoiceNumber: invoice.invoiceNumber,
+      recipientEmail,
+      total: invoice.totalAmount,
+      ownerType: isOrganization ? 'organization' : 'individual',
+      ownerId: isOrganization ? session.user.organizationId : session.user.email
+    });
+
     // Prepare payment methods for display
     const paymentMethods: string[] = [];
-    if (invoice.paymentSettings?.fiat?.enabled) {
+    if (invoice.paymentSettings?.method === 'fiat') {
       paymentMethods.push('Bank Transfer');
     }
-    if (invoice.paymentSettings?.crypto?.enabled) {
+    if (invoice.paymentSettings?.method === 'crypto') {
       paymentMethods.push('Cryptocurrency');
     }
 
@@ -59,14 +75,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Send invoice email
-    const result = await sendInvoiceEmail(
+    const result = await sendInvoiceNotification(
       recipientEmail,
-      invoice.clientDetails?.contactName || 'Valued Customer',
+      invoice.clientDetails?.companyName || 'Valued Customer',
       invoice.invoiceNumber,
       invoice.totalAmount,
       invoice.currency,
       invoice.dueDate?.toLocaleDateString() || 'N/A',
-      invoice.companyDetails?.companyName || 'Your Company',
+      invoice.companyDetails?.name || 'Your Company',
+      session.user.name || 'Invoice Sender',
       `${process.env.FRONTEND_URL || 'http://localhost:3000'}/invoice/${invoice.invoiceNumber}`,
       paymentMethods,
       pdfAttachment
@@ -101,14 +118,11 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
   } catch (error) {
     console.error('❌ [Send Invoice] Error:', error);
     return NextResponse.json(
-      { 
-        success: false, 
-        message: 'Failed to send invoice',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      },
+      { success: false, message: 'Failed to send invoice' },
       { status: 500 }
     );
   }

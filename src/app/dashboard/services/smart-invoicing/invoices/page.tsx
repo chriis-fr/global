@@ -1,34 +1,24 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import Link from 'next/link';
 import { 
   Plus, 
   Search, 
-  Filter,
   Eye,
   Edit3,
   Trash2,
-  Download,
-  Calendar,
-  DollarSign,
-  FileText,
   Loader2,
-  MoreHorizontal
+  LayoutDashboard,
+  FileText,
+  DollarSign,
+  Calendar,
+  TrendingUp
 } from 'lucide-react';
-
-interface Invoice {
-  _id: string;
-  invoiceName: string;
-  issueDate: string;
-  dueDate: string;
-  clientName: string;
-  total: number;
-  currency: string;
-  status: 'draft' | 'sent' | 'paid' | 'overdue';
-  createdAt: string;
-}
+import { InvoiceService } from '@/lib/services/invoiceService';
+import { Invoice } from '@/models/Invoice';
 
 export default function InvoicesPage() {
   const router = useRouter();
@@ -36,38 +26,30 @@ export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'sent' | 'paid' | 'overdue'>('all');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'sent' | 'pending' | 'paid' | 'overdue'>('all');
+
+  const loadInvoices = useCallback(async () => {
+    try {
+      const invoicesData = await InvoiceService.getInvoices();
+      setInvoices(invoicesData);
+      
+      console.log('📊 [Invoices Page] Loaded invoices:', {
+        count: invoicesData.length,
+        pendingCount: invoicesData.filter(inv => inv.status === 'pending').length,
+        statuses: invoicesData.map(inv => ({ id: inv._id, status: inv.status }))
+      });
+    } catch (error) {
+      console.error('❌ [Invoices Page] Error loading invoices:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (session?.user) {
       loadInvoices();
     }
-  }, [session, currentPage, statusFilter]);
-
-  const loadInvoices = async () => {
-    try {
-      setLoading(true);
-      const params = new URLSearchParams({
-        page: currentPage.toString(),
-        limit: '10',
-        status: statusFilter
-      });
-      
-      const response = await fetch(`/api/invoices?${params}`);
-      const data = await response.json();
-      
-      if (data.success) {
-        setInvoices(data.data.invoices);
-        setTotalPages(data.data.pagination.pages);
-      }
-    } catch (error) {
-      console.error('Failed to load invoices:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [session, loadInvoices]);
 
   const handleDeleteInvoice = async (id: string) => {
     if (!confirm('Are you sure you want to delete this invoice?')) return;
@@ -89,6 +71,7 @@ export default function InvoicesPage() {
     switch (status) {
       case 'draft': return 'bg-gray-100 text-gray-800';
       case 'sent': return 'bg-blue-100 text-blue-800';
+      case 'pending': return 'bg-yellow-100 text-yellow-800';
       case 'paid': return 'bg-green-100 text-green-800';
       case 'overdue': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
@@ -115,63 +98,133 @@ export default function InvoicesPage() {
   };
 
   const filteredInvoices = invoices.filter(invoice =>
-    invoice.invoiceName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    invoice.clientName.toLowerCase().includes(searchTerm.toLowerCase())
+    (invoice.invoiceNumber?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+    (invoice.clientDetails?.companyName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+    (invoice.invoiceNumber?.toLowerCase() || '').includes(searchTerm.toLowerCase())
   );
 
+  const statusFilteredInvoices = statusFilter === 'all' 
+    ? filteredInvoices 
+    : filteredInvoices.filter(invoice => invoice.status === statusFilter);
+
+  // Calculate stats for the header
+  const stats = {
+    totalInvoices: invoices.length,
+    totalRevenue: invoices.reduce((sum, inv) => sum + (inv.totalAmount || 0), 0),
+    pendingCount: invoices.filter(inv => inv.status === 'pending' || inv.status === 'sent').length,
+    paidCount: invoices.filter(inv => inv.status === 'paid').length
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 px-4 sm:px-6 lg:px-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Invoices</h1>
-          <p className="text-gray-600">Manage your invoices and track payments</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex-1">
+          <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Invoices</h1>
+          <p className="text-blue-200">Manage your invoices and track payments</p>
         </div>
         <button
           onClick={() => router.push('/dashboard/services/smart-invoicing/create')}
-          className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          className="flex items-center justify-center sm:justify-start space-x-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-lg w-full sm:w-auto"
         >
-          <Plus className="h-4 w-4" />
-          <span>Create Invoice</span>
+          <Plus className="h-5 w-5" />
+          <span className="font-medium">Create Invoice</span>
         </button>
       </div>
 
-      {/* Filters and Search */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-          <input
-            type="text"
-            placeholder="Search invoices..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-blue-200 text-sm font-medium">Total Invoices</p>
+              <p className="text-xl sm:text-2xl font-bold text-white">{stats.totalInvoices}</p>
+            </div>
+            <div className="p-2 sm:p-3 bg-blue-500/20 rounded-lg">
+              <FileText className="h-5 w-5 sm:h-6 sm:w-6 text-blue-400" />
+            </div>
+          </div>
         </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as any)}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="all">All Status</option>
-          <option value="draft">Draft</option>
-          <option value="sent">Sent</option>
-          <option value="paid">Paid</option>
-          <option value="overdue">Overdue</option>
-        </select>
+
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-blue-200 text-sm font-medium">Total Revenue</p>
+              <p className="text-xl sm:text-2xl font-bold text-white">${stats.totalRevenue.toLocaleString()}</p>
+            </div>
+            <div className="p-2 sm:p-3 bg-green-500/20 rounded-lg">
+              <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-green-400" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-blue-200 text-sm font-medium">Pending</p>
+              <p className="text-xl sm:text-2xl font-bold text-white">{stats.pendingCount}</p>
+            </div>
+            <div className="p-2 sm:p-3 bg-yellow-500/20 rounded-lg">
+              <Calendar className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-400" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-blue-200 text-sm font-medium">Paid</p>
+              <p className="text-xl sm:text-2xl font-bold text-white">{stats.paidCount}</p>
+            </div>
+            <div className="p-2 sm:p-3 bg-green-500/20 rounded-lg">
+              <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-green-400" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Filters and Search */}
+      <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20">
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+            <input
+              type="text"
+              placeholder="Search invoices by number or client..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-900 placeholder-gray-500"
+            />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as 'all' | 'draft' | 'sent' | 'pending' | 'paid' | 'overdue')}
+            className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-900"
+          >
+            <option value="all">All Status</option>
+            <option value="draft">Draft</option>
+            <option value="sent">Sent</option>
+            <option value="pending">Pending</option>
+            <option value="paid">Paid</option>
+            <option value="overdue">Overdue</option>
+          </select>
+        </div>
       </div>
 
       {/* Invoices Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+          <div className="flex items-center justify-center py-16">
+            <div className="flex items-center space-x-3">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
+              <span className="text-white text-lg">Loading invoices...</span>
+            </div>
           </div>
-        ) : filteredInvoices.length === 0 ? (
-          <div className="text-center py-12">
-            <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No invoices found</h3>
-            <p className="text-gray-600 mb-4">
+        ) : statusFilteredInvoices.length === 0 ? (
+          <div className="text-center py-16">
+            <FileText className="h-16 w-16 text-blue-400 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-white mb-2">No invoices found</h3>
+            <p className="text-blue-200 mb-6">
               {searchTerm || statusFilter !== 'all' 
                 ? 'Try adjusting your search or filters'
                 : 'Get started by creating your first invoice'
@@ -180,147 +233,111 @@ export default function InvoicesPage() {
             {!searchTerm && statusFilter === 'all' && (
               <button
                 onClick={() => router.push('/dashboard/services/smart-invoicing/create')}
-                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors mx-auto"
+                className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
-                <Plus className="h-4 w-4" />
-                <span>Create Invoice</span>
+                <Plus className="h-5 w-5 mr-2" />
+                Create Your First Invoice
               </button>
             )}
           </div>
         ) : (
           <>
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Invoice
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Client
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Amount
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Due Date
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredInvoices.map((invoice) => (
-                  <tr key={invoice._id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">
-                          {invoice.invoiceName}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          {formatDate(invoice.issueDate)}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{invoice.clientName}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {formatCurrency(invoice.total, invoice.currency)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(invoice.status)}`}>
-                        {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatDate(invoice.dueDate)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => router.push(`/dashboard/services/smart-invoicing/invoices/${invoice._id}`)}
-                          className="text-blue-600 hover:text-blue-900"
-                          title="View"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => router.push(`/dashboard/services/smart-invoicing/create?id=${invoice._id}`)}
-                          className="text-green-600 hover:text-green-900"
-                          title="Edit"
-                        >
-                          <Edit3 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteInvoice(invoice._id)}
-                          className="text-red-600 hover:text-red-900"
-                          title="Delete"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-white/10">
+                <thead className="bg-white/5">
+                  <tr>
+                    <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
+                      Invoice
+                    </th>
+                    <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
+                      Client
+                    </th>
+                    <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
+                      Amount
+                    </th>
+                    <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
+                      Date
+                    </th>
+                    <th className="px-3 sm:px-6 py-4 text-right text-xs font-semibold text-blue-200 uppercase tracking-wider">
+                      Actions
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
-                <div className="flex-1 flex justify-between sm:hidden">
-                  <button
-                    onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                    disabled={currentPage === 1}
-                    className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                    disabled={currentPage === totalPages}
-                    className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    Next
-                  </button>
-                </div>
-                <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm text-gray-700">
-                      Showing page <span className="font-medium">{currentPage}</span> of{' '}
-                      <span className="font-medium">{totalPages}</span>
-                    </p>
-                  </div>
-                  <div>
-                    <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-                      <button
-                        onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                        disabled={currentPage === 1}
-                        className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                      >
-                        Previous
-                      </button>
-                      <button
-                        onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                        disabled={currentPage === totalPages}
-                        className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                      >
-                        Next
-                      </button>
-                    </nav>
-                  </div>
-                </div>
-              </div>
-            )}
+                </thead>
+                <tbody className="divide-y divide-white/10">
+                  {statusFilteredInvoices.map((invoice) => (
+                    <tr key={invoice._id?.toString() || 'unknown'} className="hover:bg-white/5 transition-colors">
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
+                        <div>
+                          <div className="text-sm font-semibold text-white">
+                            {invoice.invoiceNumber || 'Invoice'}
+                          </div>
+                          <div className="text-sm text-blue-200">
+                            {invoice.issueDate ? formatDate(invoice.issueDate.toString()) : 'N/A'}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-white">
+                          {invoice.clientDetails?.companyName || 'Client'}
+                        </div>
+                      </td>
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-semibold text-white">
+                          {formatCurrency(invoice.totalAmount || 0, invoice.currency || 'USD')}
+                        </div>
+                      </td>
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${getStatusColor(invoice.status)}`}>
+                          {invoice.status ? (invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)) : 'Draft'}
+                        </span>
+                      </td>
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-blue-200">
+                        {invoice.createdAt ? formatDate(invoice.createdAt.toString()) : 'N/A'}
+                      </td>
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div className="flex items-center justify-end space-x-2 sm:space-x-3">
+                          <button
+                            onClick={() => router.push(`/dashboard/services/smart-invoicing/invoices/${invoice._id?.toString()}`)}
+                            className="text-blue-400 hover:text-blue-300 transition-colors p-1 sm:p-2 rounded-lg hover:bg-white/10"
+                            title="View Invoice"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => router.push(`/dashboard/services/smart-invoicing/create?edit=${invoice._id?.toString()}`)}
+                            className="text-green-400 hover:text-green-300 transition-colors p-1 sm:p-2 rounded-lg hover:bg-white/10"
+                            title="Edit Invoice"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteInvoice(invoice._id?.toString() || '')}
+                            className="text-red-400 hover:text-red-300 transition-colors p-1 sm:p-2 rounded-lg hover:bg-white/10"
+                            title="Delete Invoice"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </>
         )}
       </div>
+
+      {/* Floating Dashboard Button */}
+      <Link
+        href="/dashboard"
+        className="fixed bottom-6 right-6 z-50 flex items-center justify-center w-14 h-14 bg-blue-600/80 backdrop-blur-sm text-white rounded-full shadow-lg hover:bg-blue-700/90 transition-all duration-300 hover:scale-110"
+      >
+        <LayoutDashboard className="h-6 w-6" />
+      </Link>
     </div>
   );
 } 

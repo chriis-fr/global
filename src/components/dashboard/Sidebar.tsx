@@ -185,8 +185,6 @@ export default function Sidebar() {
       <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
         {/* Dashboard Navigation */}
         <nav className="p-4 space-y-2">
-
-
           {/* Services Navigation */}
           <div className="mb-4">
             {(!isCollapsed || isAutoHidden) && (
@@ -225,8 +223,8 @@ export default function Sidebar() {
         </nav>
       </div>
 
-      {/* Fixed Footer */}
-      <div className="flex-shrink-0">
+      {/* Fixed Footer - Settings and Profile (Desktop) */}
+      <div className="hidden lg:block flex-shrink-0">
         {/* Settings Section */}
         <div className="border-t border-white/10 p-4 space-y-2">
           {/* Settings Header Button */}
@@ -342,6 +340,87 @@ export default function Sidebar() {
           </button>
         </div>
       </div>
+
+      {/* Mobile Footer - Settings and Profile */}
+      <div className="lg:hidden flex-shrink-0 mt-auto">
+        {/* Settings Section */}
+        <div className="border-t border-white/10 p-4 space-y-2">
+          {/* Settings Header Button */}
+          <button
+            onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+            className={`flex items-center justify-between w-full px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation ${
+              pathname.startsWith('/dashboard/settings') 
+                ? 'bg-blue-800 text-white' 
+                : 'text-white/70 hover:bg-blue-900/50 hover:text-white'
+            }`}
+          >
+            <div className="flex items-center">
+              <User className="h-4 w-4 mr-3 flex-shrink-0" />
+              <span className="whitespace-nowrap">Settings</span>
+            </div>
+            <ChevronRight 
+              className={`h-4 w-4 transition-transform duration-200 ${
+                isSettingsOpen ? 'rotate-90' : ''
+              }`} 
+            />
+          </button>
+
+          {/* Settings Dropdown */}
+          {isSettingsOpen && (
+            <div className="ml-4 space-y-1">
+              {SETTINGS_LINKS.map(link => {
+                const active = pathname.startsWith(link.href);
+                return (
+                  <Link
+                    key={link.key}
+                    href={link.href}
+                    onClick={closeMobileMenu}
+                    className={`flex items-center px-3 py-3 rounded-lg transition-colors text-sm font-medium group relative touch-manipulation ${
+                      active 
+                        ? 'bg-blue-800 text-white' 
+                        : 'text-white/70 hover:bg-blue-900/50 hover:text-white'
+                    }`}
+                    style={{ textDecoration: 'none' }}
+                  >
+                    <link.icon className="h-4 w-4 mr-3 flex-shrink-0" />
+                    <span className="whitespace-nowrap">{link.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* User Profile */}
+        <div className="border-t border-white/10 p-4">
+          <div className="flex items-center space-x-3 mb-3">
+            <ProfileAvatar
+              src={session?.user?.image}
+              alt={session?.user?.name || 'User'}
+              size="sm"
+              type="user"
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-white truncate">
+                {session?.user?.name || 'User'}
+              </p>
+              <p className="text-xs text-white/50 truncate">
+                {session?.user?.email}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              signOut({ callbackUrl: '/auth' });
+              closeMobileMenu();
+            }}
+            className="flex items-center w-full px-3 py-3 rounded-lg text-sm font-medium text-white/70 hover:bg-blue-900/50 hover:text-white transition-colors group touch-manipulation"
+          >
+            <LogOut className="h-4 w-4 mr-3 flex-shrink-0" />
+            <span className="whitespace-nowrap">Sign Out</span>
+          </button>
+        </div>
+      </div>
     </>
   );
 
@@ -362,7 +441,7 @@ export default function Sidebar() {
       {/* Mobile Menu Button */}
       <button
         onClick={toggleMobileMenu}
-        className="lg:hidden fixed top-4 left-4 z-50 p-3 bg-blue-900 rounded-lg text-white hover:bg-blue-800 transition-colors shadow-lg touch-manipulation"
+        className="lg:hidden fixed top-4 left-4 z-50 p-3 bg-blue-900/80 backdrop-blur-sm rounded-lg text-white hover:bg-blue-800/90 transition-colors shadow-lg touch-manipulation"
         aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
       >
         {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -377,7 +456,7 @@ export default function Sidebar() {
       )}
 
       {/* Mobile Sidebar */}
-      <aside className={`lg:hidden fixed left-0 top-0 h-full w-80 sm:w-80 bg-blue-950 border-r border-white/10 z-50 transform transition-transform duration-300 ease-in-out overflow-hidden ${
+      <aside className={`lg:hidden fixed left-0 top-0 h-full w-80 sm:w-80 bg-blue-950 border-r border-white/10 z-50 transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col ${
         isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
       }`}>
         <SidebarContent />

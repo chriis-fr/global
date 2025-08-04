@@ -39,20 +39,101 @@ export async function POST(request: NextRequest) {
       memo,
       status,
       createdAt,
-      updatedAt
+      updatedAt,
+      invoiceName,
+      companyEmail,
+      companyPhone,
+      clientPhone
     } = body;
 
     await connectToDatabase();
 
-    // Transform data to match Invoice model structure
+    // Determine if user is individual or organization
+    const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
+    const ownerId = isOrganization ? session.user.organizationId : session.user.email;
+    const ownerType = isOrganization ? 'organization' : 'individual';
+
+    console.log('💾 [API Invoices] Saving invoice:', {
+      invoiceNumber,
+      ownerType,
+      ownerId,
+      total
+    });
+
+    // Transform data to match InvoiceFormData structure exactly
     const invoiceData = {
+      // Basic invoice info
       invoiceNumber: invoiceNumber || `INV-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      organizationId: session.user.organizationId || new ObjectId(),
-      issuerId: session.user.id || new ObjectId(),
-      type: invoiceType || 'regular',
-      status: status || 'sent',
+      invoiceName: invoiceName || `Invoice ${invoiceNumber || 'Document'}`,
       issueDate: new Date(issueDate),
       dueDate: new Date(dueDate),
+      
+      // Owner information
+      ownerId, // Dynamic owner ID (email for individual, organizationId for org)
+      ownerType, // 'individual' or 'organization'
+      userId: session.user.email, // Keep for backward compatibility
+      organizationId: session.user.organizationId || new ObjectId(),
+      issuerId: session.user.id || new ObjectId(),
+      
+      // Company information
+      companyLogo: companyLogo,
+      companyName: companyName,
+      companyEmail: companyEmail,
+      companyPhone: companyPhone,
+      companyAddress: {
+        street: companyAddress?.street || '',
+        city: companyAddress?.city || '',
+        state: companyAddress?.state || '',
+        zipCode: companyAddress?.zipCode || '',
+        country: companyAddress?.country || ''
+      },
+      companyTaxNumber: companyTaxNumber,
+      
+      // Client information
+      clientName: clientName,
+      clientEmail: clientEmail,
+      clientPhone: clientPhone,
+      clientAddress: {
+        street: clientAddress?.street || '',
+        city: clientAddress?.city || '',
+        state: clientAddress?.state || '',
+        zipCode: clientAddress?.zipCode || '',
+        country: clientAddress?.country || ''
+      },
+      
+      // Payment information
+      currency: currency,
+      paymentMethod: paymentMethod,
+      paymentNetwork: paymentNetwork,
+      paymentAddress: paymentAddress,
+      bankName: bankName,
+      accountNumber: accountNumber,
+      routingNumber: routingNumber,
+      enableMultiCurrency: enableMultiCurrency,
+      
+      // Invoice details
+      invoiceType: invoiceType || 'regular',
+      items: items.map((item: { id?: string; description: string; quantity: number; unitPrice: number; amount: number; tax: number; discount?: number }) => ({
+        id: item.id || `item-${Date.now()}-${Math.random()}`,
+        description: item.description,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        discount: item.discount || 0,
+        tax: item.tax || 0,
+        amount: item.amount
+      })),
+      subtotal: subtotal,
+      totalTax: totalTax,
+      total: total,
+      memo: memo,
+      
+      // Status and metadata
+      status: status || 'pending', // Changed from 'sent' to 'pending' for sent invoices
+      createdAt: createdAt ? new Date(createdAt) : new Date(),
+      updatedAt: updatedAt ? new Date(updatedAt) : new Date(),
+      
+      // Backward compatibility - keep nested structure for existing code
+      type: invoiceType || 'regular',
       companyDetails: {
         name: companyName,
         firstName: '',
@@ -79,20 +160,11 @@ export async function POST(request: NextRequest) {
         addressLine2: '',
         taxNumber: ''
       },
-      currency,
-      items: items.map((item: { description: string; quantity: number; unitPrice: number; amount: number; tax: number }) => ({
-        description: item.description,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        total: item.amount,
-        taxRate: item.tax / 100
-      })),
       taxes: [{
         name: 'Tax',
         rate: totalTax / subtotal,
         amount: totalTax
       }],
-      subtotal,
       totalAmount: total,
       paymentSettings: {
         method: paymentMethod,
@@ -109,14 +181,19 @@ export async function POST(request: NextRequest) {
       },
       notes: memo,
       pdfUrl: '',
-      createdAt: createdAt ? new Date(createdAt) : new Date(),
-      updatedAt: updatedAt ? new Date(updatedAt) : new Date(),
       isTemplate: false
     };
 
     // Use MongoDB directly since the model structure is complex
     const db = await connectToDatabase();
     const result = await db.collection('invoices').insertOne(invoiceData);
+
+    console.log('✅ [API Invoices] Invoice saved successfully:', {
+      id: result.insertedId,
+      invoiceNumber: invoiceData.invoiceNumber,
+      ownerType,
+      ownerId
+    });
 
     return NextResponse.json({
       success: true,
@@ -125,7 +202,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error saving invoice:', error);
+    console.error('❌ [API Invoices] Error saving invoice:', error);
     return NextResponse.json(
       { success: false, message: 'Failed to save invoice' },
       { status: 500 }
@@ -140,21 +217,51 @@ export async function GET() {
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
 
+    // Determine if user is individual or organization
+    const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
+    const ownerId = isOrganization ? session.user.organizationId : session.user.email;
+    const ownerType = isOrganization ? 'organization' : 'individual';
+
+    console.log('📊 [API Invoices] Fetching invoices for:', {
+      ownerType,
+      ownerId,
+      userEmail: session.user.email
+    });
+
     const db = await connectToDatabase();
 
+    // Query invoices based on owner type
+    const query = isOrganization 
+      ? { organizationId: session.user.organizationId }
+      : { userId: session.user.email };
+
     const invoices = await db.collection('invoices')
-      .find({ userId: session.user.email })
+      .find(query)
       .sort({ createdAt: -1 })
       .limit(50)
       .toArray();
 
+    console.log('✅ [API Invoices] Found invoices:', {
+      count: invoices.length,
+      ownerType,
+      ownerId
+    });
+
     return NextResponse.json({
       success: true,
-      invoices: invoices
+      data: {
+        invoices: invoices,
+        pagination: {
+          page: 1,
+          limit: 50,
+          total: invoices.length,
+          pages: 1
+        }
+      }
     });
 
   } catch (error) {
-    console.error('Error fetching invoices:', error);
+    console.error('❌ [API Invoices] Error fetching invoices:', error);
     return NextResponse.json(
       { success: false, message: 'Failed to fetch invoices' },
       { status: 500 }
