@@ -14,7 +14,7 @@ export interface InvoiceTax {
   amount: number;
 }
 
-export type InvoiceStatus = 'draft' | 'sent' | 'pending' | 'paid' | 'overdue' | 'cancelled';
+export type InvoiceStatus = 'draft' | 'sent' | 'pending' | 'paid' | 'overdue' | 'cancelled' | 'pending_approval' | 'rejected';
 export type PaymentMethod = 'crypto' | 'fiat';
 export type InvoiceType = 'regular' | 'recurring';
 export type RecurringFrequency = 'weekly' | 'monthly' | 'quarterly' | 'yearly';
@@ -108,6 +108,19 @@ export interface Invoice {
   // Additional Information
   notes?: string;
   pdfUrl?: string; // URL to generated invoice PDF
+  
+  // Approval Workflow
+  approvalWorkflow?: {
+    requiresApproval: boolean;
+    submittedBy: ObjectId; // User who submitted for approval
+    submittedAt: Date;
+    approvedBy?: ObjectId; // Admin who approved
+    approvedAt?: Date;
+    rejectedBy?: ObjectId; // Admin who rejected
+    rejectedAt?: Date;
+    rejectionReason?: string;
+    comments?: string;
+  };
   
   // Metadata
   createdAt: Date;

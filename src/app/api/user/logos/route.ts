@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
 
 // GET /api/user/logos - Get all logos for the user
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
       
       // If this is the default logo, unset other defaults
       if (isDefault) {
-        currentLogos.forEach(logo => logo.isDefault = false);
+        currentLogos.forEach((logo: { isDefault: boolean }) => logo.isDefault = false);
       }
 
       const updatedLogos = [...currentLogos, newLogo];
@@ -135,7 +135,7 @@ export async function POST(request: NextRequest) {
     
     // If this is the default logo, unset other defaults
     if (isDefault) {
-      currentLogos.forEach(logo => logo.isDefault = false);
+      currentLogos.forEach((logo: { isDefault: boolean }) => logo.isDefault = false);
     }
 
     const updatedLogos = [...currentLogos, newLogo];
@@ -201,18 +201,18 @@ export async function PUT(request: NextRequest) {
       }
 
       const currentLogos = organization.logos || [];
-      const logoIndex = currentLogos.findIndex(logo => logo.id === id);
+      const logoIndex = currentLogos.findIndex((logo: { id: string }) => logo.id === id);
       
       if (logoIndex === -1) {
         return NextResponse.json({ error: 'Logo not found' }, { status: 404 });
       }
 
-      // If this is the default logo, unset other defaults
-      if (isDefault) {
-        currentLogos.forEach(logo => logo.isDefault = false);
-      }
+          // If this is the default logo, unset other defaults
+    if (isDefault) {
+      currentLogos.forEach((logo: { isDefault: boolean }) => logo.isDefault = false);
+    }
 
-      currentLogos[logoIndex] = {
+    currentLogos[logoIndex] = {
         ...currentLogos[logoIndex],
         name: name || currentLogos[logoIndex].name,
         isDefault: isDefault !== undefined ? isDefault : currentLogos[logoIndex].isDefault
@@ -241,7 +241,7 @@ export async function PUT(request: NextRequest) {
 
     // For individual users, update in user
     const currentLogos = user.logos || [];
-    const logoIndex = currentLogos.findIndex(logo => logo.id === id);
+    const logoIndex = currentLogos.findIndex((logo: { id: string }) => logo.id === id);
     
     if (logoIndex === -1) {
       return NextResponse.json({ error: 'Logo not found' }, { status: 404 });
@@ -249,7 +249,7 @@ export async function PUT(request: NextRequest) {
 
     // If this is the default logo, unset other defaults
     if (isDefault) {
-      currentLogos.forEach(logo => logo.isDefault = false);
+      currentLogos.forEach((logo: { isDefault: boolean }) => logo.isDefault = false);
     }
 
     currentLogos[logoIndex] = {
@@ -320,7 +320,7 @@ export async function DELETE(request: NextRequest) {
       }
 
       const currentLogos = organization.logos || [];
-      const updatedLogos = currentLogos.filter(logo => logo.id !== id);
+      const updatedLogos = currentLogos.filter((logo: { id: string }) => logo.id !== id);
       
       if (updatedLogos.length === currentLogos.length) {
         return NextResponse.json({ error: 'Logo not found' }, { status: 404 });
@@ -348,7 +348,7 @@ export async function DELETE(request: NextRequest) {
 
     // For individual users, delete from user
     const currentLogos = user.logos || [];
-    const updatedLogos = currentLogos.filter(logo => logo.id !== id);
+    const updatedLogos = currentLogos.filter((logo: { id: string }) => logo.id !== id);
     
     if (updatedLogos.length === currentLogos.length) {
       return NextResponse.json({ error: 'Logo not found' }, { status: 404 });

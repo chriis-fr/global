@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
+import { UserService } from '@/lib/services/userService';
+import { OrganizationService } from '@/lib/services/organizationService';
 
 export async function POST(request: NextRequest) {
   try {
@@ -48,16 +50,42 @@ export async function POST(request: NextRequest) {
 
     await connectToDatabase();
 
+    // Get user details for approval workflow
+    const user = await UserService.getUserByEmail(session.user.email);
+    if (!user) {
+      return NextResponse.json({ success: false, message: 'User not found' }, { status: 404 });
+    }
+
     // Determine if user is individual or organization
     const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
     const ownerId = isOrganization ? session.user.organizationId : session.user.email;
     const ownerType = isOrganization ? 'organization' : 'individual';
 
+    // Check if approval is required
+    let requiresApproval = false;
+    let initialStatus = status || 'pending';
+
+    if (isOrganization && user.organizationId) {
+      // Check if user is admin/owner
+      const isAdmin = await OrganizationService.isUserAdmin(
+        user.organizationId.toString(), 
+        user._id!.toString()
+      );
+      
+      if (!isAdmin) {
+        // Non-admin users need approval
+        requiresApproval = true;
+        initialStatus = 'pending_approval';
+      }
+    }
+
     console.log('💾 [API Invoices] Saving invoice:', {
       invoiceNumber,
       ownerType,
       ownerId,
-      total
+      total,
+      requiresApproval,
+      initialStatus
     });
 
     // Transform data to match InvoiceFormData structure exactly
@@ -72,7 +100,7 @@ export async function POST(request: NextRequest) {
       ownerId, // Dynamic owner ID (email for individual, organizationId for org)
       ownerType, // 'individual' or 'organization'
       userId: session.user.email, // Keep for backward compatibility
-      organizationId: session.user.organizationId || new ObjectId(),
+      organizationId: session.user.organizationId || null, // Don't assign random ObjectId for individuals
       issuerId: session.user.id || new ObjectId(),
       
       // Company information
@@ -128,9 +156,16 @@ export async function POST(request: NextRequest) {
       memo: memo,
       
       // Status and metadata
-      status: status || 'pending', // Changed from 'sent' to 'pending' for sent invoices
+      status: initialStatus,
       createdAt: createdAt ? new Date(createdAt) : new Date(),
       updatedAt: updatedAt ? new Date(updatedAt) : new Date(),
+      
+      // Approval workflow
+      approvalWorkflow: requiresApproval ? {
+        requiresApproval: true,
+        submittedBy: user._id,
+        submittedAt: new Date()
+      } : undefined,
       
       // Backward compatibility - keep nested structure for existing code
       type: invoiceType || 'regular',
@@ -233,7 +268,12 @@ export async function GET() {
     // Query invoices based on owner type
     const query = isOrganization 
       ? { organizationId: session.user.organizationId }
-      : { userId: session.user.email };
+      : { 
+          $or: [
+            { issuerId: session.user.id },
+            { userId: session.user.email }
+          ]
+        };
 
     const invoices = await db.collection('invoices')
       .find(query)
@@ -244,8 +284,21 @@ export async function GET() {
     console.log('✅ [API Invoices] Found invoices:', {
       count: invoices.length,
       ownerType,
-      ownerId
+      ownerId,
+      query: JSON.stringify(query)
     });
+
+    // Log first few invoices for debugging
+    if (invoices.length > 0) {
+      console.log('📋 [API Invoices] Sample invoices:', invoices.slice(0, 3).map(inv => ({
+        _id: inv._id,
+        invoiceNumber: inv.invoiceNumber,
+        issuerId: inv.issuerId,
+        userId: inv.userId,
+        organizationId: inv.organizationId,
+        total: inv.total
+      })));
+    }
 
     return NextResponse.json({
       success: true,

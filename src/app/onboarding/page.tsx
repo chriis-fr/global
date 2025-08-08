@@ -71,7 +71,8 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   ArrowLeft,
   Coins,
   Code,
-  Globe2
+  Globe2,
+  Settings
 };
 
 const ONBOARDING_STEPS = [
@@ -127,6 +128,9 @@ export default function OnboardingPage() {
         name: session.user.name
       });
       setUser(userObj);
+      
+      // Initialize tax ID from user data
+      setTaxID(userObj.taxId || '');
 
       // Load services
       const servicesResponse = await fetch('/api/services');
@@ -390,13 +394,18 @@ export default function OnboardingPage() {
               </div>
               {user.address.country === 'KE' && (
                 <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 lg:p-6 mb-8 mx-4">
-                  <h3 className="text-lg font-semibold text-white mb-4">Tax ID (KRA PIN)</h3>
+                  <h3 className="text-lg font-semibold text-white mb-4">
+                    {user.userType === 'business' ? 'Business Tax ID (KRA PIN)' : 'Tax ID (KRA PIN)'}
+                  </h3>
                   <p className="text-blue-200 text-sm mb-2">
-                    Please enter your KRA PIN (Personal Identification Number) to verify your identity.
+                    {user.userType === 'business' 
+                      ? 'Please enter your business KRA PIN (Personal Identification Number) to verify your business identity.'
+                      : 'Please enter your KRA PIN (Personal Identification Number) to verify your identity.'
+                    }
                   </p>
                   <input
                     type="text"
-                    placeholder="Enter your KRA PIN"
+                    placeholder={user.userType === 'business' ? 'Enter your business KRA PIN' : 'Enter your KRA PIN'}
                     value={taxID}
                     onChange={(e) => setTaxID(e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500"
@@ -404,7 +413,7 @@ export default function OnboardingPage() {
                 </div>
               )}
               <button
-                onClick={() => updateOnboardingStep(2)}
+                onClick={() => updateOnboardingStep(2, { taxId: taxID })}
                 disabled={updating}
                 className="px-6 lg:px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 mx-auto disabled:opacity-50"
               >
@@ -437,7 +446,10 @@ export default function OnboardingPage() {
                     {Object.entries(services)
                       .filter(([, service]) => service.category === category)
                       .map(([serviceKey, service]) => {
-                        const Icon = iconMap[service.icon];
+                        const Icon = iconMap[service.icon] || FileText; // Fallback to FileText if icon not found
+                        if (!iconMap[service.icon]) {
+                          console.warn(`⚠️ [Onboarding] Missing icon for service ${serviceKey}: ${service.icon}`);
+                        }
                         const isEnabled = user?.services?.[serviceKey] || false;
                         const isReady = service.ready || false;
 

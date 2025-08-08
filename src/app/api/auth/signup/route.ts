@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { UserService } from '@/lib/services/userService';
-import { CreateUserInput } from '@/models';
+import { OrganizationService } from '@/lib/services/organizationService';
+import { CreateUserInput, CreateOrganizationInput } from '@/models';
 import { createDefaultServices } from '@/lib/services/serviceManager';
 import bcrypt from 'bcryptjs';
+import { ObjectId } from 'mongodb';
 
 export async function POST(request: NextRequest) {
   console.log('🚀 [SIGNUP] Starting signup process...');
@@ -78,7 +80,25 @@ export async function POST(request: NextRequest) {
         currencyPreference: 'USD',
         notifications: {
           email: true,
-          sms: false
+          sms: false,
+          push: false,
+          inApp: true,
+          invoiceCreated: true,
+          invoicePaid: true,
+          invoiceOverdue: true,
+          paymentReceived: true,
+          paymentFailed: true,
+          systemUpdates: true,
+          securityAlerts: true,
+          reminders: true,
+          approvals: true,
+          frequency: 'immediate',
+          quietHours: {
+            enabled: false,
+            start: '22:00',
+            end: '08:00',
+            timezone: 'UTC'
+          }
         }
       },
       services: createDefaultServices(),
@@ -103,6 +123,54 @@ export async function POST(request: NextRequest) {
     const newUser = await UserService.createUser(userData);
     console.log('✅ [SIGNUP] User created successfully with ID:', newUser._id);
     
+    // If this is a business user, create an organization
+    let organization = null;
+    if (userType === 'business') {
+      console.log('🏢 [SIGNUP] Creating organization for business user...');
+      
+      const orgData: CreateOrganizationInput = {
+        name: name,
+        billingEmail: email,
+        industry: industry || 'Other',
+        companySize: '1-10', // Default size, can be updated later
+        businessType: 'LLC', // Default type, can be updated later
+        phone: phone || '',
+        address: address,
+        taxId: taxId || '',
+        primaryContact: {
+          name: name,
+          email: email,
+          phone: phone || '',
+          role: 'Owner'
+        },
+        members: [{
+          userId: new ObjectId(newUser._id),
+          role: 'owner'
+        }],
+        services: createDefaultServices(),
+        onboarding: {
+          completed: false,
+          currentStep: 1,
+          completedSteps: ['creation'],
+          serviceOnboarding: {}
+        }
+      };
+      
+      organization = await OrganizationService.createOrganization(orgData);
+      console.log('✅ [SIGNUP] Organization created successfully with ID:', organization._id);
+      
+      // Update the user to link them to the organization
+      if (newUser._id) {
+        await UserService.updateUser(newUser._id.toString(), {
+          organizationId: new ObjectId(organization._id)
+        });
+        console.log('🔗 [SIGNUP] User linked to organization');
+        
+        // Update the user object to include the organization ID
+        newUser.organizationId = new ObjectId(organization._id);
+      }
+    }
+    
     // Remove password from response - extract password to exclude it from response
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password: removedPassword, ...userWithoutPassword } = newUser;
@@ -111,6 +179,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: userWithoutPassword,
+      organization: organization ? {
+        _id: organization._id,
+        name: organization.name,
+        industry: organization.industry
+      } : null,
       message: 'User created successfully',
       autoLogin: {
         email: email,

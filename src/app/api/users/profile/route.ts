@@ -3,6 +3,60 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { UserService } from '@/lib/services/userService'
 
+// GET /api/users/profile - Get user profile
+export async function GET() {
+  try {
+    console.log('🔧 [Profile API] Getting user profile...')
+    
+    // Get session
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.email) {
+      console.log('❌ [Profile API] No session found')
+      return NextResponse.json(
+        { success: false, message: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    console.log('✅ [Profile API] Session found for:', session.user.email)
+    
+    // Get user from database
+    const user = await UserService.getUserByEmail(session.user.email)
+    if (!user) {
+      console.log('❌ [Profile API] User not found in database')
+      return NextResponse.json(
+        { success: false, message: 'User not found' },
+        { status: 404 }
+      )
+    }
+
+    console.log('✅ [Profile API] User found:', user._id)
+    
+    return NextResponse.json({
+      success: true,
+      data: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        industry: user.industry,
+        address: user.address,
+        profilePicture: user.profilePicture,
+        avatar: user.avatar,
+        organizationId: user.organizationId,
+        settings: user.settings
+      }
+    })
+
+  } catch (error) {
+    console.error('❌ [Profile API] Error getting profile:', error)
+    return NextResponse.json(
+      { success: false, message: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
 export async function PUT(request: NextRequest) {
   try {
     console.log('🔧 [Profile API] Starting profile update...')

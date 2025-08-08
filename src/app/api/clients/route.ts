@@ -2,24 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
-import { ObjectId } from 'mongodb';
 
-interface Client {
-  _id?: any; // MongoDB ObjectId
-  name: string;
-  email: string;
-  phone?: string;
-  address?: string;
-  company?: string;
-  taxId?: string;
-  notes?: string;
-  organizationId?: string; // Optional for individual users
-  userId: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
+// Client interface removed as it's not used
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
@@ -86,7 +72,7 @@ export async function POST(request: NextRequest) {
     const collection = db.collection('clients');
 
     let query = {};
-    const clientData: any = {
+    const clientData: Record<string, unknown> = {
       name,
       email,
       phone,

@@ -111,7 +111,7 @@ export default function InvoicesPage() {
   const stats = {
     totalInvoices: invoices.length,
     totalRevenue: invoices.reduce((sum, inv) => sum + (inv.totalAmount || 0), 0),
-    pendingCount: invoices.filter(inv => inv.status === 'pending' || inv.status === 'sent').length,
+    pendingCount: invoices.filter(inv => inv.status === 'pending').length,
     paidCount: invoices.filter(inv => inv.status === 'paid').length
   };
 

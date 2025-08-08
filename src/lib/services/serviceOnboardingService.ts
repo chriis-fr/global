@@ -1,6 +1,5 @@
 import { UserService } from './userService';
 import { OrganizationService } from './organizationService';
-import { User } from '@/models';
 
 export interface ServiceOnboardingData {
   serviceKey: string;
@@ -246,7 +245,20 @@ export class ServiceOnboardingService {
       return null;
     }
 
-    return businessInfo as any;
+    return businessInfo as {
+      name: string;
+      email: string;
+      phone?: string;
+      address: {
+        street: string;
+        city: string;
+        state?: string;
+        zipCode?: string;
+        country: string;
+      };
+      taxId?: string;
+      logo?: string;
+    };
   }
 
   /**
@@ -272,6 +284,15 @@ export class ServiceOnboardingService {
       return null;
     }
 
-    return invoiceSettings as any;
+    return invoiceSettings as {
+      defaultCurrency: string;
+      paymentTerms: number;
+      taxRates: Array<{
+        name: string;
+        rate: number;
+        description?: string;
+      }>;
+      invoiceTemplate: string;
+    };
   }
 } 

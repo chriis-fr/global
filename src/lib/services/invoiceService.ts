@@ -44,11 +44,22 @@ export class InvoiceService {
   }
 
   static getStats(invoices: Invoice[]): InvoiceStats {
-    const pendingCount = invoices.filter(inv => inv.status === 'draft' || inv.status === 'sent').length;
+    const pendingCount = invoices.filter(inv => inv.status === 'pending').length;
     const paidCount = invoices.filter(inv => inv.status === 'paid').length;
     const totalRevenue = invoices
       .filter(inv => inv.status === 'paid')
       .reduce((sum, inv) => sum + (inv.totalAmount || 0), 0);
+
+    console.log('📊 [InvoiceService] Calculating stats:', {
+      totalInvoices: invoices.length,
+      pendingCount,
+      paidCount,
+      totalRevenue,
+      statusBreakdown: invoices.reduce((acc, inv) => {
+        acc[inv.status] = (acc[inv.status] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>)
+    });
 
     return {
       totalInvoices: invoices.length,

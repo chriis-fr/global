@@ -456,15 +456,13 @@ export default function OrganizationSettingsPage() {
                     <span>Edit</span>
                   </button>
                 )}
-                <button
-                  onClick={() => {
-                    setMessage({ type: 'success', text: 'Member management coming soon!' });
-                  }}
+                <a
+                  href="/dashboard/settings/organization/members"
                   className="px-3 py-1 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center space-x-1"
                 >
                   <Users className="h-4 w-4" />
                   <span>Members</span>
-                </button>
+                </a>
               </div>
             </div>
             

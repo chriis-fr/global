@@ -6,13 +6,13 @@ import { Image, Settings } from 'lucide-react';
 import { LogoDisplay } from '@/components/LogoDisplay';
 
 export default function LogoSettingsPage() {
-  const [selectedLogo, setSelectedLogo] = useState<any>(null);
+  const [selectedLogo, setSelectedLogo] = useState<{ id: string; name: string; url: string; isDefault: boolean } | null>(null);
 
   return (
     <div className="max-w-6xl mx-auto w-full">
       <div className="mb-8">
         <div className="flex items-center space-x-3 mb-2">
-          <Image className="h-8 w-8 text-blue-400" />
+          <Image className="h-8 w-8 text-blue-400" alt="Logo management" />
           <h1 className="text-2xl md:text-3xl font-bold text-white">Logo Management</h1>
         </div>
         <p className="text-blue-200">
@@ -40,7 +40,7 @@ export default function LogoSettingsPage() {
                                       <div className="flex items-center space-x-3">
               <LogoDisplay
                 logoUrl={selectedLogo.url}
-                alt={selectedLogo.name}
+                alt={selectedLogo.name || 'Selected logo'}
                 size={48}
               />
               <div>

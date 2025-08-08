@@ -12,6 +12,26 @@ export interface UserSettings {
   notifications: {
     email: boolean;
     sms: boolean;
+    push: boolean;
+    inApp: boolean;
+    // Specific notification types
+    invoiceCreated: boolean;
+    invoicePaid: boolean;
+    invoiceOverdue: boolean;
+    paymentReceived: boolean;
+    paymentFailed: boolean;
+    systemUpdates: boolean;
+    securityAlerts: boolean;
+    reminders: boolean;
+    approvals: boolean;
+    // Frequency settings
+    frequency: 'immediate' | 'hourly' | 'daily' | 'weekly';
+    quietHours: {
+      enabled: boolean;
+      start: string; // "22:00"
+      end: string; // "08:00"
+      timezone: string; // "UTC"
+    };
   };
 }
 

@@ -1,7 +1,7 @@
 import { MongoClient, Db } from 'mongodb';
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017';
-const DB_NAME = process.env.DB_NAME || 'request_finance';
+const DB_NAME = process.env.DB_NAME || 'global_finance';
 
 let client: MongoClient | null = null;
 let db: Db | null = null;
@@ -10,7 +10,7 @@ let connectionPromise: Promise<Db> | null = null;
 export async function connectToDatabase(): Promise<Db> {
   // If we already have a connection, return it
   if (db) {
-    console.log('✅ [Database] Using existing database connection');
+    // console.log('✅ [Database] Using existing database connection');
     return db;
   }
 

@@ -15,9 +15,11 @@ import {
   ChevronLeft,
   ChevronRight,
   CreditCard,
-  ImageIcon
+  ImageIcon,
+  CheckCircle
 } from 'lucide-react';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
+import NotificationBadge from './NotificationBadge';
 import Image from 'next/image';
 
 const SERVICE_LINKS = [
@@ -28,6 +30,15 @@ const SERVICE_LINKS = [
     href: '/dashboard/services/smart-invoicing',
   },
   // Add more services as they become ready
+];
+
+const ADMIN_LINKS = [
+  {
+    key: 'approvals',
+    label: 'Pending Approvals',
+    icon: CheckCircle,
+    href: '/dashboard/approvals',
+  },
 ];
 
 const SETTINGS_LINKS = [
@@ -170,14 +181,28 @@ export default function Sidebar() {
               <span className="text-white text-xl font-bold whitespace-nowrap">Global</span>
             )}
           </div>
-          {/* Mobile Close Button */}
-          <button
-            onClick={closeMobileMenu}
-            className="lg:hidden p-2 text-white/70 hover:text-white hover:bg-blue-900/50 rounded-lg transition-colors"
-            aria-label="Close menu"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          
+          {/* Notifications Bell Icon */}
+          <div className="flex items-center space-x-2">
+            <Link
+              href="/dashboard/notifications"
+              onClick={closeMobileMenu}
+              className="relative p-2 text-white/70 hover:text-white hover:bg-blue-900/50 rounded-lg transition-colors"
+              title="Notifications"
+            >
+              <Bell className="h-5 w-5" />
+              <NotificationBadge />
+            </Link>
+            
+            {/* Mobile Close Button */}
+            <button
+              onClick={closeMobileMenu}
+              className="lg:hidden p-2 text-white/70 hover:text-white hover:bg-blue-900/50 rounded-lg transition-colors"
+              aria-label="Close menu"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -220,6 +245,44 @@ export default function Sidebar() {
               );
             })}
           </div>
+
+          {/* Admin Navigation - Only for Business Users */}
+          {session?.user?.userType === 'business' && session?.user?.organizationId && (
+            <div className="mb-4">
+              {(!isCollapsed || isAutoHidden) && (
+                <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wider mb-2 px-2">
+                  Admin
+                </h3>
+              )}
+              {ADMIN_LINKS.map(link => {
+                const active = pathname.startsWith(link.href);
+                return (
+                  <Link
+                    key={link.key}
+                    href={link.href}
+                    onClick={closeMobileMenu}
+                    className={`flex items-center px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation ${
+                      active 
+                        ? 'bg-blue-800 text-white' 
+                        : 'text-white/70 hover:bg-blue-900/50 hover:text-white'
+                    }`}
+                    style={{ textDecoration: 'none' }}
+                    title={isCollapsed && !isAutoHidden ? link.label : undefined}
+                  >
+                    <link.icon className="h-4 w-4 mr-3 flex-shrink-0" />
+                    {(!isCollapsed || isAutoHidden) && (
+                      <span className="whitespace-nowrap">{link.label}</span>
+                    )}
+                    {isCollapsed && !isAutoHidden && (
+                      <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
+                        {link.label}
+                      </div>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
         </nav>
       </div>
 
@@ -341,8 +404,30 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* Mobile Footer - Settings and Profile */}
+              {/* Mobile Footer - Settings and Profile */}
       <div className="lg:hidden flex-shrink-0 mt-auto">
+        {/* Notifications Section (Mobile Only) */}
+        <div className="border-t border-white/10 p-4">
+          <Link
+            href="/dashboard/notifications"
+            onClick={closeMobileMenu}
+            className={`flex items-center justify-between w-full px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation ${
+              pathname.startsWith('/dashboard/notifications') 
+                ? 'bg-blue-800 text-white' 
+                : 'text-white/70 hover:bg-blue-900/50 hover:text-white'
+            }`}
+            style={{ textDecoration: 'none' }}
+          >
+            <div className="flex items-center">
+              <div className="relative">
+                <Bell className="h-4 w-4 mr-3 flex-shrink-0" />
+                <NotificationBadge />
+              </div>
+              <span className="whitespace-nowrap">Notifications</span>
+            </div>
+          </Link>
+        </div>
+        
         {/* Settings Section */}
         <div className="border-t border-white/10 p-4 space-y-2">
           {/* Settings Header Button */}

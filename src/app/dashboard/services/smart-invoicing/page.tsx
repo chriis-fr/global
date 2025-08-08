@@ -108,7 +108,7 @@ export default function SmartInvoicingPage() {
       
       // Load invoices and check onboarding status in parallel
       const [invoicesData, onboardingResponse] = await Promise.all([
-        InvoiceService.getInvoices(),
+        forceRefresh ? InvoiceService.refreshInvoices() : InvoiceService.getInvoices(),
         fetch('/api/onboarding/service?service=smartInvoicing')
       ]);
       
@@ -144,7 +144,8 @@ export default function SmartInvoicingPage() {
 
   useEffect(() => {
     if (session?.user) {
-      loadAllData();
+      // Force refresh on page load to ensure fresh data
+      loadAllData(true);
     }
   }, [session?.user, loadAllData]);
 

@@ -9,14 +9,16 @@ import {
 } from '@/models/PaymentMethod';
 import { ObjectId } from 'mongodb';
 
+import { Db } from 'mongodb';
+
 export class PaymentMethodService {
-  private db: any;
+  private db: Db | null = null;
 
   private async initDatabase() {
     if (!this.db) {
       this.db = await connectToDatabase();
     }
-    return this.db;
+    return this.db!;
   }
 
   // Create a new payment method
@@ -70,7 +72,7 @@ export class PaymentMethodService {
     
     const collection = db.collection('paymentMethods');
     
-    const filter: any = {};
+    const filter: Record<string, unknown> = {};
     
     if (organizationId) {
       filter.organizationId = organizationId;
@@ -86,7 +88,8 @@ export class PaymentMethodService {
       filter.isActive = true;
     }
 
-    return await collection.find(filter).sort({ isDefault: -1, createdAt: -1 }).toArray();
+    const results = await collection.find(filter).sort({ isDefault: -1, createdAt: -1 }).toArray();
+    return results as PaymentMethod[];
   }
 
   // Get a single payment method by ID
@@ -99,7 +102,7 @@ export class PaymentMethodService {
     
     const collection = db.collection('paymentMethods');
     
-    const filter: any = { _id: methodId };
+    const filter: Record<string, unknown> = { _id: methodId };
     
     if (organizationId) {
       filter.organizationId = organizationId;
@@ -107,7 +110,8 @@ export class PaymentMethodService {
       filter.userId = userId;
     }
 
-    return await collection.findOne(filter);
+    const result = await collection.findOne(filter);
+    return result as PaymentMethod | null;
   }
 
   // Update a payment method
@@ -132,7 +136,7 @@ export class PaymentMethodService {
       await this.unsetDefaultMethods(currentMethod.type, organizationId, userId);
     }
 
-    const updateData: any = {
+    const updateData: Record<string, unknown> = {
       ...input,
       updatedAt: new Date()
     };
@@ -143,7 +147,7 @@ export class PaymentMethodService {
       { returnDocument: 'after' }
     );
 
-    return result.value;
+    return result?.value as PaymentMethod | null;
   }
 
   // Delete a payment method
@@ -295,7 +299,7 @@ export class PaymentMethodService {
     const db = await this.initDatabase();
     const collection = db.collection('paymentMethods');
     
-    const filter: any = {
+    const filter: Record<string, unknown> = {
       type,
       isDefault: true,
       ...(organizationId ? { organizationId } : { userId })

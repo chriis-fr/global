@@ -6,8 +6,9 @@ import { ObjectId } from 'mongodb';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
@@ -17,7 +18,7 @@ export async function GET(
     const db = await connectToDatabase();
     const collection = db.collection('clients');
 
-    let query = { _id: new ObjectId(params.id) };
+    let query: Record<string, unknown> = { _id: new ObjectId(id) };
     
     // For business users, filter by organizationId
     if (session.user.userType === 'business' && session.user.organizationId) {
@@ -51,8 +52,9 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
@@ -80,8 +82,8 @@ export async function PUT(
     const db = await connectToDatabase();
     const collection = db.collection('clients');
 
-    let query = { _id: new ObjectId(params.id) };
-    let emailConflictQuery = { email, _id: { $ne: new ObjectId(params.id) } };
+    let query: Record<string, unknown> = { _id: new ObjectId(id) };
+    let emailConflictQuery: Record<string, unknown> = { email, _id: { $ne: new ObjectId(id) } };
     
     // For business users, filter by organizationId
     if (session.user.userType === 'business' && session.user.organizationId) {
@@ -126,7 +128,7 @@ export async function PUT(
     };
 
     const result = await collection.updateOne(
-      { _id: new ObjectId(params.id) },
+      { _id: new ObjectId(id) },
       { $set: updateData }
     );
 
@@ -152,8 +154,9 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
@@ -163,7 +166,7 @@ export async function DELETE(
     const db = await connectToDatabase();
     const collection = db.collection('clients');
 
-    let query = { _id: new ObjectId(params.id) };
+    let query: Record<string, unknown> = { _id: new ObjectId(id) };
     
     // For business users, filter by organizationId
     if (session.user.userType === 'business' && session.user.organizationId) {

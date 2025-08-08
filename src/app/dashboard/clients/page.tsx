@@ -1,19 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { 
-  Plus, 
   Search, 
   Edit, 
   Trash2, 
   UserPlus,
   Mail,
   Phone,
-  Building,
   MapPin,
-  FileText,
   ArrowLeft
 } from 'lucide-react';
 
@@ -48,18 +45,7 @@ export default function ClientsPage() {
     notes: ''
   });
 
-  useEffect(() => {
-    if (session?.user?.email) {
-      console.log('👤 [Clients] User session:', {
-        email: session.user.email,
-        userType: session.user.userType,
-        organizationId: session.user.organizationId
-      });
-      fetchClients();
-    }
-  }, [session]);
-
-  const fetchClients = async () => {
+  const fetchClients = useCallback(async () => {
     try {
       setLoading(true);
       console.log('🔍 [Clients] Fetching clients for user:', session?.user?.email);
@@ -79,7 +65,18 @@ export default function ClientsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [session?.user?.email]);
+
+  useEffect(() => {
+    if (session?.user?.email) {
+      console.log('👤 [Clients] User session:', {
+        email: session.user.email,
+        userType: session.user.userType,
+        organizationId: session.user.organizationId
+      });
+      fetchClients();
+    }
+  }, [session, fetchClients]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -254,105 +251,96 @@ export default function ClientsPage() {
           
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {filteredClients.length > 0 ? (
-                             filteredClients.map((client) => (
-                 <div key={client._id} className="bg-gray-50 rounded-xl border border-gray-200 p-4 sm:p-6 hover:shadow-md transition-shadow">
-                   <div className="flex items-start justify-between mb-3 sm:mb-4">
-                     <div className="flex items-center space-x-2 sm:space-x-3 flex-1 min-w-0">
-                       <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center shadow-sm flex-shrink-0">
-                         <span className="text-base sm:text-lg font-bold text-white">
-                           {client.name.charAt(0).toUpperCase()}
-                         </span>
-                       </div>
-                       <div className="min-w-0 flex-1">
-                         <h3 className="font-semibold text-gray-900 text-base sm:text-lg truncate">{client.name}</h3>
-                         {client.company && (
-                           <p className="text-xs sm:text-sm text-gray-600 font-medium truncate">{client.company}</p>
-                         )}
-                       </div>
-                     </div>
-                     <div className="flex items-center space-x-1 ml-2">
-                       <button
-                         onClick={() => handleEdit(client)}
-                         className="p-1.5 sm:p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                         title="Edit client"
-                       >
-                         <Edit className="h-4 w-4" />
-                       </button>
-                       <button
-                         onClick={() => handleDelete(client._id)}
-                         className="p-1.5 sm:p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                         title="Delete client"
-                       >
-                         <Trash2 className="h-4 w-4" />
-                       </button>
-                     </div>
-                   </div>
-
-                                     <div className="space-y-2 sm:space-y-3">
-                     {client.email && (
-                       <div className="flex items-center space-x-2 sm:space-x-3 text-xs sm:text-sm">
-                         <Mail className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400 flex-shrink-0" />
-                         <span className="text-gray-700 font-medium truncate">{client.email}</span>
-                       </div>
-                     )}
-                     
-                     {client.phone && (
-                       <div className="flex items-center space-x-2 sm:space-x-3 text-xs sm:text-sm">
-                         <Phone className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400 flex-shrink-0" />
-                         <span className="text-gray-700 font-medium truncate">{client.phone}</span>
-                       </div>
-                     )}
-                     
-                     {client.address && (
-                       <div className="flex items-start space-x-2 sm:space-x-3 text-xs sm:text-sm">
-                         <MapPin className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400 flex-shrink-0 mt-0.5" />
-                         <span className="text-gray-700 line-clamp-2">{client.address}</span>
-                       </div>
-                     )}
-                     
-                     {client.taxId && (
-                       <div className="flex items-center space-x-2 sm:space-x-3 text-xs sm:text-sm">
-                         <FileText className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400 flex-shrink-0" />
-                         <span className="text-gray-700 font-medium truncate">Tax ID: {client.taxId}</span>
-                       </div>
-                     )}
-                   </div>
-
-                                     {client.notes && (
-                     <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-200">
-                       <p className="text-xs sm:text-sm text-gray-600 italic line-clamp-2">"{client.notes}"</p>
-                     </div>
-                   )}
+              filteredClients.map((client) => (
+                <div key={client._id} className="bg-gray-50 rounded-xl border border-gray-200 p-4 sm:p-6 hover:shadow-md transition-shadow">
+                  <div className="flex items-start justify-between mb-3 sm:mb-4">
+                    <div className="flex items-center space-x-2 sm:space-x-3 flex-1 min-w-0">
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center shadow-sm flex-shrink-0">
+                        <span className="text-base sm:text-lg font-bold text-white">
+                          {client.name.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-semibold text-gray-900 text-base sm:text-lg truncate">{client.name}</h3>
+                        {client.company && (
+                          <p className="text-xs sm:text-sm text-gray-600 font-medium truncate">{client.company}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-1 ml-2">
+                      <button
+                        onClick={() => handleEdit(client)}
+                        className="p-1.5 sm:p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        title="Edit client"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(client._id)}
+                        className="p-1.5 sm:p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Delete client"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2 sm:space-y-3">
+                    <div className="flex items-center space-x-2 sm:space-x-3 text-xs sm:text-sm">
+                      <Mail className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400 flex-shrink-0" />
+                      <span className="text-gray-700 font-medium truncate">{client.email}</span>
+                    </div>
+                    
+                    {client.phone && (
+                      <div className="flex items-center space-x-2 sm:space-x-3 text-xs sm:text-sm">
+                        <Phone className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400 flex-shrink-0" />
+                        <span className="text-gray-700 font-medium truncate">{client.phone}</span>
+                      </div>
+                    )}
+                    
+                    {client.address && (
+                      <div className="flex items-start space-x-2 sm:space-x-3 text-xs sm:text-sm">
+                        <MapPin className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400 flex-shrink-0 mt-0.5" />
+                        <span className="text-gray-700 font-medium line-clamp-2">{client.address}</span>
+                      </div>
+                    )}
+                    
+                    {client.notes && (
+                      <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-200">
+                        <p className="text-xs sm:text-sm text-gray-600 italic line-clamp-2">&quot;{client.notes}&quot;</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))
-                         ) : (
-               <div className="col-span-full text-center py-12 sm:py-16">
-                 <div className="bg-gray-100 rounded-full w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center mx-auto mb-4 sm:mb-6">
-                   <UserPlus className="h-8 w-8 sm:h-10 sm:w-10 text-gray-400" />
-                 </div>
-                 <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2 sm:mb-3">
-                   {searchTerm ? 'No clients found' : 'No clients yet'}
-                 </h3>
-                 <p className="text-gray-600 mb-6 sm:mb-8 max-w-md mx-auto text-sm sm:text-base px-4">
-                   {searchTerm 
-                     ? 'Try adjusting your search terms or add a new client'
-                     : 'Start by adding your first client to manage their information and create invoices'
+            ) : (
+              <div className="col-span-full text-center py-12 sm:py-16">
+                <div className="bg-gray-100 rounded-full w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center mx-auto mb-4 sm:mb-6">
+                  <UserPlus className="h-8 w-8 sm:h-10 sm:w-10 text-gray-400" />
+                </div>
+                <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2 sm:mb-3">
+                  {searchTerm ? 'No clients found' : 'No clients yet'}
+                </h3>
+                <p className="text-gray-600 mb-6 sm:mb-8 max-w-md mx-auto text-sm sm:text-base px-4">
+                                     {searchTerm 
+                     ? "Try adjusting your search terms or add a new client"
+                     : "Start by adding your first client to manage their information and create invoices"
                    }
-                 </p>
-                 {!searchTerm && (
-                   <button
-                     onClick={() => {
-                       setEditingClient(null);
-                       resetForm();
-                       setShowAddModal(true);
-                     }}
-                     className="bg-blue-600 text-white py-2 px-6 sm:py-3 sm:px-8 rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-sm text-sm sm:text-base"
-                   >
-                     Add Your First Client
-                   </button>
-                 )}
-               </div>
-             )}
+                </p>
+                {!searchTerm && (
+                  <button
+                    onClick={() => {
+                      setEditingClient(null);
+                      resetForm();
+                      setShowAddModal(true);
+                    }}
+                    className="bg-blue-600 text-white py-2 px-6 sm:py-3 sm:px-8 rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-sm text-sm sm:text-base"
+                  >
+                    Add Your First Client
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -375,7 +363,7 @@ export default function ClientsPage() {
                   </div>
                 </div>
               
-                              <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
+                <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -432,7 +420,7 @@ export default function ClientsPage() {
                     </div>
                   </div>
 
-                                    <div>
+                  <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
                       Address
                     </label>
@@ -473,31 +461,31 @@ export default function ClientsPage() {
                     </div>
                   </div>
 
-                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end space-y-2 sm:space-y-0 sm:space-x-4 pt-4 sm:pt-6 border-t border-gray-200">
-                     <button
-                       type="button"
-                       onClick={() => {
-                         setShowAddModal(false);
-                         setEditingClient(null);
-                         resetForm();
-                       }}
-                       className="px-4 py-2 sm:px-6 sm:py-3 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm sm:text-base"
-                     >
-                       Cancel
-                     </button>
-                     <button
-                       type="submit"
-                       className="px-4 py-2 sm:px-6 sm:py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm text-sm sm:text-base"
-                     >
-                       {editingClient ? 'Update Client' : 'Add Client'}
-                     </button>
-                   </div>
-                 </form>
-               </div>
-             </div>
-           </div>
-         )}
-       </div>
-     </div>
-   );
- } 
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end space-y-2 sm:space-y-0 sm:space-x-4 pt-4 sm:pt-6 border-t border-gray-200">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddModal(false);
+                        setEditingClient(null);
+                        resetForm();
+                      }}
+                      className="px-4 py-2 sm:px-6 sm:py-3 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm sm:text-base"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-2 sm:px-6 sm:py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm text-sm sm:text-base"
+                    >
+                      {editingClient ? 'Update Client' : 'Add Client'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+} 

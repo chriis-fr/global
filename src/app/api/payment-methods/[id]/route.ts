@@ -9,15 +9,16 @@ import { ObjectId } from 'mongodb';
 // GET /api/payment-methods/[id] - Get a specific payment method
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const methodId = new ObjectId(params.id);
+    const methodId = new ObjectId(id);
 
     // Get user and organization info
     const user = await UserService.getUserByEmail(session.user.email);
@@ -61,15 +62,16 @@ export async function GET(
 // PUT /api/payment-methods/[id] - Update a payment method
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const methodId = new ObjectId(params.id);
+    const methodId = new ObjectId(id);
     const body = await request.json();
     const input: UpdatePaymentMethodInput = body;
 
@@ -116,15 +118,16 @@ export async function PUT(
 // DELETE /api/payment-methods/[id] - Delete a payment method
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const methodId = new ObjectId(params.id);
+    const methodId = new ObjectId(id);
 
     // Get user and organization info
     const user = await UserService.getUserByEmail(session.user.email);

@@ -49,7 +49,7 @@ export default function DashboardPage() {
 
         const totalExpenses = 0; // Will be implemented when expenses service is ready
 
-        const pendingInvoices = invoices.filter((inv: { status: string }) => inv.status === 'draft' || inv.status === 'sent').length;
+        const pendingInvoices = invoices.filter((inv: { status: string }) => inv.status === 'pending').length;
         const paidInvoices = invoices.filter((inv: { status: string }) => inv.status === 'paid').length;
 
         setStats({

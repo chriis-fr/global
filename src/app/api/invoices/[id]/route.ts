@@ -35,7 +35,7 @@ export async function GET(
     // Query based on owner type
     const query = isOrganization 
       ? { _id: new ObjectId(id), organizationId: session.user.organizationId }
-      : { _id: new ObjectId(id), userId: session.user.email };
+      : { _id: new ObjectId(id), issuerId: session.user.id };
 
     const invoice = await collection.findOne(query);
 
@@ -104,7 +104,7 @@ export async function PUT(
     // Check if invoice exists and belongs to user/organization
     const query = isOrganization 
       ? { _id: new ObjectId(id), organizationId: session.user.organizationId }
-      : { _id: new ObjectId(id), userId: session.user.email };
+      : { _id: new ObjectId(id), issuerId: session.user.id };
 
     const existingInvoice = await collection.findOne(query);
 
@@ -218,7 +218,7 @@ export async function DELETE(
     // Query based on owner type
     const query = isOrganization 
       ? { _id: new ObjectId(id), organizationId: session.user.organizationId }
-      : { _id: new ObjectId(id), userId: session.user.email };
+      : { _id: new ObjectId(id), issuerId: session.user.id };
 
     const result = await collection.deleteOne(query);
 

@@ -70,7 +70,7 @@ export default function TestEnableServicePage() {
           <ol className="list-decimal list-inside mt-2 space-y-1">
             <li>Refresh the page</li>
             <li>Go back to the dashboard</li>
-            <li>You should see "Smart Invoicing" in the sidebar</li>
+            <li>You should see &quot;Smart Invoicing&quot; in the sidebar</li>
           </ol>
         </div>
       </div>

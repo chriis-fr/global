@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { paymentMethodService } from '@/lib/services/paymentMethodService';
-import { OrganizationService } from '@/lib/services/organizationService';
 import { UserService } from '@/lib/services/userService';
 import { CreatePaymentMethodInput } from '@/models/PaymentMethod';
 import { ObjectId } from 'mongodb';

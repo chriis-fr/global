@@ -9,6 +9,16 @@ interface ProfileData {
   name: string;
   email: string;
   phone: string;
+  userType: 'individual' | 'business';
+  organizationName?: string;
+  industry?: string;
+  address?: {
+    street: string;
+    city: string;
+    country: string;
+    postalCode: string;
+  };
+  taxId?: string;
 }
 
 interface Logo {
@@ -24,6 +34,16 @@ export default function ProfileSettingsPage() {
     name: '',
     email: '',
     phone: '',
+    userType: 'individual',
+    organizationName: '',
+    industry: '',
+    address: {
+      street: '',
+      city: '',
+      country: '',
+      postalCode: ''
+    },
+    taxId: ''
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -129,18 +149,22 @@ export default function ProfileSettingsPage() {
       )}
       
       <form onSubmit={handleSubmit} className="bg-white/10 backdrop-blur-sm rounded-xl p-6 mb-8">
-        <h2 className="text-xl font-semibold text-white mb-6">Personal Information</h2>
+        <h2 className="text-xl font-semibold text-white mb-6">
+          {formData.userType === 'business' ? 'Organization Information' : 'Personal Information'}
+        </h2>
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-white mb-2">Full Name</label>
+              <label className="block text-sm font-medium text-white mb-2">
+                {formData.userType === 'business' ? 'Organization Name' : 'Full Name'}
+              </label>
               <input
                 type="text"
                 name="name"
                 value={formData.name}
                 onChange={handleInputChange}
                 className="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                placeholder="Enter your full name"
+                placeholder={formData.userType === 'business' ? 'Enter organization name' : 'Enter your full name'}
                 required
               />
             </div>
@@ -159,17 +183,100 @@ export default function ProfileSettingsPage() {
               <p className="text-xs text-blue-200 mt-1">Email cannot be changed</p>
             </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-white mb-2">Phone Number</label>
-            <input
-              type="tel"
-              name="phone"
-              value={formData.phone}
-              onChange={handleInputChange}
-              className="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500"
-              placeholder="Enter your phone number"
-            />
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-white mb-2">Phone Number</label>
+              <input
+                type="tel"
+                name="phone"
+                value={formData.phone}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                placeholder="Enter your phone number"
+              />
+            </div>
+            {formData.userType === 'business' && (
+              <div>
+                <label className="block text-sm font-medium text-white mb-2">Industry</label>
+                <input
+                  type="text"
+                  name="industry"
+                  value={formData.industry}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  placeholder="Enter industry"
+                />
+              </div>
+            )}
           </div>
+
+          {formData.userType === 'business' && (
+            <div>
+              <label className="block text-sm font-medium text-white mb-2">Tax ID (KRA PIN)</label>
+              <input
+                type="text"
+                name="taxId"
+                value={formData.taxId}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                placeholder="Enter tax ID"
+              />
+            </div>
+          )}
+
+          {formData.userType === 'business' && (
+            <div>
+              <label className="block text-sm font-medium text-white mb-2">Address</label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <input
+                  type="text"
+                  name="address.street"
+                  value={formData.address?.street}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    address: { ...prev.address!, street: e.target.value }
+                  }))}
+                  className="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  placeholder="Street address"
+                />
+                <input
+                  type="text"
+                  name="address.city"
+                  value={formData.address?.city}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    address: { ...prev.address!, city: e.target.value }
+                  }))}
+                  className="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  placeholder="City"
+                />
+                <input
+                  type="text"
+                  name="address.country"
+                  value={formData.address?.country}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    address: { ...prev.address!, country: e.target.value }
+                  }))}
+                  className="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  placeholder="Country"
+                />
+                <input
+                  type="text"
+                  name="address.postalCode"
+                  value={formData.address?.postalCode}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    address: { ...prev.address!, postalCode: e.target.value }
+                  }))}
+                  className="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  placeholder="Postal code"
+                />
+              </div>
+            </div>
+          )}
+
           <div className="pt-4">
             <button 
               type="submit"

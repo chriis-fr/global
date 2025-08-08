@@ -11,14 +11,7 @@ export const SERVICE_DEFINITIONS = {
     icon: 'FileText',
     ready: true // Ready for production
   },
-  emailService: {
-    key: 'emailService',
-    title: 'Email Service',
-    description: 'Send automated emails for invoices, notifications, and system interactions',
-    category: 'Core Invoicing & Payments',
-    icon: 'Mail',
-    ready: true // Ready for production
-  },
+
   accountsReceivable: {
     key: 'accountsReceivable',
     title: 'Accounts Receivable',

@@ -18,11 +18,9 @@ export function LogoDisplay({
   alt = 'Logo', 
   size = 64, 
   className = '',
-  showFallback = true,
   fallbackIcon
 }: LogoDisplayProps) {
   const [hasError, setHasError] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
 
   const handleImageError = () => {
     setHasError(true);
@@ -31,7 +29,6 @@ export function LogoDisplay({
 
   const handleImageLoad = () => {
     setHasError(false);
-    setIsLoading(false);
   };
 
   // If no logo URL is provided, show fallback
