@@ -742,12 +742,6 @@ export const sendTestEmail = async (toEmail: string) => {
 
   try {
     const info = await transporter.sendMail(mailOptions);
-    console.log('✅ Test email sent successfully');
-    console.log('📧 Test email details:', {
-      messageId: info.messageId,
-      to: toEmail,
-      previewUrl: nodemailer.getTestMessageUrl(info),
-    });
     return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error('❌ Failed to send test email:', error);

@@ -11,17 +11,7 @@ export class UserService {
 
   // Create a new user
   static async createUser(userData: CreateUserInput): Promise<User> {
-    console.log('🔧 [UserService] Starting user creation...');
-    console.log('📋 [UserService] User data received:', {
-      email: userData.email,
-      name: userData.name,
-      userType: userData.userType,
-      hasPassword: !!userData.password,
-      hasAddress: !!userData.address
-    });
-    
     const collection = await this.getCollection();
-    console.log('📊 [UserService] Got database collection');
     
     const now = new Date();
     const newUser: User = {
@@ -31,7 +21,25 @@ export class UserService {
         currencyPreference: userData.settings?.currencyPreference || 'USD',
         notifications: {
           email: userData.settings?.notifications?.email ?? true,
-          sms: userData.settings?.notifications?.sms ?? false
+          sms: userData.settings?.notifications?.sms ?? false,
+          push: userData.settings?.notifications?.push ?? false,
+          inApp: userData.settings?.notifications?.inApp ?? true,
+          invoiceCreated: userData.settings?.notifications?.invoiceCreated ?? true,
+          invoicePaid: userData.settings?.notifications?.invoicePaid ?? true,
+          invoiceOverdue: userData.settings?.notifications?.invoiceOverdue ?? true,
+          paymentReceived: userData.settings?.notifications?.paymentReceived ?? true,
+          paymentFailed: userData.settings?.notifications?.paymentFailed ?? true,
+          systemUpdates: userData.settings?.notifications?.systemUpdates ?? true,
+          securityAlerts: userData.settings?.notifications?.securityAlerts ?? true,
+          reminders: userData.settings?.notifications?.reminders ?? true,
+          approvals: userData.settings?.notifications?.approvals ?? true,
+          frequency: userData.settings?.notifications?.frequency ?? 'immediate',
+          quietHours: {
+            enabled: userData.settings?.notifications?.quietHours?.enabled ?? false,
+            start: userData.settings?.notifications?.quietHours?.start ?? '22:00',
+            end: userData.settings?.notifications?.quietHours?.end ?? '08:00',
+            timezone: userData.settings?.notifications?.quietHours?.timezone ?? 'UTC'
+          }
         }
       },
       services: userData.services ? { ...createDefaultServices(), ...userData.services } : createDefaultServices(),
@@ -47,9 +55,7 @@ export class UserService {
       updatedAt: now
     };
 
-    console.log('💾 [UserService] Inserting user into database...');
     const result = await collection.insertOne(newUser);
-    console.log('✅ [UserService] User inserted successfully with ID:', result.insertedId);
     return { ...newUser, _id: result.insertedId };
   }
 

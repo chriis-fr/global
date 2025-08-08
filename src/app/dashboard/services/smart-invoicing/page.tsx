@@ -57,14 +57,12 @@ export default function SmartInvoicingPage() {
         
         // Check if cache is still valid (less than 5 minutes old)
         if (now - data.timestamp < CACHE_DURATION) {
-          console.log('📦 [Smart Invoicing] Loading from cache');
           setInvoices(data.invoices);
           setStats(data.stats);
           setIsOnboardingCompleted(data.isOnboardingCompleted);
           setDataLoaded(true);
           return true;
         } else {
-          console.log('📦 [Smart Invoicing] Cache expired, will fetch fresh data');
           localStorage.removeItem(CACHE_KEY);
         }
       }
@@ -85,7 +83,6 @@ export default function SmartInvoicingPage() {
         timestamp: Date.now()
       };
       localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
-      console.log('📦 [Smart Invoicing] Data cached successfully');
     } catch (error) {
       console.error('❌ [Smart Invoicing] Error saving to cache:', error);
     }
@@ -123,17 +120,11 @@ export default function SmartInvoicingPage() {
       if (onboardingData.success) {
         onboardingCompleted = onboardingData.data.isCompleted;
         setIsOnboardingCompleted(onboardingCompleted);
-        console.log('✅ [Smart Invoicing] Service onboarding check:', {
-          serviceOnboarding: onboardingData.data.serviceOnboarding,
-          isCompleted: onboardingData.data.isCompleted,
-          storageLocation: onboardingData.data.storageLocation
-        });
+
       }
       
       // Save to cache
       saveToCache(invoicesData, calculatedStats, onboardingCompleted);
-      
-      console.log('📊 [Smart Invoicing Dashboard] Updated with stats:', calculatedStats);
     } catch (error) {
       console.error('❌ [Smart Invoicing Dashboard] Error loading data:', error);
     } finally {
@@ -183,7 +174,6 @@ export default function SmartInvoicingPage() {
   };
 
   const handleManageClients = () => {
-    console.log('👥 [Smart Invoicing] Navigating to client management');
     router.push('/dashboard/clients');
   };
 

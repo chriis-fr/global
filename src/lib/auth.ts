@@ -50,34 +50,27 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          console.log('❌ [Auth] Missing credentials')
           return null
         }
 
         try {
-          console.log('🔐 [Auth] Attempting credentials login for:', credentials.email)
           
           // Get user from database
           const user = await UserService.getUserByEmail(credentials.email)
           if (!user) {
-            console.log('❌ [Auth] User not found:', credentials.email)
             return null
           }
 
           // Check if user has a password (Google users might not have one)
           if (!user.password) {
-            console.log('❌ [Auth] User has no password (Google account):', credentials.email)
             return null
           }
 
           // Verify password
           const isValidPassword = await bcrypt.compare(credentials.password, user.password)
           if (!isValidPassword) {
-            console.log('❌ [Auth] Invalid password for user:', credentials.email)
             return null
           }
-
-          console.log('✅ [Auth] Credentials login successful for:', credentials.email)
           
           // Update last login
           await UserService.updateUser(user._id!.toString(), {
@@ -105,35 +98,22 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async signIn({ user, account }) {
-      if (account?.provider === 'google') {
-        try {
-          console.log('🔐 [Auth] Google sign-in attempt for:', user.email)
-          
-          // Check if user already exists
-          const existingUser = await UserService.getUserByEmail(user.email!)
-          if (existingUser) {
-            console.log('✅ [Auth] Existing user found, updating Google info')
-            // Update existing user with Google info
-            await UserService.updateUser(existingUser._id!.toString(), {
-              profilePicture: user.image || undefined,
-              avatar: user.image || undefined,
-              lastLoginAt: new Date()
-            })
-            return true
-          }
+              if (account?.provider === 'google') {
+          try {
+            // Check if user already exists
+            const existingUser = await UserService.getUserByEmail(user.email!)
+            if (existingUser) {
+              // Update existing user with Google info
+              await UserService.updateUser(existingUser._id!.toString(), {
+                profilePicture: user.image || undefined,
+                avatar: user.image || undefined,
+                lastLoginAt: new Date()
+              })
+              return true
+            }
 
-          // Create new user from Google data
-          console.log('📝 [Auth] Creating new user from Google data')
-          const googleUser = user as GoogleUserExtended
-          console.log('🔍 [Auth] Google user data:', {
-            email: googleUser.email,
-            name: googleUser.name,
-            given_name: googleUser.given_name,
-            family_name: googleUser.family_name,
-            locale: googleUser.locale,
-            verified_email: googleUser.verified_email,
-            hd: googleUser.hd
-          })
+            // Create new user from Google data
+            const googleUser = user as GoogleUserExtended
           
           const userData = {
             email: googleUser.email!,
@@ -152,13 +132,31 @@ export const authOptions: NextAuthOptions = {
             },
             taxId: '',
             walletAddresses: [],
-            settings: {
-              currencyPreference: 'USD',
-              notifications: {
-                email: true,
-                sms: false
-              }
-            },
+                         settings: {
+               currencyPreference: 'USD',
+               notifications: {
+                 email: true,
+                 sms: false,
+                 push: false,
+                 inApp: true,
+                 invoiceCreated: true,
+                 invoicePaid: true,
+                 invoiceOverdue: true,
+                 paymentReceived: true,
+                 paymentFailed: true,
+                 systemUpdates: true,
+                 securityAlerts: true,
+                 reminders: true,
+                 approvals: true,
+                 frequency: 'immediate' as const,
+                 quietHours: {
+                   enabled: false,
+                   start: '22:00',
+                   end: '08:00',
+                   timezone: 'UTC'
+                 }
+               }
+             },
             services: createDefaultServices(),
             onboarding: {
               completed: false,
@@ -168,8 +166,7 @@ export const authOptions: NextAuthOptions = {
             }
           }
 
-          const newUser = await UserService.createUser(userData)
-          console.log('✅ [Auth] New user created from Google:', newUser._id)
+          await UserService.createUser(userData)
           return true
         } catch (error) {
           console.error('❌ [Auth] Error during Google sign-in:', error)
@@ -215,8 +212,6 @@ export const authOptions: NextAuthOptions = {
         token.onboarding = user.onboarding
         token.services = user.services || createDefaultServices()
         token.organizationId = user.organizationId
-        
-        console.log('🔐 [Auth] JWT token updated with services:', token.services)
       }
       return token
     }

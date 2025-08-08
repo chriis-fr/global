@@ -16,11 +16,8 @@ export async function connectToDatabase(): Promise<Db> {
 
   // If we're already connecting, wait for that connection
   if (connectionPromise) {
-    console.log('⏳ [Database] Waiting for existing connection attempt...');
     return connectionPromise;
   }
-
-  console.log('🔌 [Database] Attempting to connect to MongoDB...');
   
   // Create a new connection promise
   connectionPromise = createConnection();
@@ -50,18 +47,13 @@ async function createConnection(): Promise<Db> {
       tlsAllowInvalidHostnames: false,
     };
 
-    console.log('🔌 [Database] Connecting to MongoDB URI:', MONGODB_URI.replace(/\/\/[^:]+:[^@]+@/, '//***:***@')); // Hide credentials in logs
     client = new MongoClient(MONGODB_URI, clientOptions);
 
     await client.connect();
     db = client.db(DB_NAME);
     
-    console.log('✅ [Database] Connected to MongoDB successfully');
-    console.log('📊 [Database] Database name:', DB_NAME);
-    
     // Test the connection
     await db.admin().ping();
-    console.log('✅ [Database] Connection test successful');
     
     return db;
   } catch (error) {
@@ -93,19 +85,17 @@ export async function closeDatabase(): Promise<void> {
     client = null;
     db = null;
     connectionPromise = null;
-    console.log('🔌 [Database] MongoDB connection closed');
+
   }
 }
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
-  console.log('🛑 [Database] Received SIGINT, closing database connection...');
   await closeDatabase();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-  console.log('🛑 [Database] Received SIGTERM, closing database connection...');
   await closeDatabase();
   process.exit(0);
 }); 

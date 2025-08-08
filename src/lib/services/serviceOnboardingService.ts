@@ -35,8 +35,8 @@ export class ServiceOnboardingService {
 
         return {
           serviceKey,
-          serviceOnboarding: serviceOnboarding || {},
-          isCompleted,
+          serviceOnboarding: (serviceOnboarding || {}) as Record<string, unknown>,
+          isCompleted: Boolean(isCompleted),
           storageLocation: 'organization'
         };
       } else {
@@ -49,8 +49,8 @@ export class ServiceOnboardingService {
 
         return {
           serviceKey,
-          serviceOnboarding: serviceOnboarding || {},
-          isCompleted,
+          serviceOnboarding: (serviceOnboarding || {}) as Record<string, unknown>,
+          isCompleted: Boolean(isCompleted),
           storageLocation: 'user'
         };
       }
@@ -84,14 +84,14 @@ export class ServiceOnboardingService {
 
         return {
           serviceOnboarding: organization.onboarding.serviceOnboarding,
-          services: organization.services,
+          services: organization.services as unknown as Record<string, boolean>,
           storageLocation: 'organization'
         };
       } else {
         // For individual users, get data from user record
         return {
           serviceOnboarding: user.onboarding.serviceOnboarding,
-          services: user.services,
+          services: user.services as unknown as Record<string, boolean>,
           storageLocation: 'user'
         };
       }

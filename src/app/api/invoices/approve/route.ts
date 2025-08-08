@@ -90,6 +90,9 @@ export async function POST(request: NextRequest) {
         status: 'sent',
         approvalWorkflow: {
           ...invoice.approvalWorkflow,
+          requiresApproval: invoice.approvalWorkflow?.requiresApproval ?? true,
+          submittedBy: invoice.approvalWorkflow?.submittedBy!,
+          submittedAt: invoice.approvalWorkflow?.submittedAt!,
           approvedBy: user._id,
           approvedAt: new Date(),
           comments
@@ -106,6 +109,9 @@ export async function POST(request: NextRequest) {
         status: 'rejected',
         approvalWorkflow: {
           ...invoice.approvalWorkflow,
+          requiresApproval: invoice.approvalWorkflow?.requiresApproval ?? true,
+          submittedBy: invoice.approvalWorkflow?.submittedBy!,
+          submittedAt: invoice.approvalWorkflow?.submittedAt!,
           rejectedBy: user._id,
           rejectedAt: new Date(),
           rejectionReason: reason,

@@ -18,12 +18,10 @@ export class InvoiceService {
     
     // Return cached data if still valid
     if (now - lastFetchTime < CACHE_DURATION && invoicesCache.length > 0) {
-      console.log('📊 [InvoiceService] Using cached invoices data');
       return invoicesCache;
     }
 
     try {
-      console.log('📊 [InvoiceService] Fetching fresh invoices data...');
       const response = await fetch('/api/invoices');
       const data = await response.json();
       
@@ -31,7 +29,6 @@ export class InvoiceService {
         invoicesCache = data.data?.invoices || [];
         lastFetchTime = now;
         
-        console.log('📊 [InvoiceService] Updated cache with', invoicesCache.length, 'invoices');
         return invoicesCache;
       } else {
         console.error('❌ [InvoiceService] Failed to fetch invoices:', data.message);
@@ -50,16 +47,7 @@ export class InvoiceService {
       .filter(inv => inv.status === 'paid')
       .reduce((sum, inv) => sum + (inv.totalAmount || 0), 0);
 
-    console.log('📊 [InvoiceService] Calculating stats:', {
-      totalInvoices: invoices.length,
-      pendingCount,
-      paidCount,
-      totalRevenue,
-      statusBreakdown: invoices.reduce((acc, inv) => {
-        acc[inv.status] = (acc[inv.status] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>)
-    });
+
 
     return {
       totalInvoices: invoices.length,
@@ -72,11 +60,73 @@ export class InvoiceService {
   static clearCache(): void {
     invoicesCache = [];
     lastFetchTime = 0;
-    console.log('📊 [InvoiceService] Cache cleared');
   }
 
   static async refreshInvoices(): Promise<Invoice[]> {
     this.clearCache();
     return this.getInvoices();
+  }
+
+  static async getInvoiceById(id: string): Promise<Invoice | null> {
+    try {
+      const response = await fetch(`/api/invoices/${id}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        return data.data;
+      } else {
+        console.error('❌ [InvoiceService] Failed to fetch invoice:', data.message);
+        return null;
+      }
+    } catch (error) {
+      console.error('❌ [InvoiceService] Error fetching invoice:', error);
+      return null;
+    }
+  }
+
+  static async updateInvoice(id: string, updateData: Partial<Invoice>): Promise<Invoice | null> {
+    try {
+      const response = await fetch(`/api/invoices/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updateData),
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        this.clearCache(); // Clear cache after update
+        return data.data;
+      } else {
+        console.error('❌ [InvoiceService] Failed to update invoice:', data.message);
+        return null;
+      }
+    } catch (error) {
+      console.error('❌ [InvoiceService] Error updating invoice:', error);
+      return null;
+    }
+  }
+
+  static async sendInvoice(id: string): Promise<boolean> {
+    try {
+      const response = await fetch(`/api/invoices/${id}/send`, {
+        method: 'POST',
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        this.clearCache(); // Clear cache after sending
+        return true;
+      } else {
+        console.error('❌ [InvoiceService] Failed to send invoice:', data.message);
+        return false;
+      }
+    } catch (error) {
+      console.error('❌ [InvoiceService] Error sending invoice:', error);
+      return false;
+    }
   }
 } 

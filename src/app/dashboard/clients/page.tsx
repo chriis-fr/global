@@ -48,15 +48,11 @@ export default function ClientsPage() {
   const fetchClients = useCallback(async () => {
     try {
       setLoading(true);
-      console.log('🔍 [Clients] Fetching clients for user:', session?.user?.email);
       const response = await fetch('/api/clients');
       const result = await response.json();
       
-      console.log('📊 [Clients] API response:', result);
-      
       if (result.success) {
         setClients(result.data || []);
-        console.log('✅ [Clients] Loaded clients:', result.data?.length || 0);
       } else {
         console.error('❌ [Clients] Failed to fetch clients:', result.message);
       }
@@ -65,18 +61,13 @@ export default function ClientsPage() {
     } finally {
       setLoading(false);
     }
-  }, [session?.user?.email]);
+  }, []);
 
   useEffect(() => {
     if (session?.user?.email) {
-      console.log('👤 [Clients] User session:', {
-        email: session.user.email,
-        userType: session.user.userType,
-        organizationId: session.user.organizationId
-      });
       fetchClients();
     }
-  }, [session, fetchClients]);
+  }, [session?.user?.email, fetchClients]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,8 +75,6 @@ export default function ClientsPage() {
     try {
       const url = editingClient ? `/api/clients/${editingClient._id}` : '/api/clients';
       const method = editingClient ? 'PUT' : 'POST';
-      
-      console.log('💾 [Clients] Saving client:', { url, method, formData });
       
       const response = await fetch(url, {
         method,
@@ -97,14 +86,11 @@ export default function ClientsPage() {
 
       const result = await response.json();
       
-      console.log('📊 [Clients] Save response:', result);
-      
       if (result.success) {
         setShowAddModal(false);
         setEditingClient(null);
         resetForm();
         fetchClients();
-        console.log('✅ [Clients] Client saved successfully');
       } else {
         console.error('❌ [Clients] Failed to save client:', result.message);
         alert(result.message || 'Failed to save client');
@@ -121,19 +107,14 @@ export default function ClientsPage() {
     }
 
     try {
-      console.log('🗑️ [Clients] Deleting client:', clientId);
-      
       const response = await fetch(`/api/clients/${clientId}`, {
         method: 'DELETE',
       });
 
       const result = await response.json();
       
-      console.log('📊 [Clients] Delete response:', result);
-      
       if (result.success) {
         fetchClients();
-        console.log('✅ [Clients] Client deleted successfully');
       } else {
         console.error('❌ [Clients] Failed to delete client:', result.message);
         alert(result.message || 'Failed to delete client');
@@ -145,7 +126,6 @@ export default function ClientsPage() {
   };
 
   const handleEdit = (client: Client) => {
-    console.log('✏️ [Clients] Editing client:', client);
     setEditingClient(client);
     setFormData({
       name: client.name,

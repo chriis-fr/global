@@ -18,6 +18,7 @@ export class OrganizationService {
       members: orgData.members || [],
       services: {
         smartInvoicing: orgData.services?.smartInvoicing ?? false,
+        emailService: orgData.services?.emailService ?? false,
         accountsReceivable: orgData.services?.accountsReceivable ?? false,
         accountsPayable: orgData.services?.accountsPayable ?? false,
         expenses: orgData.services?.expenses ?? false,
