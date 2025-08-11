@@ -7,6 +7,7 @@ import {
   FileText, 
   Users
 } from 'lucide-react';
+import FormattedNumberDisplay from '@/components/FormattedNumber';
 
 interface DashboardStats {
   totalRevenue: number;
@@ -49,7 +50,7 @@ export default function DashboardPage() {
 
         const totalExpenses = 0; // Will be implemented when expenses service is ready
 
-        const pendingInvoices = invoices.filter((inv: { status: string }) => inv.status === 'pending').length;
+        const pendingInvoices = invoices.filter((inv: { status: string }) => inv.status === 'sent' || inv.status === 'pending').length;
         const paidInvoices = invoices.filter((inv: { status: string }) => inv.status === 'paid').length;
 
         setStats({
@@ -111,7 +112,9 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-blue-200 text-sm font-medium">Total Revenue</p>
-              <p className="text-2xl font-bold text-white">${stats.totalRevenue.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-white">
+                <FormattedNumberDisplay value={stats.totalRevenue} />
+              </p>
             </div>
             <div className="p-3 bg-green-500/20 rounded-lg">
               <TrendingUp className="h-6 w-6 text-green-400" />

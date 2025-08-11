@@ -17,6 +17,7 @@ import {
   Calendar,
   TrendingUp
 } from 'lucide-react';
+import FormattedNumberDisplay from '@/components/FormattedNumber';
 import { InvoiceService } from '@/lib/services/invoiceService';
 import { Invoice } from '@/models/Invoice';
 
@@ -35,7 +36,7 @@ export default function InvoicesPage() {
       
       console.log('📊 [Invoices Page] Loaded invoices:', {
         count: invoicesData.length,
-        pendingCount: invoicesData.filter(inv => inv.status === 'pending').length,
+        pendingCount: invoicesData.filter(inv => inv.status === 'sent' || inv.status === 'pending').length,
         statuses: invoicesData.map(inv => ({ id: inv._id, status: inv.status }))
       });
     } catch (error) {
@@ -70,7 +71,7 @@ export default function InvoicesPage() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'draft': return 'bg-gray-100 text-gray-800';
-      case 'sent': return 'bg-blue-100 text-blue-800';
+      case 'sent': 
       case 'pending': return 'bg-yellow-100 text-yellow-800';
       case 'paid': return 'bg-green-100 text-green-800';
       case 'overdue': return 'bg-red-100 text-red-800';
@@ -86,16 +87,7 @@ export default function InvoicesPage() {
     });
   };
 
-  const formatCurrency = (amount: number, currency: string) => {
-    const symbols: { [key: string]: string } = {
-      'USD': '$',
-      'EUR': '€',
-      'GBP': '£',
-      'JPY': '¥'
-    };
-    const symbol = symbols[currency] || currency;
-    return `${symbol}${amount.toFixed(2)}`;
-  };
+
 
   const filteredInvoices = invoices.filter(invoice =>
     (invoice.invoiceNumber?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
@@ -105,13 +97,15 @@ export default function InvoicesPage() {
 
   const statusFilteredInvoices = statusFilter === 'all' 
     ? filteredInvoices 
+    : statusFilter === 'pending'
+    ? filteredInvoices.filter(invoice => invoice.status === 'sent' || invoice.status === 'pending')
     : filteredInvoices.filter(invoice => invoice.status === statusFilter);
 
   // Calculate stats for the header
   const stats = {
     totalInvoices: invoices.length,
     totalRevenue: invoices.reduce((sum, inv) => sum + (inv.totalAmount || 0), 0),
-    pendingCount: invoices.filter(inv => inv.status === 'pending').length,
+    pendingCount: invoices.filter(inv => inv.status === 'sent' || inv.status === 'pending').length,
     paidCount: invoices.filter(inv => inv.status === 'paid').length
   };
 
@@ -150,7 +144,9 @@ export default function InvoicesPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-blue-200 text-sm font-medium">Total Revenue</p>
-              <p className="text-xl sm:text-2xl font-bold text-white">${stats.totalRevenue.toLocaleString()}</p>
+              <p className="text-xl sm:text-2xl font-bold text-white">
+                <FormattedNumberDisplay value={stats.totalRevenue} />
+              </p>
             </div>
             <div className="p-2 sm:p-3 bg-green-500/20 rounded-lg">
               <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-green-400" />
@@ -203,7 +199,6 @@ export default function InvoicesPage() {
           >
             <option value="all">All Status</option>
             <option value="draft">Draft</option>
-            <option value="sent">Sent</option>
             <option value="pending">Pending</option>
             <option value="paid">Paid</option>
             <option value="overdue">Overdue</option>
@@ -268,7 +263,11 @@ export default function InvoicesPage() {
                 </thead>
                 <tbody className="divide-y divide-white/10">
                   {statusFilteredInvoices.map((invoice) => (
-                    <tr key={invoice._id?.toString() || 'unknown'} className="hover:bg-white/5 transition-colors">
+                    <tr 
+                      key={invoice._id?.toString() || 'unknown'} 
+                      className={`hover:bg-white/5 transition-colors ${invoice.status === 'draft' ? 'cursor-pointer' : ''}`}
+                      onClick={invoice.status === 'draft' ? () => router.push(`/dashboard/services/smart-invoicing/create?id=${invoice._id?.toString()}`) : undefined}
+                    >
                       <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                         <div>
                           <div className="text-sm font-semibold text-white">
@@ -286,12 +285,16 @@ export default function InvoicesPage() {
                       </td>
                       <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-semibold text-white">
-                          {formatCurrency(invoice.totalAmount || 0, invoice.currency || 'USD')}
+                          <FormattedNumberDisplay 
+                            value={invoice.totalAmount || 0} 
+                            currency={invoice.currency === 'USD' ? '$' : invoice.currency === 'EUR' ? '€' : invoice.currency === 'GBP' ? '£' : '$'}
+                          />
                         </div>
                       </td>
                       <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${getStatusColor(invoice.status)}`}>
-                          {invoice.status ? (invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)) : 'Draft'}
+                          {invoice.status === 'sent' ? 'Pending' : 
+                           invoice.status ? (invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)) : 'Draft'}
                         </span>
                       </td>
                       <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-blue-200">
@@ -299,22 +302,46 @@ export default function InvoicesPage() {
                       </td>
                       <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex items-center justify-end space-x-2 sm:space-x-3">
+                          {invoice.status === 'draft' ? (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.push(`/dashboard/services/smart-invoicing/create?id=${invoice._id?.toString()}`);
+                              }}
+                              className="text-blue-400 hover:text-blue-300 transition-colors p-1 sm:p-2 rounded-lg hover:bg-white/10"
+                              title="Continue Editing Draft"
+                            >
+                              <Edit3 className="h-4 w-4" />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.push(`/dashboard/services/smart-invoicing/invoices/${invoice._id?.toString()}`);
+                              }}
+                              className="text-blue-400 hover:text-blue-300 transition-colors p-1 sm:p-2 rounded-lg hover:bg-white/10"
+                              title="View Invoice"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+                          )}
+                          {invoice.status !== 'draft' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.push(`/dashboard/services/smart-invoicing/create?id=${invoice._id?.toString()}`);
+                              }}
+                              className="text-green-400 hover:text-green-300 transition-colors p-1 sm:p-2 rounded-lg hover:bg-white/10"
+                              title="Edit Invoice"
+                            >
+                              <Edit3 className="h-4 w-4" />
+                            </button>
+                          )}
                           <button
-                            onClick={() => router.push(`/dashboard/services/smart-invoicing/invoices/${invoice._id?.toString()}`)}
-                            className="text-blue-400 hover:text-blue-300 transition-colors p-1 sm:p-2 rounded-lg hover:bg-white/10"
-                            title="View Invoice"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => router.push(`/dashboard/services/smart-invoicing/create?edit=${invoice._id?.toString()}`)}
-                            className="text-green-400 hover:text-green-300 transition-colors p-1 sm:p-2 rounded-lg hover:bg-white/10"
-                            title="Edit Invoice"
-                          >
-                            <Edit3 className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteInvoice(invoice._id?.toString() || '')}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteInvoice(invoice._id?.toString() || '');
+                            }}
                             className="text-red-400 hover:text-red-300 transition-colors p-1 sm:p-2 rounded-lg hover:bg-white/10"
                             title="Delete Invoice"
                           >

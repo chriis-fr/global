@@ -139,9 +139,10 @@ export async function PUT(
       }
     }
 
-    // Update invoice
+    // Update invoice - remove _id from body to avoid immutable field error
+    const { _id, ...bodyWithoutId } = body; // eslint-disable-line @typescript-eslint/no-unused-vars
     const updateData = {
-      ...body,
+      ...bodyWithoutId,
       updatedAt: new Date()
     };
 
@@ -167,17 +168,21 @@ export async function PUT(
       );
     }
 
+    // Get the updated invoice to return full data
+    const updatedInvoice = await collection.findOne({ _id: new ObjectId(id) });
+
     console.log('✅ [API Invoice] Invoice updated successfully:', {
       id,
       status: body.status,
       ownerType,
-      ownerId
+      ownerId,
+      invoiceNumber: updatedInvoice?.invoiceNumber
     });
 
     return NextResponse.json({
       success: true,
       message: 'Invoice updated successfully',
-      data: { id, status: body.status }
+      invoice: updatedInvoice
     });
   } catch (error) {
     console.error('❌ [API Invoice] Error updating invoice:', error);

@@ -2,9 +2,56 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
-import { ObjectId } from 'mongodb';
+import { ObjectId, Db } from 'mongodb';
 import { UserService } from '@/lib/services/userService';
 import { OrganizationService } from '@/lib/services/organizationService';
+
+// Secure invoice number generation function
+const generateSecureInvoiceNumber = async (db: Db, organizationId: string, ownerId: string): Promise<string> => {
+  const currentYear = new Date().getFullYear();
+  const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+  
+  // Create a short, secure identifier from organization/user ID
+  let secureId: string;
+  if (organizationId) {
+    // For organizations, use last 4 chars of org ID
+    secureId = organizationId.slice(-4);
+  } else {
+    // For individual users, create a unique identifier from email
+    // Remove dots and special chars, take first 4 chars of username + last 2 of domain
+    const emailParts = ownerId.split('@');
+    const username = emailParts[0].replace(/[^a-zA-Z0-9]/g, '').slice(0, 4);
+    const domain = emailParts[1]?.replace(/[^a-zA-Z0-9]/g, '').slice(-2) || 'XX';
+    secureId = `${username}${domain}`.toUpperCase();
+  }
+  
+  // Query for the last invoice number for this organization/user
+  const lastInvoice = await db.collection('invoices').findOne(
+    { 
+      $or: [
+        { organizationId: organizationId || null },
+        { ownerId: ownerId }
+      ]
+    },
+    { 
+      sort: { invoiceNumber: -1 },
+      projection: { invoiceNumber: 1 }
+    }
+  );
+
+  let sequence = 1;
+  
+  if (lastInvoice?.invoiceNumber) {
+    // Extract sequence from existing invoice number
+    const match = lastInvoice.invoiceNumber.match(/-(\d{4})$/);
+    if (match) {
+      sequence = parseInt(match[1]) + 1;
+    }
+  }
+
+  // Format: INV-{secureId}-{year}{month}-{sequence}
+  return `INV-${secureId}-${currentYear}${currentMonth}-${String(sequence).padStart(4, '0')}`;
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -80,8 +127,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Generate secure invoice number if not provided
+    const db = await connectToDatabase();
+    const finalInvoiceNumber = invoiceNumber || await generateSecureInvoiceNumber(
+      db, 
+      session.user.organizationId || '', 
+      ownerId || ''
+    );
+
     console.log('💾 [API Invoices] Saving invoice:', {
-      invoiceNumber,
+      invoiceNumber: finalInvoiceNumber,
       ownerType,
       ownerId,
       total,
@@ -92,8 +147,8 @@ export async function POST(request: NextRequest) {
     // Transform data to match InvoiceFormData structure exactly
     const invoiceData = {
       // Basic invoice info
-      invoiceNumber: invoiceNumber || `INV-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      invoiceName: invoiceName || `Invoice ${invoiceNumber || 'Document'}`,
+      invoiceNumber: finalInvoiceNumber,
+      invoiceName: invoiceName || `Invoice ${finalInvoiceNumber}`,
       issueDate: new Date(issueDate),
       dueDate: new Date(dueDate),
       
@@ -222,7 +277,6 @@ export async function POST(request: NextRequest) {
     };
 
     // Use MongoDB directly since the model structure is complex
-    const db = await connectToDatabase();
     const result = await db.collection('invoices').insertOne(invoiceData);
 
     console.log('✅ [API Invoices] Invoice saved successfully:', {
@@ -240,8 +294,19 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('❌ [API Invoices] Error saving invoice:', error);
+    
+    // Provide more detailed error information
+    let errorMessage = 'Failed to save invoice';
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+    
     return NextResponse.json(
-      { success: false, message: 'Failed to save invoice' },
+      { 
+        success: false, 
+        message: errorMessage,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     );
   }

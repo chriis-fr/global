@@ -102,6 +102,14 @@ interface InvoiceFormData {
   memo: string;
   attachedFiles: File[];
   status: 'draft' | 'sent' | 'paid' | 'overdue';
+  ccClients?: Array<{
+    _id?: string;
+    name: string;
+    email: string;
+    phone?: string;
+    company?: string;
+    address?: string;
+  }>;
 }
 
 const defaultInvoiceData: InvoiceFormData = {
@@ -151,7 +159,8 @@ const defaultInvoiceData: InvoiceFormData = {
   total: 0,
   memo: '',
   attachedFiles: [],
-  status: 'draft'
+  status: 'draft',
+  ccClients: []
 };
 
 export default function CreateInvoicePage() {
@@ -169,6 +178,11 @@ export default function CreateInvoicePage() {
   const [showClientEditModal, setShowClientEditModal] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [sendingInvoice, setSendingInvoice] = useState(false);
+  
+  // CC Clients state
+  const [showCcClientSelector, setShowCcClientSelector] = useState(false);
+  const [showCcClientCreationModal, setShowCcClientCreationModal] = useState(false);
+  
   const printRef = useRef<HTMLDivElement>(null);
   const pdfRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -240,7 +254,14 @@ export default function CreateInvoicePage() {
       const data = await response.json();
       
       if (data.success && data.data) {
-        setFormData(data.data);
+        // Ensure all required fields are present with defaults
+        const loadedData = {
+          ...defaultInvoiceData,
+          ...data.data,
+          attachedFiles: data.data.attachedFiles || [],
+          ccClients: data.data.ccClients || []
+        };
+        setFormData(loadedData);
         setIsEditing(true);
       }
     } catch (error) {
@@ -392,14 +413,14 @@ export default function CreateInvoicePage() {
 
     setFormData(prev => ({
       ...prev,
-      attachedFiles: [...prev.attachedFiles, ...validFiles]
+      attachedFiles: [...(prev.attachedFiles || []), ...validFiles]
     }));
   };
 
   const handleRemoveFile = (index: number) => {
     setFormData(prev => ({
       ...prev,
-      attachedFiles: prev.attachedFiles.filter((_, i) => i !== index)
+      attachedFiles: (prev.attachedFiles || []).filter((_, i) => i !== index)
     }));
   };
 
@@ -464,6 +485,50 @@ export default function CreateInvoicePage() {
     setShowClientSelector(false);
   };
 
+  // CC Client functions
+  const selectCcClient = (client: Client) => {
+    // Check if client is already in CC list
+    const isAlreadyCc = formData.ccClients?.some(cc => cc.email === client.email);
+    if (isAlreadyCc) {
+      alert('This client is already in the CC list.');
+      return;
+    }
+
+    // Check if client is the primary client
+    if (formData.clientEmail === client.email) {
+      alert('This client is already the primary recipient.');
+      return;
+    }
+
+    const newCcClient = {
+      _id: client._id,
+      name: client.name,
+      email: client.email,
+      phone: client.phone,
+      company: client.company,
+      address: client.address
+    };
+
+    setFormData(prev => ({
+      ...prev,
+      ccClients: [...(prev.ccClients || []), newCcClient]
+    }));
+
+    setShowCcClientSelector(false);
+  };
+
+  const removeCcClient = (email: string) => {
+    setFormData(prev => ({
+      ...prev,
+      ccClients: prev.ccClients?.filter(cc => cc.email !== email) || []
+    }));
+  };
+
+  const createNewCcClient = () => {
+    setShowCcClientCreationModal(true);
+    setShowCcClientSelector(false);
+  };
+
   const handleCreateClient = async (clientData: Omit<Client, '_id'>) => {
     try {
       const response = await fetch('/api/clients', {
@@ -478,6 +543,26 @@ export default function CreateInvoicePage() {
         await loadClients();
         selectClient(data.data);
         setShowNewClientModal(false);
+      }
+    } catch (error) {
+      console.error('Failed to create client:', error);
+    }
+  };
+
+  const handleCreateCcClient = async (clientData: Omit<Client, '_id'>) => {
+    try {
+      const response = await fetch('/api/clients', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(clientData),
+      });
+      const data = await response.json();
+      if (data.success) {
+        await loadClients();
+        selectCcClient(data.data);
+        setShowCcClientCreationModal(false);
       }
     } catch (error) {
       console.error('Failed to create client:', error);
@@ -583,13 +668,6 @@ export default function CreateInvoicePage() {
     }
     setValidationErrors([]);
 
-    // Generate invoice number if not exists
-    if (!formData.invoiceNumber) {
-      const invoiceNumber = generateInvoiceNumber();
-      handleInputChange('invoiceNumber', invoiceNumber);
-      console.log('📝 [Smart Invoicing] Generated invoice number for email send:', invoiceNumber);
-    }
-
     setSendingInvoice(true);
 
     try {
@@ -598,8 +676,121 @@ export default function CreateInvoicePage() {
         clientEmail: formData.clientEmail,
         clientName: formData.clientName,
         total: formData.total,
-        paymentMethod: formData.paymentMethod
+        paymentMethod: formData.paymentMethod,
+        ccClients: formData.ccClients?.length || 0,
+        isDraft: !!formData._id
       });
+
+      let primaryInvoiceId: string;
+      let primaryInvoiceNumber: string;
+
+      // If this is a draft invoice (has _id), update it instead of creating new
+      if (formData._id) {
+        console.log('💾 [Smart Invoicing] Updating draft invoice:', {
+          id: formData._id,
+          invoiceNumber: formData.invoiceNumber,
+          clientEmail: formData.clientEmail,
+          clientName: formData.clientName,
+          total: formData.total,
+          items: formData.items.length
+        });
+
+        const updateResponse = await fetch(`/api/invoices/${formData._id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...formData,
+            status: 'sent'
+          })
+        });
+
+        console.log('📡 [Smart Invoicing] Update invoice response status:', updateResponse.status);
+
+        if (!updateResponse.ok) {
+          const errorText = await updateResponse.text();
+          console.error('❌ [Smart Invoicing] Update invoice response error:', errorText);
+          throw new Error(`Failed to update invoice: ${updateResponse.status} ${errorText}`);
+        }
+
+        const updateData = await updateResponse.json();
+        console.log('📄 [Smart Invoicing] Update invoice response data:', updateData);
+
+        if (!updateData.success) {
+          throw new Error(`Failed to update invoice: ${updateData.message}`);
+        }
+
+        primaryInvoiceId = updateData.invoice._id;
+        primaryInvoiceNumber = updateData.invoice.invoiceNumber;
+
+        console.log('📧 [Smart Invoicing] Draft invoice updated:', {
+          id: primaryInvoiceId,
+          invoiceNumber: primaryInvoiceNumber
+        });
+      } else {
+        // Create new invoice
+        console.log('💾 [Smart Invoicing] Creating new invoice:', {
+          clientEmail: formData.clientEmail,
+          clientName: formData.clientName,
+          total: formData.total,
+          items: formData.items.length
+        });
+
+        const primaryInvoiceResponse = await fetch('/api/invoices', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...formData,
+            status: 'sent'
+          })
+        });
+
+        console.log('📡 [Smart Invoicing] Primary invoice response status:', primaryInvoiceResponse.status);
+
+        if (!primaryInvoiceResponse.ok) {
+          const errorText = await primaryInvoiceResponse.text();
+          console.error('❌ [Smart Invoicing] Primary invoice response error:', errorText);
+          throw new Error(`Failed to save primary invoice: ${primaryInvoiceResponse.status} ${errorText}`);
+        }
+
+        const primaryInvoiceData = await primaryInvoiceResponse.json();
+        console.log('📄 [Smart Invoicing] Primary invoice response data:', primaryInvoiceData);
+
+        if (!primaryInvoiceData.success) {
+          throw new Error(`Failed to save invoice: ${primaryInvoiceData.message}`);
+        }
+
+        primaryInvoiceId = primaryInvoiceData.invoice._id;
+        primaryInvoiceNumber = primaryInvoiceData.invoice.invoiceNumber;
+
+        console.log('📧 [Smart Invoicing] Primary invoice saved:', {
+          id: primaryInvoiceId,
+          invoiceNumber: primaryInvoiceNumber
+        });
+      }
+
+      // If there are CC clients, create CC invoices
+      if (formData.ccClients && formData.ccClients.length > 0) {
+        const ccInvoiceResponse = await fetch('/api/invoices/cc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            primaryInvoiceId,
+            primaryInvoiceNumber,
+            ccClients: formData.ccClients,
+            invoiceData: {
+              ...formData,
+              status: 'sent'
+            }
+          })
+        });
+
+        if (!ccInvoiceResponse.ok) {
+          throw new Error('Failed to create CC invoices');
+        }
+
+        const ccInvoiceData = await ccInvoiceResponse.json();
+        console.log('📧 [Smart Invoicing] CC invoices created:', ccInvoiceData.ccInvoices);
+      }
 
       // Create a simplified version of the invoice for PDF generation (same as handleDownloadPdf)
       const pdfContainer = document.createElement('div');
@@ -903,22 +1094,19 @@ export default function CreateInvoicePage() {
       // Add watermark
       addWatermark(pdf);
 
-      // Save invoice to database
-      const savedInvoice = await saveInvoiceToDatabase(formData);
-
       // Convert PDF to base64 for email attachment
       const pdfBase64 = pdf.output('datauristring').split(',')[1];
       
       console.log('📧 [Smart Invoicing] Sending invoice via email...', {
         recipientEmail: formData.clientEmail,
-        invoiceNumber: formData.invoiceNumber,
-        invoiceId: savedInvoice?._id,
+        invoiceNumber: primaryInvoiceNumber,
+        invoiceId: primaryInvoiceId,
         pdfSize: pdfBase64.length
       });
       
       // Convert attached files to base64
       const attachedFilesBase64 = await Promise.all(
-        formData.attachedFiles.map(async (file) => {
+        (formData.attachedFiles || []).map(async (file) => {
           return new Promise<{ filename: string; content: string; contentType: string }>((resolve) => {
             const reader = new FileReader();
             reader.onload = () => {
@@ -941,7 +1129,7 @@ export default function CreateInvoicePage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          invoiceId: savedInvoice?._id || formData._id,
+          invoiceId: primaryInvoiceId,
           recipientEmail: formData.clientEmail,
           pdfBuffer: pdfBase64,
           attachedFiles: attachedFilesBase64
@@ -1078,12 +1266,8 @@ export default function CreateInvoicePage() {
     }
     setValidationErrors([]);
 
-    // Generate invoice number if not exists
-    if (!formData.invoiceNumber) {
-      const invoiceNumber = generateInvoiceNumber();
-      handleInputChange('invoiceNumber', invoiceNumber);
-      console.log('📝 [Smart Invoicing] Generated invoice number for download:', invoiceNumber);
-    }
+    // Invoice number will be generated by the backend API
+    // No need to generate it here
 
     setSendingInvoice(true);
 
@@ -1396,22 +1580,18 @@ export default function CreateInvoicePage() {
       // Add watermark
       addWatermark(pdf);
 
-      // Save invoice to database
-      const savedInvoice = await saveInvoiceToDatabase(formData);
-
       // Convert PDF to base64 for email attachment
       const pdfBase64 = pdf.output('datauristring').split(',')[1];
       
       console.log('📧 [Smart Invoicing] Sending invoice via email...', {
         recipientEmail: formData.clientEmail,
         invoiceNumber: formData.invoiceNumber,
-        invoiceId: savedInvoice?._id,
         pdfSize: pdfBase64.length
       });
       
       // Convert attached files to base64
       const attachedFilesBase64 = await Promise.all(
-        formData.attachedFiles.map(async (file) => {
+        (formData.attachedFiles || []).map(async (file) => {
           return new Promise<{ filename: string; content: string; contentType: string }>((resolve) => {
             const reader = new FileReader();
             reader.onload = () => {
@@ -1434,7 +1614,7 @@ export default function CreateInvoicePage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          invoiceId: savedInvoice?._id || formData._id,
+          invoiceId: formData._id,
           recipientEmail: formData.clientEmail,
           pdfBuffer: pdfBase64,
           attachedFiles: attachedFilesBase64
@@ -1473,12 +1653,8 @@ export default function CreateInvoicePage() {
     }
     setValidationErrors([]);
 
-    // Generate invoice number if not exists
-    if (!formData.invoiceNumber) {
-      const invoiceNumber = generateInvoiceNumber();
-      handleInputChange('invoiceNumber', invoiceNumber);
-      console.log('📝 [Smart Invoicing] Generated invoice number for CSV download:', invoiceNumber);
-    }
+    // Invoice number will be generated by the backend API
+    // No need to generate it here
 
     try {
       console.log('📤 [Smart Invoicing] Starting CSV download...', {
@@ -1607,21 +1783,10 @@ export default function CreateInvoicePage() {
     }
   };
 
-  // Generate unique invoice number
-  const generateInvoiceNumber = () => {
-    const timestamp = Date.now();
-    const random = Math.floor(Math.random() * 1000);
-    return `INV-${timestamp}-${random}`;
-  };
 
-  // Generate invoice number on component mount if not exists
-  useEffect(() => {
-    if (!formData.invoiceNumber) {
-      const invoiceNumber = generateInvoiceNumber();
-      handleInputChange('invoiceNumber', invoiceNumber);
-      console.log('📝 [Smart Invoicing] Generated invoice number:', invoiceNumber);
-    }
-  }, [formData.invoiceNumber, handleInputChange]);
+
+  // Note: Invoice numbers are now generated by the backend API
+  // No need to generate them on the frontend
 
   // Add watermark to PDF
   const addWatermark = (pdf: jsPDF) => {
@@ -1654,12 +1819,8 @@ export default function CreateInvoicePage() {
     }
     setValidationErrors([]);
 
-    // Generate invoice number if not exists
-    if (!formData.invoiceNumber) {
-      const invoiceNumber = generateInvoiceNumber();
-      handleInputChange('invoiceNumber', invoiceNumber);
-      console.log('📝 [Smart Invoicing] Generated invoice number for PDF share:', invoiceNumber);
-    }
+    // Invoice number will be generated by the backend API
+    // No need to generate it here
 
     setSendingInvoice(true);
 
@@ -2013,7 +2174,7 @@ export default function CreateInvoicePage() {
       });
 
       // Convert File objects to metadata for database storage
-      const attachedFilesMetadata = invoiceData.attachedFiles.map(file => ({
+      const attachedFilesMetadata = (invoiceData.attachedFiles || []).map(file => ({
         filename: file.name,
         originalName: file.name,
         size: file.size,
@@ -2316,6 +2477,106 @@ export default function CreateInvoicePage() {
                   <div className="text-gray-600">
                     {formData.clientPhone || 'Phone'}
                   </div>
+                </div>
+
+                {/* CC Clients Section */}
+                <div className="mt-6 pt-4 border-t border-gray-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-medium text-gray-700 flex items-center">
+                      <Mail className="h-4 w-4 mr-1" />
+                      CC Others
+                    </h4>
+                    <button
+                      onClick={() => setShowCcClientSelector(!showCcClientSelector)}
+                      className="text-xs text-blue-600 hover:text-blue-800 flex items-center"
+                    >
+                      <Plus className="h-3 w-3 mr-1" />
+                      {formData.ccClients && formData.ccClients.length > 0 ? 'Add More' : 'Add CC'}
+                    </button>
+                  </div>
+
+                  {/* CC Client Selector Dropdown */}
+                  {showCcClientSelector && (
+                    <div className="absolute z-10 mt-2 w-full sm:w-80 bg-white border border-gray-300 rounded-lg shadow-lg">
+                      <div className="p-4">
+                        <div className="flex justify-between items-center mb-3">
+                          <h4 className="font-medium text-gray-900">Select CC Clients</h4>
+                          <button
+                            onClick={() => setShowCcClientSelector(false)}
+                            className="text-gray-400 hover:text-gray-600"
+                          >
+                            ×
+                          </button>
+                        </div>
+                        
+                        {clients.length > 0 ? (
+                          <div className="space-y-2 max-h-48 overflow-y-auto">
+                            {clients.map((client) => {
+                              // Filter out clients that are already CC'd or are the primary client
+                              const isAlreadyCc = formData.ccClients?.some(cc => cc.email === client.email);
+                              const isPrimaryClient = formData.clientEmail === client.email;
+                              
+                              if (isAlreadyCc || isPrimaryClient) {
+                                return null;
+                              }
+
+                              return (
+                                <button
+                                  key={client._id}
+                                  onClick={() => selectCcClient(client)}
+                                  className="w-full text-left p-2 hover:bg-gray-100 rounded border"
+                                >
+                                  <div className="font-medium">
+                                    {client.company ? client.company : client.name}
+                                  </div>
+                                  {client.company && (
+                                    <div className="text-sm text-gray-500">Attn: {client.name}</div>
+                                  )}
+                                  <div className="text-sm text-gray-600">{client.email}</div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="text-gray-500 text-center py-4">No clients found</div>
+                        )}
+                        
+                        <div className="mt-3 pt-3 border-t">
+                          <button
+                            onClick={createNewCcClient}
+                            className="w-full text-center py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                          >
+                            Create New Client
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* CC Clients List */}
+                  {formData.ccClients && formData.ccClients.length > 0 && (
+                    <div className="space-y-2">
+                      {formData.ccClients.map((ccClient, index) => (
+                        <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded border">
+                          <div className="flex-1">
+                            <div className="text-sm font-medium">
+                              {ccClient.company ? ccClient.company : ccClient.name}
+                            </div>
+                            {ccClient.company && (
+                              <div className="text-xs text-gray-500">Attn: {ccClient.name}</div>
+                            )}
+                            <div className="text-xs text-gray-600">{ccClient.email}</div>
+                          </div>
+                          <button
+                            onClick={() => removeCcClient(ccClient.email)}
+                            className="text-red-500 hover:text-red-700 ml-2"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -2863,9 +3124,9 @@ export default function CreateInvoicePage() {
                   <p className="text-sm text-gray-600">No file attached yet.</p>
                   <p className="text-xs text-gray-500 mt-1">Click to upload files</p>
                 </div>
-                {formData.attachedFiles.length > 0 && (
+                {(formData.attachedFiles?.length || 0) > 0 && (
                   <div className="mt-4 space-y-2">
-                    {formData.attachedFiles.map((file, index) => (
+                    {formData.attachedFiles?.map((file, index) => (
                       <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
                         <div className="flex items-center space-x-2">
                           <File className="h-4 w-4 text-gray-500" />
@@ -2957,6 +3218,28 @@ export default function CreateInvoicePage() {
               <ClientCreationForm 
                 onSubmit={handleCreateClient}
                 onCancel={() => setShowNewClientModal(false)}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* CC Client Creation Modal */}
+        {showCcClientCreationModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Create New CC Client</h3>
+                <button
+                  onClick={() => setShowCcClientCreationModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  ×
+                </button>
+              </div>
+              
+              <ClientCreationForm 
+                onSubmit={handleCreateCcClient}
+                onCancel={() => setShowCcClientCreationModal(false)}
               />
             </div>
           </div>

@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { InvoiceService, InvoiceStats } from '@/lib/services/invoiceService';
 import { Invoice } from '@/models/Invoice';
+import FormattedNumberDisplay from '@/components/FormattedNumber';
 
 // Cache key for localStorage
 const CACHE_KEY = 'smart-invoicing-cache';
@@ -272,7 +273,7 @@ export default function SmartInvoicingPage() {
             <div>
               <p className="text-blue-200 text-sm">Total Revenue</p>
               <p className="text-2xl font-bold text-white">
-                {loading ? '...' : `$${stats.totalRevenue.toLocaleString()}`}
+                {loading ? '...' : <FormattedNumberDisplay value={stats.totalRevenue} />}
               </p>
             </div>
             <DollarSign className="h-8 w-8 text-green-400" />
@@ -421,7 +422,13 @@ export default function SmartInvoicingPage() {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.8 + index * 0.1 }}
                 className="flex items-center justify-between p-3 bg-white/5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
-                onClick={() => router.push(`/dashboard/services/smart-invoicing/invoices/${invoice._id}`)}
+                onClick={() => {
+                  if (invoice.status === 'draft') {
+                    router.push(`/dashboard/services/smart-invoicing/create?id=${invoice._id}`);
+                  } else {
+                    router.push(`/dashboard/services/smart-invoicing/invoices/${invoice._id}`);
+                  }
+                }}
               >
                 <div className="flex items-center space-x-3">
                   <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
@@ -436,16 +443,15 @@ export default function SmartInvoicingPage() {
                 </div>
                 <div className="text-right">
                   <p className="text-white font-semibold">
-                    ${(invoice.totalAmount || 0).toLocaleString()}
+                    <FormattedNumberDisplay value={invoice.totalAmount || 0} />
                   </p>
                   <span className={`text-xs px-2 py-1 rounded-full ${
                     invoice.status === 'paid' ? 'bg-green-100 text-green-800' :
-                    invoice.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                    invoice.status === 'sent' ? 'bg-blue-100 text-blue-800' :
+                    invoice.status === 'sent' || invoice.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
                     invoice.status === 'draft' ? 'bg-gray-100 text-gray-800' :
                     'bg-red-100 text-red-800'
                   }`}>
-                    {invoice.status}
+                    {invoice.status === 'sent' ? 'pending' : invoice.status}
                   </span>
                 </div>
               </motion.div>

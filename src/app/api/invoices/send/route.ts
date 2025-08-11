@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { sendInvoiceNotification } from '@/lib/services/emailService';
 import { connectToDatabase } from '@/lib/database';
+import { ObjectId } from 'mongodb';
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,8 +33,14 @@ export async function POST(request: NextRequest) {
     // Get the invoice
     const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
     const query = isOrganization 
-      ? { _id: invoiceId, organizationId: session.user.organizationId }
-      : { _id: invoiceId, userId: session.user.email };
+      ? { _id: new ObjectId(invoiceId), organizationId: session.user.organizationId }
+      : { 
+          _id: new ObjectId(invoiceId),
+          $or: [
+            { issuerId: session.user.id },
+            { userId: session.user.email }
+          ]
+        };
 
     const invoice = await invoicesCollection.findOne(query);
 
@@ -95,7 +102,7 @@ export async function POST(request: NextRequest) {
       invoice.invoiceNumber,
       invoice.totalAmount,
       invoice.currency,
-      invoice.dueDate?.toLocaleDateString() || 'N/A',
+      invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : 'N/A',
       invoice.companyDetails?.name || 'Your Company',
       session.user.name || 'Invoice Sender',
       `${process.env.FRONTEND_URL || 'http://localhost:3000'}/invoice/${invoice.invoiceNumber}`,
@@ -107,7 +114,7 @@ export async function POST(request: NextRequest) {
     if (result.success) {
       // Update invoice status to sent
       await invoicesCollection.updateOne(
-        { _id: invoiceId },
+        { _id: new ObjectId(invoiceId) },
         { 
           $set: { 
             status: 'sent',

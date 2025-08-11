@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { countries } from '@/data/countries';
 import { getCurrencyByCode } from '@/data/currencies';
+import FormattedNumberDisplay from '@/components/FormattedNumber';
 
 interface Invoice {
   _id: string;
@@ -136,6 +137,14 @@ export default function InvoiceViewPage() {
           items: data.data.items?.length || 0,
           itemsData: data.data.items
         });
+        
+        // Redirect draft invoices to create page for editing
+        if (data.data.status === 'draft') {
+          console.log('📝 [Invoice View] Redirecting draft invoice to create page for editing');
+          router.push(`/dashboard/services/smart-invoicing/create?id=${data.data._id}`);
+          return;
+        }
+        
         setInvoice(data.data);
       } else {
         console.error('❌ [Invoice View] Failed to load invoice:', data.message);
@@ -189,7 +198,7 @@ export default function InvoiceViewPage() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'draft': return 'bg-gray-100 text-gray-800';
-      case 'sent': return 'bg-blue-100 text-blue-800';
+      case 'sent': 
       case 'pending': return 'bg-yellow-100 text-yellow-800';
       case 'paid': return 'bg-green-100 text-green-800';
       case 'overdue': return 'bg-red-100 text-red-800';
@@ -441,7 +450,8 @@ export default function InvoiceViewPage() {
           
           <div className="flex space-x-4">
             <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(invoice.status || 'draft')}`}>
-              {invoice.status ? (invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)) : 'Draft'}
+              {invoice.status === 'sent' ? 'Pending' : 
+               invoice.status ? (invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)) : 'Draft'}
             </span>
             
             {/* Download Dropdown */}
@@ -680,7 +690,12 @@ export default function InvoiceViewPage() {
                           <div className="text-gray-900">{item.quantity}</div>
                         </td>
                         <td className="py-3 px-4">
-                          <div className="text-gray-900">{getCurrencySymbol(invoice.currency || '')}{item.unitPrice?.toFixed(2) || '0.00'}</div>
+                          <div className="text-gray-900">
+                            <FormattedNumberDisplay 
+                              value={item.unitPrice || 0} 
+                              currency={getCurrencySymbol(invoice.currency || '')}
+                            />
+                          </div>
                         </td>
                         {hasAnyDiscounts && (
                           <td className="py-3 px-4">
@@ -691,7 +706,12 @@ export default function InvoiceViewPage() {
                           <div className="text-gray-900">{item.tax || 0}%</div>
                         </td>
                         <td className="py-3 px-4 font-medium">
-                          <div className="text-gray-900">{getCurrencySymbol(invoice.currency || '')}{item.amount?.toFixed(2) || '0.00'}</div>
+                          <div className="text-gray-900">
+                            <FormattedNumberDisplay 
+                              value={item.amount || 0} 
+                              currency={getCurrencySymbol(invoice.currency || '')}
+                            />
+                          </div>
                         </td>
                       </tr>
                     );
@@ -705,19 +725,39 @@ export default function InvoiceViewPage() {
               <div className="w-64 space-y-2">
                 <div className="flex justify-between text-gray-600">
                   <span>Amount without tax</span>
-                  <span>{getCurrencySymbol(invoice.currency || '')}{invoice.subtotal?.toFixed(2) || '0.00'}</span>
+                  <span>
+                    <FormattedNumberDisplay 
+                      value={invoice.subtotal || 0} 
+                      currency={getCurrencySymbol(invoice.currency || '')}
+                    />
+                  </span>
                 </div>
                 <div className="flex justify-between text-gray-600">
                   <span>Total Tax amount</span>
-                  <span>{getCurrencySymbol(invoice.currency || '')}{invoice.totalTax?.toFixed(2) || '0.00'}</span>
+                  <span>
+                    <FormattedNumberDisplay 
+                      value={invoice.totalTax || 0} 
+                      currency={getCurrencySymbol(invoice.currency || '')}
+                    />
+                  </span>
                 </div>
                 <div className="flex justify-between text-lg font-semibold border-t pt-2">
                   <span>Total amount</span>
-                  <span>{getCurrencySymbol(invoice.currency || '')}{invoice.totalAmount?.toFixed(2) || '0.00'}</span>
+                  <span>
+                    <FormattedNumberDisplay 
+                      value={invoice.totalAmount || 0} 
+                      currency={getCurrencySymbol(invoice.currency || '')}
+                    />
+                  </span>
                 </div>
                 <div className="flex justify-between text-lg font-semibold text-blue-600">
                   <span>Due</span>
-                  <span>{getCurrencySymbol(invoice.currency || '')}{invoice.totalAmount?.toFixed(2) || '0.00'}</span>
+                  <span>
+                    <FormattedNumberDisplay 
+                      value={invoice.totalAmount || 0} 
+                      currency={getCurrencySymbol(invoice.currency || '')}
+                    />
+                  </span>
                 </div>
               </div>
             </div>

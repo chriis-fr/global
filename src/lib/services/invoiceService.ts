@@ -41,7 +41,7 @@ export class InvoiceService {
   }
 
   static getStats(invoices: Invoice[]): InvoiceStats {
-    const pendingCount = invoices.filter(inv => inv.status === 'pending').length;
+    const pendingCount = invoices.filter(inv => inv.status === 'sent' || inv.status === 'pending').length;
     const paidCount = invoices.filter(inv => inv.status === 'paid').length;
     const totalRevenue = invoices
       .filter(inv => inv.status === 'paid')
