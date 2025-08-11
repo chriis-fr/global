@@ -162,22 +162,22 @@ The Chains ERP-Global Team
 // Send invoice notification email
 export const sendInvoiceNotification = async (
   userEmail: string,
-  userName: string,
+  clientName: string,
   invoiceNumber: string,
   invoiceAmount: number,
   currency: string,
   dueDate: string,
   companyName: string,
-  senderName: string,
+  recipientName: string,
   invoiceUrl: string,
   paymentMethods: string[],
   pdfBuffer?: Buffer,
   additionalAttachments?: Array<{ filename: string; content: Buffer; contentType: string }>
 ) => {
   const mailOptions: nodemailer.SendMailOptions = {
-    from: `"${companyName} via Chains ERP-Global" <${emailConfig.auth.user}>`,
+    from: `"${companyName || 'Chains ERP-Global'} via Chains ERP-Global" <${emailConfig.auth.user}>`,
     to: userEmail,
-    subject: `Invoice #${invoiceNumber} from ${companyName}`,
+    subject: `Invoice #${invoiceNumber} from ${companyName || 'Chains ERP-Global'}`,
     headers: getEmailHeaders(),
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -188,15 +188,18 @@ export const sendInvoiceNotification = async (
               style="max-width: 150px; height: auto; border-radius: 8px;">
           </div>
           <h1 style="margin: 0; font-size: 28px;">Invoice</h1>
-          <p style="margin: 10px 0 0 0; opacity: 0.9;">Invoice #${invoiceNumber} from ${companyName}</p>
+          <p style="margin: 10px 0 0 0; opacity: 0.9;">Invoice #${invoiceNumber} from ${companyName || 'Chains ERP-Global'}</p>
         </div>
         
         <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
-          <h2 style="color: #333; margin-top: 0;">Hello ${userName},</h2>
+          <h2 style="color: #333; margin-top: 0;">Hello ${clientName},</h2>
           
           <p style="color: #666; line-height: 1.6;">
-            You have received an invoice from <strong>${companyName}</strong>. 
-            This invoice was sent by <strong>${senderName}</strong>.
+            You have received an invoice from <strong>${companyName || 'Chains ERP-Global'}</strong>.
+          </p>
+          
+          <p style="color: #666; line-height: 1.6;">
+            This invoice is intended for <strong>${recipientName}</strong>.
           </p>
           
           <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #667eea;">
@@ -204,7 +207,6 @@ export const sendInvoiceNotification = async (
             <p style="color: #666; margin: 5px 0;"><strong>Invoice Number:</strong> ${invoiceNumber}</p>
             <p style="color: #666; margin: 5px 0;"><strong>Amount:</strong> ${currency} ${invoiceAmount.toFixed(2)}</p>
             <p style="color: #666; margin: 5px 0;"><strong>Due Date:</strong> ${dueDate}</p>
-            <p style="color: #666; margin: 5px 0;"><strong>Company:</strong> ${companyName}</p>
             <p style="color: #666; margin: 5px 0;"><strong>Payment Methods:</strong> ${paymentMethods.join(', ')}</p>
           </div>
           
@@ -232,7 +234,7 @@ export const sendInvoiceNotification = async (
             </p>
             
             <p style="color: #666; font-size: 14px; margin: 10px 0 0 0;">
-              If you have any questions about this invoice, please contact ${companyName}.
+              If you have any questions about this invoice, please contact ${companyName || 'Chains ERP-Global'}.
             </p>
           </div>
         </div>
@@ -244,17 +246,18 @@ export const sendInvoiceNotification = async (
       </div>
     `,
     text: `
-Invoice from ${companyName}
+Invoice from ${companyName || 'Chains ERP-Global'}
 
-Hello ${userName},
+Hello ${clientName},
 
-You have received an invoice from ${companyName}. This invoice was sent by ${senderName}.
+You have received an invoice from ${companyName || 'Chains ERP-Global'}.
+
+This invoice is intended for ${recipientName}.
 
 Invoice Details:
 Invoice Number: ${invoiceNumber}
 Amount: ${currency} ${invoiceAmount.toFixed(2)}
 Due Date: ${dueDate}
-Company: ${companyName}
 Payment Methods: ${paymentMethods.join(', ')}
 
 View and pay your invoice online: ${invoiceUrl}
@@ -263,7 +266,7 @@ This invoice supports both traditional and cryptocurrency payments.
 
 The invoice PDF is attached to this email for your records.
 
-If you have any questions about this invoice, please contact ${companyName}.
+If you have any questions about this invoice, please contact ${companyName || 'Chains ERP-Global'}.
 
 Best regards,
 The Chains ERP-Global Team

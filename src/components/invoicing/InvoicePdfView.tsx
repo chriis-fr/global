@@ -65,8 +65,9 @@ interface InvoicePdfViewProps {
 
 const InvoicePdfView = forwardRef<HTMLDivElement, InvoicePdfViewProps>(
   ({ formData, invoiceNumber }, ref) => {
-    // Check if any items have discounts
+    // Check if any items have discounts or taxes
     const hasAnyDiscounts = formData.items.some(item => item.discount > 0);
+    const hasAnyTaxes = formData.items.some(item => item.tax > 0);
     const formatDate = (dateString: string) => {
       const date = new Date(dateString);
       return date.toLocaleDateString('en-US', { 
@@ -208,7 +209,9 @@ const InvoicePdfView = forwardRef<HTMLDivElement, InvoicePdfViewProps>(
                   {hasAnyDiscounts && (
                     <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 uppercase tracking-wider">Discount</th>
                   )}
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 uppercase tracking-wider">Tax</th>
+                  {hasAnyTaxes && (
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 uppercase tracking-wider">Tax</th>
+                  )}
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 uppercase tracking-wider">Amount</th>
                 </tr>
               </thead>
@@ -226,12 +229,14 @@ const InvoicePdfView = forwardRef<HTMLDivElement, InvoicePdfViewProps>(
                     </td>
                     {hasAnyDiscounts && (
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                        {item.discount}%
+                        {item.discount > 0 ? `${item.discount}%` : ''}
                       </td>
                     )}
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                      {item.tax}%
-                    </td>
+                    {hasAnyTaxes && (
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                        {item.tax > 0 ? `${item.tax}%` : ''}
+                      </td>
+                    )}
                     <td className="px-4 py-3 whitespace-nowrap font-medium text-sm text-gray-900">
                       {getCurrencySymbol()}{item.amount.toFixed(2)}
                     </td>

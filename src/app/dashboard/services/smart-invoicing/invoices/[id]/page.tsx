@@ -116,8 +116,9 @@ export default function InvoiceViewPage() {
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [showDownloadDropdown, setShowDownloadDropdown] = useState(false);
 
-  // Check if any items have discounts
+  // Check if any items have discounts or taxes
   const hasAnyDiscounts = invoice?.items?.some(item => (item.discount || 0) > 0) || false;
+  const hasAnyTaxes = invoice?.items?.some(item => (item.tax || 0) > 0) || false;
 
   const loadInvoice = useCallback(async (id: string) => {
     try {
@@ -323,10 +324,14 @@ export default function InvoiceViewPage() {
       csvRows.push(['']);
       
       // Items header
-      const itemHeaders = ['Description', 'Quantity', 'Unit Price', 'Tax %', 'Amount'];
+      const itemHeaders = ['Description', 'Quantity', 'Unit Price'];
       if (hasAnyDiscounts) {
-        itemHeaders.splice(3, 0, 'Discount %');
+        itemHeaders.push('Discount %');
       }
+      if (hasAnyTaxes) {
+        itemHeaders.push('Tax %');
+      }
+      itemHeaders.push('Amount');
       csvRows.push(['Invoice Items']);
       csvRows.push(itemHeaders.join(','));
       
@@ -335,13 +340,15 @@ export default function InvoiceViewPage() {
         const itemRow = [
           item.description || 'Item description',
           item.quantity?.toString() || '0',
-          `${getCurrencySymbol(invoice.currency || '')}${item.unitPrice?.toFixed(2) || '0.00'}`,
-          item.tax?.toString() || '0' + '%',
-          `${getCurrencySymbol(invoice.currency || '')}${item.amount?.toFixed(2) || '0.00'}`
+          `${getCurrencySymbol(invoice.currency || '')}${item.unitPrice?.toFixed(2) || '0.00'}`
         ];
         if (hasAnyDiscounts) {
-          itemRow.splice(3, 0, (item.discount || 0).toString() + '%');
+          itemRow.push((item.discount || 0) > 0 ? (item.discount || 0).toString() + '%' : '');
         }
+        if (hasAnyTaxes) {
+          itemRow.push((item.tax || 0) > 0 ? (item.tax || 0).toString() + '%' : '');
+        }
+        itemRow.push(`${getCurrencySymbol(invoice.currency || '')}${item.amount?.toFixed(2) || '0.00'}`);
         csvRows.push(itemRow.join(','));
       });
       
@@ -675,7 +682,9 @@ export default function InvoiceViewPage() {
                     {hasAnyDiscounts && (
                       <th className="text-left py-3 px-4 font-medium text-gray-700">Discount</th>
                     )}
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Tax</th>
+                    {hasAnyTaxes && (
+                      <th className="text-left py-3 px-4 font-medium text-gray-700">Tax</th>
+                    )}
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Amount</th>
                   </tr>
                 </thead>
@@ -699,12 +708,14 @@ export default function InvoiceViewPage() {
                         </td>
                         {hasAnyDiscounts && (
                           <td className="py-3 px-4">
-                            <div className="text-gray-900">{item.discount || 0}%</div>
+                            <div className="text-gray-900">{(item.discount || 0) > 0 ? `${item.discount || 0}%` : ''}</div>
                           </td>
                         )}
-                        <td className="py-3 px-4">
-                          <div className="text-gray-900">{item.tax || 0}%</div>
-                        </td>
+                        {hasAnyTaxes && (
+                          <td className="py-3 px-4">
+                            <div className="text-gray-900">{(item.tax || 0) > 0 ? `${item.tax || 0}%` : ''}</div>
+                          </td>
+                        )}
                         <td className="py-3 px-4 font-medium">
                           <div className="text-gray-900">
                             <FormattedNumberDisplay 
