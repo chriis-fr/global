@@ -171,7 +171,8 @@ export const sendInvoiceNotification = async (
   senderName: string,
   invoiceUrl: string,
   paymentMethods: string[],
-  pdfBuffer?: Buffer
+  pdfBuffer?: Buffer,
+  additionalAttachments?: Array<{ filename: string; content: Buffer; contentType: string }>
 ) => {
   const mailOptions: nodemailer.SendMailOptions = {
     from: `"${companyName} via Chains ERP-Global" <${emailConfig.auth.user}>`,
@@ -270,14 +271,23 @@ The Chains ERP-Global Team
   };
 
   // Add PDF attachment if provided
+  const attachments: Array<{ filename: string; content: Buffer; contentType: string }> = [];
+  
   if (pdfBuffer) {
-    mailOptions.attachments = [
-      {
-        filename: `Invoice-${invoiceNumber}.pdf`,
-        content: pdfBuffer,
-        contentType: 'application/pdf'
-      }
-    ];
+    attachments.push({
+      filename: `Invoice-${invoiceNumber}.pdf`,
+      content: pdfBuffer,
+      contentType: 'application/pdf'
+    });
+  }
+  
+  // Add additional attachments if provided
+  if (additionalAttachments && additionalAttachments.length > 0) {
+    attachments.push(...additionalAttachments);
+  }
+  
+  if (attachments.length > 0) {
+    mailOptions.attachments = attachments;
   }
 
   try {

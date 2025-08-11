@@ -108,6 +108,13 @@ export interface Invoice {
   // Additional Information
   notes?: string;
   pdfUrl?: string; // URL to generated invoice PDF
+  attachedFiles?: Array<{
+    filename: string;
+    originalName: string;
+    size: number;
+    contentType: string;
+    uploadedAt: Date;
+  }>;
   
   // Approval Workflow
   approvalWorkflow?: {

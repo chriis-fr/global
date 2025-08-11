@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
       hasAddress: !!body.address
     });
     
-    const { email, password, name, userType, phone, industry, address, taxId } = body;
+    const { email, password, name, userType, phone, industry, address, taxId, termsAgreement } = body;
 
     // Basic validation
     console.log('🔍 [SIGNUP] Validating required fields...');
@@ -28,7 +28,8 @@ export async function POST(request: NextRequest) {
       hasName: !!name,
       hasUserType: !!userType,
       hasAddress: !!address,
-      hasIndustry: !!industry
+      hasIndustry: !!industry,
+      hasTermsAgreement: !!termsAgreement
     });
     
     if (!email || !password || !name || !userType || !address) {
@@ -37,6 +38,18 @@ export async function POST(request: NextRequest) {
         { 
           success: false, 
           message: 'Email, password, name, userType, and address are required' 
+        },
+        { status: 400 }
+      );
+    }
+    
+    // Validate terms agreement
+    if (!termsAgreement || !termsAgreement.agreed) {
+      console.log('❌ [SIGNUP] Validation failed - terms agreement required');
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: 'You must agree to the Terms of Service and Privacy Policy to continue' 
         },
         { status: 400 }
       );
@@ -75,6 +88,7 @@ export async function POST(request: NextRequest) {
       industry,
       address,
       taxId,
+      termsAgreement,
       walletAddresses: [],
       settings: {
         currencyPreference: 'USD',

@@ -26,10 +26,11 @@ import {
   LayoutDashboard,
   ChevronDown,
   Search,
-  Mail
+  Mail,
+  File
 } from 'lucide-react';
 import { fiatCurrencies, cryptoCurrencies, getCurrencyByCode } from '@/data/currencies';
-import { countries } from '@/data/countries';
+import { countries, getTaxRatesByCountry } from '@/data/countries';
 import { networks } from '@/data/networks';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -167,6 +168,7 @@ export default function CreateInvoicePage() {
   const [sendingInvoice, setSendingInvoice] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
   const pdfRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Currency dropdown state
   const [showCurrencyDropdown, setShowCurrencyDropdown] = useState(false);
@@ -362,6 +364,30 @@ export default function CreateInvoicePage() {
       [field]: value
     }));
   }, []);
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    const validFiles = files.filter(file => {
+      const maxSize = 10 * 1024 * 1024; // 10MB
+      if (file.size > maxSize) {
+        alert(`File ${file.name} is too large. Maximum size is 10MB.`);
+        return false;
+      }
+      return true;
+    });
+
+    setFormData(prev => ({
+      ...prev,
+      attachedFiles: [...prev.attachedFiles, ...validFiles]
+    }));
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      attachedFiles: prev.attachedFiles.filter((_, i) => i !== index)
+    }));
+  };
 
 
 
@@ -834,6 +860,24 @@ export default function CreateInvoicePage() {
         pdfSize: pdfBase64.length
       });
       
+      // Convert attached files to base64
+      const attachedFilesBase64 = await Promise.all(
+        formData.attachedFiles.map(async (file) => {
+          return new Promise<{ filename: string; content: string; contentType: string }>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const base64 = (reader.result as string).split(',')[1];
+              resolve({
+                filename: file.name,
+                content: base64,
+                contentType: file.type
+              });
+            };
+            reader.readAsDataURL(file);
+          });
+        })
+      );
+
       // Send invoice via email
       const response = await fetch('/api/invoices/send', {
         method: 'POST',
@@ -843,7 +887,8 @@ export default function CreateInvoicePage() {
         body: JSON.stringify({
           invoiceId: savedInvoice?._id || formData._id,
           recipientEmail: formData.clientEmail,
-          pdfBuffer: pdfBase64
+          pdfBuffer: pdfBase64,
+          attachedFiles: attachedFilesBase64
         }),
       });
 
@@ -1706,6 +1751,15 @@ export default function CreateInvoicePage() {
         total: invoiceData.total
       });
 
+      // Convert File objects to metadata for database storage
+      const attachedFilesMetadata = invoiceData.attachedFiles.map(file => ({
+        filename: file.name,
+        originalName: file.name,
+        size: file.size,
+        contentType: file.type,
+        uploadedAt: new Date()
+      }));
+
       const response = await fetch('/api/invoices', {
         method: 'POST',
         headers: {
@@ -1713,6 +1767,7 @@ export default function CreateInvoicePage() {
         },
         body: JSON.stringify({
           ...invoiceData,
+          attachedFiles: attachedFilesMetadata,
           status: 'pending', // Set as pending when sent
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
@@ -2359,28 +2414,77 @@ export default function CreateInvoicePage() {
                         />
                       </td>
                       <td className="py-3 px-4">
-                        <input
-                          type="number"
-                          value={item.discount}
-                          onChange={(e) => handleItemChange(index, 'discount', parseFloat(e.target.value) || 0)}
-                          className="w-20 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                        />
-                        <span className="text-gray-500 ml-1">%</span>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            value={item.discount}
+                            onChange={(e) => handleItemChange(index, 'discount', parseFloat(e.target.value) || 0)}
+                            className="w-20 px-2 pr-6 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                          />
+                          <span className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">%</span>
+                        </div>
                       </td>
                       <td className="py-3 px-4">
-                        <input
-                          type="number"
-                          value={item.tax}
-                          onChange={(e) => handleItemChange(index, 'tax', parseFloat(e.target.value) || 0)}
-                          className="w-20 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                        />
-                        <span className="text-gray-500 ml-1">%</span>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            value={item.tax}
+                            onChange={(e) => handleItemChange(index, 'tax', parseFloat(e.target.value) || 0)}
+                            className="w-20 px-2 pr-6 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                          />
+                          <span className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">%</span>
+                        </div>
+                        {/* Multi-Tax Rate Selector */}
+                        <div className="mt-1">
+                          <select
+                            onChange={(e) => {
+                              const selectedTax = e.target.value;
+                              if (selectedTax) {
+                                const [, rate] = selectedTax.split(':');
+                                const taxRate = parseFloat(rate);
+                                if (taxRate > 0) {
+                                  handleItemChange(index, 'tax', taxRate);
+                                }
+                              }
+                            }}
+                            className="w-full text-xs px-1 py-0.5 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            value=""
+                          >
+                            <option value="">Select tax type</option>
+                            <optgroup label="Common Rates">
+                              <option value="custom:0">0% - No Tax</option>
+                              <option value="custom:5">5% - Reduced Rate</option>
+                              <option value="custom:10">10% - Standard Rate</option>
+                              <option value="custom:16">16% - Kenya VAT</option>
+                              <option value="custom:20">20% - High Rate</option>
+                              <option value="custom:25">25% - Luxury Rate</option>
+                              <option value="custom:30">30% - Premium Rate</option>
+                            </optgroup>
+                            <optgroup label="Country Tax Rates">
+                              {(() => {
+                                const countryTaxes = getTaxRatesByCountry(formData.companyAddress.country);
+                                if (countryTaxes) {
+                                  return (
+                                    <>
+                                      {countryTaxes.vat && <option value={`vat:${countryTaxes.vat}`}>VAT {countryTaxes.vat}%</option>}
+                                      {countryTaxes.gst && <option value={`gst:${countryTaxes.gst}`}>GST {countryTaxes.gst}%</option>}
+                                      {countryTaxes.salesTax && <option value={`salesTax:${countryTaxes.salesTax}`}>Sales Tax {countryTaxes.salesTax}%</option>}
+                                      {countryTaxes.corporateTax && <option value={`corporateTax:${countryTaxes.corporateTax}`}>Corporate Tax {countryTaxes.corporateTax}%</option>}
+                                      {countryTaxes.personalTax && <option value={`personalTax:${countryTaxes.personalTax}`}>Personal Tax {countryTaxes.personalTax}%</option>}
+                                    </>
+                                  );
+                                }
+                                return null;
+                              })()}
+                            </optgroup>
+                          </select>
+                        </div>
                       </td>
                       <td className="py-3 px-4 font-medium">
                         {getCurrencySymbol()}{item.amount.toFixed(2)}
@@ -2440,11 +2544,41 @@ export default function CreateInvoicePage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Attached files</label>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors cursor-pointer">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  multiple
+                  accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <div 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors cursor-pointer"
+                >
                   <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
                   <p className="text-sm text-gray-600">No file attached yet.</p>
                   <p className="text-xs text-gray-500 mt-1">Click to upload files</p>
                 </div>
+                {formData.attachedFiles.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    {formData.attachedFiles.map((file, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                        <div className="flex items-center space-x-2">
+                          <File className="h-4 w-4 text-gray-500" />
+                          <span className="text-sm text-gray-700">{file.name}</span>
+                          <span className="text-xs text-gray-500">({(file.size / 1024).toFixed(1)} KB)</span>
+                        </div>
+                        <button
+                          onClick={() => handleRemoveFile(index)}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>

@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { invoiceId, recipientEmail, pdfBuffer } = body;
+    const { invoiceId, recipientEmail, pdfBuffer, attachedFiles } = body;
 
     if (!invoiceId || !recipientEmail) {
       return NextResponse.json(
@@ -74,6 +74,20 @@ export async function POST(request: NextRequest) {
       pdfAttachment = Buffer.from(pdfBuffer, 'base64');
     }
 
+    // Convert attached files to buffers
+    const additionalAttachments: Array<{ filename: string; content: Buffer; contentType: string }> = [];
+    if (attachedFiles && Array.isArray(attachedFiles)) {
+      for (const file of attachedFiles) {
+        if (file.filename && file.content && file.contentType) {
+          additionalAttachments.push({
+            filename: file.filename,
+            content: Buffer.from(file.content, 'base64'),
+            contentType: file.contentType
+          });
+        }
+      }
+    }
+
     // Send invoice email
     const result = await sendInvoiceNotification(
       recipientEmail,
@@ -86,7 +100,8 @@ export async function POST(request: NextRequest) {
       session.user.name || 'Invoice Sender',
       `${process.env.FRONTEND_URL || 'http://localhost:3000'}/invoice/${invoice.invoiceNumber}`,
       paymentMethods,
-      pdfAttachment
+      pdfAttachment,
+      additionalAttachments
     );
 
     if (result.success) {

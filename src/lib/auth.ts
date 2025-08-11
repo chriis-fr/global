@@ -131,6 +131,11 @@ export const authOptions: NextAuthOptions = {
               postalCode: googleUser.addresses?.[0]?.postalCode || ''
             },
             taxId: '',
+            termsAgreement: {
+              agreed: true,
+              agreedAt: new Date(),
+              termsVersion: '1.0'
+            },
             walletAddresses: [],
                          settings: {
                currencyPreference: 'USD',

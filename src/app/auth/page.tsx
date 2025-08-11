@@ -38,7 +38,8 @@ export default function AuthPage() {
       country: defaultCountry.code,
       postalCode: ''
     },
-    taxId: ''
+    taxId: '',
+    agreeToTerms: false
   })
 
   const [showCountryDropdown, setShowCountryDropdown] = useState(false)
@@ -276,6 +277,14 @@ export default function AuthPage() {
       } else {
         // Handle signup
         console.log('📝 [Auth] Preparing signup data...')
+        
+        // Validate terms agreement
+        if (!formData.agreeToTerms) {
+          setError('You must agree to the Terms of Service and Privacy Policy to continue.')
+          setLoading(false)
+          return
+        }
+        
         const signupData = {
           email: formData.email,
           password: formData.password,
@@ -284,7 +293,12 @@ export default function AuthPage() {
           phone: cleanPhoneNumber(formData.phone),
           industry: formData.industry,
           address: formData.address,
-          taxId: formData.taxId
+          taxId: formData.taxId,
+          termsAgreement: {
+            agreed: true,
+            agreedAt: new Date(),
+            termsVersion: '1.0'
+          }
         }
         console.log('📤 [Auth] Sending signup request with data:', {
           email: signupData.email,
@@ -783,6 +797,51 @@ export default function AuthPage() {
                     >
                       {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                     </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Terms Agreement (Signup only) */}
+            <AnimatePresence mode="wait">
+              {!isLogin && (
+                <motion.div
+                  key="terms-agreement"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="space-y-2"
+                >
+                  <div className="flex items-start space-x-3">
+                    <input
+                      type="checkbox"
+                      name="agreeToTerms"
+                      checked={formData.agreeToTerms}
+                      onChange={(e) => setFormData(prev => ({ ...prev, agreeToTerms: e.target.checked }))}
+                      className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      required
+                    />
+                    <label className="text-sm text-blue-200 leading-relaxed">
+                      I agree to the{' '}
+                      <a
+                        href="/terms"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-400 hover:text-blue-300 underline"
+                      >
+                        Terms of Service
+                      </a>
+                      {' '}and{' '}
+                      <a
+                        href="/privacy"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-400 hover:text-blue-300 underline"
+                      >
+                        Privacy Policy
+                      </a>
+                    </label>
                   </div>
                 </motion.div>
               )}

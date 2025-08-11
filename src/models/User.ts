@@ -141,6 +141,13 @@ export interface User {
   createdAt: Date;
   updatedAt: Date;
   lastLoginAt?: Date;
+  
+  // Legal Agreements
+  termsAgreement?: {
+    agreed: boolean;
+    agreedAt: Date;
+    termsVersion: string;
+  };
   logos?: Array<{
     id: string;
     name: string;
@@ -174,6 +181,11 @@ export interface CreateUserInput {
     completedSteps?: string[];
     serviceOnboarding?: Partial<ServiceOnboarding>;
   };
+  termsAgreement?: {
+    agreed: boolean;
+    agreedAt: Date;
+    termsVersion: string;
+  };
 }
 
 export interface UpdateUserInput {
@@ -201,4 +213,9 @@ export interface UpdateUserInput {
   status?: 'pending' | 'active' | 'suspended';
   emailVerified?: boolean;
   lastLoginAt?: Date;
+  termsAgreement?: {
+    agreed: boolean;
+    agreedAt: Date;
+    termsVersion: string;
+  };
 } 
