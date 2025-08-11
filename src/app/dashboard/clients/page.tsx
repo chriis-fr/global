@@ -11,8 +11,10 @@ import {
   Mail,
   Phone,
   MapPin,
-  ArrowLeft
+  ArrowLeft,
+  ChevronDown
 } from 'lucide-react';
+import { countries } from '@/data/countries';
 
 interface Client {
   _id: string;
@@ -39,11 +41,19 @@ export default function ClientsPage() {
     name: '',
     email: '',
     phone: '',
-    address: '',
     company: '',
     taxId: '',
-    notes: ''
+    notes: '',
+    address: {
+      street: '',
+      city: '',
+      state: '',
+      zipCode: '',
+      country: ''
+    }
   });
+  const [showCountryDropdown, setShowCountryDropdown] = useState(false);
+  const [countrySearch, setCountrySearch] = useState('');
 
   const fetchClients = useCallback(async () => {
     try {
@@ -76,12 +86,18 @@ export default function ClientsPage() {
       const url = editingClient ? `/api/clients/${editingClient._id}` : '/api/clients';
       const method = editingClient ? 'PUT' : 'POST';
       
+      // Convert structured address to string format for API
+      const clientData = {
+        ...formData,
+        address: `${formData.address.street}, ${formData.address.city}, ${formData.address.state} ${formData.address.zipCode}, ${formData.address.country}`.replace(/^,\s*/, '').replace(/,\s*,/g, ',').replace(/,\s*$/, '')
+      };
+      
       const response = await fetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(clientData),
       });
 
       const result = await response.json();
@@ -126,12 +142,54 @@ export default function ClientsPage() {
   };
 
   const handleEdit = (client: Client) => {
+    // Parse the address string to extract components
+    let street = client.address || '';
+    let city = '';
+    let state = '';
+    let zipCode = '';
+    let country = '';
+
+    if (client.address) {
+      const addressParts = client.address.split(',').map(part => part.trim());
+      if (addressParts.length >= 4) {
+        street = addressParts[0];
+        city = addressParts[1];
+        const stateZip = addressParts[2].split(' ');
+        if (stateZip.length >= 2) {
+          state = stateZip.slice(0, -1).join(' ');
+          zipCode = stateZip[stateZip.length - 1];
+        } else {
+          state = addressParts[2];
+        }
+        country = addressParts[3];
+      } else if (addressParts.length === 3) {
+        street = addressParts[0];
+        city = addressParts[1];
+        const stateZip = addressParts[2].split(' ');
+        if (stateZip.length >= 2) {
+          state = stateZip.slice(0, -1).join(' ');
+          zipCode = stateZip[stateZip.length - 1];
+        } else {
+          state = addressParts[2];
+        }
+      } else if (addressParts.length === 2) {
+        street = addressParts[0];
+        city = addressParts[1];
+      }
+    }
+
     setEditingClient(client);
     setFormData({
       name: client.name,
       email: client.email,
       phone: client.phone || '',
-      address: client.address || '',
+      address: {
+        street,
+        city,
+        state,
+        zipCode,
+        country
+      },
       company: client.company || '',
       taxId: client.taxId || '',
       notes: client.notes || ''
@@ -144,7 +202,13 @@ export default function ClientsPage() {
       name: '',
       email: '',
       phone: '',
-      address: '',
+      address: {
+        street: '',
+        city: '',
+        state: '',
+        zipCode: '',
+        country: ''
+      },
       company: '',
       taxId: '',
       notes: ''
@@ -402,15 +466,119 @@ export default function ClientsPage() {
 
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Address
+                      Street Address
                     </label>
-                    <textarea
-                      value={formData.address}
-                      onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                      rows={3}
+                    <input
+                      type="text"
+                      value={formData.address.street}
+                      onChange={(e) => setFormData({ ...formData, address: { ...formData.address, street: e.target.value } })}
                       className="w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500 text-sm sm:text-base"
-                      placeholder="Enter full address"
+                      placeholder="Enter street address"
                     />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        City
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.address.city}
+                        onChange={(e) => setFormData({ ...formData, address: { ...formData.address, city: e.target.value } })}
+                        className="w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500 text-sm sm:text-base"
+                        placeholder="Enter city"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        State
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.address.state}
+                        onChange={(e) => setFormData({ ...formData, address: { ...formData.address, state: e.target.value } })}
+                        className="w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500 text-sm sm:text-base"
+                        placeholder="Enter state"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        ZIP Code
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.address.zipCode}
+                        onChange={(e) => setFormData({ ...formData, address: { ...formData.address, zipCode: e.target.value } })}
+                        className="w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500 text-sm sm:text-base"
+                        placeholder="Enter ZIP code"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Country
+                      </label>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setShowCountryDropdown(!showCountryDropdown)}
+                          className="w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-left flex items-center justify-between bg-white"
+                        >
+                          <span className={formData.address.country ? 'text-gray-900' : 'text-gray-500'}>
+                            {formData.address.country 
+                              ? countries.find(c => c.code === formData.address.country)?.name 
+                              : 'Select Country'}
+                          </span>
+                          <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${showCountryDropdown ? 'rotate-180' : ''}`} />
+                        </button>
+                        
+                        {showCountryDropdown && (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg max-h-60 overflow-y-auto z-20 shadow-lg">
+                            {/* Search input */}
+                            <div className="p-2 border-b border-gray-200 bg-gray-50">
+                              <div className="relative">
+                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                <input
+                                  type="text"
+                                  value={countrySearch}
+                                  onChange={(e) => setCountrySearch(e.target.value)}
+                                  placeholder="Search countries..."
+                                  className="w-full pl-10 pr-3 py-2 bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                              </div>
+                            </div>
+                            
+                            {/* Country list */}
+                            <div className="max-h-48 overflow-y-auto">
+                              {countries
+                                .filter(country => 
+                                  country.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                                  country.phoneCode.includes(countrySearch) ||
+                                  country.code.toLowerCase().includes(countrySearch.toLowerCase())
+                                )
+                                .map(country => (
+                                <button
+                                  key={country.code}
+                                  type="button"
+                                  onClick={() => {
+                                    setFormData({ ...formData, address: { ...formData.address, country: country.code } });
+                                    setShowCountryDropdown(false);
+                                    setCountrySearch('');
+                                  }}
+                                  className="w-full px-3 py-2 text-left text-gray-700 hover:bg-gray-100 transition-colors flex items-center justify-between border-b border-gray-100 last:border-b-0"
+                                >
+                                  <span className="text-sm">{country.name}</span>
+                                  <span className="text-blue-600 text-xs font-medium">{country.phoneCode}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">

@@ -23,6 +23,7 @@ export async function POST(request: NextRequest) {
       companyAddress,
       companyTaxNumber,
       clientName,
+      clientCompany,
       clientEmail,
       clientAddress,
       currency,
@@ -119,6 +120,7 @@ export async function POST(request: NextRequest) {
       
       // Client information
       clientName: clientName,
+      clientCompany: clientCompany,
       clientEmail: clientEmail,
       clientPhone: clientPhone,
       clientAddress: {
@@ -184,7 +186,7 @@ export async function POST(request: NextRequest) {
       },
       clientDetails: {
         email: clientEmail,
-        companyName: clientName,
+        companyName: clientCompany || clientName,
         firstName: '',
         lastName: '',
         country: clientAddress?.country || '',

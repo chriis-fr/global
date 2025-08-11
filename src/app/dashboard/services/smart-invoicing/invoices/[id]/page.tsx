@@ -294,7 +294,12 @@ export default function InvoiceViewPage() {
       
       // Client information
       csvRows.push(['Client Information']);
-      csvRows.push(['Client Name', invoice.clientName || invoice.clientDetails?.companyName || 'N/A']);
+      if (invoice.clientDetails?.companyName) {
+        csvRows.push(['Company', invoice.clientDetails.companyName]);
+        csvRows.push(['Contact Person', invoice.clientName || 'N/A']);
+      } else {
+        csvRows.push(['Client Name', invoice.clientName || 'N/A']);
+      }
       csvRows.push(['Email', invoice.clientEmail || 'N/A']);
       csvRows.push(['Phone', invoice.clientPhone || 'N/A']);
       
@@ -584,7 +589,14 @@ export default function InvoiceViewPage() {
                   Bill To
                 </h3>
                 <div className="space-y-2">
-                  <div className="font-medium text-gray-900">{invoice.clientName || invoice.clientDetails?.companyName || 'Client Name'}</div>
+                  <div className="font-medium text-gray-900">
+                    {invoice.clientDetails?.companyName ? invoice.clientDetails.companyName : invoice.clientName || 'Client Name'}
+                  </div>
+                  {invoice.clientDetails?.companyName && (
+                    <div className="text-gray-600">
+                      Attn: {invoice.clientName || 'Client Name'}
+                    </div>
+                  )}
                   <div className="text-gray-600">
                     {invoice.clientAddress?.street || invoice.clientDetails?.addressLine1 ? <div>{invoice.clientAddress?.street || invoice.clientDetails?.addressLine1}</div> : null}
                     {(invoice.clientAddress?.city || invoice.clientDetails?.city || invoice.clientAddress?.state || invoice.clientDetails?.region || invoice.clientAddress?.zipCode || invoice.clientDetails?.postalCode) && (

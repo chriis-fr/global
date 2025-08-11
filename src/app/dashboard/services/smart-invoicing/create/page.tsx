@@ -68,6 +68,7 @@ interface InvoiceFormData {
   };
   companyTaxNumber: string;
   clientName: string;
+  clientCompany?: string;
   clientEmail: string;
   clientPhone: string;
   clientAddress: {
@@ -120,6 +121,7 @@ const defaultInvoiceData: InvoiceFormData = {
   },
   companyTaxNumber: '',
   clientName: '',
+  clientCompany: '',
   clientEmail: '',
   clientPhone: '',
   clientAddress: {
@@ -404,17 +406,54 @@ export default function CreateInvoicePage() {
 
 
   const selectClient = (client: Client) => {
+    // Parse the address string to extract components
+    let street = client.address || '';
+    let city = '';
+    let state = '';
+    let zipCode = '';
+    let country = '';
+
+    if (client.address) {
+      const addressParts = client.address.split(',').map(part => part.trim());
+      if (addressParts.length >= 4) {
+        street = addressParts[0];
+        city = addressParts[1];
+        const stateZip = addressParts[2].split(' ');
+        if (stateZip.length >= 2) {
+          state = stateZip.slice(0, -1).join(' ');
+          zipCode = stateZip[stateZip.length - 1];
+        } else {
+          state = addressParts[2];
+        }
+        country = addressParts[3];
+      } else if (addressParts.length === 3) {
+        street = addressParts[0];
+        city = addressParts[1];
+        const stateZip = addressParts[2].split(' ');
+        if (stateZip.length >= 2) {
+          state = stateZip.slice(0, -1).join(' ');
+          zipCode = stateZip[stateZip.length - 1];
+        } else {
+          state = addressParts[2];
+        }
+      } else if (addressParts.length === 2) {
+        street = addressParts[0];
+        city = addressParts[1];
+      }
+    }
+
     setFormData(prev => ({
       ...prev,
       clientName: client.name,
+      clientCompany: client.company || '',
       clientEmail: client.email,
       clientPhone: client.phone || '',
       clientAddress: {
-        street: client.address || '',
-        city: '',
-        state: '',
-        zipCode: '',
-        country: ''
+        street,
+        city,
+        state,
+        zipCode,
+        country
       }
     }));
     setShowClientSelector(false);
@@ -646,8 +685,13 @@ export default function CreateInvoicePage() {
                 Bill To
               </h3>
               <div style="font-weight: 500; margin-bottom: 8px;">
-                ${formData.clientName || 'Client Name'}
+                ${formData.clientCompany ? formData.clientCompany : formData.clientName || 'Client Name'}
               </div>
+              ${formData.clientCompany ? `
+              <div style="color: #6b7280; font-size: 14px; margin-bottom: 8px;">
+                Attn: ${formData.clientName || 'Client Name'}
+              </div>
+              ` : ''}
               <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
                 <div>${formData.clientAddress.street || 'Street Address'}</div>
                 <div>${formData.clientAddress.city || 'City'}, ${formData.clientAddress.state || 'State'} ${formData.clientAddress.zipCode || 'ZIP'}</div>
@@ -1134,8 +1178,13 @@ export default function CreateInvoicePage() {
                 Bill To
               </h3>
               <div style="font-weight: 500; margin-bottom: 8px;">
-                ${formData.clientName || 'Client Name'}
+                ${formData.clientCompany ? formData.clientCompany : formData.clientName || 'Client Name'}
               </div>
+              ${formData.clientCompany ? `
+              <div style="color: #6b7280; font-size: 14px; margin-bottom: 8px;">
+                Attn: ${formData.clientName || 'Client Name'}
+              </div>
+              ` : ''}
               <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
                 <div>${formData.clientAddress.street || 'Street Address'}</div>
                 <div>${formData.clientAddress.city || 'City'}, ${formData.clientAddress.state || 'State'} ${formData.clientAddress.zipCode || 'ZIP'}</div>
@@ -1463,7 +1512,12 @@ export default function CreateInvoicePage() {
       
       // Client information
       csvRows.push(['Client Information']);
-      csvRows.push(['Client Name', formData.clientName]);
+      if (formData.clientCompany) {
+        csvRows.push(['Company', formData.clientCompany]);
+        csvRows.push(['Contact Person', formData.clientName]);
+      } else {
+        csvRows.push(['Client Name', formData.clientName]);
+      }
       csvRows.push(['Email', formData.clientEmail]);
       csvRows.push(['Phone', formData.clientPhone]);
       csvRows.push(['Address', `${formData.clientAddress.street}, ${formData.clientAddress.city}, ${formData.clientAddress.state} ${formData.clientAddress.zipCode}, ${formData.clientAddress.country}`]);
@@ -1700,8 +1754,13 @@ export default function CreateInvoicePage() {
                 Bill To
               </h3>
               <div style="font-weight: 500; margin-bottom: 8px;">
-                ${formData.clientName || 'Client Name'}
+                ${formData.clientCompany ? formData.clientCompany : formData.clientName || 'Client Name'}
               </div>
+              ${formData.clientCompany ? `
+              <div style="color: #6b7280; font-size: 14px; margin-bottom: 8px;">
+                Attn: ${formData.clientName || 'Client Name'}
+              </div>
+              ` : ''}
               <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
                 <div>${formData.clientAddress.street || 'Street Address'}</div>
                 <div>${formData.clientAddress.city || 'City'}, ${formData.clientAddress.state || 'State'} ${formData.clientAddress.zipCode || 'ZIP'}</div>
@@ -2207,7 +2266,12 @@ export default function CreateInvoicePage() {
                               onClick={() => selectClient(client)}
                               className="w-full text-left p-2 hover:bg-gray-100 rounded border"
                             >
-                              <div className="font-medium">{client.name}</div>
+                              <div className="font-medium">
+                                {client.company ? client.company : client.name}
+                              </div>
+                              {client.company && (
+                                <div className="text-sm text-gray-500">Attn: {client.name}</div>
+                              )}
                               <div className="text-sm text-gray-600">{client.email}</div>
                             </button>
                           ))}
@@ -2230,8 +2294,13 @@ export default function CreateInvoicePage() {
 
                 <div className="space-y-2">
                   <div className="font-medium">
-                    {formData.clientName || 'Client Name'}
+                    {formData.clientCompany ? formData.clientCompany : formData.clientName || 'Client Name'}
                   </div>
+                  {formData.clientCompany && (
+                    <div className="text-gray-600">
+                      Attn: {formData.clientName || 'Client Name'}
+                    </div>
+                  )}
                   <div className="text-gray-600 space-y-1">
                     <div>{formData.clientAddress.street || 'Street Address'}</div>
                     <div className="flex space-x-2">
@@ -2974,22 +3043,46 @@ function ClientCreationForm({
     name: '',
     email: '',
     phone: '',
-    address: '',
     company: '',
     taxId: '',
-    notes: ''
+    notes: '',
+    address: {
+      street: '',
+      city: '',
+      state: '',
+      zipCode: '',
+      country: ''
+    }
   });
+  const [showCountryDropdown, setShowCountryDropdown] = useState(false);
+  const [countrySearch, setCountrySearch] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(formData);
+    // Convert structured address to string format for backward compatibility
+    const clientData = {
+      ...formData,
+      address: `${formData.address.street}, ${formData.address.city}, ${formData.address.state} ${formData.address.zipCode}, ${formData.address.country}`.replace(/^,\s*/, '').replace(/,\s*,/g, ',').replace(/,\s*$/, '')
+    };
+    onSubmit(clientData);
   };
 
   const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    if (field.startsWith('address.')) {
+      const addressField = field.split('.')[1];
+      setFormData(prev => ({
+        ...prev,
+        address: {
+          ...prev.address,
+          [addressField]: value
+        }
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [field]: value
+      }));
+    }
   };
 
   return (
@@ -3037,13 +3130,106 @@ function ClientCreationForm({
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-        <textarea
-          value={formData.address}
-          onChange={(e) => handleInputChange('address', e.target.value)}
-          rows={3}
+        <label className="block text-sm font-medium text-gray-700 mb-1">Street Address</label>
+        <input
+          type="text"
+          value={formData.address.street}
+          onChange={(e) => handleInputChange('address.street', e.target.value)}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+          <input
+            type="text"
+            value={formData.address.city}
+            onChange={(e) => handleInputChange('address.city', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+          <input
+            type="text"
+            value={formData.address.state}
+            onChange={(e) => handleInputChange('address.state', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">ZIP Code</label>
+          <input
+            type="text"
+            value={formData.address.zipCode}
+            onChange={(e) => handleInputChange('address.zipCode', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowCountryDropdown(!showCountryDropdown)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-left flex items-center justify-between bg-white"
+            >
+              <span className={formData.address.country ? 'text-gray-900' : 'text-gray-500'}>
+                {formData.address.country 
+                  ? countries.find(c => c.code === formData.address.country)?.name 
+                  : 'Select Country'}
+              </span>
+              <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${showCountryDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            
+            {showCountryDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md max-h-60 overflow-y-auto z-20 shadow-lg">
+                {/* Search input */}
+                <div className="p-2 border-b border-gray-200 bg-gray-50">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input
+                      type="text"
+                      value={countrySearch}
+                      onChange={(e) => setCountrySearch(e.target.value)}
+                      placeholder="Search countries..."
+                      className="w-full pl-10 pr-3 py-2 bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+                
+                {/* Country list */}
+                <div className="max-h-48 overflow-y-auto">
+                  {countries
+                    .filter(country => 
+                      country.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                      country.phoneCode.includes(countrySearch) ||
+                      country.code.toLowerCase().includes(countrySearch.toLowerCase())
+                    )
+                    .map(country => (
+                    <button
+                      key={country.code}
+                      type="button"
+                      onClick={() => {
+                        handleInputChange('address.country', country.code);
+                        setShowCountryDropdown(false);
+                        setCountrySearch('');
+                      }}
+                      className="w-full px-3 py-2 text-left text-gray-700 hover:bg-gray-100 transition-colors flex items-center justify-between border-b border-gray-100 last:border-b-0"
+                    >
+                      <span className="text-sm">{country.name}</span>
+                      <span className="text-blue-600 text-xs font-medium">{country.phoneCode}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
       
       <div>
@@ -3356,6 +3542,7 @@ function ClientEditForm({
 }) {
   const [editData, setEditData] = useState({
     clientName: formData.clientName,
+    clientCompany: formData.clientCompany,
     clientEmail: formData.clientEmail,
     clientPhone: formData.clientPhone,
     clientAddress: {
@@ -3402,6 +3589,17 @@ function ClientEditForm({
           onChange={(e) => handleInputChange('clientName', e.target.value)}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           required
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Company</label>
+        <input
+          type="text"
+          value={editData.clientCompany}
+          onChange={(e) => handleInputChange('clientCompany', e.target.value)}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder="Company name (optional)"
         />
       </div>
 

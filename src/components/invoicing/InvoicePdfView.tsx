@@ -32,6 +32,7 @@ interface InvoiceFormData {
   companyTaxNumber: string;
   companyLogo?: string;
   clientName: string;
+  clientCompany?: string;
   clientEmail: string;
   clientPhone: string;
   clientAddress: {
@@ -165,8 +166,13 @@ const InvoicePdfView = forwardRef<HTMLDivElement, InvoicePdfViewProps>(
               </h3>
               <div className="space-y-2">
                 <div className="font-medium">
-                  {formData.clientName || 'Client Name'}
+                  {formData.clientCompany ? formData.clientCompany : formData.clientName || 'Client Name'}
                 </div>
+                {formData.clientCompany && (
+                  <div className="text-gray-600">
+                    Attn: {formData.clientName || 'Client Name'}
+                  </div>
+                )}
                 <div className="text-gray-600 space-y-1">
                   <div>{formData.clientAddress.street || 'Street Address'}</div>
                   <div className="flex flex-col sm:flex-row sm:space-x-2">
