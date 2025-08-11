@@ -98,13 +98,13 @@ export async function POST(request: NextRequest) {
     // Send invoice email
     const result = await sendInvoiceNotification(
       recipientEmail,
-      invoice.clientDetails?.name || 'Valued Customer', // Client name for greeting
+      invoice.clientDetails?.name || '', // Client name for greeting
       invoice.invoiceNumber,
       invoice.totalAmount,
       invoice.currency,
       invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : 'N/A',
       invoice.companyDetails?.name || (isOrganization ? 'Your Company' : ''), // Company name (empty for individuals)
-      invoice.clientDetails?.companyName || invoice.clientDetails?.name || 'Valued Customer', // Recipient name/company
+      invoice.clientDetails?.companyName || invoice.clientDetails?.name || '', // Recipient name/company
       `${process.env.FRONTEND_URL || 'http://localhost:3000'}/invoice/${invoice.invoiceNumber}`,
       paymentMethods,
       pdfAttachment,

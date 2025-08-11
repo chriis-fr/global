@@ -4,6 +4,7 @@ import { forwardRef } from 'react';
 import Image from 'next/image';
 import { Building2, User, Calendar, Clock } from 'lucide-react';
 import { getCurrencyByCode } from '@/data/currencies';
+import { countries } from '@/data/countries';
 
 interface InvoiceItem {
   id: string;
@@ -145,7 +146,7 @@ const InvoicePdfView = forwardRef<HTMLDivElement, InvoicePdfViewProps>(
                     <span>{formData.companyAddress.state || 'State'}</span>
                     <span>{formData.companyAddress.zipCode || 'ZIP'}</span>
                   </div>
-                  <div>{formData.companyAddress.country || 'Country'}</div>
+                  <div>{formData.companyAddress.country ? countries.find(c => c.code === formData.companyAddress.country)?.name || formData.companyAddress.country : 'Country'}</div>
                 </div>
                 <div className="text-gray-600">
                   Tax: {formData.companyTaxNumber || 'Tax Number'}
@@ -181,7 +182,7 @@ const InvoicePdfView = forwardRef<HTMLDivElement, InvoicePdfViewProps>(
                     <span>{formData.clientAddress.state || 'State'}</span>
                     <span>{formData.clientAddress.zipCode || 'ZIP'}</span>
                   </div>
-                  <div>{formData.clientAddress.country || 'Country'}</div>
+                  <div>{formData.clientAddress.country ? countries.find(c => c.code === formData.clientAddress.country)?.name || formData.clientAddress.country : 'Country'}</div>
                 </div>
                 <div className="text-gray-600">
                   {formData.clientEmail || 'Email'}

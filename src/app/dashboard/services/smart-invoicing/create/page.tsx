@@ -863,7 +863,7 @@ export default function CreateInvoicePage() {
               <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
                 <div>${formData.companyAddress.street || 'Street Address'}</div>
                 <div>${formData.companyAddress.city || 'City'}, ${formData.companyAddress.state || 'State'} ${formData.companyAddress.zipCode || 'ZIP'}</div>
-                <div>${formData.companyAddress.country || 'Country'}</div>
+                <div>${formData.companyAddress.country ? countries.find(c => c.code === formData.companyAddress.country)?.name || formData.companyAddress.country : 'Country'}</div>
                 <div>Tax: ${formData.companyTaxNumber || 'Tax Number'}</div>
                 <div>${formData.companyEmail || 'Email'}</div>
                 <div>${formData.companyPhone || 'Phone'}</div>
@@ -887,7 +887,7 @@ export default function CreateInvoicePage() {
               <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
                 <div>${formData.clientAddress.street || 'Street Address'}</div>
                 <div>${formData.clientAddress.city || 'City'}, ${formData.clientAddress.state || 'State'} ${formData.clientAddress.zipCode || 'ZIP'}</div>
-                <div>${formData.clientAddress.country || 'Country'}</div>
+                <div>${formData.clientAddress.country ? countries.find(c => c.code === formData.clientAddress.country)?.name || formData.clientAddress.country : 'Country'}</div>
                 <div>${formData.clientEmail || 'Email'}</div>
                 <div>${formData.clientPhone || 'Phone'}</div>
               </div>
@@ -1349,7 +1349,7 @@ export default function CreateInvoicePage() {
               <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
                 <div>${formData.companyAddress.street || 'Street Address'}</div>
                 <div>${formData.companyAddress.city || 'City'}, ${formData.companyAddress.state || 'State'} ${formData.companyAddress.zipCode || 'ZIP'}</div>
-                <div>${formData.companyAddress.country || 'Country'}</div>
+                <div>${formData.companyAddress.country ? countries.find(c => c.code === formData.companyAddress.country)?.name || formData.companyAddress.country : 'Country'}</div>
                 <div>Tax: ${formData.companyTaxNumber || 'Tax Number'}</div>
                 <div>${formData.companyEmail || 'Email'}</div>
                 <div>${formData.companyPhone || 'Phone'}</div>
@@ -1373,7 +1373,7 @@ export default function CreateInvoicePage() {
               <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
                 <div>${formData.clientAddress.street || 'Street Address'}</div>
                 <div>${formData.clientAddress.city || 'City'}, ${formData.clientAddress.state || 'State'} ${formData.clientAddress.zipCode || 'ZIP'}</div>
-                <div>${formData.clientAddress.country || 'Country'}</div>
+                <div>${formData.clientAddress.country ? countries.find(c => c.code === formData.clientAddress.country)?.name || formData.clientAddress.country : 'Country'}</div>
                 <div>${formData.clientEmail || 'Email'}</div>
                 <div>${formData.clientPhone || 'Phone'}</div>
               </div>
@@ -1902,7 +1902,7 @@ export default function CreateInvoicePage() {
               <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
                 <div>${formData.companyAddress.street || 'Street Address'}</div>
                 <div>${formData.companyAddress.city || 'City'}, ${formData.companyAddress.state || 'State'} ${formData.companyAddress.zipCode || 'ZIP'}</div>
-                <div>${formData.companyAddress.country || 'Country'}</div>
+                <div>${formData.companyAddress.country ? countries.find(c => c.code === formData.companyAddress.country)?.name || formData.companyAddress.country : 'Country'}</div>
                 <div>Tax: ${formData.companyTaxNumber || 'Tax Number'}</div>
                 <div>${formData.companyEmail || 'Email'}</div>
                 <div>${formData.companyPhone || 'Phone'}</div>
@@ -1926,7 +1926,7 @@ export default function CreateInvoicePage() {
               <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
                 <div>${formData.clientAddress.street || 'Street Address'}</div>
                 <div>${formData.clientAddress.city || 'City'}, ${formData.clientAddress.state || 'State'} ${formData.clientAddress.zipCode || 'ZIP'}</div>
-                <div>${formData.clientAddress.country || 'Country'}</div>
+                <div>${formData.clientAddress.country ? countries.find(c => c.code === formData.clientAddress.country)?.name || formData.clientAddress.country : 'Country'}</div>
                 <div>${formData.clientEmail || 'Email'}</div>
                 <div>${formData.clientPhone || 'Phone'}</div>
               </div>
@@ -2363,10 +2363,7 @@ export default function CreateInvoicePage() {
                         <span>{formData.companyAddress.zipCode || 'ZIP'}</span>
                       </div>
                       <div>
-                        {formData.companyAddress.country 
-                          ? countries.find(c => c.code === formData.companyAddress.country)?.name || formData.companyAddress.country
-                          : 'Country'
-                        }
+                        {formData.companyAddress.country ? countries.find(c => c.code === formData.companyAddress.country)?.name || formData.companyAddress.country : 'Country'}
                       </div>
                     </div>
                     <div className="text-gray-600">
@@ -2470,7 +2467,7 @@ export default function CreateInvoicePage() {
                       <span>{formData.clientAddress.state || 'State'}</span>
                       <span>{formData.clientAddress.zipCode || 'ZIP'}</span>
                     </div>
-                    <div>{formData.clientAddress.country || 'Country'}</div>
+                    <div>{formData.clientAddress.country ? countries.find(c => c.code === formData.clientAddress.country)?.name || formData.clientAddress.country : 'Country'}</div>
                   </div>
                   <div className="text-gray-600">
                     {formData.clientEmail || 'Email'}
