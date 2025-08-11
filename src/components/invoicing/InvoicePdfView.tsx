@@ -64,6 +64,8 @@ interface InvoicePdfViewProps {
 
 const InvoicePdfView = forwardRef<HTMLDivElement, InvoicePdfViewProps>(
   ({ formData, invoiceNumber }, ref) => {
+    // Check if any items have discounts
+    const hasAnyDiscounts = formData.items.some(item => item.discount > 0);
     const formatDate = (dateString: string) => {
       const date = new Date(dateString);
       return date.toLocaleDateString('en-US', { 
@@ -197,7 +199,9 @@ const InvoicePdfView = forwardRef<HTMLDivElement, InvoicePdfViewProps>(
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 uppercase tracking-wider">Description</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 uppercase tracking-wider">Qty</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 uppercase tracking-wider">Unit Price</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 uppercase tracking-wider">Discount</th>
+                  {hasAnyDiscounts && (
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 uppercase tracking-wider">Discount</th>
+                  )}
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 uppercase tracking-wider">Tax</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 uppercase tracking-wider">Amount</th>
                 </tr>
@@ -214,9 +218,11 @@ const InvoicePdfView = forwardRef<HTMLDivElement, InvoicePdfViewProps>(
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
                       {getCurrencySymbol()}{item.unitPrice.toFixed(2)}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                      {item.discount}%
-                    </td>
+                    {hasAnyDiscounts && (
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                        {item.discount}%
+                      </td>
+                    )}
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
                       {item.tax}%
                     </td>

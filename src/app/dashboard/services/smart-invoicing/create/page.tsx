@@ -27,7 +27,8 @@ import {
   ChevronDown,
   Search,
   Mail,
-  File
+  File,
+  ChevronDown as ChevronDownIcon
 } from 'lucide-react';
 import { fiatCurrencies, cryptoCurrencies, getCurrencyByCode } from '@/data/currencies';
 import { countries, getTaxRatesByCountry } from '@/data/countries';
@@ -181,6 +182,14 @@ export default function CreateInvoicePage() {
   // Check if we're editing an existing invoice
   const invoiceId = searchParams.get('id');
 
+  // Check if any items have discounts
+  const hasAnyDiscounts = formData.items.some(item => item.discount > 0);
+  
+  // Download dropdown state
+  const [showDownloadDropdown, setShowDownloadDropdown] = useState(false);
+
+
+
   useEffect(() => {
     console.log('🔄 [Invoice Create] useEffect triggered - invoiceId:', invoiceId, 'session:', !!session?.user);
     if (invoiceId) {
@@ -210,6 +219,9 @@ export default function CreateInvoicePage() {
       if (!target.closest('.network-dropdown-container')) {
         setShowNetworkDropdown(false);
         setNetworkSearch('');
+      }
+      if (!target.closest('.download-dropdown-container')) {
+        setShowDownloadDropdown(false);
       }
     };
 
@@ -1301,10 +1313,10 @@ export default function CreateInvoicePage() {
         unit: 'mm',
         format: 'a4'
       });
-      
+
       const imgWidth = pdf.internal.pageSize.getWidth();
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      
+
       // If the content is too tall, split into multiple pages
       const pageHeight = pdf.internal.pageSize.getHeight();
       const margin = 10;
@@ -1336,18 +1348,208 @@ export default function CreateInvoicePage() {
       addWatermark(pdf);
 
       // Save invoice to database
-      await saveInvoiceToDatabase(formData);
+      const savedInvoice = await saveInvoiceToDatabase(formData);
 
-      pdf.save(`invoice-${formData.invoiceName || 'document'}.pdf`);
+      // Convert PDF to base64 for email attachment
+      const pdfBase64 = pdf.output('datauristring').split(',')[1];
       
-      // Show success message but don't redirect
-      alert('Invoice saved and downloaded successfully!');
-      console.log('✅ [Smart Invoicing] Invoice downloaded successfully:', {
+      console.log('📧 [Smart Invoicing] Sending invoice via email...', {
+        recipientEmail: formData.clientEmail,
         invoiceNumber: formData.invoiceNumber,
+        invoiceId: savedInvoice?._id,
+        pdfSize: pdfBase64.length
+      });
+      
+      // Convert attached files to base64
+      const attachedFilesBase64 = await Promise.all(
+        formData.attachedFiles.map(async (file) => {
+          return new Promise<{ filename: string; content: string; contentType: string }>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const base64 = (reader.result as string).split(',')[1];
+              resolve({
+                filename: file.name,
+                content: base64,
+                contentType: file.type
+              });
+            };
+            reader.readAsDataURL(file);
+          });
+        })
+      );
+
+      // Send invoice via email
+      const response = await fetch('/api/invoices/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          invoiceId: savedInvoice?._id || formData._id,
+          recipientEmail: formData.clientEmail,
+          pdfBuffer: pdfBase64,
+          attachedFiles: attachedFilesBase64
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        console.log('✅ [Smart Invoicing] Invoice sent successfully:', {
+          invoiceNumber: formData.invoiceNumber,
+          recipientEmail: formData.clientEmail,
+          total: formData.total
+        });
+        alert('Invoice sent successfully! Check your email for confirmation.');
+        // Redirect to invoices page
+        router.push('/dashboard/services/smart-invoicing/invoices');
+      } else {
+        console.error('❌ [Smart Invoicing] Failed to send invoice:', result.message);
+        alert(`Failed to send invoice: ${result.message}`);
+      }
+    } catch (error) {
+      console.error('❌ [Smart Invoicing] Failed to send invoice:', error);
+      alert('Failed to send invoice. Please try again.');
+    } finally {
+      setSendingInvoice(false);
+    }
+  };
+
+  // Handle CSV download
+  const handleDownloadCsv = () => {
+    const errors = validateInvoiceForPdf();
+    if (errors.length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
+    setValidationErrors([]);
+
+    // Generate invoice number if not exists
+    if (!formData.invoiceNumber) {
+      const invoiceNumber = generateInvoiceNumber();
+      handleInputChange('invoiceNumber', invoiceNumber);
+      console.log('📝 [Smart Invoicing] Generated invoice number for CSV download:', invoiceNumber);
+    }
+
+    try {
+      console.log('📤 [Smart Invoicing] Starting CSV download...', {
+        invoiceNumber: formData.invoiceNumber,
+        clientEmail: formData.clientEmail,
         total: formData.total
       });
+
+      // Create CSV content
+      const csvRows = [];
+      
+      // Header row
+      const headers = ['Invoice Details'];
+      csvRows.push(headers.join(','));
+      
+      // Invoice information
+      csvRows.push(['Invoice Name', formData.invoiceName || 'Invoice']);
+      csvRows.push(['Invoice Number', formData.invoiceNumber || 'N/A']);
+      csvRows.push(['Issue Date', formatDate(formData.issueDate)]);
+      csvRows.push(['Due Date', formatDate(formData.dueDate)]);
+      csvRows.push(['']);
+      
+      // Company information
+      csvRows.push(['Company Information']);
+      csvRows.push(['Company Name', formData.companyName]);
+      csvRows.push(['Email', formData.companyEmail]);
+      csvRows.push(['Phone', formData.companyPhone]);
+      csvRows.push(['Address', `${formData.companyAddress.street}, ${formData.companyAddress.city}, ${formData.companyAddress.state} ${formData.companyAddress.zipCode}, ${formData.companyAddress.country}`]);
+      csvRows.push(['Tax Number', formData.companyTaxNumber]);
+      csvRows.push(['']);
+      
+      // Client information
+      csvRows.push(['Client Information']);
+      csvRows.push(['Client Name', formData.clientName]);
+      csvRows.push(['Email', formData.clientEmail]);
+      csvRows.push(['Phone', formData.clientPhone]);
+      csvRows.push(['Address', `${formData.clientAddress.street}, ${formData.clientAddress.city}, ${formData.clientAddress.state} ${formData.clientAddress.zipCode}, ${formData.clientAddress.country}`]);
+      csvRows.push(['']);
+      
+      // Items header
+      const itemHeaders = ['Description', 'Quantity', 'Unit Price', 'Tax %', 'Amount'];
+      if (hasAnyDiscounts) {
+        itemHeaders.splice(3, 0, 'Discount %');
+      }
+      csvRows.push(['Invoice Items']);
+      csvRows.push(itemHeaders.join(','));
+      
+      // Items data
+      formData.items.forEach(item => {
+        const itemRow = [
+          item.description || 'Item description',
+          item.quantity.toString(),
+          `${getCurrencySymbol()}${item.unitPrice.toFixed(2)}`,
+          item.tax.toString() + '%',
+          `${getCurrencySymbol()}${item.amount.toFixed(2)}`
+        ];
+        if (hasAnyDiscounts) {
+          itemRow.splice(3, 0, item.discount.toString() + '%');
+        }
+        csvRows.push(itemRow.join(','));
+      });
+      
+      csvRows.push(['']);
+      
+      // Summary
+      csvRows.push(['Summary']);
+      csvRows.push(['Subtotal', `${getCurrencySymbol()}${formData.subtotal.toFixed(2)}`]);
+      csvRows.push(['Total Tax', `${getCurrencySymbol()}${formData.totalTax.toFixed(2)}`]);
+      csvRows.push(['Total Amount', `${getCurrencySymbol()}${formData.total.toFixed(2)}`]);
+      csvRows.push(['']);
+      
+      // Payment information
+      csvRows.push(['Payment Information']);
+      csvRows.push(['Payment Method', formData.paymentMethod === 'fiat' ? 'Bank Transfer' : 'Cryptocurrency']);
+      csvRows.push(['Currency', formData.currency]);
+      
+      if (formData.paymentMethod === 'fiat') {
+        if (formData.bankName) csvRows.push(['Bank Name', formData.bankName]);
+        if (formData.accountNumber) csvRows.push(['Account Number', formData.accountNumber]);
+        if (formData.routingNumber) csvRows.push(['Routing Number', formData.routingNumber]);
+      } else {
+        if (formData.paymentNetwork) csvRows.push(['Network', formData.paymentNetwork]);
+        if (formData.paymentAddress) csvRows.push(['Payment Address', formData.paymentAddress]);
+      }
+      
+      csvRows.push(['']);
+      
+      // Memo
+      if (formData.memo) {
+        csvRows.push(['Memo']);
+        csvRows.push([formData.memo]);
+        csvRows.push(['']);
+      }
+      
+      // Footer
+      csvRows.push(['Generated by Chains-ERP']);
+      csvRows.push([`Invoice Number: ${formData.invoiceNumber || 'N/A'} | Date: ${formatDate(formData.issueDate)}`]);
+      
+      // Convert to CSV string
+      const csvContent = csvRows.join('\n');
+      
+      // Create and download file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `${formData.invoiceNumber || 'invoice'}_${formatDate(formData.issueDate).replace(/,/g, '')}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      console.log('✅ [Smart Invoicing] CSV downloaded successfully:', {
+        invoiceNumber: formData.invoiceNumber,
+        filename: `${formData.invoiceNumber || 'invoice'}_${formatDate(formData.issueDate).replace(/,/g, '')}.csv`
+      });
+      
     } catch (error) {
-      console.error('Failed to generate PDF:', error);
+      console.error('❌ [Smart Invoicing] Failed to download CSV:', error);
+      alert('Failed to download CSV. Please try again.');
     }
   };
 
@@ -2358,13 +2560,30 @@ export default function CreateInvoicePage() {
           <div className="p-4 sm:p-8 border-b border-gray-200">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 space-y-4 sm:space-y-0">
               <h3 className="text-lg font-semibold text-gray-900">Invoice Items</h3>
-              <button
-                onClick={addItem}
-                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <Plus className="h-4 w-4" />
-                <span>Add Item</span>
-              </button>
+              <div className="flex space-x-2">
+                {!hasAnyDiscounts && (
+                  <button
+                    onClick={() => {
+                      // Add a small discount to the first item to enable discount functionality
+                      if (formData.items.length > 0) {
+                        handleItemChange(0, 'discount', 5);
+                      }
+                    }}
+                    className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Add Discount</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={addItem}
+                  className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Add Item</span>
+                </button>
+              </div>
             </div>
 
             {/* Items Table */}
@@ -2375,7 +2594,9 @@ export default function CreateInvoicePage() {
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Description</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Qty</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Unit Price</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Discount</th>
+                    {hasAnyDiscounts && (
+                      <th className="text-left py-3 px-4 font-medium text-gray-700">Discount</th>
+                    )}
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Tax</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Amount</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700"></th>
@@ -2413,20 +2634,33 @@ export default function CreateInvoicePage() {
                           step="0.01"
                         />
                       </td>
-                      <td className="py-3 px-4">
-                        <div className="relative">
-                          <input
-                            type="number"
-                            value={item.discount}
-                            onChange={(e) => handleItemChange(index, 'discount', parseFloat(e.target.value) || 0)}
-                            className="w-20 px-2 pr-6 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            min="0"
-                            max="100"
-                            step="0.01"
-                          />
-                          <span className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">%</span>
-                        </div>
-                      </td>
+                      {hasAnyDiscounts && (
+                        <td className="py-3 px-4">
+                          <div className="flex items-center space-x-2">
+                            <div className="relative">
+                              <input
+                                type="number"
+                                value={item.discount}
+                                onChange={(e) => handleItemChange(index, 'discount', parseFloat(e.target.value) || 0)}
+                                className="w-20 px-2 pr-6 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                min="0"
+                                max="100"
+                                step="0.01"
+                              />
+                              <span className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">%</span>
+                            </div>
+                            {item.discount > 0 && (
+                              <button
+                                onClick={() => handleItemChange(index, 'discount', 0)}
+                                className="p-1 text-red-500 hover:text-red-700 transition-colors"
+                                title="Remove discount"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )}
                       <td className="py-3 px-4">
                         <div className="relative">
                           <input
@@ -2584,15 +2818,44 @@ export default function CreateInvoicePage() {
           </div>
         </div>
 
-        {/* PDF Buttons */}
+        {/* Download and Send Buttons */}
         <div className="flex flex-col sm:flex-row justify-center space-y-2 sm:space-y-0 sm:space-x-4 mt-8 mb-6">
-          <button
-            onClick={handleDownloadPdf}
-            className="flex items-center justify-center space-x-2 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-          >
-            <Download className="h-4 w-4" />
-            <span>Download PDF</span>
-          </button>
+          {/* Download Dropdown */}
+          <div className="relative download-dropdown-container">
+            <button
+              onClick={() => setShowDownloadDropdown(!showDownloadDropdown)}
+              className="flex items-center justify-center space-x-2 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              <Download className="h-4 w-4" />
+              <span>Download</span>
+              <ChevronDownIcon className="h-4 w-4" />
+            </button>
+            
+            {showDownloadDropdown && (
+              <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                <button
+                  onClick={() => {
+                    handleDownloadPdf();
+                    setShowDownloadDropdown(false);
+                  }}
+                  className="w-full flex items-center space-x-2 px-4 py-2 text-left hover:bg-gray-50 transition-colors"
+                >
+                  <File className="h-4 w-4 text-red-500" />
+                  <span>Download as PDF</span>
+                </button>
+                <button
+                  onClick={() => {
+                    handleDownloadCsv();
+                    setShowDownloadDropdown(false);
+                  }}
+                  className="w-full flex items-center space-x-2 px-4 py-2 text-left hover:bg-gray-50 transition-colors"
+                >
+                  <File className="h-4 w-4 text-blue-500" />
+                  <span>Download as CSV</span>
+                </button>
+              </div>
+            )}
+          </div>
           
           <button
             onClick={handleSendPdf}

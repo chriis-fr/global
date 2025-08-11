@@ -13,7 +13,10 @@ import {
   Calendar,
   Clock,
   Loader2,
-  CheckCircle
+  CheckCircle,
+  Download,
+  File,
+  ChevronDown as ChevronDownIcon
 } from 'lucide-react';
 import { countries } from '@/data/countries';
 import { getCurrencyByCode } from '@/data/currencies';
@@ -110,6 +113,10 @@ export default function InvoiceViewPage() {
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [showDownloadDropdown, setShowDownloadDropdown] = useState(false);
+
+  // Check if any items have discounts
+  const hasAnyDiscounts = invoice?.items?.some(item => (item.discount || 0) > 0) || false;
 
   const loadInvoice = useCallback(async (id: string) => {
     try {
@@ -246,6 +253,147 @@ export default function InvoiceViewPage() {
     }
   };
 
+  // Handle CSV download
+  const handleDownloadCsv = () => {
+    if (!invoice) return;
+
+    try {
+      console.log('📤 [Smart Invoicing] Starting CSV download for invoice:', invoice.invoiceNumber);
+
+      // Create CSV content
+      const csvRows = [];
+      
+      // Header row
+      const headers = ['Invoice Details'];
+      csvRows.push(headers.join(','));
+      
+      // Invoice information
+      csvRows.push(['Invoice Name', invoice.invoiceName || 'Invoice']);
+      csvRows.push(['Invoice Number', invoice.invoiceNumber || 'N/A']);
+      csvRows.push(['Issue Date', formatDate(invoice.issueDate || '')]);
+      csvRows.push(['Due Date', formatDate(invoice.dueDate || '')]);
+      csvRows.push(['Status', invoice.status || 'Draft']);
+      csvRows.push(['']);
+      
+      // Company information
+      csvRows.push(['Company Information']);
+      csvRows.push(['Company Name', invoice.companyName || invoice.companyDetails?.name || 'N/A']);
+      csvRows.push(['Email', invoice.companyEmail || 'N/A']);
+      csvRows.push(['Phone', invoice.companyPhone || 'N/A']);
+      
+      // Handle company address with different formats
+      let companyAddressStr = 'N/A';
+      if (invoice.companyAddress) {
+        companyAddressStr = `${invoice.companyAddress.street || ''}, ${invoice.companyAddress.city || ''}, ${invoice.companyAddress.state || ''} ${invoice.companyAddress.zipCode || ''}, ${invoice.companyAddress.country || ''}`;
+      } else if (invoice.companyDetails) {
+        companyAddressStr = `${invoice.companyDetails.addressLine1 || ''}, ${invoice.companyDetails.city || ''}, ${invoice.companyDetails.region || ''} ${invoice.companyDetails.postalCode || ''}, ${invoice.companyDetails.country || ''}`;
+      }
+      csvRows.push(['Address', companyAddressStr]);
+      csvRows.push(['Tax Number', invoice.companyTaxNumber || invoice.companyDetails?.taxNumber || 'N/A']);
+      csvRows.push(['']);
+      
+      // Client information
+      csvRows.push(['Client Information']);
+      csvRows.push(['Client Name', invoice.clientName || invoice.clientDetails?.companyName || 'N/A']);
+      csvRows.push(['Email', invoice.clientEmail || 'N/A']);
+      csvRows.push(['Phone', invoice.clientPhone || 'N/A']);
+      
+      // Handle client address with different formats
+      let clientAddressStr = 'N/A';
+      if (invoice.clientAddress) {
+        clientAddressStr = `${invoice.clientAddress.street || ''}, ${invoice.clientAddress.city || ''}, ${invoice.clientAddress.state || ''} ${invoice.clientAddress.zipCode || ''}, ${invoice.clientAddress.country || ''}`;
+      } else if (invoice.clientDetails) {
+        clientAddressStr = `${invoice.clientDetails.addressLine1 || ''}, ${invoice.clientDetails.city || ''}, ${invoice.clientDetails.region || ''} ${invoice.clientDetails.postalCode || ''}, ${invoice.clientDetails.country || ''}`;
+      }
+      csvRows.push(['Address', clientAddressStr]);
+      csvRows.push(['']);
+      
+      // Items header
+      const itemHeaders = ['Description', 'Quantity', 'Unit Price', 'Tax %', 'Amount'];
+      if (hasAnyDiscounts) {
+        itemHeaders.splice(3, 0, 'Discount %');
+      }
+      csvRows.push(['Invoice Items']);
+      csvRows.push(itemHeaders.join(','));
+      
+      // Items data
+      invoice.items?.forEach(item => {
+        const itemRow = [
+          item.description || 'Item description',
+          item.quantity?.toString() || '0',
+          `${getCurrencySymbol(invoice.currency || '')}${item.unitPrice?.toFixed(2) || '0.00'}`,
+          item.tax?.toString() || '0' + '%',
+          `${getCurrencySymbol(invoice.currency || '')}${item.amount?.toFixed(2) || '0.00'}`
+        ];
+        if (hasAnyDiscounts) {
+          itemRow.splice(3, 0, (item.discount || 0).toString() + '%');
+        }
+        csvRows.push(itemRow.join(','));
+      });
+      
+      csvRows.push(['']);
+      
+      // Summary
+      csvRows.push(['Summary']);
+      csvRows.push(['Subtotal', `${getCurrencySymbol(invoice.currency || '')}${invoice.subtotal?.toFixed(2) || '0.00'}`]);
+      csvRows.push(['Total Tax', `${getCurrencySymbol(invoice.currency || '')}${invoice.totalTax?.toFixed(2) || '0.00'}`]);
+      csvRows.push(['Total Amount', `${getCurrencySymbol(invoice.currency || '')}${invoice.totalAmount?.toFixed(2) || '0.00'}`]);
+      csvRows.push(['']);
+      
+      // Payment information
+      csvRows.push(['Payment Information']);
+      const paymentMethod = invoice.paymentMethod || invoice.paymentSettings?.method;
+      csvRows.push(['Payment Method', paymentMethod === 'fiat' ? 'Bank Transfer' : 'Cryptocurrency']);
+      csvRows.push(['Currency', invoice.currency || invoice.paymentSettings?.currency || 'N/A']);
+      
+      if (paymentMethod === 'fiat') {
+        const bankAccount = invoice.paymentSettings?.bankAccount;
+        if (bankAccount?.bankName) csvRows.push(['Bank Name', bankAccount.bankName]);
+        if (bankAccount?.accountNumber) csvRows.push(['Account Number', bankAccount.accountNumber]);
+        if (bankAccount?.routingNumber) csvRows.push(['Routing Number', bankAccount.routingNumber]);
+      } else {
+        if (invoice.paymentNetwork || invoice.paymentSettings?.cryptoNetwork) csvRows.push(['Network', invoice.paymentNetwork || invoice.paymentSettings?.cryptoNetwork]);
+        if (invoice.paymentAddress || invoice.paymentSettings?.walletAddress) csvRows.push(['Payment Address', invoice.paymentAddress || invoice.paymentSettings?.walletAddress]);
+      }
+      
+      csvRows.push(['']);
+      
+      // Memo
+      if (invoice.memo) {
+        csvRows.push(['Memo']);
+        csvRows.push([invoice.memo]);
+        csvRows.push(['']);
+      }
+      
+      // Footer
+      csvRows.push(['Generated by Chains-ERP']);
+      csvRows.push([`Invoice Number: ${invoice.invoiceNumber || 'N/A'} | Date: ${formatDate(invoice.issueDate || '')}`]);
+      
+      // Convert to CSV string
+      const csvContent = csvRows.join('\n');
+      
+      // Create and download file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `${invoice.invoiceNumber || 'invoice'}_${formatDate(invoice.issueDate || '').replace(/,/g, '')}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      console.log('✅ [Smart Invoicing] CSV downloaded successfully:', {
+        invoiceNumber: invoice.invoiceNumber,
+        filename: `${invoice.invoiceNumber || 'invoice'}_${formatDate(invoice.issueDate || '').replace(/,/g, '')}.csv`
+      });
+      
+    } catch (error) {
+      console.error('❌ [Smart Invoicing] Failed to download CSV:', error);
+      alert('Failed to download CSV. Please try again.');
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -290,6 +438,45 @@ export default function InvoiceViewPage() {
             <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(invoice.status || 'draft')}`}>
               {invoice.status ? (invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)) : 'Draft'}
             </span>
+            
+            {/* Download Dropdown */}
+            <div className="relative download-dropdown-container">
+              <button
+                onClick={() => setShowDownloadDropdown(!showDownloadDropdown)}
+                className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              >
+                <Download className="h-4 w-4" />
+                <span>Download</span>
+                <ChevronDownIcon className="h-4 w-4" />
+              </button>
+              
+              {showDownloadDropdown && (
+                <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                  <button
+                    onClick={() => {
+                      // For now, just show a message since PDF download isn't implemented here
+                      alert('PDF download functionality will be implemented soon.');
+                      setShowDownloadDropdown(false);
+                    }}
+                    className="w-full flex items-center space-x-2 px-4 py-2 text-left hover:bg-gray-50 transition-colors"
+                  >
+                    <File className="h-4 w-4 text-red-500" />
+                    <span>Download as PDF</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleDownloadCsv();
+                      setShowDownloadDropdown(false);
+                    }}
+                    className="w-full flex items-center space-x-2 px-4 py-2 text-left hover:bg-gray-50 transition-colors"
+                  >
+                    <File className="h-4 w-4 text-blue-500" />
+                    <span>Download as CSV</span>
+                  </button>
+                </div>
+              )}
+            </div>
+            
             <button
               onClick={() => router.push(`/dashboard/services/smart-invoicing/create?id=${invoice._id}`)}
               className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -463,7 +650,9 @@ export default function InvoiceViewPage() {
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Description</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Qty</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Unit Price</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Discount</th>
+                    {hasAnyDiscounts && (
+                      <th className="text-left py-3 px-4 font-medium text-gray-700">Discount</th>
+                    )}
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Tax</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Amount</th>
                   </tr>
@@ -481,9 +670,11 @@ export default function InvoiceViewPage() {
                         <td className="py-3 px-4">
                           <div className="text-gray-900">{getCurrencySymbol(invoice.currency || '')}{item.unitPrice?.toFixed(2) || '0.00'}</div>
                         </td>
-                        <td className="py-3 px-4">
-                          <div className="text-gray-900">{item.discount || 0}%</div>
-                        </td>
+                        {hasAnyDiscounts && (
+                          <td className="py-3 px-4">
+                            <div className="text-gray-900">{item.discount || 0}%</div>
+                          </td>
+                        )}
                         <td className="py-3 px-4">
                           <div className="text-gray-900">{item.tax || 0}%</div>
                         </td>
