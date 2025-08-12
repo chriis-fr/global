@@ -38,10 +38,6 @@ export default function OrganizationMembersPage() {
     role: 'member'
   });
 
-  useEffect(() => {
-    fetchOrganizationData();
-  }, [fetchOrganizationData]);
-
   const fetchOrganizationData = useCallback(async () => {
     try {
       const response = await fetch('/api/organization');
@@ -62,6 +58,10 @@ export default function OrganizationMembersPage() {
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    fetchOrganizationData();
+  }, [fetchOrganizationData]);
 
   const fetchMembers = async () => {
     try {

@@ -158,34 +158,34 @@ export class CurrencyService {
 
     try {
       const convertedAmount = await this.convertCurrency(
-        invoice.totalAmount,
-        invoice.currency,
+        invoice.totalAmount as number,
+        invoice.currency as string,
         preferredCurrency
       );
 
       const convertedSubtotal = await this.convertCurrency(
-        invoice.subtotal,
-        invoice.currency,
+        invoice.subtotal as number,
+        invoice.currency as string,
         preferredCurrency
       );
 
       const convertedTax = await this.convertCurrency(
-        invoice.taxAmount,
-        invoice.currency,
+        invoice.taxAmount as number,
+        invoice.currency as string,
         preferredCurrency
       );
 
       return {
         ...invoice,
         originalCurrency: invoice.currency,
-        originalTotalAmount: invoice.totalAmount,
-        originalSubtotal: invoice.subtotal,
-        originalTaxAmount: invoice.taxAmount,
+        originalTotalAmount: invoice.totalAmount as number,
+        originalSubtotal: invoice.subtotal as number,
+        originalTaxAmount: invoice.taxAmount as number,
         currency: preferredCurrency,
         totalAmount: convertedAmount,
         subtotal: convertedSubtotal,
         taxAmount: convertedTax,
-        conversionRate: convertedAmount / invoice.totalAmount
+        conversionRate: convertedAmount / (invoice.totalAmount as number)
       };
     } catch (error) {
       console.error('Error converting invoice for reporting:', error);
@@ -223,11 +223,11 @@ export class CurrencyService {
       }
 
       if (invoice.currency === preferredCurrency) {
-        total += invoice.totalAmount;
+        total += invoice.totalAmount as number;
       } else {
         const converted = await this.convertCurrency(
-          invoice.totalAmount,
-          invoice.currency,
+          invoice.totalAmount as number,
+          invoice.currency as string,
           preferredCurrency
         );
         total += converted;
