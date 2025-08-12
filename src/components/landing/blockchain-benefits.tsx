@@ -144,35 +144,36 @@ const integrations = [
 
 export function BlockchainBenefits() {
   return (
-    <section className="py-4 md:py-8 bg-gradient-to-br from-blue-900 to-blue-950 text-white min-h-screen">
+    <section className="py-16 bg-gradient-to-br from-blue-900 to-blue-950 text-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-4 md:mb-8">
+        <div className="text-center mb-16">
           <div className="flex justify-center">
             <Image
               src="/chainsnobg.png"
               alt="ChainsERP"
-              width={80}
-              height={80}
-              className="bg-white mb-2 rounded-xl md:w-[120px] md:h-[120px]"
+              width={150}
+              height={150}
+              className="bg-white mb-4 rounded-2xl"
             />
           </div>
-          <h1 className="text-xl md:text-3xl lg:text-5xl font-bold text-white mb-2 md:mb-4">
+          <h1 className="text-4xl md:text-6xl font-bold text-white mb-6">
             Blockchain-Powered {' '}
             <span className="bg-gradient-to-r from-blue-400 to-blue-200 bg-clip-text text-transparent">
               Global Business
             </span>
           </h1>
-          <p className="text-sm md:text-lg text-blue-100 max-w-2xl mx-auto">
-            Enterprise-grade security and transparency with blockchain technology
+          <p className="text-xl text-blue-100 max-w-3xl mx-auto">
+            Enterprise-grade security and transparency with blockchain technology, 
+            designed for modern global business operations
           </p>
         </div>
 
         {/* Core Benefits */}
-        <div className="mb-4 md:mb-8">
-          <h3 className="text-lg md:text-xl font-bold text-center mb-3 md:mb-6">
+        <div className="mb-16">
+          <h3 className="text-2xl font-bold text-center mb-10">
             Core Blockchain Benefits
           </h3>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 md:gap-4">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {benefits.map((benefit, index) => {
               const Icon = benefit.icon
               const cardContent = (
@@ -181,15 +182,15 @@ export function BlockchainBenefits() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.1 }}
-                  className="p-2 md:p-8 rounded-lg bg-white/5 hover:bg-white/10 transition-colors cursor-pointer ring-1 ring-blue-400/30 hover:ring-blue-500"
+                  className="p-6 rounded-xl bg-white/5 hover:bg-white/10 transition-colors cursor-pointer ring-2 ring-blue-400/50 hover:ring-blue-500"
                 >
-                  <div className="w-8 h-8 md:w-16 md:h-16 bg-blue-500/20 rounded-lg flex items-center justify-center mb-2 md:mb-6">
-                    <Icon className="h-4 w-4 md:h-8 md:w-8 text-blue-400" />
+                  <div className="w-12 h-12 bg-blue-500/20 rounded-lg flex items-center justify-center mb-4">
+                    <Icon className="h-6 w-6 text-blue-400" />
                   </div>
-                  <h3 className="text-xs md:text-xl font-semibold mb-1 md:mb-3">
+                  <h3 className="text-xl font-semibold mb-2">
                     {benefit.title}
                   </h3>
-                  <p className="text-blue-100 text-xs md:text-base leading-tight">
+                  <p className="text-blue-100">
                     {benefit.description}
                   </p>
                 </motion.div>
@@ -204,15 +205,15 @@ export function BlockchainBenefits() {
         </div>
 
         {/* Business Solutions */}
-        <div className="border-t border-blue-800 pt-4 md:pt-8 mb-4 md:mb-8">
-          <h3 className="text-lg md:text-xl font-bold text-center mb-3 md:mb-6">
+        <div className="border-t border-blue-800 pt-16 mb-12">
+          <h3 className="text-2xl font-bold text-center mb-10">
             Business Solutions
           </h3>
           
           {/* For Companies */}
-          <div className="mb-4 md:mb-6">
-            <h4 className="text-sm md:text-lg font-semibold mb-2 md:mb-4 text-blue-200">For Companies</h4>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 md:gap-6">
+          <div className="mb-12">
+            <h4 className="text-xl font-semibold mb-6 text-blue-200">For Companies</h4>
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
               {businessSolutions
                 .filter(solution => solution.category === 'For Companies')
                 .map((solution, index) => {
@@ -223,15 +224,15 @@ export function BlockchainBenefits() {
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: index * 0.1 }}
-                      className="p-2 md:p-6 rounded-lg bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
+                      className="p-6 rounded-xl bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
                     >
-                      <div className="w-6 h-6 md:w-12 md:h-12 bg-blue-500/20 rounded-lg flex items-center justify-center mb-1 md:mb-4">
-                        <Icon className="h-3 w-3 md:h-6 md:w-6 text-blue-400" />
+                      <div className="w-12 h-12 bg-blue-500/20 rounded-lg flex items-center justify-center mb-4">
+                        <Icon className="h-6 w-6 text-blue-400" />
                       </div>
-                      <h4 className="text-xs md:text-lg font-semibold mb-1 md:mb-2">
+                      <h4 className="text-lg font-semibold mb-2">
                         {solution.title}
                       </h4>
-                      <p className="text-blue-100 text-xs md:text-sm leading-tight">
+                      <p className="text-blue-100 text-sm">
                         {solution.description}
                       </p>
                     </motion.div>
@@ -246,9 +247,9 @@ export function BlockchainBenefits() {
           </div>
 
           {/* For Freelancers */}
-          <div className="mb-4 md:mb-6">
-            <h4 className="text-sm md:text-lg font-semibold mb-2 md:mb-4 text-blue-200">For Freelancers</h4>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-6">
+          <div className="mb-12">
+            <h4 className="text-xl font-semibold mb-6 text-blue-200">For Freelancers</h4>
+            <div className="grid md:grid-cols-2 lg:grid-cols-2 gap-6">
               {businessSolutions
                 .filter(solution => solution.category === 'For Freelancers')
                 .map((solution, index) => {
@@ -259,15 +260,15 @@ export function BlockchainBenefits() {
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: index * 0.1 }}
-                      className="p-2 md:p-6 rounded-lg bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
+                      className="p-6 rounded-xl bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
                     >
-                      <div className="w-6 h-6 md:w-12 md:h-12 bg-blue-500/20 rounded-lg flex items-center justify-center mb-1 md:mb-4">
-                        <Icon className="h-3 w-3 md:h-6 md:w-6 text-blue-400" />
+                      <div className="w-12 h-12 bg-blue-500/20 rounded-lg flex items-center justify-center mb-4">
+                        <Icon className="h-6 w-6 text-blue-400" />
                       </div>
-                      <h4 className="text-xs md:text-lg font-semibold mb-1 md:mb-2">
+                      <h4 className="text-lg font-semibold mb-2">
                         {solution.title}
                       </h4>
-                      <p className="text-blue-100 text-xs md:text-sm leading-tight">
+                      <p className="text-blue-100 text-sm">
                         {solution.description}
                       </p>
                     </motion.div>
@@ -283,12 +284,12 @@ export function BlockchainBenefits() {
         </div>
 
         {/* Integrations and API Solutions */}
-        <div className="border-t border-blue-800 pt-4 md:pt-8 mb-4 md:mb-8">
-          <h3 className="text-lg md:text-xl font-bold text-center mb-3 md:mb-6">
+        <div className="border-t border-blue-800 pt-16 mb-12">
+          <h3 className="text-2xl font-bold text-center mb-10">
             Integrations and API Solutions
           </h3>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-8">
+          <div className="grid md:grid-cols-2 gap-8">
             {integrations.map((integration, index) => {
               const Icon = integration.icon
               const cardContent = (
@@ -297,19 +298,19 @@ export function BlockchainBenefits() {
                   initial={{ opacity: 0, x: index % 2 === 0 ? -20 : 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: index * 0.1 + 0.3 }}
-                  className="flex bg-white/5 rounded-lg overflow-hidden cursor-pointer hover:bg-white/10 transition-colors"
+                  className="flex bg-white/5 rounded-xl overflow-hidden cursor-pointer hover:bg-white/10 transition-colors"
                 >
-                  <div className="w-8 md:w-20 flex-shrink-0 bg-blue-800/30 flex items-center justify-center">
-                    <Icon className="h-4 w-4 md:h-10 md:w-10 text-blue-400" />
+                  <div className="w-16 flex-shrink-0 bg-blue-800/30 flex items-center justify-center">
+                    <Icon className="h-8 w-8 text-blue-400" />
                   </div>
-                  <div className="p-2 md:p-8">
+                  <div className="p-5">
                     <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider">
                       {integration.module}
                     </span>
-                    <h4 className="text-sm md:text-xl font-semibold mb-1 md:mb-3 mt-1">
+                    <h4 className="text-lg font-semibold mb-2 mt-1">
                       {integration.title}
                     </h4>
-                    <p className="text-blue-100 text-xs md:text-base leading-tight">
+                    <p className="text-blue-100 text-sm">
                       {integration.description}
                     </p>
                   </div>
@@ -330,15 +331,16 @@ export function BlockchainBenefits() {
             animate={{ opacity: 1 }}
             transition={{ delay: 0.8 }}
           >
-            <h3 className="text-base md:text-lg font-medium mb-2 md:mb-3">
+            <h3 className="text-xl font-medium mb-4">
               Why Blockchain for Global Business?
             </h3>
-            <p className="max-w-xl mx-auto text-blue-100 mb-3 md:mb-4 text-xs md:text-sm">
+            <p className="max-w-2xl mx-auto text-blue-100 mb-6">
               Traditional international business faces challenges with trust, transparency, 
-              and transaction costs. Our blockchain integration eliminates these barriers.
+              and transaction costs. Our blockchain integration eliminates these barriers, 
+              allowing you to operate globally with confidence.
             </p>
-            <button className="px-3 md:px-4 py-1.5 md:py-2 bg-blue-600 rounded-md hover:bg-blue-700 transition-colors font-medium text-xs md:text-sm">
-              Learn More
+            <button className="px-6 py-2 bg-blue-600 rounded-md hover:bg-blue-700 transition-colors font-medium">
+              Learn More About Blockchain Integration
             </button>
           </motion.div>
         </div>
