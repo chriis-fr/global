@@ -1,0 +1,133 @@
+[
+    {
+      "name": "REPUBLIC BANK",
+      "swift_code": "HFCAGHAC",
+      "bank_code": "96793657"
+    },
+    {
+      "name": "BANK OF GHANA",
+      "swift_code": "BAGHGHAC",
+      "bank_code": "20313400"
+    },
+    {
+      "name": "UBA GHANA",
+      "swift_code": "STBGGHAC",
+      "bank_code": "2006228LG0"
+    },
+    {
+      "name": "FIDELITY BANK GHANA",
+      "swift_code": "FBLIGHAC",
+      "bank_code": "25570554"
+    },
+    {
+      "name": "Consolidated Bank Ghana",
+      "swift_code": "CBGHGHAC",
+      "bank_code": "11350352"
+    },
+    {
+      "name": "Universal Merchant Bank",
+      "swift_code": "MBGHGHAC",
+      "bank_code": "20313800"
+    },
+    {
+      "name": "APEX BANK",
+      "swift_code": "AREXGHAC",
+      "bank_code": "25544088"
+    },
+    {
+      "name": "OMNI BANK",
+      "swift_code": "OMBLGHAC",
+      "bank_code": "11299458"
+    },
+    {
+      "name": "National Investment Bank Limited",
+      "swift_code": "NIBGGHAC",
+      "bank_code": "20313900"
+    },
+    {
+      "name": "Agricultural Development Bank",
+      "swift_code": "ADNTGHAC",
+      "bank_code": "20313200"
+    },
+    {
+      "name": "ZENITH BANK GHANA",
+      "swift_code": "ZEBLGHAC",
+      "bank_code": "98357706"
+    },
+    {
+      "name": "STANBIC BANK GHANA",
+      "swift_code": "SBICGHAC",
+      "bank_code": "97151844"
+    },
+    {
+      "name": "STANDARD CHARTERED GHANA",
+      "swift_code": "SCBLGHAC",
+      "bank_code": "20314200"
+    },
+    {
+      "name": "ABSA BANK GHANA",
+      "swift_code": "BARCGHAC",
+      "bank_code": "20313500"
+    },
+    {
+      "name": "First Atlantic Bank GHANA",
+      "swift_code": "FAMCGHAC",
+      "bank_code": "60003191"
+    },
+    {
+      "name": "ACCESS BANK GHANA",
+      "swift_code": "ABNGGHAC",
+      "bank_code": "26153374"
+    },
+    {
+      "name": "First National Bank",
+      "swift_code": "FIRNGHAC",
+      "bank_code": "11276282"
+    },
+    {
+      "name": "GCB Bank Limited",
+      "swift_code": "GHCBGHAC",
+      "bank_code": "20313600"
+    },
+    {
+      "name": "Ghl Bank Limited",
+      "swift_code": "GHLLGHPC",
+      "bank_code": "11319374"
+    },
+    {
+      "name": "Bank of Africa Ghana Limited",
+      "swift_code": "AMMAGHAC",
+      "bank_code": "97155860"
+    },
+    {
+      "name": "Prudential Bank Limited",
+      "swift_code": "PUBKGHAC",
+      "bank_code": "60003190"
+    },
+    {
+      "name": "FBNBank Ghana Limited",
+      "swift_code": "INCEGHAC",
+      "bank_code": "60003193"
+    },
+    {
+      "name": "ECOBANK GHANA",
+      "swift_code": "ECOCGHAC",
+      "bank_code": "GH130100"
+    },
+    {
+      "name": "CAL BANK",
+      "swift_code": "ACCCGHAC",
+      "bank_code": "22031960"
+    },
+    {
+      "name": "Societe Generale Ghana Limited",
+      "swift_code": "SSEBGHAC",
+      "bank_code": "20314100"
+    },
+    {
+      "name": "GT BANK GHANA",
+      "swift_code": "GTBIGHAC",
+      "bank_code": "25562284"
+    }
+  ]
+  

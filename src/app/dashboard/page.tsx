@@ -31,22 +31,22 @@ export default function DashboardPage() {
   useEffect(() => {
     const loadStats = async () => {
       try {
-        // Fetch real data from API
+        // Fetch real data from API with currency conversion
         const [invoicesResponse, clientsResponse] = await Promise.all([
-          fetch('/api/invoices'),
+          fetch('/api/invoices?convertToPreferred=true'),
           fetch('/api/clients')
         ]);
 
         const invoicesData = await invoicesResponse.json();
         const clientsData = await clientsResponse.json();
 
-        // Calculate real stats
+        // Use converted revenue from API
         const invoices = invoicesData.success ? invoicesData.data.invoices || [] : [];
         const clients = clientsData.success ? clientsData.data : [];
-
-        const totalRevenue = invoices
-          .filter((inv: { status: string; totalAmount?: number }) => inv.status === 'paid')
-          .reduce((sum: number, inv: { totalAmount?: number }) => sum + (inv.totalAmount || 0), 0);
+        
+        // Calculate revenue only from paid invoices
+        const paidInvoicesForRevenue = invoices.filter((inv: { status: string }) => inv.status === 'paid');
+        const totalRevenue = paidInvoicesForRevenue.reduce((sum: number, inv: { totalAmount: number }) => sum + (inv.totalAmount || 0), 0);
 
         const totalExpenses = 0; // Will be implemented when expenses service is ready
 

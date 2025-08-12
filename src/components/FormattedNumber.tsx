@@ -2,24 +2,32 @@
 
 import { useState } from 'react';
 import { formatNumber, formatNumberWithoutCurrency, FormattedNumber } from '@/lib/utils/numberFormat';
+import { useCurrency } from '@/lib/contexts/CurrencyContext';
 
 interface FormattedNumberDisplayProps {
   value: number;
   currency?: string;
   className?: string;
   showCurrency?: boolean;
+  usePreferredCurrency?: boolean;
 }
 
 export default function FormattedNumberDisplay({ 
   value, 
   currency = '$', 
   className = '',
-  showCurrency = true 
+  showCurrency = true,
+  usePreferredCurrency = true
 }: FormattedNumberDisplayProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const { preferredCurrency, getCurrencySymbol, formatAmount } = useCurrency();
+  
+  // Use preferred currency if specified, otherwise use the provided currency
+  const displayCurrency = usePreferredCurrency ? preferredCurrency : currency;
+  const currencySymbol = getCurrencySymbol(displayCurrency);
   
   const formattedNumber: FormattedNumber = showCurrency 
-    ? formatNumber(value, currency)
+    ? formatNumber(value, currencySymbol)
     : formatNumberWithoutCurrency(value);
 
   const handleClick = () => {

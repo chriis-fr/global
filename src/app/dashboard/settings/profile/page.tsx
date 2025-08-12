@@ -1,9 +1,11 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { LogoManager } from '@/components/LogoManager';
-import { Image } from 'lucide-react';
+import { Image, ChevronDown } from 'lucide-react';
 import NextImage from 'next/image';
 import DashboardFloatingButton from '@/components/DashboardFloatingButton';
+import { fiatCurrencies } from '@/data/currencies';
+import { useCurrency } from '@/lib/contexts/CurrencyContext';
 
 interface ProfileData {
   name: string;
@@ -19,6 +21,7 @@ interface ProfileData {
     postalCode: string;
   };
   taxId?: string;
+  currencyPreference?: string;
 }
 
 interface Logo {
@@ -43,12 +46,16 @@ export default function ProfileSettingsPage() {
       country: '',
       postalCode: ''
     },
-    taxId: ''
+    taxId: '',
+    currencyPreference: 'USD'
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [selectedLogo, setSelectedLogo] = useState<Logo | null>(null);
+  const [showCurrencyDropdown, setShowCurrencyDropdown] = useState(false);
+  const [currencySearch, setCurrencySearch] = useState('');
+  const { setPreferredCurrency } = useCurrency();
 
   // Fetch user data on component mount
   useEffect(() => {
@@ -80,6 +87,15 @@ export default function ProfileSettingsPage() {
     }));
   };
 
+  const handleCurrencyChange = (currencyCode: string) => {
+    setFormData(prev => ({
+      ...prev,
+      currencyPreference: currencyCode
+    }));
+    setShowCurrencyDropdown(false);
+    setCurrencySearch('');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -101,6 +117,10 @@ export default function ProfileSettingsPage() {
       
       if (data.success) {
         setMessage({ type: 'success', text: 'Profile updated successfully!' });
+        // Update the currency context if currency preference was changed
+        if (formData.currencyPreference) {
+          setPreferredCurrency(formData.currencyPreference);
+        }
       } else {
         setMessage({ type: 'error', text: data.message || 'Failed to update profile' });
       }
@@ -209,6 +229,65 @@ export default function ProfileSettingsPage() {
                 />
               </div>
             )}
+          </div>
+
+          {/* Currency Preference Section */}
+          <div className="relative">
+            <label className="block text-sm font-medium text-white mb-2">Preferred Currency</label>
+            <p className="text-xs text-blue-200 mb-3">
+              This currency will be used to display all monetary values throughout the app. 
+              Invoices can still be created in different currencies, but they will be converted to your preferred currency for display.
+            </p>
+            <div className="relative currency-dropdown-container" style={{ zIndex: 9999 }}>
+              <button
+                type="button"
+                onClick={() => setShowCurrencyDropdown(!showCurrencyDropdown)}
+                className="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500 text-left flex items-center justify-between"
+              >
+                <span className={formData.currencyPreference ? 'text-white' : 'text-gray-400'}>
+                  {formData.currencyPreference 
+                    ? `${formData.currencyPreference} - ${fiatCurrencies.find(c => c.code === formData.currencyPreference)?.name}`
+                    : 'Select currency'}
+                </span>
+                <ChevronDown className={`h-5 w-5 text-blue-300 transition-transform ${showCurrencyDropdown ? 'rotate-180' : ''}`} />
+              </button>
+              
+              {showCurrencyDropdown && (
+                <div className="fixed z-[9999] w-full mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-60 overflow-hidden" style={{ width: 'calc(100% - 2rem)', maxWidth: '400px' }}>
+                  <div className="p-2 border-b border-gray-600">
+                    <input
+                      type="text"
+                      placeholder="Search currencies..."
+                      value={currencySearch}
+                      onChange={(e) => setCurrencySearch(e.target.value)}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="max-h-48 overflow-y-auto">
+                    {fiatCurrencies
+                      .filter(currency => 
+                        currency.name.toLowerCase().includes(currencySearch.toLowerCase()) ||
+                        currency.code.toLowerCase().includes(currencySearch.toLowerCase()) ||
+                        currency.symbol.toLowerCase().includes(currencySearch.toLowerCase())
+                      )
+                      .map(currency => (
+                      <button
+                        key={currency.code}
+                        type="button"
+                        onClick={() => handleCurrencyChange(currency.code)}
+                        className="w-full px-3 py-2 text-left text-white hover:bg-gray-700 transition-colors flex items-center justify-between border-b border-gray-700 last:border-b-0"
+                      >
+                        <div className="flex items-center space-x-3">
+                          <span className="text-sm">{currency.name}</span>
+                          <span className="text-blue-300 text-xs font-medium">{currency.symbol}</span>
+                        </div>
+                        <span className="text-gray-400 text-xs font-medium">{currency.code}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {formData.userType === 'business' && (

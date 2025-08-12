@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 
@@ -38,6 +38,8 @@ import jsPDF from 'jspdf';
 import InvoicePdfView from '@/components/invoicing/InvoicePdfView';
 import { LogoSelector } from '@/components/LogoSelector';
 import { setCriticalOperation } from '@/components/dashboard/NotificationBadge';
+import BankSelector from '@/components/BankSelector';
+import { Bank } from '@/data';
 
 interface Client {
   _id: string;
@@ -84,8 +86,12 @@ interface InvoiceFormData {
   paymentNetwork?: string;
   paymentAddress?: string;
   bankName?: string;
+  swiftCode?: string;
+  bankCode?: string;
+  branchCode?: string;
+  accountName?: string;
   accountNumber?: string;
-  routingNumber?: string;
+  branchAddress?: string;
   enableMultiCurrency: boolean;
   invoiceType: 'regular' | 'recurring';
   items: Array<{
@@ -142,6 +148,15 @@ const defaultInvoiceData: InvoiceFormData = {
   },
   currency: 'USD',
   paymentMethod: 'fiat',
+  paymentNetwork: '',
+  paymentAddress: '',
+  bankName: '',
+  swiftCode: '',
+  bankCode: '',
+  branchCode: '',
+  accountName: '',
+  accountNumber: '',
+  branchAddress: '',
   enableMultiCurrency: false,
   invoiceType: 'regular',
   items: [
@@ -195,6 +210,25 @@ export default function CreateInvoicePage() {
   // Network dropdown state
   const [showNetworkDropdown, setShowNetworkDropdown] = useState(false);
   const [networkSearch, setNetworkSearch] = useState('');
+  const [savedPaymentMethods, setSavedPaymentMethods] = useState<Array<{
+    _id: string;
+    name: string;
+    type: 'fiat' | 'crypto';
+    fiatDetails?: {
+      bankName: string;
+      swiftCode: string;
+      bankCode: string;
+      branchCode: string;
+      accountName: string;
+      accountNumber: string;
+      branchAddress: string;
+    };
+    cryptoDetails?: {
+      network: string;
+      address: string;
+    };
+  }>>([]);
+  const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<string>('');
 
   // Check if we're editing an existing invoice
   const invoiceId = searchParams.get('id');
@@ -209,22 +243,23 @@ export default function CreateInvoicePage() {
 
 
   useEffect(() => {
-    console.log('🔄 [Invoice Create] useEffect triggered - invoiceId:', invoiceId, 'session:', !!session?.user);
+    // useEffect triggered
     if (invoiceId) {
       loadInvoice(invoiceId);
     } else if (session?.user) {
-      console.log('✅ [Invoice Create] Loading data for user:', session.user.email);
+      // Loading data for user
       loadServiceOnboardingData();
       loadOrganizationData();
       loadClients();
       loadLogoFromSettings();
+      loadSavedPaymentMethods();
     }
   }, [invoiceId, session]);
 
     // Monitor formData changes for debugging (disabled during sending)
   useEffect(() => {
     if (!sendingInvoice) {
-      console.log('📊 [Invoice Create] FormData updated - companyLogo: [LOGO_DATA]');
+      // FormData updated with logo
     }
   }, [formData.companyLogo, sendingInvoice]);
 
@@ -287,7 +322,7 @@ export default function CreateInvoicePage() {
         setFormData(prev => {
           const finalCountry = onboardingData.businessInfo?.address?.country || prev.companyAddress.country;
           
-          console.log('✅ [Invoice Create] Service onboarding data loaded from:', data.data.storageLocation);
+          // Service onboarding data loaded
           
           return {
             ...prev,
@@ -393,12 +428,18 @@ export default function CreateInvoicePage() {
     }
   };
 
-  const handleInputChange = useCallback((field: string, value: string | number | boolean) => {
+  const handleInputChange = (field: keyof InvoiceFormData, value: string | number | boolean) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleBankSelect = (bank: Bank) => {
     setFormData(prev => ({
       ...prev,
-      [field]: value
+      bankName: bank.name,
+      swiftCode: bank.swift_code,
+      bankCode: bank.bank_code || ''
     }));
-  }, []);
+  };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
@@ -672,14 +713,14 @@ export default function CreateInvoicePage() {
     setCriticalOperation(true); // Disable notification polling during invoice sending
 
     try {
-      console.log('📧 [Smart Invoicing] Starting invoice email send...');
+      // Starting invoice email send...
 
       let primaryInvoiceId: string;
       let primaryInvoiceNumber: string;
 
       // If this is a draft invoice (has _id), update it instead of creating new
       if (formData._id) {
-        console.log('💾 [Smart Invoicing] Updating draft invoice...');
+        // Updating draft invoice...
 
         const updateResponse = await fetch(`/api/invoices/${formData._id}`, {
           method: 'PUT',
@@ -690,7 +731,7 @@ export default function CreateInvoicePage() {
           })
         });
 
-        console.log('📡 [Smart Invoicing] Update invoice response status:', updateResponse.status);
+        // Update invoice response status received
 
         if (!updateResponse.ok) {
           const errorText = await updateResponse.text();
@@ -699,7 +740,7 @@ export default function CreateInvoicePage() {
         }
 
         const updateData = await updateResponse.json();
-        console.log('📄 [Smart Invoicing] Update invoice response received');
+        // Update invoice response received
 
         if (!updateData.success) {
           throw new Error(`Failed to update invoice: ${updateData.message}`);
@@ -708,13 +749,10 @@ export default function CreateInvoicePage() {
         primaryInvoiceId = updateData.invoice._id;
         primaryInvoiceNumber = updateData.invoice.invoiceNumber;
 
-        console.log('📧 [Smart Invoicing] Draft invoice updated:', {
-          id: primaryInvoiceId,
-          invoiceNumber: primaryInvoiceNumber
-        });
+        // Draft invoice updated successfully
       } else {
         // Create new invoice
-        console.log('💾 [Smart Invoicing] Creating new invoice...');
+        // Creating new invoice...
 
         const primaryInvoiceResponse = await fetch('/api/invoices', {
           method: 'POST',
@@ -725,7 +763,7 @@ export default function CreateInvoicePage() {
           })
         });
 
-        console.log('📡 [Smart Invoicing] Primary invoice response status:', primaryInvoiceResponse.status);
+        // Primary invoice response status received
 
         if (!primaryInvoiceResponse.ok) {
           const errorText = await primaryInvoiceResponse.text();
@@ -734,7 +772,7 @@ export default function CreateInvoicePage() {
         }
 
         const primaryInvoiceData = await primaryInvoiceResponse.json();
-        console.log('📄 [Smart Invoicing] Primary invoice response received');
+        // Primary invoice response received
 
         if (!primaryInvoiceData.success) {
           throw new Error(`Failed to save invoice: ${primaryInvoiceData.message}`);
@@ -743,10 +781,7 @@ export default function CreateInvoicePage() {
         primaryInvoiceId = primaryInvoiceData.invoice._id;
         primaryInvoiceNumber = primaryInvoiceData.invoice.invoiceNumber;
 
-        console.log('📧 [Smart Invoicing] Primary invoice saved:', {
-          id: primaryInvoiceId,
-          invoiceNumber: primaryInvoiceNumber
-        });
+        // Primary invoice saved successfully
       }
 
       // Update formData with the new invoice number and ID
@@ -777,7 +812,7 @@ export default function CreateInvoicePage() {
         }
 
         await ccInvoiceResponse.json();
-        console.log('📧 [Smart Invoicing] CC invoices created successfully');
+        // CC invoices created successfully
       }
 
       // Create a simplified version of the invoice for PDF generation (same as handleDownloadPdf)
@@ -960,9 +995,19 @@ export default function CreateInvoicePage() {
                   Account: ${formData.accountNumber}
                 </div>
               ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.routingNumber ? `
+              ${formData.paymentMethod === 'fiat' && formData.swiftCode ? `
                 <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Routing: ${formData.routingNumber}
+                  SWIFT Code: ${formData.swiftCode}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.accountName ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Account Name: ${formData.accountName}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.branchAddress ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Branch Address: ${formData.branchAddress}
                 </div>
               ` : ''}
             </div>
@@ -1085,12 +1130,7 @@ export default function CreateInvoicePage() {
       // Convert PDF to base64 for email attachment
       const pdfBase64 = pdf.output('datauristring').split(',')[1];
       
-      console.log('📧 [Smart Invoicing] Sending invoice via email...', {
-        recipientEmail: formData.clientEmail,
-        invoiceNumber: primaryInvoiceNumber,
-        invoiceId: primaryInvoiceId,
-        pdfSize: pdfBase64.length
-      });
+      // Sending invoice via email...
       
       // Convert attached files to base64
       const attachedFilesBase64 = await Promise.all(
@@ -1171,7 +1211,7 @@ export default function CreateInvoicePage() {
       <input
         type="text"
         value={value}
-        onChange={(e) => handleInputChange(field, e.target.value)}
+        onChange={(e) => handleInputChange(field as keyof InvoiceFormData, e.target.value)}
         onBlur={() => setEditingField(null)}
         className={`${className} border-none outline-none bg-transparent`}
         autoFocus
@@ -1198,7 +1238,7 @@ export default function CreateInvoicePage() {
         <input
           type="date"
           value={value}
-          onChange={(e) => handleInputChange(field, e.target.value)}
+          onChange={(e) => handleInputChange(field as keyof InvoiceFormData, e.target.value)}
           onBlur={() => setEditingField(null)}
           className={`${className} border border-gray-300 rounded px-2 py-1 bg-white`}
           autoFocus
@@ -1447,9 +1487,19 @@ export default function CreateInvoicePage() {
                   Account: ${formData.accountNumber}
                 </div>
               ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.routingNumber ? `
+              ${formData.paymentMethod === 'fiat' && formData.swiftCode ? `
                 <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Routing: ${formData.routingNumber}
+                  SWIFT Code: ${formData.swiftCode}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.accountName ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Account Name: ${formData.accountName}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.branchAddress ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Branch Address: ${formData.branchAddress}
                 </div>
               ` : ''}
             </div>
@@ -1728,8 +1778,12 @@ export default function CreateInvoicePage() {
       
       if (formData.paymentMethod === 'fiat') {
         if (formData.bankName) csvRows.push(['Bank Name', formData.bankName]);
+        if (formData.swiftCode) csvRows.push(['SWIFT Code', formData.swiftCode]);
+        if (formData.bankCode) csvRows.push(['Bank Code', formData.bankCode]);
+        if (formData.branchCode) csvRows.push(['Branch Code', formData.branchCode]);
+        if (formData.accountName) csvRows.push(['Account Name', formData.accountName]);
         if (formData.accountNumber) csvRows.push(['Account Number', formData.accountNumber]);
-        if (formData.routingNumber) csvRows.push(['Routing Number', formData.routingNumber]);
+        if (formData.branchAddress) csvRows.push(['Branch Address', formData.branchAddress]);
       } else {
         if (formData.paymentNetwork) csvRows.push(['Network', formData.paymentNetwork]);
         if (formData.paymentAddress) csvRows.push(['Payment Address', formData.paymentAddress]);
@@ -2001,9 +2055,19 @@ export default function CreateInvoicePage() {
                   Account: ${formData.accountNumber}
                 </div>
               ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.routingNumber ? `
+              ${formData.paymentMethod === 'fiat' && formData.swiftCode ? `
                 <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Routing: ${formData.routingNumber}
+                  SWIFT Code: ${formData.swiftCode}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.accountName ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Account Name: ${formData.accountName}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.branchAddress ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Branch Address: ${formData.branchAddress}
                 </div>
               ` : ''}
             </div>
@@ -2199,6 +2263,52 @@ export default function CreateInvoicePage() {
     } catch (error) {
       console.error('❌ [Smart Invoicing] Error saving invoice:', error);
       return null;
+    }
+  };
+
+  // Handle payment method selection
+  const handlePaymentMethodSelect = (methodId: string) => {
+    setSelectedPaymentMethodId(methodId);
+    
+    if (methodId) {
+      const selectedMethod = savedPaymentMethods.find(method => method._id === methodId);
+      if (selectedMethod) {
+        if (selectedMethod.type === 'fiat') {
+          setFormData(prev => ({
+            ...prev,
+            paymentMethod: 'fiat',
+            bankName: selectedMethod.fiatDetails?.bankName || '',
+            swiftCode: selectedMethod.fiatDetails?.swiftCode || '',
+            bankCode: selectedMethod.fiatDetails?.bankCode || '',
+            branchCode: selectedMethod.fiatDetails?.branchCode || '',
+            accountName: selectedMethod.fiatDetails?.accountName || '',
+            accountNumber: selectedMethod.fiatDetails?.accountNumber || '',
+            branchAddress: selectedMethod.fiatDetails?.branchAddress || ''
+          }));
+        } else if (selectedMethod.type === 'crypto') {
+          setFormData(prev => ({
+            ...prev,
+            paymentMethod: 'crypto',
+            paymentNetwork: selectedMethod.cryptoDetails?.network || '',
+            paymentAddress: selectedMethod.cryptoDetails?.address || ''
+          }));
+        }
+      }
+    }
+  };
+
+  // Load saved payment methods
+  const loadSavedPaymentMethods = async () => {
+    try {
+      const response = await fetch('/api/payment-methods');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setSavedPaymentMethods(data.paymentMethods || []);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading payment methods:', error);
     }
   };
 
@@ -2715,6 +2825,26 @@ export default function CreateInvoicePage() {
           {/* Payment Method */}
           <div className="p-4 sm:p-8 border-b border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Payment Method</h3>
+            
+            {/* Payment Method Selector */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select Saved Payment Method
+              </label>
+              <select
+                value={selectedPaymentMethodId || ''}
+                onChange={(e) => handlePaymentMethodSelect(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">-- Select a saved payment method --</option>
+                {savedPaymentMethods.map((method) => (
+                  <option key={method._id} value={method._id}>
+                    {method.name} ({method.type === 'fiat' ? 'Bank Transfer' : 'Crypto'})
+                  </option>
+                ))}
+              </select>
+            </div>
+            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Payment Type</label>
@@ -2831,38 +2961,77 @@ export default function CreateInvoicePage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-4">
+                  <div className="max-h-48 overflow-y-auto space-y-4 pr-2">
                     <div>
                       <label className="block text-sm text-gray-600 mb-1">Bank Name</label>
-                      <input
-                        type="text"
+                      <BankSelector
+                        countryCode={formData.companyAddress.country}
                         value={formData.bankName || ''}
-                        onChange={(e) => handleInputChange('bankName', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Bank name"
+                        onBankSelectAction={handleBankSelect}
+                        onInputChangeAction={(value) => handleInputChange('bankName', value)}
+                        placeholder="Search for a bank..."
+                        disabled={!formData.companyAddress.country}
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm text-gray-600 mb-1">Account Number</label>
-                        <input
-                          type="text"
-                          value={formData.accountNumber || ''}
-                          onChange={(e) => handleInputChange('accountNumber', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          placeholder="Account number"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm text-gray-600 mb-1">Routing Number</label>
-                        <input
-                          type="text"
-                          value={formData.routingNumber || ''}
-                          onChange={(e) => handleInputChange('routingNumber', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          placeholder="Routing number"
-                        />
-                      </div>
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">SWIFT Code</label>
+                      <input
+                        type="text"
+                        value={formData.swiftCode || ''}
+                        onChange={(e) => handleInputChange('swiftCode', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="SWIFT/BIC code"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Bank Code</label>
+                      <input
+                        type="text"
+                        value={formData.bankCode || ''}
+                        onChange={(e) => handleInputChange('bankCode', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Bank code"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Branch Code</label>
+                      <input
+                        type="text"
+                        value={formData.branchCode || ''}
+                        onChange={(e) => handleInputChange('branchCode', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Branch code"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Account Name</label>
+                      <input
+                        type="text"
+                        value={formData.accountName || ''}
+                        onChange={(e) => handleInputChange('accountName', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Account holder name"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Account Number</label>
+                      <input
+                        type="text"
+                        value={formData.accountNumber || ''}
+                        onChange={(e) => handleInputChange('accountNumber', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Account number"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Branch Address</label>
+                      <textarea
+                        value={formData.branchAddress || ''}
+                        onChange={(e) => handleInputChange('branchAddress', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Branch address"
+                        rows={3}
+                      />
                     </div>
                   </div>
                 )}

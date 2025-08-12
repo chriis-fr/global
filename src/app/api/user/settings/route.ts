@@ -32,6 +32,7 @@ export async function GET() {
           name: user.name,
           email: user.email,
           phone: user.phone || '',
+          currencyPreference: user.settings?.currencyPreference || 'USD',
         },
         organization: {
           industry: user.industry || '',
@@ -91,6 +92,10 @@ export async function PUT(request: NextRequest) {
       updateData = {
         name: data.name,
         phone: data.phone,
+        settings: {
+          ...user.settings,
+          currencyPreference: data.currencyPreference || 'USD',
+        },
       };
     } else if (type === 'organization') {
       updateData = {

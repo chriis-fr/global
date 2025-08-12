@@ -23,6 +23,7 @@ import { InvoiceService, InvoiceStats } from '@/lib/services/invoiceService';
 import { Invoice } from '@/models/Invoice';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
 
+
 // Cache key for localStorage
 const CACHE_KEY = 'smart-invoicing-cache';
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
@@ -37,6 +38,7 @@ interface CachedData {
 export default function SmartInvoicingPage() {
   const router = useRouter();
   const { data: session } = useSession();
+
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [stats, setStats] = useState<InvoiceStats>({
     totalInvoices: 0,
@@ -104,16 +106,42 @@ export default function SmartInvoicingPage() {
     try {
       setLoading(true);
       
-      // Load invoices and check onboarding status in parallel
-      const [invoicesData, onboardingResponse] = await Promise.all([
-        forceRefresh ? InvoiceService.refreshInvoices() : InvoiceService.getInvoices(),
+      // Load invoices with stats and check onboarding status in parallel
+      const [invoicesResponse, onboardingResponse] = await Promise.all([
+        fetch('/api/invoices?convertToPreferred=true'),
         fetch('/api/onboarding/service?service=smartInvoicing')
       ]);
       
-      // Process invoices
-      setInvoices(invoicesData);
-      const calculatedStats = InvoiceService.getStats(invoicesData);
-      setStats(calculatedStats);
+      const invoicesData = await invoicesResponse.json();
+      
+      // Process invoices and stats from API
+      let currentInvoices: Invoice[] = [];
+      let currentStats: InvoiceStats = {
+        totalInvoices: 0,
+        pendingCount: 0,
+        paidCount: 0,
+        totalRevenue: 0
+      };
+      
+      if (invoicesData.success) {
+        currentInvoices = invoicesData.data.invoices || [];
+        const apiStats = invoicesData.data.stats;
+        
+        setInvoices(currentInvoices);
+        currentStats = {
+          totalInvoices: apiStats.totalInvoices || 0,
+          pendingCount: currentInvoices.filter((inv: { status: string }) => inv.status === 'sent' || inv.status === 'pending').length,
+          paidCount: currentInvoices.filter((inv: { status: string }) => inv.status === 'paid').length,
+          totalRevenue: apiStats.totalRevenue || 0
+        };
+        setStats(currentStats);
+      } else {
+        // Fallback to local calculation if API fails
+        currentInvoices = forceRefresh ? await InvoiceService.refreshInvoices() : await InvoiceService.getInvoices();
+        setInvoices(currentInvoices);
+        currentStats = InvoiceService.getStats(currentInvoices);
+        setStats(currentStats);
+      }
       
       // Process onboarding status
       const onboardingData = await onboardingResponse.json();
@@ -121,11 +149,10 @@ export default function SmartInvoicingPage() {
       if (onboardingData.success) {
         onboardingCompleted = onboardingData.data.isCompleted;
         setIsOnboardingCompleted(onboardingCompleted);
-
       }
       
       // Save to cache
-      saveToCache(invoicesData, calculatedStats, onboardingCompleted);
+      saveToCache(currentInvoices, currentStats, onboardingCompleted);
     } catch (error) {
       console.error('❌ [Smart Invoicing Dashboard] Error loading data:', error);
     } finally {
@@ -273,7 +300,7 @@ export default function SmartInvoicingPage() {
             <div>
               <p className="text-blue-200 text-sm">Total Revenue</p>
               <p className="text-2xl font-bold text-white">
-                {loading ? '...' : <FormattedNumberDisplay value={stats.totalRevenue} />}
+                {loading ? '...' : <FormattedNumberDisplay value={stats.totalRevenue} usePreferredCurrency={true} />}
               </p>
             </div>
             <DollarSign className="h-8 w-8 text-green-400" />

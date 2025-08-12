@@ -3,6 +3,7 @@ export interface Country {
   name: string;
   phoneCode: string;
   flag?: string;
+  hasBanks?: boolean;
   taxes?: {
     vat?: number;
     gst?: number;
@@ -126,8 +127,8 @@ export const countries: Country[] = [
   { code: 'ZA', name: 'South Africa', phoneCode: '+27', taxes: { vat: 15, corporateTax: 28, personalTax: 45 } },
   { code: 'EG', name: 'Egypt', phoneCode: '+20', taxes: { vat: 14, corporateTax: 22.5, personalTax: 25 } },
   { code: 'NG', name: 'Nigeria', phoneCode: '+234', taxes: { vat: 7.5, corporateTax: 30, personalTax: 24 } },
-  { code: 'KE', name: 'Kenya', phoneCode: '+254', taxes: { vat: 16, corporateTax: 30, personalTax: 30 } },
-  { code: 'GH', name: 'Ghana', phoneCode: '+233', taxes: { vat: 12.5, corporateTax: 25, personalTax: 35 } },
+  { code: 'KE', name: 'Kenya', phoneCode: '+254', hasBanks: true, taxes: { vat: 16, corporateTax: 30, personalTax: 30 } },
+  { code: 'GH', name: 'Ghana', phoneCode: '+233', hasBanks: true, taxes: { vat: 12.5, corporateTax: 25, personalTax: 35 } },
   { code: 'ET', name: 'Ethiopia', phoneCode: '+251', taxes: { vat: 15, corporateTax: 30, personalTax: 35 } },
   { code: 'TZ', name: 'Tanzania', phoneCode: '+255', taxes: { vat: 18, corporateTax: 30, personalTax: 30 } },
   { code: 'UG', name: 'Uganda', phoneCode: '+256', taxes: { vat: 18, corporateTax: 30, personalTax: 40 } },

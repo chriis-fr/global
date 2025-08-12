@@ -6,10 +6,12 @@ export type PaymentMethodType = 'fiat' | 'crypto';
 // Fiat Payment Method Details
 export interface FiatPaymentDetails {
   bankName: string;
+  swiftCode: string;
+  bankCode: string;
+  branchCode: string;
+  accountName: string;
   accountNumber: string;
-  routingNumber?: string; // US/Canada
-  swiftCode?: string; // International
-  iban?: string; // European
+  branchAddress: string;
   accountType: 'checking' | 'savings' | 'business';
   currency: string; // e.g., "USD", "EUR", "GBP"
   country: string;
@@ -53,10 +55,12 @@ export interface PaymentMethod {
 export interface CreateFiatPaymentMethodInput {
   name: string;
   bankName: string;
+  swiftCode: string;
+  bankCode: string;
+  branchCode: string;
+  accountName: string;
   accountNumber: string;
-  routingNumber?: string;
-  swiftCode?: string;
-  iban?: string;
+  branchAddress: string;
   accountType: 'checking' | 'savings' | 'business';
   currency: string;
   country: string;

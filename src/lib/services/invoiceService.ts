@@ -22,7 +22,7 @@ export class InvoiceService {
     }
 
     try {
-      const response = await fetch('/api/invoices');
+      const response = await fetch('/api/invoices?convertToPreferred=true');
       const data = await response.json();
       
       if (data.success) {
@@ -43,11 +43,11 @@ export class InvoiceService {
   static getStats(invoices: Invoice[]): InvoiceStats {
     const pendingCount = invoices.filter(inv => inv.status === 'sent' || inv.status === 'pending').length;
     const paidCount = invoices.filter(inv => inv.status === 'paid').length;
+    
+    // Calculate total revenue from converted amounts
     const totalRevenue = invoices
       .filter(inv => inv.status === 'paid')
       .reduce((sum, inv) => sum + (inv.totalAmount || 0), 0);
-
-
 
     return {
       totalInvoices: invoices.length,

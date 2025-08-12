@@ -296,13 +296,6 @@ The Chains ERP-Global Team
   try {
     const info = await transporter.sendMail(mailOptions);
     console.log('✅ Invoice notification email sent successfully');
-    console.log('📧 Invoice email details:', {
-      messageId: info.messageId,
-      to: userEmail,
-      subject: mailOptions.subject,
-      hasAttachment: !!pdfBuffer,
-      previewUrl: nodemailer.getTestMessageUrl(info),
-    });
     return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error('❌ Failed to send invoice notification email:', error);

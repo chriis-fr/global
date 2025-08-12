@@ -5,56 +5,40 @@ import { paymentMethodService } from '@/lib/services/paymentMethodService';
 import { UserService } from '@/lib/services/userService';
 import { CreatePaymentMethodInput } from '@/models/PaymentMethod';
 import { ObjectId } from 'mongodb';
+import { connectToDatabase } from '@/lib/database';
 
 // GET /api/payment-methods - List payment methods
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    
+    if (!session?.user) {
+      return NextResponse.json(
+        { success: false, message: 'Unauthorized' },
+        { status: 401 }
+      );
     }
 
-    const { searchParams } = new URL(request.url);
-    const type = searchParams.get('type') as 'fiat' | 'crypto' | undefined;
-    const activeOnly = searchParams.get('activeOnly') !== 'false';
+    const db = await connectToDatabase();
+    const paymentMethodsCollection = db.collection('paymentMethods');
 
-    // Get user and organization info
-    const user = await UserService.getUserByEmail(session.user.email);
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
-    }
+    // Get payment methods for the user
+    const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
+    const query = isOrganization 
+      ? { organizationId: session.user.organizationId }
+      : { userId: session.user.email };
 
-    let organizationId: ObjectId | undefined;
-    let userId: ObjectId | undefined;
-
-    if (user.organizationId) {
-      // User belongs to an organization
-      organizationId = user.organizationId;
-    } else {
-      // Individual user
-      userId = user._id;
-    }
-
-    const paymentMethods = await paymentMethodService.getPaymentMethods(
-      organizationId,
-      userId,
-      type,
-      activeOnly
-    );
+    const paymentMethods = await paymentMethodsCollection.find(query).toArray();
 
     return NextResponse.json({
       success: true,
-      data: {
-        paymentMethods,
-        organizationId: organizationId?.toString(),
-        userId: userId?.toString()
-      }
+      paymentMethods: paymentMethods
     });
 
   } catch (error) {
     console.error('Error fetching payment methods:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to fetch payment methods' },
+      { success: false, message: 'Failed to fetch payment methods' },
       { status: 500 }
     );
   }
