@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
         approvalWorkflow: {
           ...invoice.approvalWorkflow,
           requiresApproval: invoice.approvalWorkflow?.requiresApproval ?? true,
-          submittedBy: invoice.approvalWorkflow?.submittedBy ?? invoice.createdBy,
+          submittedBy: invoice.approvalWorkflow?.submittedBy ?? invoice.issuerId,
           submittedAt: invoice.approvalWorkflow?.submittedAt ?? invoice.createdAt,
           approvedBy: user._id,
           approvedAt: new Date(),
@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
         approvalWorkflow: {
           ...invoice.approvalWorkflow,
           requiresApproval: invoice.approvalWorkflow?.requiresApproval ?? true,
-          submittedBy: invoice.approvalWorkflow?.submittedBy ?? invoice.createdBy,
+          submittedBy: invoice.approvalWorkflow?.submittedBy ?? invoice.issuerId,
           submittedAt: invoice.approvalWorkflow?.submittedAt ?? invoice.createdAt,
           rejectedBy: user._id,
           rejectedAt: new Date(),
