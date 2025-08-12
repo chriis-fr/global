@@ -144,9 +144,9 @@ export class CurrencyService {
 
   // Convert invoice amounts to preferred currency for reporting
   static async convertInvoiceForReporting(
-    invoice: any,
+    invoice: { [key: string]: unknown },
     preferredCurrency: string
-  ): Promise<any> {
+  ): Promise<{ [key: string]: unknown }> {
     // Type guard to check if invoice has required properties
     if (!invoice || typeof invoice !== 'object' || !('currency' in invoice) || !('totalAmount' in invoice)) {
       return invoice;
@@ -211,7 +211,7 @@ export class CurrencyService {
 
   // Calculate total revenue in preferred currency
   static async calculateTotalRevenue(
-    invoices: any[],
+    invoices: { [key: string]: unknown }[],
     preferredCurrency: string
   ): Promise<number> {
     let total = 0;
