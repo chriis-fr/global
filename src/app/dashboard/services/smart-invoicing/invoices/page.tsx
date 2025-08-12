@@ -280,7 +280,9 @@ export default function InvoicesPage() {
                       </td>
                       <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-white">
-                          {invoice.clientDetails?.companyName || 'Client'}
+                          {invoice.clientDetails?.companyName || 
+                           [invoice.clientDetails?.firstName, invoice.clientDetails?.lastName].filter(Boolean).join(' ') || 
+                           'Client'}
                         </div>
                       </td>
                       <td className="px-3 sm:px-6 py-4 whitespace-nowrap">

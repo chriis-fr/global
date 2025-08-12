@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
       invoice.currency,
       invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : 'N/A',
       invoice.companyDetails?.name || (isOrganization ? 'Your Company' : ''), // Company name (empty for individuals)
-      invoice.clientDetails?.companyName || invoice.clientDetails?.name || '', // Recipient name/company
+      invoice.clientDetails?.companyName || fullName || 'Client', // Recipient name/company
       `${process.env.FRONTEND_URL || 'http://localhost:3000'}/invoice/${invoice.invoiceNumber}`,
       paymentMethods,
       pdfAttachment,

@@ -607,11 +607,11 @@ export default function InvoiceViewPage() {
                 </h3>
                 <div className="space-y-2">
                   <div className="font-medium text-gray-900">
-                    {invoice.clientDetails?.companyName ? invoice.clientDetails.companyName : invoice.clientName || 'Client Name'}
+                    {invoice.clientDetails?.companyName || 'Client Name'}
                   </div>
                   {invoice.clientDetails?.companyName && (
                     <div className="text-gray-600">
-                      Attn: {invoice.clientName || 'Client Name'}
+                      Attn: Client Name
                     </div>
                   )}
                   <div className="text-gray-600">

@@ -437,7 +437,9 @@ export default function SmartInvoicingPage() {
                   <div>
                     <p className="text-white font-medium">{invoice.invoiceNumber || 'Invoice'}</p>
                     <p className="text-blue-200 text-sm">
-                      {invoice.clientDetails?.companyName || invoice.clientDetails?.email || 'Client'}
+                      {invoice.clientDetails?.companyName || 
+                       [invoice.clientDetails?.firstName, invoice.clientDetails?.lastName].filter(Boolean).join(' ') || 
+                       invoice.clientDetails?.email || 'Client'}
                     </p>
                   </div>
                 </div>
