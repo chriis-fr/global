@@ -2,9 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
-import { ObjectId, Db } from 'mongodb';
+import { ObjectId } from 'mongodb';
 import { UserService } from '@/lib/services/userService';
-import { OrganizationService } from '@/lib/services/organizationService';
 
 // Generate CC invoice number based on primary invoice
 const generateCcInvoiceNumber = (primaryInvoiceNumber: string, index: number): string => {

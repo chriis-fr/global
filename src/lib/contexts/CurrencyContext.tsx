@@ -59,7 +59,6 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
 
   const formatAmount = (amount: number, currencyCode?: string): string => {
     const code = currencyCode || preferredCurrency;
-    const symbol = getCurrencySymbol(code);
     
     return new Intl.NumberFormat('en-US', {
       style: 'currency',

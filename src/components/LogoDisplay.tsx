@@ -21,11 +21,9 @@ export function LogoDisplay({
   fallbackIcon
 }: LogoDisplayProps) {
   const [hasError, setHasError] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
 
   const handleImageError = () => {
     setHasError(true);
-    setIsLoading(false);
   };
 
   const handleImageLoad = () => {

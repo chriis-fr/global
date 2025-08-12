@@ -84,7 +84,7 @@ export function useCurrencyConversion(
             error: data.message || 'Conversion failed'
           }));
         }
-      } catch (error) {
+      } catch {
         setResult(prev => ({
           ...prev,
           isLoading: false,

@@ -147,6 +147,11 @@ export class CurrencyService {
     invoice: any,
     preferredCurrency: string
   ): Promise<any> {
+    // Type guard to check if invoice has required properties
+    if (!invoice || typeof invoice !== 'object' || !('currency' in invoice) || !('totalAmount' in invoice)) {
+      return invoice;
+    }
+
     if (invoice.currency === preferredCurrency) {
       return invoice;
     }
@@ -196,8 +201,6 @@ export class CurrencyService {
 
   // Format amount with currency
   static formatAmount(amount: number, currency: string, locale: string = 'en-US'): string {
-    const symbol = this.getCurrencySymbol(currency);
-    
     return new Intl.NumberFormat(locale, {
       style: 'currency',
       currency: currency,
@@ -214,6 +217,11 @@ export class CurrencyService {
     let total = 0;
 
     for (const invoice of invoices) {
+      // Type guard to check if invoice has required properties
+      if (!invoice || typeof invoice !== 'object' || !('currency' in invoice) || !('totalAmount' in invoice)) {
+        continue;
+      }
+
       if (invoice.currency === preferredCurrency) {
         total += invoice.totalAmount;
       } else {

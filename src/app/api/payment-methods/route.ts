@@ -8,7 +8,7 @@ import { ObjectId } from 'mongodb';
 import { connectToDatabase } from '@/lib/database';
 
 // GET /api/payment-methods - List payment methods
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     

@@ -20,7 +20,7 @@ export default function FormattedNumberDisplay({
   usePreferredCurrency = true
 }: FormattedNumberDisplayProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const { preferredCurrency, getCurrencySymbol, formatAmount } = useCurrency();
+  const { preferredCurrency, getCurrencySymbol } = useCurrency();
   
   // Use preferred currency if specified, otherwise use the provided currency
   const displayCurrency = usePreferredCurrency ? preferredCurrency : currency;

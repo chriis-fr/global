@@ -1,6 +1,7 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Users, Plus, Edit, Trash2, User, Shield, Crown } from 'lucide-react';
+import Image from 'next/image';
 import DashboardFloatingButton from '@/components/DashboardFloatingButton';
 
 interface Member {
@@ -14,7 +15,12 @@ interface Member {
 interface OrganizationInfo {
   userType: 'individual' | 'business';
   hasOrganization: boolean;
-  organization: any;
+  organization: {
+    _id: string;
+    name: string;
+    type: string;
+    [key: string]: unknown;
+  };
   userRole: string | null;
 }
 
@@ -34,9 +40,9 @@ export default function OrganizationMembersPage() {
 
   useEffect(() => {
     fetchOrganizationData();
-  }, []);
+  }, [fetchOrganizationData]);
 
-  const fetchOrganizationData = async () => {
+  const fetchOrganizationData = useCallback(async () => {
     try {
       const response = await fetch('/api/organization');
       const data = await response.json();
@@ -55,7 +61,7 @@ export default function OrganizationMembersPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const fetchMembers = async () => {
     try {
@@ -338,9 +344,11 @@ export default function OrganizationMembersPage() {
                   <div className="flex items-center space-x-3">
                     <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
                       {member.profilePicture ? (
-                        <img 
+                        <Image 
                           src={member.profilePicture} 
                           alt={member.name}
+                          width={40}
+                          height={40}
                           className="w-10 h-10 rounded-full object-cover"
                         />
                       ) : (

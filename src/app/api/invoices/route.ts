@@ -366,15 +366,15 @@ export async function GET(request: NextRequest) {
     if (convertToPreferred) {
       const convertedInvoices = await Promise.all(
         invoices.map(invoice => 
-          CurrencyService.convertInvoiceForReporting(invoice, preferredCurrency)
+          CurrencyService.convertInvoiceForReporting(invoice as { [key: string]: unknown }, preferredCurrency)
         )
       );
-      invoices = convertedInvoices;
+      invoices = convertedInvoices as typeof invoices;
     }
 
     // Calculate total revenue in preferred currency
     const allInvoices = await invoicesCollection.find(query).toArray();
-    const totalRevenue = await CurrencyService.calculateTotalRevenue(allInvoices, preferredCurrency);
+    const totalRevenue = await CurrencyService.calculateTotalRevenue(allInvoices as { [key: string]: unknown }[], preferredCurrency);
 
     return NextResponse.json({
       success: true,

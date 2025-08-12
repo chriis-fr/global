@@ -4,7 +4,6 @@ import { authOptions } from '@/lib/auth';
 import { UserService } from '@/lib/services/userService';
 import { OrganizationService } from '@/lib/services/organizationService';
 import { InvoiceService } from '@/lib/services/invoiceService';
-import { ObjectId } from 'mongodb';
 
 // POST /api/invoices/approve - Approve or reject an invoice
 export async function POST(request: NextRequest) {
@@ -91,8 +90,8 @@ export async function POST(request: NextRequest) {
         approvalWorkflow: {
           ...invoice.approvalWorkflow,
           requiresApproval: invoice.approvalWorkflow?.requiresApproval ?? true,
-          submittedBy: invoice.approvalWorkflow?.submittedBy!,
-          submittedAt: invoice.approvalWorkflow?.submittedAt!,
+          submittedBy: invoice.approvalWorkflow?.submittedBy ?? invoice.createdBy,
+          submittedAt: invoice.approvalWorkflow?.submittedAt ?? invoice.createdAt,
           approvedBy: user._id,
           approvedAt: new Date(),
           comments
@@ -110,8 +109,8 @@ export async function POST(request: NextRequest) {
         approvalWorkflow: {
           ...invoice.approvalWorkflow,
           requiresApproval: invoice.approvalWorkflow?.requiresApproval ?? true,
-          submittedBy: invoice.approvalWorkflow?.submittedBy!,
-          submittedAt: invoice.approvalWorkflow?.submittedAt!,
+          submittedBy: invoice.approvalWorkflow?.submittedBy ?? invoice.createdBy,
+          submittedAt: invoice.approvalWorkflow?.submittedAt ?? invoice.createdAt,
           rejectedBy: user._id,
           rejectedAt: new Date(),
           rejectionReason: reason,
