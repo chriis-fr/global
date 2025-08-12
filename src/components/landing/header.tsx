@@ -15,7 +15,7 @@ import {
 import Image from 'next/image'
 import Link from 'next/link'
 import { AnimatePresence } from 'framer-motion'
-import { useSession } from 'next-auth/react'
+import { useSession, signOut } from 'next-auth/react'
 
 export function Header() {
   const { data: session } = useSession();
@@ -181,12 +181,21 @@ export function Header() {
                 <span>Dashboard</span>
               </Link>
             )}
-            <Link
-              href="/auth"
-              className="text-gray-700 hover:text-blue-600 transition-colors font-medium"
-            >
-              {session ? 'Sign Out' : 'Sign In'}
-            </Link>
+            {session ? (
+              <button
+                onClick={() => signOut({ callbackUrl: '/' })}
+                className="text-gray-700 hover:text-blue-600 transition-colors font-medium"
+              >
+                Sign Out
+              </button>
+            ) : (
+              <Link
+                href="/auth"
+                className="text-gray-700 hover:text-blue-600 transition-colors font-medium"
+              >
+                Sign In
+              </Link>
+            )}
             <motion.div
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
@@ -249,13 +258,25 @@ export function Header() {
                 )}
                 
                 <div className="pt-4 border-t border-gray-200 space-y-3">
-                  <Link
-                    href="/auth"
-                    className="block text-gray-700 hover:text-blue-600 transition-colors"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    {session ? 'Sign Out' : 'Sign In'}
-                  </Link>
+                  {session ? (
+                    <button
+                      onClick={() => {
+                        signOut({ callbackUrl: '/' });
+                        setIsMenuOpen(false);
+                      }}
+                      className="block text-gray-700 hover:text-blue-600 transition-colors w-full text-left"
+                    >
+                      Sign Out
+                    </button>
+                  ) : (
+                    <Link
+                      href="/auth"
+                      className="block text-gray-700 hover:text-blue-600 transition-colors"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      Sign In
+                    </Link>
+                  )}
                   <Link
                     href="/auth"
                     className="block bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors text-center"
