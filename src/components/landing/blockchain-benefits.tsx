@@ -181,15 +181,15 @@ export function BlockchainBenefits() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.1 }}
-                  className="p-2 md:p-6 rounded-lg bg-white/5 hover:bg-white/10 transition-colors cursor-pointer ring-1 ring-blue-400/30 hover:ring-blue-500"
+                  className="p-2 md:p-8 rounded-lg bg-white/5 hover:bg-white/10 transition-colors cursor-pointer ring-1 ring-blue-400/30 hover:ring-blue-500"
                 >
-                  <div className="w-8 h-8 md:w-12 md:h-12 bg-blue-500/20 rounded-lg flex items-center justify-center mb-2 md:mb-4">
-                    <Icon className="h-4 w-4 md:h-6 md:w-6 text-blue-400" />
+                  <div className="w-8 h-8 md:w-16 md:h-16 bg-blue-500/20 rounded-lg flex items-center justify-center mb-2 md:mb-6">
+                    <Icon className="h-4 w-4 md:h-8 md:w-8 text-blue-400" />
                   </div>
-                  <h3 className="text-xs md:text-lg font-semibold mb-1 md:mb-2">
+                  <h3 className="text-xs md:text-xl font-semibold mb-1 md:mb-3">
                     {benefit.title}
                   </h3>
-                  <p className="text-blue-100 text-xs md:text-sm leading-tight">
+                  <p className="text-blue-100 text-xs md:text-base leading-tight">
                     {benefit.description}
                   </p>
                 </motion.div>
@@ -212,7 +212,7 @@ export function BlockchainBenefits() {
           {/* For Companies */}
           <div className="mb-4 md:mb-6">
             <h4 className="text-sm md:text-lg font-semibold mb-2 md:mb-4 text-blue-200">For Companies</h4>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2 md:gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 md:gap-6">
               {businessSolutions
                 .filter(solution => solution.category === 'For Companies')
                 .map((solution, index) => {
@@ -248,7 +248,7 @@ export function BlockchainBenefits() {
           {/* For Freelancers */}
           <div className="mb-4 md:mb-6">
             <h4 className="text-sm md:text-lg font-semibold mb-2 md:mb-4 text-blue-200">For Freelancers</h4>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-6">
               {businessSolutions
                 .filter(solution => solution.category === 'For Freelancers')
                 .map((solution, index) => {
@@ -288,7 +288,7 @@ export function BlockchainBenefits() {
             Integrations and API Solutions
           </h3>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-8">
             {integrations.map((integration, index) => {
               const Icon = integration.icon
               const cardContent = (
@@ -299,17 +299,17 @@ export function BlockchainBenefits() {
                   transition={{ delay: index * 0.1 + 0.3 }}
                   className="flex bg-white/5 rounded-lg overflow-hidden cursor-pointer hover:bg-white/10 transition-colors"
                 >
-                  <div className="w-8 md:w-16 flex-shrink-0 bg-blue-800/30 flex items-center justify-center">
-                    <Icon className="h-4 w-4 md:h-8 md:w-8 text-blue-400" />
+                  <div className="w-8 md:w-20 flex-shrink-0 bg-blue-800/30 flex items-center justify-center">
+                    <Icon className="h-4 w-4 md:h-10 md:w-10 text-blue-400" />
                   </div>
-                  <div className="p-2 md:p-6">
+                  <div className="p-2 md:p-8">
                     <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider">
                       {integration.module}
                     </span>
-                    <h4 className="text-sm md:text-lg font-semibold mb-1 md:mb-2 mt-1">
+                    <h4 className="text-sm md:text-xl font-semibold mb-1 md:mb-3 mt-1">
                       {integration.title}
                     </h4>
-                    <p className="text-blue-100 text-xs md:text-sm leading-tight">
+                    <p className="text-blue-100 text-xs md:text-base leading-tight">
                       {integration.description}
                     </p>
                   </div>
