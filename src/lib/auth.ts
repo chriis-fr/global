@@ -98,22 +98,34 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async signIn({ user, account }) {
-              if (account?.provider === 'google') {
-          try {
-            // Check if user already exists
-            const existingUser = await UserService.getUserByEmail(user.email!)
-            if (existingUser) {
-              // Update existing user with Google info
-              await UserService.updateUser(existingUser._id!.toString(), {
-                profilePicture: user.image || undefined,
-                avatar: user.image || undefined,
-                lastLoginAt: new Date()
-              })
-              return true
-            }
+      console.log('🔍 [Auth] SignIn callback triggered')
+      console.log('🔍 [Auth] User:', user)
+      console.log('🔍 [Auth] Account:', account)
+      
+      if (account?.provider === 'google') {
+        console.log('🔍 [Auth] Google provider detected')
+        try {
+          console.log('🔍 [Auth] Checking if user exists:', user.email)
+          
+          // Check if user already exists
+          const existingUser = await UserService.getUserByEmail(user.email!)
+          console.log('🔍 [Auth] Existing user check result:', existingUser ? 'Found' : 'Not found')
+          
+          if (existingUser) {
+            console.log('🔍 [Auth] Updating existing user')
+            // Update existing user with Google info
+            await UserService.updateUser(existingUser._id!.toString(), {
+              profilePicture: user.image || undefined,
+              avatar: user.image || undefined,
+              lastLoginAt: new Date()
+            })
+            console.log('✅ [Auth] Existing user updated successfully')
+            return true
+          }
 
-            // Create new user from Google data
-            const googleUser = user as GoogleUserExtended
+          console.log('🔍 [Auth] Creating new user from Google data')
+          // Create new user from Google data
+          const googleUser = user as GoogleUserExtended
           
           const userData = {
             email: googleUser.email!,
@@ -137,31 +149,31 @@ export const authOptions: NextAuthOptions = {
               termsVersion: '1.0'
             },
             walletAddresses: [],
-                         settings: {
-               currencyPreference: 'USD',
-               notifications: {
-                 email: true,
-                 sms: false,
-                 push: false,
-                 inApp: true,
-                 invoiceCreated: true,
-                 invoicePaid: true,
-                 invoiceOverdue: true,
-                 paymentReceived: true,
-                 paymentFailed: true,
-                 systemUpdates: true,
-                 securityAlerts: true,
-                 reminders: true,
-                 approvals: true,
-                 frequency: 'immediate' as const,
-                 quietHours: {
-                   enabled: false,
-                   start: '22:00',
-                   end: '08:00',
-                   timezone: 'UTC'
-                 }
-               }
-             },
+            settings: {
+              currencyPreference: 'USD',
+              notifications: {
+                email: true,
+                sms: false,
+                push: false,
+                inApp: true,
+                invoiceCreated: true,
+                invoicePaid: true,
+                invoiceOverdue: true,
+                paymentReceived: true,
+                paymentFailed: true,
+                systemUpdates: true,
+                securityAlerts: true,
+                reminders: true,
+                approvals: true,
+                frequency: 'immediate' as const,
+                quietHours: {
+                  enabled: false,
+                  start: '22:00',
+                  end: '08:00',
+                  timezone: 'UTC'
+                }
+              }
+            },
             services: createDefaultServices(),
             onboarding: {
               completed: false,
@@ -171,13 +183,21 @@ export const authOptions: NextAuthOptions = {
             }
           }
 
+          console.log('🔍 [Auth] User data prepared:', { email: userData.email, name: userData.name })
           await UserService.createUser(userData)
+          console.log('✅ [Auth] New user created successfully')
           return true
         } catch (error) {
           console.error('❌ [Auth] Error during Google sign-in:', error)
+          console.error('❌ [Auth] Error details:', {
+            message: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : undefined,
+            name: error instanceof Error ? error.name : 'Unknown'
+          })
           return false
         }
       }
+      console.log('🔍 [Auth] Non-Google provider, returning true')
       return true
     },
     async session({ session, token }) {
