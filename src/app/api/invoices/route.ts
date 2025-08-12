@@ -241,8 +241,8 @@ export async function POST(request: NextRequest) {
       },
       clientDetails: {
         email: clientEmail,
-        companyName: clientCompany || clientName,
-        firstName: '',
+        companyName: clientCompany || undefined,
+        firstName: clientName || '',
         lastName: '',
         country: clientAddress?.country || '',
         region: clientAddress?.state || '',

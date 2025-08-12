@@ -37,6 +37,7 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import InvoicePdfView from '@/components/invoicing/InvoicePdfView';
 import { LogoSelector } from '@/components/LogoSelector';
+import { setCriticalOperation } from '@/components/dashboard/NotificationBadge';
 
 interface Client {
   _id: string;
@@ -220,10 +221,12 @@ export default function CreateInvoicePage() {
     }
   }, [invoiceId, session]);
 
-  // Monitor formData changes for debugging
+    // Monitor formData changes for debugging (disabled during sending)
   useEffect(() => {
-    console.log('📊 [Invoice Create] FormData updated - companyLogo:', formData.companyLogo);
-  }, [formData.companyLogo]);
+    if (!sendingInvoice) {
+      console.log('📊 [Invoice Create] FormData updated - companyLogo: [LOGO_DATA]');
+    }
+  }, [formData.companyLogo, sendingInvoice]);
 
   // Handle click outside for dropdowns
   useEffect(() => {
@@ -362,21 +365,17 @@ export default function CreateInvoicePage() {
       const response = await fetch('/api/user/logo');
       const data = await response.json();
       
-      console.log('📊 [Invoice Create] Logo API response:', data);
-      
       if (data.success && data.logoUrl) {
         setFormData(prev => ({
           ...prev,
           companyLogo: data.logoUrl
         }));
-        console.log('✅ [Invoice Create] Logo loaded from settings:', data.logoSource, 'URL:', data.logoUrl);
+        console.log('✅ [Invoice Create] Logo loaded from settings:', data.logoSource);
       } else {
         console.log('⚠️ [Invoice Create] No logo in settings, trying logos API...');
         // If no logo is set in settings, try to load from logos API
         const logosResponse = await fetch('/api/user/logos');
         const logosData = await logosResponse.json();
-        
-        console.log('📊 [Invoice Create] Logos API response:', logosData);
         
         if (logosData.success && logosData.logos && logosData.logos.length > 0) {
           const defaultLogo = logosData.logos.find((logo: {isDefault: boolean, url: string}) => logo.isDefault) || logosData.logos[0];
@@ -384,7 +383,7 @@ export default function CreateInvoicePage() {
             ...prev,
             companyLogo: defaultLogo.url
           }));
-          console.log('✅ [Invoice Create] Logo loaded from logos API:', defaultLogo);
+          console.log('✅ [Invoice Create] Logo loaded from logos API');
         } else {
           console.log('⚠️ [Invoice Create] No logos found in any API');
         }
@@ -670,31 +669,17 @@ export default function CreateInvoicePage() {
     setValidationErrors([]);
 
     setSendingInvoice(true);
+    setCriticalOperation(true); // Disable notification polling during invoice sending
 
     try {
-      console.log('📧 [Smart Invoicing] Starting invoice email send...', {
-        invoiceNumber: formData.invoiceNumber,
-        clientEmail: formData.clientEmail,
-        clientName: formData.clientName,
-        total: formData.total,
-        paymentMethod: formData.paymentMethod,
-        ccClients: formData.ccClients?.length || 0,
-        isDraft: !!formData._id
-      });
+      console.log('📧 [Smart Invoicing] Starting invoice email send...');
 
       let primaryInvoiceId: string;
       let primaryInvoiceNumber: string;
 
       // If this is a draft invoice (has _id), update it instead of creating new
       if (formData._id) {
-        console.log('💾 [Smart Invoicing] Updating draft invoice:', {
-          id: formData._id,
-          invoiceNumber: formData.invoiceNumber,
-          clientEmail: formData.clientEmail,
-          clientName: formData.clientName,
-          total: formData.total,
-          items: formData.items.length
-        });
+        console.log('💾 [Smart Invoicing] Updating draft invoice...');
 
         const updateResponse = await fetch(`/api/invoices/${formData._id}`, {
           method: 'PUT',
@@ -714,7 +699,7 @@ export default function CreateInvoicePage() {
         }
 
         const updateData = await updateResponse.json();
-        console.log('📄 [Smart Invoicing] Update invoice response data:', updateData);
+        console.log('📄 [Smart Invoicing] Update invoice response received');
 
         if (!updateData.success) {
           throw new Error(`Failed to update invoice: ${updateData.message}`);
@@ -729,12 +714,7 @@ export default function CreateInvoicePage() {
         });
       } else {
         // Create new invoice
-        console.log('💾 [Smart Invoicing] Creating new invoice:', {
-          clientEmail: formData.clientEmail,
-          clientName: formData.clientName,
-          total: formData.total,
-          items: formData.items.length
-        });
+        console.log('💾 [Smart Invoicing] Creating new invoice...');
 
         const primaryInvoiceResponse = await fetch('/api/invoices', {
           method: 'POST',
@@ -754,7 +734,7 @@ export default function CreateInvoicePage() {
         }
 
         const primaryInvoiceData = await primaryInvoiceResponse.json();
-        console.log('📄 [Smart Invoicing] Primary invoice response data:', primaryInvoiceData);
+        console.log('📄 [Smart Invoicing] Primary invoice response received');
 
         if (!primaryInvoiceData.success) {
           throw new Error(`Failed to save invoice: ${primaryInvoiceData.message}`);
@@ -768,6 +748,13 @@ export default function CreateInvoicePage() {
           invoiceNumber: primaryInvoiceNumber
         });
       }
+
+      // Update formData with the new invoice number and ID
+      setFormData(prev => ({
+        ...prev,
+        _id: primaryInvoiceId,
+        invoiceNumber: primaryInvoiceNumber
+      }));
 
       // If there are CC clients, create CC invoices
       if (formData.ccClients && formData.ccClients.length > 0) {
@@ -789,8 +776,8 @@ export default function CreateInvoicePage() {
           throw new Error('Failed to create CC invoices');
         }
 
-        const ccInvoiceData = await ccInvoiceResponse.json();
-        console.log('📧 [Smart Invoicing] CC invoices created:', ccInvoiceData.ccInvoices);
+        await ccInvoiceResponse.json();
+        console.log('📧 [Smart Invoicing] CC invoices created successfully');
       }
 
       // Create a simplified version of the invoice for PDF generation (same as handleDownloadPdf)
@@ -826,9 +813,9 @@ export default function CreateInvoicePage() {
                   <div style="font-size: 14px; color: #6b7280;">
                     Payment due by ${formatDate(formData.dueDate)}
                   </div>
-                  ${formData.invoiceNumber ? `
+                  ${primaryInvoiceNumber ? `
                     <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                      Invoice: ${formData.invoiceNumber}
+                      Invoice: ${primaryInvoiceNumber}
                     </div>
                   ` : ''}
                 </div>
@@ -1157,6 +1144,7 @@ export default function CreateInvoicePage() {
       alert('Failed to send invoice. Please try again.');
     } finally {
       setSendingInvoice(false);
+      setCriticalOperation(false); // Re-enable notification polling
     }
   };
 
@@ -1642,6 +1630,7 @@ export default function CreateInvoicePage() {
       alert('Failed to send invoice. Please try again.');
     } finally {
       setSendingInvoice(false);
+      setCriticalOperation(false); // Re-enable notification polling
     }
   };
 
@@ -2169,10 +2158,7 @@ export default function CreateInvoicePage() {
   // Save invoice to database
   const saveInvoiceToDatabase = async (invoiceData: InvoiceFormData) => {
     try {
-      console.log('💾 [Smart Invoicing] Saving invoice to database:', {
-        invoiceNumber: invoiceData.invoiceNumber,
-        total: invoiceData.total
-      });
+            console.log('💾 [Smart Invoicing] Saving invoice to database');
 
       // Convert File objects to metadata for database storage
       const attachedFilesMetadata = (invoiceData.attachedFiles || []).map(file => ({

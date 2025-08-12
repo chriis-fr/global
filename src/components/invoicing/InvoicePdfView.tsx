@@ -106,6 +106,11 @@ const InvoicePdfView = forwardRef<HTMLDivElement, InvoicePdfViewProps>(
                     <Clock className="h-4 w-4" />
                     <span>Payment due by {formatDate(formData.dueDate)}</span>
                   </div>
+                  {invoiceNumber && (
+                    <div className="mt-1 text-gray-600">
+                      Invoice: {invoiceNumber}
+                    </div>
+                  )}
                 </div>
                                  <div className="w-16 h-16 bg-white rounded-lg flex items-center justify-center overflow-hidden border border-gray-200">
                    {formData.companyLogo ? (
@@ -305,15 +310,6 @@ const InvoicePdfView = forwardRef<HTMLDivElement, InvoicePdfViewProps>(
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Memo</h3>
             <div className="text-sm text-gray-700 whitespace-pre-wrap">
               {formData.memo}
-            </div>
-          </div>
-        )}
-
-        {/* Invoice Number */}
-        {invoiceNumber && (
-          <div className="py-8 text-center">
-            <div className="text-sm text-gray-500">
-                  Invoice Number: {invoiceNumber}
             </div>
           </div>
         )}

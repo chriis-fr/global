@@ -419,10 +419,7 @@ export default function Sidebar() {
             style={{ textDecoration: 'none' }}
           >
             <div className="flex items-center">
-              <div className="relative">
-                <Bell className="h-4 w-4 mr-3 flex-shrink-0" />
-                <NotificationBadge />
-              </div>
+              <Bell className="h-4 w-4 mr-3 flex-shrink-0" />
               <span className="whitespace-nowrap">Notifications</span>
             </div>
           </Link>

@@ -1,21 +1,42 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
+
+// Global flag to disable polling during critical operations
+let isCriticalOperation = false;
+
+export const setCriticalOperation = (critical: boolean) => {
+  isCriticalOperation = critical;
+};
 
 export default function NotificationBadge() {
   const { data: session } = useSession();
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const lastFetchRef = useRef<number>(0);
-  const activityTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isVisibleRef = useRef<boolean>(true);
+  const isFetchingRef = useRef<boolean>(false);
 
-  const fetchUnreadCount = async () => {
-    // Prevent multiple simultaneous requests
-    const now = Date.now();
-    if (now - lastFetchRef.current < 5000) { // 5 second cooldown
+  const fetchUnreadCount = useCallback(async () => {
+    // Skip if critical operation is happening
+    if (isCriticalOperation) {
       return;
     }
+
+    // Prevent multiple simultaneous requests
+    const now = Date.now();
+    if (now - lastFetchRef.current < 60000) { // 60 second cooldown (increased from 30)
+      return;
+    }
+    
+    // Prevent concurrent requests
+    if (isFetchingRef.current) {
+      return;
+    }
+    
+    isFetchingRef.current = true;
     lastFetchRef.current = now;
 
     try {
@@ -37,8 +58,9 @@ export default function NotificationBadge() {
       }
     } finally {
       setLoading(false);
+      isFetchingRef.current = false;
     }
-  };
+  }, [loading]);
 
   useEffect(() => {
     if (!session?.user) return;
@@ -46,31 +68,31 @@ export default function NotificationBadge() {
     // Initial fetch on login
     fetchUnreadCount();
 
-    // Activity-based fetching (only on user interaction)
-    const handleUserActivity = () => {
-      // Clear existing timeout
-      if (activityTimeoutRef.current) {
-        clearTimeout(activityTimeoutRef.current);
-      }
-      
-      // Debounce activity - only fetch after 2 seconds of no activity
-      activityTimeoutRef.current = setTimeout(() => {
+    // Set up periodic polling every 5 minutes (300 seconds) - increased from 2 minutes
+    intervalRef.current = setInterval(() => {
+      if (isVisibleRef.current && !isCriticalOperation) {
         fetchUnreadCount();
-      }, 2000);
+      }
+    }, 300000); // 5 minutes
+
+    // Handle page visibility changes
+    const handleVisibilityChange = () => {
+      isVisibleRef.current = !document.hidden;
+      if (isVisibleRef.current && !isCriticalOperation) {
+        // Fetch immediately when page becomes visible
+        fetchUnreadCount();
+      }
     };
 
-    // Only listen for actual user interactions
-    document.addEventListener('click', handleUserActivity);
-    document.addEventListener('keydown', handleUserActivity);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     
     return () => {
-      if (activityTimeoutRef.current) {
-        clearTimeout(activityTimeoutRef.current);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
       }
-      document.removeEventListener('click', handleUserActivity);
-      document.removeEventListener('keydown', handleUserActivity);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [session?.user]);
+  }, [session?.user, fetchUnreadCount]);
 
   if (loading) {
     return null;
