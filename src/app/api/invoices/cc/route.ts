@@ -193,10 +193,10 @@ export async function POST(request: NextRequest) {
         if (emailResult.success) {
           console.log('✅ [API CC Invoices] Email sent to CC recipient:', ccClient.email);
         } else {
-          console.error('❌ [API CC Invoices] Failed to send email to CC recipient:', ccClient.email, emailResult.error);
+          console.error('❌ [API CC Invoices] Failed to send email to CC recipient:', ccClient.email);
         }
       } catch (emailError) {
-        console.error('❌ [API CC Invoices] Error sending email to CC recipient:', ccClient.email, emailError);
+        console.error('❌ [API CC Invoices] Error sending email to CC recipient:', ccClient.email);
       }
     }
 

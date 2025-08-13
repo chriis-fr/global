@@ -812,7 +812,6 @@ export default function CreateInvoicePage() {
         }
 
         await ccInvoiceResponse.json();
-        // CC invoices created successfully
       }
 
       // Create a simplified version of the invoice for PDF generation (same as handleDownloadPdf)

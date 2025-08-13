@@ -49,10 +49,7 @@ const generateSecureInvoiceNumber = async (db: Db, organizationId: string, owner
     const match = lastInvoice.invoiceNumber.match(/-(\d{4})$/);
     if (match) {
       sequence = parseInt(match[1]) + 1;
-      console.log(`🔍 [Invoice Number] Found last invoice: ${lastInvoice.invoiceNumber}, next sequence: ${sequence}`);
     }
-  } else {
-    console.log(`🔍 [Invoice Number] No existing invoices found, starting with sequence: ${sequence}`);
   }
 
   // Generate the invoice number
@@ -70,8 +67,6 @@ const generateSecureInvoiceNumber = async (db: Db, organizationId: string, owner
   );
   
   if (existingInvoice) {
-    console.log(`⚠️ [Invoice Number] Generated number ${invoiceNumber} already exists, finding next available sequence`);
-    
     // If it exists, find all invoices for this month and get the highest sequence
     const allInvoices = await db.collection('invoices').find(
       { 
@@ -83,26 +78,19 @@ const generateSecureInvoiceNumber = async (db: Db, organizationId: string, owner
       }
     ).toArray();
     
-    console.log(`🔍 [Invoice Number] Found ${allInvoices.length} existing invoices for this month`);
-    
     // Get all sequences and find the highest one
     const usedSequences = allInvoices.map(inv => {
       const match = inv.invoiceNumber.match(/-(\d{4})$/);
       return match ? parseInt(match[1]) : 0;
     });
     
-    console.log(`🔍 [Invoice Number] Used sequences: [${usedSequences.join(', ')}]`);
-    
     // Find the highest sequence and increment by 1
     const highestSequence = Math.max(...usedSequences, 0);
     sequence = highestSequence + 1;
     
     invoiceNumber = `INV-${secureId}-${currentYear}${currentMonth}-${String(sequence).padStart(4, '0')}`;
-    
-    console.log(`✅ [Invoice Number] Resolved conflict, highest sequence: ${highestSequence}, new sequence: ${sequence}, new number: ${invoiceNumber}`);
   }
 
-  console.log(`🎯 [Invoice Number] Final generated number: ${invoiceNumber}`);
   return invoiceNumber;
 };
 
@@ -364,8 +352,6 @@ export async function POST(request: NextRequest) {
         
         if (error && typeof error === 'object' && 'code' in error && error.code === 11000) {
           // Duplicate key error - generate a new invoice number and try again
-          console.log(`⚠️ [API Invoices] Duplicate invoice number detected (attempt ${attempts}/${maxAttempts}), generating new number and retrying`);
-          
           const newInvoiceNumber = await generateSecureInvoiceNumber(
             db, 
             session.user.organizationId || '', 
@@ -378,7 +364,6 @@ export async function POST(request: NextRequest) {
           invoiceData.invoiceName = invoiceName || `Invoice ${newInvoiceNumber}`;
           
           if (attempts >= maxAttempts) {
-            console.error('❌ [API Invoices] Max retry attempts reached for duplicate invoice numbers');
             throw new Error('Failed to generate unique invoice number after multiple attempts');
           }
         } else {
@@ -392,12 +377,7 @@ export async function POST(request: NextRequest) {
       throw new Error('Failed to insert invoice - no result returned');
     }
     
-    console.log('✅ [API Invoices] Invoice saved successfully:', {
-      id: result.insertedId,
-      invoiceNumber: invoiceData.invoiceNumber,
-      ownerType,
-      ownerId
-    });
+    console.log('✅ [API Invoices] Invoice saved successfully');
 
     return NextResponse.json({
       success: true,
