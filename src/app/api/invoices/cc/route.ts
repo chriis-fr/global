@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
-import { ObjectId } from 'mongodb';
+import { ObjectId, Db } from 'mongodb';
 import { UserService } from '@/lib/services/userService';
 import { sendInvoiceNotification } from '@/lib/services/emailService';
 
 // Generate CC invoice number based on primary invoice
-const generateCcInvoiceNumber = async (db: any, primaryInvoiceNumber: string, index: number, organizationId: string, ownerId: string): Promise<string> => {
+const generateCcInvoiceNumber = async (db: Db, primaryInvoiceNumber: string, index: number, organizationId: string, ownerId: string): Promise<string> => {
   const currentYear = new Date().getFullYear();
   const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
   
@@ -195,7 +195,7 @@ export async function POST(request: NextRequest) {
         } else {
           console.error('❌ [API CC Invoices] Failed to send email to CC recipient:', ccClient.email);
         }
-      } catch (emailError) {
+      } catch {
         console.error('❌ [API CC Invoices] Error sending email to CC recipient:', ccClient.email);
       }
     }
