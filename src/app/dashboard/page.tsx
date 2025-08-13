@@ -44,9 +44,8 @@ export default function DashboardPage() {
         const invoices = invoicesData.success ? invoicesData.data.invoices || [] : [];
         const clients = clientsData.success ? clientsData.data : [];
         
-        // Calculate revenue only from paid invoices
-        const paidInvoicesForRevenue = invoices.filter((inv: { status: string }) => inv.status === 'paid');
-        const totalRevenue = paidInvoicesForRevenue.reduce((sum: number, inv: { totalAmount: number }) => sum + (inv.totalAmount || 0), 0);
+        // Use total revenue from API (which includes all invoices, not just paid ones)
+        const totalRevenue = invoicesData.success ? invoicesData.data.stats?.totalRevenue || 0 : 0;
 
         const totalExpenses = 0; // Will be implemented when expenses service is ready
 

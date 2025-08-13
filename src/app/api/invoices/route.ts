@@ -466,8 +466,16 @@ export async function GET(request: NextRequest) {
       invoices = convertedInvoices as typeof invoices;
     }
 
-    // Calculate total revenue in preferred currency
-    const allInvoices = await invoicesCollection.find(query).toArray();
+    // Calculate total revenue in preferred currency (always include all invoices regardless of status filter)
+    const revenueQuery = isOrganization 
+      ? { organizationId: session.user.organizationId }
+      : { 
+          $or: [
+            { issuerId: session.user.id },
+            { userId: session.user.email }
+          ]
+        };
+    const allInvoices = await invoicesCollection.find(revenueQuery).toArray();
     const totalRevenue = await CurrencyService.calculateTotalRevenue(allInvoices as { [key: string]: unknown }[], preferredCurrency);
 
     return NextResponse.json({

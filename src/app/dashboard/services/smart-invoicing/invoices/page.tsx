@@ -28,19 +28,29 @@ export default function InvoicesPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'sent' | 'pending' | 'paid' | 'overdue'>('all');
+  const [totalRevenue, setTotalRevenue] = useState(0);
 
   const loadInvoices = useCallback(async () => {
     try {
-      const invoicesData = await InvoiceService.getInvoices();
-      setInvoices(invoicesData);
+      // Fetch invoices with stats to get total revenue from all invoices
+      const response = await fetch('/api/invoices?convertToPreferred=true');
+      const data = await response.json();
       
-      console.log('📊 [Invoices Page] Loaded invoices:', {
-        count: invoicesData.length,
-        pendingCount: invoicesData.filter(inv => inv.status === 'sent' || inv.status === 'pending').length,
-        statuses: invoicesData.map(inv => ({ id: inv._id, status: inv.status }))
-      });
+      if (data.success) {
+        setInvoices(data.data.invoices || []);
+        setTotalRevenue(data.data.stats?.totalRevenue || 0);
+      } else {
+        // Fallback to InvoiceService if API fails
+        const invoicesData = await InvoiceService.getInvoices();
+        setInvoices(invoicesData);
+        setTotalRevenue(0); // Will be calculated from loaded invoices
+      }
     } catch (error) {
       console.error('❌ [Invoices Page] Error loading invoices:', error);
+      // Fallback to InvoiceService if fetch fails
+      const invoicesData = await InvoiceService.getInvoices();
+      setInvoices(invoicesData);
+      setTotalRevenue(0);
     } finally {
       setLoading(false);
     }
@@ -104,7 +114,7 @@ export default function InvoicesPage() {
   // Calculate stats for the header
   const stats = {
     totalInvoices: invoices.length,
-    totalRevenue: invoices.reduce((sum, inv) => sum + (inv.totalAmount || 0), 0),
+    totalRevenue: totalRevenue, // Use total revenue from API (all invoices) instead of just loaded invoices
     pendingCount: invoices.filter(inv => inv.status === 'sent' || inv.status === 'pending').length,
     paidCount: invoices.filter(inv => inv.status === 'paid').length
   };
