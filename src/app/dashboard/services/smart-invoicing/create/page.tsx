@@ -812,7 +812,6 @@ export default function CreateInvoicePage() {
         }
 
         await ccInvoiceResponse.json();
-        // CC invoices created successfully
       }
 
       // Create a simplified version of the invoice for PDF generation (same as handleDownloadPdf)
@@ -3808,7 +3807,7 @@ function CompanyEditForm({
           type="text"
           value={editData.companyName}
           onChange={(e) => handleInputChange('companyName', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder-gray-500 bg-white"
           required
         />
       </div>
@@ -3819,7 +3818,7 @@ function CompanyEditForm({
           type="email"
           value={editData.companyEmail}
           onChange={(e) => handleInputChange('companyEmail', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder-gray-500 bg-white"
           required
         />
       </div>
@@ -3830,7 +3829,7 @@ function CompanyEditForm({
           type="tel"
           value={editData.companyPhone}
           onChange={(e) => handleInputChange('companyPhone', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder-gray-500 bg-white"
         />
       </div>
 
@@ -3840,18 +3839,18 @@ function CompanyEditForm({
           type="text"
           value={editData.companyTaxNumber}
           onChange={(e) => handleInputChange('companyTaxNumber', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder-gray-500 bg-white"
         />
       </div>
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Street Address</label>
-        <input
-          type="text"
-          value={editData.companyAddress.street}
-          onChange={(e) => handleInputChange('companyAddress.street', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+                  <input
+            type="text"
+            value={editData.companyAddress.street}
+            onChange={(e) => handleInputChange('companyAddress.street', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder-gray-500 bg-white"
+          />
       </div>
 
       <div className="grid grid-cols-2 gap-2">
@@ -3861,7 +3860,7 @@ function CompanyEditForm({
             type="text"
             value={editData.companyAddress.city}
             onChange={(e) => handleInputChange('companyAddress.city', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder-gray-500 bg-white"
           />
         </div>
         <div>
@@ -3870,7 +3869,7 @@ function CompanyEditForm({
             type="text"
             value={editData.companyAddress.state}
             onChange={(e) => handleInputChange('companyAddress.state', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder-gray-500 bg-white"
           />
         </div>
       </div>
@@ -3882,7 +3881,7 @@ function CompanyEditForm({
             type="text"
             value={editData.companyAddress.zipCode}
             onChange={(e) => handleInputChange('companyAddress.zipCode', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder-gray-500 bg-white"
           />
         </div>
         <div>
@@ -3912,7 +3911,7 @@ function CompanyEditForm({
                       value={countrySearch}
                       onChange={(e) => setCountrySearch(e.target.value)}
                       placeholder="Search countries..."
-                      className="w-full pl-10 pr-3 py-2 bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full pl-10 pr-3 py-2 bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                 </div>

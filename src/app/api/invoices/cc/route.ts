@@ -4,10 +4,74 @@ import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
 import { UserService } from '@/lib/services/userService';
+import { sendInvoiceNotification } from '@/lib/services/emailService';
 
 // Generate CC invoice number based on primary invoice
-const generateCcInvoiceNumber = (primaryInvoiceNumber: string, index: number): string => {
-  return `${primaryInvoiceNumber}-CC${String(index + 1).padStart(3, '0')}`;
+const generateCcInvoiceNumber = async (db: any, primaryInvoiceNumber: string, index: number, organizationId: string, ownerId: string): Promise<string> => {
+  const currentYear = new Date().getFullYear();
+  const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+  
+  // Create a short, secure identifier from organization/user ID
+  let secureId: string;
+  if (organizationId) {
+    // For organizations, use last 4 chars of org ID
+    secureId = organizationId.slice(-4);
+  } else {
+    // For individual users, create a unique identifier from email
+    const emailParts = ownerId.split('@');
+    const username = emailParts[0].replace(/[^a-zA-Z0-9]/g, '').slice(0, 4);
+    const domain = emailParts[1]?.replace(/[^a-zA-Z0-9]/g, '').slice(-2) || 'XX';
+    secureId = `${username}${domain}`.toUpperCase();
+  }
+  
+  // Query for the last invoice number for this organization/user (including both regular and CC invoices)
+  const lastInvoice = await db.collection('invoices').findOne(
+    { 
+      $or: [
+        { organizationId: organizationId || null },
+        { ownerId: ownerId }
+      ]
+    },
+    { 
+      sort: { invoiceNumber: -1 },
+      projection: { invoiceNumber: 1 }
+    }
+  );
+
+  let sequence = 1;
+  
+  if (lastInvoice?.invoiceNumber) {
+    // Extract sequence from existing invoice number
+    const match = lastInvoice.invoiceNumber.match(/-(\d{4})$/);
+    if (match) {
+      sequence = parseInt(match[1]) + 1;
+    }
+  }
+
+  // Generate the invoice number
+  const generatedNumber = `INV-${secureId}-${currentYear}${currentMonth}-${String(sequence).padStart(4, '0')}`;
+  
+  // Check if this number already exists and increment if necessary
+  let finalNumber = generatedNumber;
+  let attempts = 0;
+  const maxAttempts = 10;
+  
+  while (attempts < maxAttempts) {
+    const existingInvoice = await db.collection('invoices').findOne(
+      { invoiceNumber: finalNumber }
+    );
+    
+    if (!existingInvoice) {
+      break; // Number is unique, use it
+    }
+    
+    // Number exists, increment sequence and try again
+    sequence++;
+    finalNumber = `INV-${secureId}-${currentYear}${currentMonth}-${String(sequence).padStart(4, '0')}`;
+    attempts++;
+  }
+  
+  return finalNumber;
 };
 
 export async function POST(request: NextRequest) {
@@ -48,7 +112,7 @@ export async function POST(request: NextRequest) {
     // Create CC invoices for each recipient
     for (let i = 0; i < ccClients.length; i++) {
       const ccClient = ccClients[i];
-      const ccInvoiceNumber = generateCcInvoiceNumber(primaryInvoiceNumber, i);
+      const ccInvoiceNumber = await generateCcInvoiceNumber(db, primaryInvoiceNumber, i, session.user.organizationId || '', ownerId);
 
       const ccInvoiceData = {
         ...invoiceData,
@@ -78,6 +142,12 @@ export async function POST(request: NextRequest) {
         createdAt: new Date(),
         updatedAt: new Date(),
         
+        // Ensure amounts are properly copied
+        subtotal: invoiceData.subtotal,
+        totalTax: invoiceData.totalTax,
+        total: invoiceData.total,
+        totalAmount: invoiceData.total, // Ensure totalAmount is set
+        
         // Update client details
         clientDetails: {
           ...invoiceData.clientDetails,
@@ -99,6 +169,35 @@ export async function POST(request: NextRequest) {
         invoiceNumber: ccInvoiceNumber,
         clientEmail: ccClient.email
       });
+
+      // Send email to CC recipient
+      try {
+        const greetingName = ccClient.company ? ccClient.name : (ccClient.name || 'Client');
+        const recipientName = ccClient.company || ccClient.name || 'Client';
+        
+        const emailResult = await sendInvoiceNotification(
+          ccClient.email,
+          greetingName,
+          ccInvoiceNumber,
+          invoiceData.total,
+          invoiceData.currency,
+          invoiceData.dueDate ? new Date(invoiceData.dueDate).toLocaleDateString() : 'N/A',
+          invoiceData.companyName || 'Chains ERP-Global',
+          recipientName,
+          `${process.env.FRONTEND_URL || 'http://localhost:3000'}/invoice/${ccInvoiceNumber}`,
+          [invoiceData.paymentMethod === 'crypto' ? 'Cryptocurrency' : 'Bank Transfer'],
+          undefined, // No PDF attachment for CC emails
+          [] // No additional attachments
+        );
+
+        if (emailResult.success) {
+          console.log('✅ [API CC Invoices] Email sent to CC recipient:', ccClient.email);
+        } else {
+          console.error('❌ [API CC Invoices] Failed to send email to CC recipient:', ccClient.email);
+        }
+      } catch (emailError) {
+        console.error('❌ [API CC Invoices] Error sending email to CC recipient:', ccClient.email);
+      }
     }
 
     // Update primary invoice to mark it as having CC recipients
