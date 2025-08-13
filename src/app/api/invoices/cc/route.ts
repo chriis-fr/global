@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
 
     // Determine if user is individual or organization
     const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
-    const ownerId = isOrganization ? session.user.organizationId : session.user.email;
+    const ownerId = isOrganization ? (session.user.organizationId ?? '') : (session.user.email ?? '');
     const ownerType = isOrganization ? 'organization' : 'individual';
 
     const db = await connectToDatabase();
@@ -112,7 +112,8 @@ export async function POST(request: NextRequest) {
     // Create CC invoices for each recipient
     for (let i = 0; i < ccClients.length; i++) {
       const ccClient = ccClients[i];
-      const ccInvoiceNumber = await generateCcInvoiceNumber(db, primaryInvoiceNumber, i, session.user.organizationId || '', ownerId);
+      const organizationId = session.user.organizationId ?? '';
+      const ccInvoiceNumber = await generateCcInvoiceNumber(db, primaryInvoiceNumber, i, organizationId, ownerId);
 
       const ccInvoiceData = {
         ...invoiceData,
