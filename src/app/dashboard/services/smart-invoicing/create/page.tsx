@@ -2365,12 +2365,16 @@ export default function CreateInvoicePage() {
             </button>
             
             <button
-              onClick={handleSendInvoice}
-              disabled={loading || sendingInvoice}
-              className="flex items-center justify-center space-x-2 px-6 py-2 bg-blue-800 text-white rounded-lg hover:bg-blue-900 transition-colors"
+              onClick={handleSendPdf}
+              disabled={sendingInvoice}
+              className="flex items-center justify-center space-x-2 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {sendingInvoice ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-              <span>Send Invoice</span>
+              {sendingInvoice ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+              <span>{sendingInvoice ? 'Sending...' : 'Send PDF'}</span>
             </button>
           </div>
         </div>
@@ -2592,7 +2596,7 @@ export default function CreateInvoicePage() {
                 </div>
 
                 {/* CC Clients Section */}
-                <div className="mt-6 pt-4 border-t border-gray-200">
+                <div className="mt-6 pt-4 border-t border-gray-200 relative">
                   <div className="flex items-center justify-between mb-3">
                     <h4 className="text-sm font-medium text-gray-700 flex items-center">
                       <Mail className="h-4 w-4 mr-1" />
@@ -2609,7 +2613,7 @@ export default function CreateInvoicePage() {
 
                   {/* CC Client Selector Dropdown */}
                   {showCcClientSelector && (
-                    <div className="absolute z-10 mt-2 w-full sm:w-80 bg-white border border-gray-300 rounded-lg shadow-lg">
+                    <div className="absolute top-full left-0 z-10 mt-2 w-80 max-w-full bg-white border border-gray-300 rounded-lg shadow-lg">
                       <div className="p-4">
                         <div className="flex justify-between items-center mb-3">
                           <h4 className="font-medium text-gray-900">Select CC Clients</h4>
@@ -3359,16 +3363,12 @@ export default function CreateInvoicePage() {
           </div>
           
           <button
-            onClick={handleSendPdf}
-            disabled={sendingInvoice}
-            className="flex items-center justify-center space-x-2 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={handleSendInvoice}
+            disabled={loading || sendingInvoice}
+            className="flex items-center justify-center space-x-2 px-6 py-2 bg-blue-800 text-white rounded-lg hover:bg-blue-900 transition-colors"
           >
-            {sendingInvoice ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-            <span>{sendingInvoice ? 'Sending...' : 'Send PDF'}</span>
+            {sendingInvoice ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+            <span>Send Invoice</span>
           </button>
         </div>
 
