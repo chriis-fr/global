@@ -11,16 +11,18 @@ import {
   Star,
   Eye,
   EyeOff,
-  LayoutDashboard
+  LayoutDashboard,
+  AlertCircle
 } from 'lucide-react';
 import Link from 'next/link';
 import BankSelector from '@/components/BankSelector';
 import { Bank } from '@/data';
+import { checkWalletStatus } from '../wallet';
 
 interface PaymentMethod {
   _id?: string;
   name: string;
-  type: 'fiat' | 'crypto';
+  type: 'fiat' | 'crypto' | 'stellar';
   isDefault: boolean;
   isActive: boolean;
   fiatDetails?: {
@@ -38,6 +40,13 @@ interface PaymentMethod {
     network: string;
     currency: string;
   };
+  stellarDetails?: {
+    publicKey: string;
+    currency: string;
+    assetType: 'native' | 'credit_alphanum4' | 'credit_alphanum12';
+    assetCode?: string;
+    assetIssuer?: string;
+  };
 }
 
 export default function PaymentMethodsPage() {
@@ -45,9 +54,10 @@ export default function PaymentMethodsPage() {
   const [loading, setLoading] = useState(true);
   const [showSensitiveData, setShowSensitiveData] = useState<Record<string, boolean>>({});
   const [showAddModal, setShowAddModal] = useState(false);
+  const [walletStatus, setWalletStatus] = useState<{ isActivated: boolean; status: string } | null>(null);
   const [newPaymentMethod, setNewPaymentMethod] = useState({
     name: '',
-    type: 'fiat' as 'fiat' | 'crypto',
+    type: 'fiat' as 'fiat' | 'crypto' | 'stellar',
     bankName: '',
     swiftCode: '',
     bankCode: '',
@@ -58,12 +68,25 @@ export default function PaymentMethodsPage() {
     currency: 'USD',
     network: '',
     address: '',
+    publicKey: '',
+    assetType: 'native' as 'native' | 'credit_alphanum4' | 'credit_alphanum12',
     isDefault: false
   });
 
   useEffect(() => {
     loadPaymentMethods();
+    checkWalletActivationStatus();
   }, []);
+
+  const checkWalletActivationStatus = async () => {
+    try {
+      const status = await checkWalletStatus();
+      setWalletStatus(status);
+    } catch (error) {
+      console.error('Error checking wallet status:', error);
+      setWalletStatus({ isActivated: false, status: 'error' });
+    }
+  };
 
   const loadPaymentMethods = async () => {
     try {
@@ -158,6 +181,26 @@ export default function PaymentMethodsPage() {
         </motion.button>
       </div>
 
+      {/* Wallet Activation Notice */}
+      {walletStatus && !walletStatus.isActivated && (
+        <div className="bg-yellow-500/10 backdrop-blur-sm rounded-xl p-6 border border-yellow-500/20">
+          <div className="flex items-center space-x-3">
+            <AlertCircle className="h-6 w-6 text-yellow-400" />
+            <div>
+              <h3 className="text-lg font-semibold text-white mb-1">Wallet Not Activated</h3>
+              <p className="text-blue-200 mb-4">Activate your Stellar wallet to use crypto payment methods</p>
+              <Link
+                href="/dashboard/settings/wallet"
+                className="inline-flex items-center space-x-2 bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 transition-colors"
+              >
+                <Wallet className="h-4 w-4" />
+                <span>Activate Wallet</span>
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Payment Methods List */}
       <div className="space-y-4">
         {paymentMethods.length === 0 ? (
@@ -183,12 +226,14 @@ export default function PaymentMethodsPage() {
               <div className="flex items-start justify-between">
                 <div className="flex items-center space-x-4">
                   <div className={`p-3 rounded-lg ${
-                    method.type === 'fiat' ? 'bg-green-500/20' : 'bg-purple-500/20'
+                    method.type === 'fiat' ? 'bg-green-500/20' : method.type === 'crypto' ? 'bg-purple-500/20' : 'bg-blue-500/20'
                   }`}>
                     {method.type === 'fiat' ? (
                       <CreditCard className="h-6 w-6 text-green-400" />
-                    ) : (
+                    ) : method.type === 'crypto' ? (
                       <Wallet className="h-6 w-6 text-purple-400" />
+                    ) : (
+                      <Wallet className="h-6 w-6 text-blue-400" />
                     )}
                   </div>
                   <div>
@@ -201,8 +246,10 @@ export default function PaymentMethodsPage() {
                     <p className="text-blue-200 text-sm">
                       {method.type === 'fiat' ? (
                         `${method.fiatDetails?.bankName} • ${method.fiatDetails?.currency}`
-                      ) : (
+                      ) : method.type === 'crypto' ? (
                         `${method.cryptoDetails?.network} • ${method.cryptoDetails?.currency}`
+                      ) : (
+                        `Stellar • ${method.stellarDetails?.currency}`
                       )}
                     </p>
                   </div>
@@ -264,6 +311,11 @@ export default function PaymentMethodsPage() {
                       <span className="text-blue-200">Address:</span>
                       <span className="text-white ml-2 font-mono break-all">{method.cryptoDetails.address}</span>
                     </div>
+                  ) : method.type === 'stellar' && method.stellarDetails ? (
+                    <div className="text-sm">
+                      <span className="text-blue-200">Public Key:</span>
+                      <span className="text-white ml-2 font-mono break-all">{method.stellarDetails.publicKey}</span>
+                    </div>
                   ) : null}
                 </div>
               )}
@@ -296,6 +348,14 @@ export default function PaymentMethodsPage() {
 
             <form onSubmit={async (e) => {
               e.preventDefault();
+              
+              // Check wallet activation for crypto/Stellar payment methods
+              if ((newPaymentMethod.type === 'crypto' || newPaymentMethod.type === 'stellar') && 
+                  walletStatus && !walletStatus.isActivated) {
+                alert('Please activate your wallet first before adding crypto payment methods');
+                return;
+              }
+              
               try {
                 const response = await fetch('/api/payment-methods', {
                   method: 'POST',
@@ -320,6 +380,11 @@ export default function PaymentMethodsPage() {
                       address: newPaymentMethod.address,
                       network: newPaymentMethod.network,
                       currency: newPaymentMethod.currency
+                    } : undefined,
+                    stellarDetails: newPaymentMethod.type === 'stellar' ? {
+                      publicKey: newPaymentMethod.publicKey,
+                      currency: newPaymentMethod.currency,
+                      assetType: newPaymentMethod.assetType
                     } : undefined
                   })
                 });
@@ -339,6 +404,8 @@ export default function PaymentMethodsPage() {
                     currency: 'USD',
                     network: '',
                     address: '',
+                    publicKey: '',
+                    assetType: 'native',
                     isDefault: false
                   });
                   loadPaymentMethods();
@@ -368,7 +435,7 @@ export default function PaymentMethodsPage() {
                         type="radio"
                         value="fiat"
                         checked={newPaymentMethod.type === 'fiat'}
-                        onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, type: e.target.value as 'fiat' | 'crypto' }))}
+                        onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, type: e.target.value as 'fiat' | 'crypto' | 'stellar' }))}
                         className="mr-2"
                       />
                       Bank Transfer
@@ -378,10 +445,20 @@ export default function PaymentMethodsPage() {
                         type="radio"
                         value="crypto"
                         checked={newPaymentMethod.type === 'crypto'}
-                        onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, type: e.target.value as 'fiat' | 'crypto' }))}
+                        onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, type: e.target.value as 'fiat' | 'crypto' | 'stellar' }))}
                         className="mr-2"
                       />
                       Cryptocurrency
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        value="stellar"
+                        checked={newPaymentMethod.type === 'stellar'}
+                        onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, type: e.target.value as 'fiat' | 'crypto' | 'stellar' }))}
+                        className="mr-2"
+                      />
+                      Stellar Wallet
                     </label>
                   </div>
                 </div>
@@ -481,6 +558,18 @@ export default function PaymentMethodsPage() {
                   </div>
                 ) : (
                   <div className="space-y-4">
+                    {/* Wallet Status Check for Crypto */}
+                    {walletStatus && !walletStatus.isActivated && (
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                        <div className="flex items-center space-x-2">
+                          <AlertCircle className="h-5 w-5 text-yellow-600" />
+                          <p className="text-yellow-800 text-sm">
+                            Please activate your wallet first to add crypto payment methods
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Network</label>
                       <input
@@ -490,6 +579,7 @@ export default function PaymentMethodsPage() {
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                         placeholder="e.g., Ethereum, Bitcoin"
                         required
+                        disabled={!walletStatus?.isActivated}
                       />
                     </div>
                     <div>
@@ -513,6 +603,61 @@ export default function PaymentMethodsPage() {
                       >
                         <option value="ETH">ETH</option>
                         <option value="BTC">BTC</option>
+                        <option value="USDC">USDC</option>
+                        <option value="USDT">USDT</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {newPaymentMethod.type === 'stellar' && (
+                  <div className="space-y-4">
+                    {/* Wallet Status Check for Stellar */}
+                    {walletStatus && !walletStatus.isActivated && (
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                        <div className="flex items-center space-x-2">
+                          <AlertCircle className="h-5 w-5 text-yellow-600" />
+                          <p className="text-yellow-800 text-sm">
+                            Please activate your Stellar wallet first to add Stellar payment methods
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Stellar Public Key</label>
+                      <input
+                        type="text"
+                        value={newPaymentMethod.publicKey}
+                        onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, publicKey: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="G..."
+                        required
+                        disabled={!walletStatus?.isActivated}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Asset Type</label>
+                      <select
+                        value={newPaymentMethod.assetType}
+                        onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, assetType: e.target.value as 'native' | 'credit_alphanum4' | 'credit_alphanum12' }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required
+                      >
+                        <option value="native">Native (XLM)</option>
+                        <option value="credit_alphanum4">Credit Alphanum4</option>
+                        <option value="credit_alphanum12">Credit Alphanum12</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
+                      <select
+                        value={newPaymentMethod.currency}
+                        onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, currency: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required
+                      >
+                        <option value="XLM">XLM</option>
                         <option value="USDC">USDC</option>
                         <option value="USDT">USDT</option>
                       </select>

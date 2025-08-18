@@ -7,6 +7,21 @@ export interface WalletAddress {
   network: string; // e.g., "Ethereum", "Bitcoin"
 }
 
+export interface StellarWallet {
+  isActivated: boolean;
+  publicKey: string;
+  encryptedPrivateKey?: string; // encrypted with user's password
+  balance: {
+    [currency: string]: number;
+  };
+  lastSyncAt: Date;
+  securitySettings: {
+    backupEnabled: boolean;
+    backupMethod: 'seed_phrase' | 'private_key' | 'hardware_wallet';
+    twoFactorEnabled: boolean;
+  };
+}
+
 export interface UserSettings {
   currencyPreference: string; // e.g., "USD", "EUR"
   notifications: {
@@ -110,6 +125,7 @@ export interface User {
   
   // Crypto
   walletAddresses: WalletAddress[];
+  stellarWallet?: StellarWallet;
   
   // Settings & Services
   settings: UserSettings;
@@ -165,6 +181,7 @@ export interface CreateUserInput {
   userType: 'individual' | 'business';
   organizationId?: ObjectId;
   walletAddresses?: WalletAddress[];
+  stellarWallet?: StellarWallet;
   phone?: string;
   profilePicture?: string;
   avatar?: string;
@@ -194,6 +211,7 @@ export interface UpdateUserInput {
   userType?: 'individual' | 'business';
   organizationId?: ObjectId;
   walletAddresses?: WalletAddress[];
+  stellarWallet?: StellarWallet;
   phone?: string;
   profilePicture?: string;
   avatar?: string;

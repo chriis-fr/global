@@ -16,7 +16,8 @@ import {
   ChevronRight,
   CreditCard,
   ImageIcon,
-  CheckCircle
+  CheckCircle,
+  Wallet
 } from 'lucide-react';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import NotificationBadge from './NotificationBadge';
@@ -65,6 +66,12 @@ const SETTINGS_LINKS = [
     label: 'Payment Methods',
     icon: CreditCard,
     href: '/dashboard/settings/payment-methods',
+  },
+  {
+    key: 'wallet',
+    label: 'Stellar Wallet',
+    icon: Wallet,
+    href: '/dashboard/settings/wallet',
   },
   {
     key: 'notifications',

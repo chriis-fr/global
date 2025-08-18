@@ -1,7 +1,7 @@
 import { ObjectId } from 'mongodb';
 
 // Payment Method Types
-export type PaymentMethodType = 'fiat' | 'crypto';
+export type PaymentMethodType = 'fiat' | 'crypto' | 'stellar';
 
 // Fiat Payment Method Details
 export interface FiatPaymentDetails {
@@ -26,6 +26,16 @@ export interface CryptoPaymentDetails {
   isDefault?: boolean;
 }
 
+// Stellar Payment Method Details
+export interface StellarPaymentDetails {
+  publicKey: string;
+  currency: string; // e.g., "XLM", "USDC"
+  assetType: 'native' | 'credit_alphanum4' | 'credit_alphanum12';
+  assetCode?: string; // For non-native assets
+  assetIssuer?: string; // For non-native assets
+  isDefault?: boolean;
+}
+
 // Base Payment Method Interface
 export interface PaymentMethod {
   _id?: ObjectId;
@@ -34,9 +44,10 @@ export interface PaymentMethod {
   isDefault: boolean;
   isActive: boolean;
   
-  // Fiat or Crypto specific details
+  // Fiat, Crypto, or Stellar specific details
   fiatDetails?: FiatPaymentDetails;
   cryptoDetails?: CryptoPaymentDetails;
+  stellarDetails?: StellarPaymentDetails;
   
   // Metadata
   description?: string;
