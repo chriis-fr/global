@@ -289,7 +289,7 @@ export function LogoManager({ onLogoSelectAction, selectedLogoId, className = ''
                 type="text"
                 value={uploadForm.name}
                 onChange={(e) => setUploadForm(prev => ({ ...prev, name: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
                 placeholder="Enter logo name"
               />
             </div>
@@ -302,7 +302,7 @@ export function LogoManager({ onLogoSelectAction, selectedLogoId, className = ''
                 type="file"
                 accept="image/*"
                 onChange={handleFileChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white font-medium"
               />
               <p className="text-xs text-gray-500 mt-1">
                 Supported formats: PNG, JPG, JPEG, GIF. Max size: 5MB
@@ -463,7 +463,7 @@ export function LogoManager({ onLogoSelectAction, selectedLogoId, className = ''
                   type="text"
                   value={editForm.name}
                   onChange={(e) => setEditForm({ name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
                 />
               </div>
               

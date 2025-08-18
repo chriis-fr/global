@@ -14,6 +14,8 @@ const emailConfig = {
 // Create transporter
 const transporter = nodemailer.createTransport(emailConfig);
 
+
+
 // Get frontend URL based on environment
 const getFrontendUrl = () => {
   if (process.env.NODE_ENV === 'production') {
@@ -34,8 +36,12 @@ const getEmailHeaders = () => {
 // Test email configuration
 export const testEmailConnection = async () => {
   try {
+    console.log('📧 [Email Service] Testing SMTP connection...');
+    const startTime = Date.now();
     await transporter.verify();
-    console.log('✅ Email service is ready');
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    console.log('✅ Email service is ready (connection test took', duration, 'ms)');
     return true;
   } catch (error) {
     console.error('❌ Email service error:', error);
@@ -294,12 +300,44 @@ The Chains ERP-Global Team
   }
 
   try {
+    console.log('📧 [Email Service] Starting to send invoice notification email...');
+    console.log('📧 [Email Service] Email details:', {
+      to: userEmail,
+      subject: mailOptions.subject,
+      hasPdfAttachment: !!pdfBuffer,
+      pdfSize: pdfBuffer ? `${(pdfBuffer.length / 1024).toFixed(2)} KB` : 'N/A',
+      additionalAttachmentsCount: additionalAttachments?.length || 0,
+      totalAttachmentsCount: attachments.length
+    });
+    
+    const startTime = Date.now();
     const info = await transporter.sendMail(mailOptions);
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    
     console.log('✅ Invoice notification email sent successfully');
+    console.log('📧 [Email Service] Email sent in', duration, 'ms');
+    console.log('📧 [Email Service] Message ID:', info.messageId);
     return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error('❌ Failed to send invoice notification email:', error);
-    return { success: false, error: error as Error };
+    
+    // Provide more specific error information
+    let errorMessage = 'Unknown email error';
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      if (error.message.includes('ECONNREFUSED')) {
+        errorMessage = 'SMTP connection refused - check server configuration';
+      } else if (error.message.includes('EAUTH')) {
+        errorMessage = 'SMTP authentication failed - check credentials';
+      } else if (error.message.includes('ETIMEDOUT')) {
+        errorMessage = 'SMTP connection timed out - check network connectivity';
+      } else if (error.message.includes('ENOTFOUND')) {
+        errorMessage = 'SMTP host not found - check SMTP_HOST configuration';
+      }
+    }
+    
+    return { success: false, error: new Error(errorMessage) };
   }
 };
 

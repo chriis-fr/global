@@ -16,7 +16,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch (error) {
+      console.error('❌ [Send Invoice] JSON parsing error:', error);
+      return NextResponse.json(
+        { success: false, message: 'Invalid JSON in request body' },
+        { status: 400 }
+      );
+    }
+
     const { invoiceId, recipientEmail, pdfBuffer, attachedFiles } = body;
 
     if (!invoiceId || !recipientEmail) {
@@ -57,7 +67,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Invoice found for sending
+    console.log('✅ [Send Invoice] Invoice found for sending:', {
+      invoiceId,
+      invoiceNumber: invoice.invoiceNumber,
+      recipientEmail,
+      total: invoice.totalAmount,
+      ownerType: isOrganization ? 'organization' : 'individual',
+      ownerId: isOrganization ? session.user.organizationId : session.user.email
+    });
 
     // Prepare payment methods for display
     const paymentMethods: string[] = [];
@@ -91,25 +108,53 @@ export async function POST(request: NextRequest) {
     // Determine the greeting name - always use the client name
     const fullName = [invoice.clientDetails?.firstName, invoice.clientDetails?.lastName].filter(Boolean).join(' ');
     
+    console.log('🔍 [Send Invoice] Client details:', {
+      companyName: invoice.clientDetails?.companyName,
+      firstName: invoice.clientDetails?.firstName,
+      lastName: invoice.clientDetails?.lastName,
+      fullName: fullName,
+      hasCompany: !!invoice.clientDetails?.companyName
+    });
+    
     const greetingName = invoice.clientDetails?.companyName 
       ? (fullName || invoice.clientDetails?.companyName) // If company exists, use individual name or company name
       : (fullName || 'Client'); // If no company, use individual name or 'Client'
+    
+    console.log('🔍 [Send Invoice] Greeting name determined:', greetingName);
 
-    // Send invoice email
-    const result = await sendInvoiceNotification(
-      recipientEmail,
-      greetingName, // Proper greeting name
-      invoice.invoiceNumber,
-      invoice.totalAmount,
-      invoice.currency,
-      invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : 'N/A',
-      invoice.companyDetails?.name || (isOrganization ? 'Your Company' : ''), // Company name (empty for individuals)
-      invoice.clientDetails?.companyName || fullName || 'Client', // Recipient name/company
-      `${process.env.FRONTEND_URL || 'http://localhost:3000'}/invoice/${invoice.invoiceNumber}`,
-      paymentMethods,
-      pdfAttachment,
-      additionalAttachments
-    );
+    // Send invoice email with timeout
+    let result: { success: boolean; messageId?: string; error?: Error };
+    try {
+      result = await Promise.race([
+        sendInvoiceNotification(
+          recipientEmail,
+          greetingName, // Proper greeting name
+          invoice.invoiceNumber,
+          invoice.totalAmount,
+          invoice.currency,
+          invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : 'N/A',
+          invoice.companyDetails?.name || (isOrganization ? 'Your Company' : ''), // Company name (empty for individuals)
+          invoice.clientDetails?.companyName || fullName || 'Client', // Recipient name/company
+          `${process.env.FRONTEND_URL || 'http://localhost:3000'}/invoice/${invoice.invoiceNumber}`,
+          paymentMethods,
+          pdfAttachment,
+          additionalAttachments
+        ),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Email service timeout')), 120000) // 2 minute timeout
+        )
+      ]) as { success: boolean; messageId?: string; error?: Error };
+    } catch (error) {
+      console.error('❌ [Send Invoice] Email service error:', error);
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: 'Failed to send invoice email - service timeout or error',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        },
+        { status: 500 }
+      );
+    }
 
     if (result.success) {
       // Update invoice status to sent
