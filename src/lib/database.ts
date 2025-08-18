@@ -6,6 +6,10 @@ const DB_NAME = process.env.DB_NAME || 'global_finance';
 let client: MongoClient | null = null;
 let db: Db | null = null;
 let connectionPromise: Promise<Db> | null = null;
+let shutdownHandlersInitialized = false;
+
+// Increase max listeners to prevent warnings
+process.setMaxListeners(20);
 
 export async function connectToDatabase(): Promise<Db> {
   // If we already have a connection, return it
@@ -25,6 +29,10 @@ export async function connectToDatabase(): Promise<Db> {
   try {
     db = await connectionPromise;
     connectionPromise = null; // Clear the promise after successful connection
+    
+    // Initialize shutdown handlers only once
+    initializeShutdownHandlers();
+    
     return db;
   } catch (error) {
     connectionPromise = null; // Clear the promise on error
@@ -85,17 +93,31 @@ export async function closeDatabase(): Promise<void> {
     client = null;
     db = null;
     connectionPromise = null;
-
   }
 }
 
-// Graceful shutdown
-process.on('SIGINT', async () => {
-  await closeDatabase();
-  process.exit(0);
-});
+// Initialize shutdown handlers only once
+function initializeShutdownHandlers(): void {
+  if (shutdownHandlersInitialized) {
+    return;
+  }
+  
+  // Remove any existing listeners to prevent duplicates
+  process.removeAllListeners('SIGINT');
+  process.removeAllListeners('SIGTERM');
+  
+  // Graceful shutdown
+  process.on('SIGINT', async () => {
+    console.log('🔄 [Database] Received SIGINT, closing database connection...');
+    await closeDatabase();
+    process.exit(0);
+  });
 
-process.on('SIGTERM', async () => {
-  await closeDatabase();
-  process.exit(0);
-}); 
+  process.on('SIGTERM', async () => {
+    console.log('🔄 [Database] Received SIGTERM, closing database connection...');
+    await closeDatabase();
+    process.exit(0);
+  });
+  
+  shutdownHandlersInitialized = true;
+} 

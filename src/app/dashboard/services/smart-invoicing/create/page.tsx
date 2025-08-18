@@ -179,6 +179,137 @@ const defaultInvoiceData: InvoiceFormData = {
   ccClients: []
 };
 
+// Add this utility function at the top of the file, after imports
+const optimizeCanvasForPdf = (canvas: HTMLCanvasElement): HTMLCanvasElement => {
+  const optimizedCanvas = document.createElement('canvas');
+  const ctx = optimizedCanvas.getContext('2d');
+  
+  // Optimize dimensions for PDF while maintaining quality
+  const maxWidth = 1200; // Reduced from 1600 (800 * 2)
+  const maxHeight = 1600;
+  
+  let { width, height } = canvas;
+  
+  // Scale down if too large
+  if (width > maxWidth || height > maxHeight) {
+    const scale = Math.min(maxWidth / width, maxHeight / height);
+    width *= scale;
+    height *= scale;
+  }
+  
+  optimizedCanvas.width = width;
+  optimizedCanvas.height = height;
+  
+  // Enable image smoothing for better quality
+  if (ctx) {
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(canvas, 0, 0, width, height);
+  }
+  
+  return optimizedCanvas;
+};
+
+// Add PDF caching utility
+const pdfCache = new Map<string, string>();
+
+const generateOptimizedPdf = async (pdfContainer: HTMLElement, cacheKey?: string): Promise<{ pdf: jsPDF; base64: string }> => {
+  // Ensure cacheKey is always a string
+  const safeCacheKey = cacheKey || 'temp';
+  
+  // Check cache first
+  if (pdfCache.has(safeCacheKey)) {
+    const cachedBase64 = pdfCache.get(safeCacheKey)!;
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    // Note: We can't directly restore PDF from base64, but we can return the cached base64
+    return { pdf, base64: cachedBase64 };
+  }
+
+
+
+  // Generate PDF using html2canvas with optimized options
+  const canvas = await html2canvas(pdfContainer, {
+    logging: false,
+    useCORS: true,
+    allowTaint: true,
+    backgroundColor: '#ffffff',
+    scale: 1.5, // Reduced from 2 for better size/quality balance
+    width: 800,
+    height: pdfContainer.scrollHeight,
+    scrollX: 0,
+    scrollY: 0,
+    // Add performance optimizations
+    removeContainer: true,
+    foreignObjectRendering: false, // Disable for better performance
+    imageTimeout: 15000 // 15 second timeout for images
+  });
+
+
+
+  // Optimize canvas
+  const optimizedCanvas = optimizeCanvasForPdf(canvas);
+  
+  // Create PDF with optimized settings
+  const pdf = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+    compress: true // Enable PDF compression
+  });
+
+  const imgWidth = pdf.internal.pageSize.getWidth();
+  const imgHeight = (optimizedCanvas.height * imgWidth) / optimizedCanvas.width;
+
+  // If the content is too tall, split into multiple pages
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const margin = 10;
+  const contentHeight = pageHeight - (2 * margin);
+  
+  if (imgHeight <= contentHeight) {
+    // Single page - use JPEG for smaller size
+    const imageData = optimizedCanvas.toDataURL('image/jpeg', 0.85);
+    pdf.addImage(imageData, 'JPEG', margin, margin, imgWidth - (2 * margin), imgHeight);
+  } else {
+    // Multiple pages - optimized for performance
+    const pages = Math.ceil(imgHeight / contentHeight);
+    for (let i = 0; i < pages; i++) {
+      if (i > 0) pdf.addPage();
+      
+      const sourceY = i * contentHeight * (optimizedCanvas.width / (imgWidth - (2 * margin)));
+      const sourceHeight = Math.min(contentHeight * (optimizedCanvas.width / (imgWidth - (2 * margin))), optimizedCanvas.height - sourceY);
+      
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = optimizedCanvas.width;
+      tempCanvas.height = sourceHeight;
+      const tempCtx = tempCanvas.getContext('2d');
+      tempCtx?.drawImage(optimizedCanvas, 0, sourceY, optimizedCanvas.width, sourceHeight, 0, 0, optimizedCanvas.width, sourceHeight);
+      
+      // Use JPEG for smaller size
+      const imageData = tempCanvas.toDataURL('image/jpeg', 0.85);
+      pdf.addImage(imageData, 'JPEG', margin, margin, imgWidth - (2 * margin), Math.min(contentHeight, imgHeight - (i * contentHeight)));
+    }
+  }
+
+  // Convert to base64 with optimization
+  const pdfBase64 = pdf.output('datauristring').split(',')[1];
+  
+  // Cache the result
+  pdfCache.set(safeCacheKey, pdfBase64);
+  // Limit cache size to prevent memory issues
+  if (pdfCache.size > 10) {
+    const firstKey = pdfCache.keys().next().value;
+    if (firstKey) {
+      pdfCache.delete(firstKey);
+    }
+  }
+
+
+
+  return { pdf, base64: pdfBase64 };
+};
+
+
+
 export default function CreateInvoicePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -356,11 +487,7 @@ export default function CreateInvoicePage() {
         setFormData(prev => {
           const finalCountry = org.address?.country && org.address.country !== 'US' ? org.address.country : prev.companyAddress.country;
           
-          console.log('✅ [Invoice Create] Organization data loaded:', {
-            orgCountry: org.address?.country,
-            prevCountry: prev.companyAddress.country,
-            finalCountry: finalCountry
-          });
+          
           
           return {
             ...prev,
@@ -396,7 +523,7 @@ export default function CreateInvoicePage() {
 
   const loadLogoFromSettings = async () => {
     try {
-      console.log('🔄 [Invoice Create] Loading logo from settings...');
+      
       const response = await fetch('/api/user/logo');
       const data = await response.json();
       
@@ -405,7 +532,7 @@ export default function CreateInvoicePage() {
           ...prev,
           companyLogo: data.logoUrl
         }));
-        console.log('✅ [Invoice Create] Logo loaded from settings:', data.logoSource);
+        
       } else {
         console.log('⚠️ [Invoice Create] No logo in settings, trying logos API...');
         // If no logo is set in settings, try to load from logos API
@@ -1070,66 +1197,26 @@ export default function CreateInvoicePage() {
         }));
       }
 
-      // Generate PDF using html2canvas with safe options
-      const canvas = await html2canvas(pdfContainer, {
-        logging: false,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#ffffff',
-        scale: 2, // Higher quality
-        width: 800,
-        height: pdfContainer.scrollHeight,
-        scrollX: 0,
-        scrollY: 0
-      });
+      // Generate optimized PDF
+      const { pdf, base64: pdfBase64 } = await generateOptimizedPdf(pdfContainer, formData.invoiceNumber || 'temp');
 
       // Remove the temporary element
       document.body.removeChild(pdfContainer);
 
-      // Create PDF
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      });
-
-      const imgWidth = pdf.internal.pageSize.getWidth();
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-      // If the content is too tall, split into multiple pages
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 10;
-      const contentHeight = pageHeight - (2 * margin);
-      
-      if (imgHeight <= contentHeight) {
-        // Single page
-        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', margin, margin, imgWidth - (2 * margin), imgHeight);
-      } else {
-        // Multiple pages
-        const pages = Math.ceil(imgHeight / contentHeight);
-        for (let i = 0; i < pages; i++) {
-          if (i > 0) pdf.addPage();
-          
-          const sourceY = i * contentHeight * (canvas.width / (imgWidth - (2 * margin)));
-          const sourceHeight = Math.min(contentHeight * (canvas.width / (imgWidth - (2 * margin))), canvas.height - sourceY);
-          
-          const tempCanvas = document.createElement('canvas');
-          tempCanvas.width = canvas.width;
-          tempCanvas.height = sourceHeight;
-          const tempCtx = tempCanvas.getContext('2d');
-          tempCtx?.drawImage(canvas, 0, sourceY, canvas.width, sourceHeight, 0, 0, canvas.width, sourceHeight);
-          
-          pdf.addImage(tempCanvas.toDataURL('image/png'), 'PNG', margin, margin, imgWidth - (2 * margin), Math.min(contentHeight, imgHeight - (i * contentHeight)));
-        }
-      }
-
       // Add watermark
       addWatermark(pdf);
 
-      // Convert PDF to base64 for email attachment
-      const pdfBase64 = pdf.output('datauristring').split(',')[1];
+      console.log('📄 [PDF Generation] Converting PDF to base64...');
+      const base64StartTime = Date.now();
+      
+      const base64EndTime = Date.now();
+      console.log('📄 [PDF Generation] PDF base64 conversion completed in', base64EndTime - base64StartTime, 'ms');
+      console.log('📄 [PDF Generation] PDF size:', (pdfBase64.length / 1024).toFixed(2), 'KB');
       
       // Sending invoice via email...
+      
+      console.log('📄 [PDF Generation] Converting attached files to base64...');
+      const filesStartTime = Date.now();
       
       // Convert attached files to base64
       const attachedFilesBase64 = await Promise.all(
@@ -1148,8 +1235,17 @@ export default function CreateInvoicePage() {
           });
         })
       );
+      
+      const filesEndTime = Date.now();
+      console.log('📄 [PDF Generation] File attachments conversion completed in', filesEndTime - filesStartTime, 'ms');
 
-      // Send invoice via email
+      console.log('📧 [Email Sending] Starting email request...');
+      const emailStartTime = Date.now();
+      
+      // Send invoice via email with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+
       const response = await fetch('/api/invoices/send', {
         method: 'POST',
         headers: {
@@ -1161,7 +1257,18 @@ export default function CreateInvoicePage() {
           pdfBuffer: pdfBase64,
           attachedFiles: attachedFilesBase64
         }),
+        signal: controller.signal
       });
+      
+      const emailEndTime = Date.now();
+      console.log('📧 [Email Sending] Email request completed in', emailEndTime - emailStartTime, 'ms');
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Server error: ${response.status} - ${errorText}`);
+      }
 
       const result = await response.json();
 
@@ -1180,7 +1287,16 @@ export default function CreateInvoicePage() {
       }
     } catch (error) {
       console.error('❌ [Smart Invoicing] Failed to send invoice:', error);
-      alert('Failed to send invoice. Please try again.');
+      
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          alert('Request timed out. Please try again or contact support if the issue persists.');
+        } else {
+          alert(`Failed to send invoice: ${error.message}`);
+        }
+      } else {
+        alert('Failed to send invoice. Please try again.');
+      }
     } finally {
       setSendingInvoice(false);
       setCriticalOperation(false); // Re-enable notification polling
@@ -1562,64 +1678,14 @@ export default function CreateInvoicePage() {
         }));
       }
 
-      // Generate PDF using html2canvas with safe options
-      const canvas = await html2canvas(pdfContainer, {
-        logging: false,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#ffffff',
-        scale: 2, // Higher quality
-        width: 800,
-        height: pdfContainer.scrollHeight,
-        scrollX: 0,
-        scrollY: 0
-      });
+            // Generate optimized PDF
+      const { pdf, base64: pdfBase64 } = await generateOptimizedPdf(pdfContainer, formData.invoiceNumber || 'temp');
 
       // Remove the temporary element
       document.body.removeChild(pdfContainer);
 
-      // Create PDF
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      });
-
-      const imgWidth = pdf.internal.pageSize.getWidth();
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-      // If the content is too tall, split into multiple pages
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 10;
-      const contentHeight = pageHeight - (2 * margin);
-      
-      if (imgHeight <= contentHeight) {
-        // Single page
-        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', margin, margin, imgWidth - (2 * margin), imgHeight);
-      } else {
-        // Multiple pages
-        const pages = Math.ceil(imgHeight / contentHeight);
-        for (let i = 0; i < pages; i++) {
-          if (i > 0) pdf.addPage();
-          
-          const sourceY = i * contentHeight * (canvas.width / (imgWidth - (2 * margin)));
-          const sourceHeight = Math.min(contentHeight * (canvas.width / (imgWidth - (2 * margin))), canvas.height - sourceY);
-          
-          const tempCanvas = document.createElement('canvas');
-          tempCanvas.width = canvas.width;
-          tempCanvas.height = sourceHeight;
-          const tempCtx = tempCanvas.getContext('2d');
-          tempCtx?.drawImage(canvas, 0, sourceY, canvas.width, sourceHeight, 0, 0, canvas.width, sourceHeight);
-          
-          pdf.addImage(tempCanvas.toDataURL('image/png'), 'PNG', margin, margin, imgWidth - (2 * margin), Math.min(contentHeight, imgHeight - (i * contentHeight)));
-        }
-      }
-
       // Add watermark
       addWatermark(pdf);
-
-      // Convert PDF to base64 for email attachment
-      const pdfBase64 = pdf.output('datauristring').split(',')[1];
       
       console.log('📧 [Smart Invoicing] Sending invoice via email...', {
         recipientEmail: formData.clientEmail,
@@ -2130,58 +2196,11 @@ export default function CreateInvoicePage() {
         }));
       }
 
-      // Generate PDF using html2canvas with safe options
-      const canvas = await html2canvas(pdfContainer, {
-        logging: false,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#ffffff',
-        scale: 2, // Higher quality
-        width: 800,
-        height: pdfContainer.scrollHeight,
-        scrollX: 0,
-        scrollY: 0
-      });
+      // Generate optimized PDF
+      const { pdf } = await generateOptimizedPdf(pdfContainer, formData.invoiceNumber || 'temp');
 
       // Remove the temporary element
       document.body.removeChild(pdfContainer);
-
-      // Create PDF
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      });
-      
-      const imgWidth = pdf.internal.pageSize.getWidth();
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      
-      // If the content is too tall, split into multiple pages
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 10;
-      const contentHeight = pageHeight - (2 * margin);
-      
-      if (imgHeight <= contentHeight) {
-        // Single page
-        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', margin, margin, imgWidth - (2 * margin), imgHeight);
-      } else {
-        // Multiple pages
-        const pages = Math.ceil(imgHeight / contentHeight);
-        for (let i = 0; i < pages; i++) {
-          if (i > 0) pdf.addPage();
-          
-          const sourceY = i * contentHeight * (canvas.width / (imgWidth - (2 * margin)));
-          const sourceHeight = Math.min(contentHeight * (canvas.width / (imgWidth - (2 * margin))), canvas.height - sourceY);
-          
-          const tempCanvas = document.createElement('canvas');
-          tempCanvas.width = canvas.width;
-          tempCanvas.height = sourceHeight;
-          const tempCtx = tempCanvas.getContext('2d');
-          tempCtx?.drawImage(canvas, 0, sourceY, canvas.width, sourceHeight, 0, 0, canvas.width, sourceHeight);
-          
-          pdf.addImage(tempCanvas.toDataURL('image/png'), 'PNG', margin, margin, imgWidth - (2 * margin), Math.min(contentHeight, imgHeight - (i * contentHeight)));
-        }
-      }
 
       // Add watermark
       addWatermark(pdf);
@@ -2190,10 +2209,10 @@ export default function CreateInvoicePage() {
       await saveInvoiceToDatabase(formData);
 
       // Generate secure shareable link
-      const pdfBase64 = pdf.output('datauristring');
+      const pdfBase64Full = pdf.output('datauristring');
       
       // Create a shareable link (you can implement your own file sharing service)
-      const shareableLink = `data:application/pdf;base64,${pdfBase64.split(',')[1]}`;
+      const shareableLink = `data:application/pdf;base64,${pdfBase64Full.split(',')[1]}`;
       
       // Copy to clipboard
       navigator.clipboard.writeText(shareableLink).then(() => {
@@ -2701,13 +2720,13 @@ export default function CreateInvoicePage() {
                       <div className="p-2 border-b border-gray-200 bg-gray-50">
                         <div className="relative">
                           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                          <input
-                            type="text"
-                            value={currencySearch}
-                            onChange={(e) => setCurrencySearch(e.target.value)}
-                            placeholder="Search currencies..."
-                            className="w-full pl-10 pr-3 py-2 bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
+                                              <input
+                      type="text"
+                      value={currencySearch}
+                      onChange={(e) => setCurrencySearch(e.target.value)}
+                      placeholder="Search currencies..."
+                      className="w-full pl-10 pr-3 py-2 bg-white border border-gray-300 rounded text-black placeholder-gray-600 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                    />
                         </div>
                       </div>
                       
@@ -2833,7 +2852,7 @@ export default function CreateInvoicePage() {
               <select
                 value={selectedPaymentMethodId || ''}
                 onChange={(e) => handlePaymentMethodSelect(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white font-medium"
               >
                 <option value="">-- Select a saved payment method --</option>
                 {savedPaymentMethods.map((method) => (
@@ -2909,13 +2928,13 @@ export default function CreateInvoicePage() {
                             <div className="p-2 border-b border-gray-200 bg-gray-50">
                               <div className="relative">
                                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                                <input
-                                  type="text"
-                                  value={networkSearch}
-                                  onChange={(e) => setNetworkSearch(e.target.value)}
-                                  placeholder="Search networks..."
-                                  className="w-full pl-10 pr-3 py-2 bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
+                                                    <input
+                      type="text"
+                      value={networkSearch}
+                      onChange={(e) => setNetworkSearch(e.target.value)}
+                      placeholder="Search networks..."
+                      className="w-full pl-10 pr-3 py-2 bg-white border border-gray-300 rounded text-black placeholder-gray-600 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                    />
                               </div>
                             </div>
                             
@@ -2954,7 +2973,7 @@ export default function CreateInvoicePage() {
                         type="text"
                         value={formData.paymentAddress || ''}
                         onChange={(e) => handleInputChange('paymentAddress', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
                         placeholder="Enter wallet address"
                       />
                     </div>
@@ -2978,7 +2997,7 @@ export default function CreateInvoicePage() {
                         type="text"
                         value={formData.swiftCode || ''}
                         onChange={(e) => handleInputChange('swiftCode', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
                         placeholder="SWIFT/BIC code"
                       />
                     </div>
@@ -2988,7 +3007,7 @@ export default function CreateInvoicePage() {
                         type="text"
                         value={formData.bankCode || ''}
                         onChange={(e) => handleInputChange('bankCode', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
                         placeholder="Bank code"
                       />
                     </div>
@@ -2998,7 +3017,7 @@ export default function CreateInvoicePage() {
                         type="text"
                         value={formData.branchCode || ''}
                         onChange={(e) => handleInputChange('branchCode', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
                         placeholder="Branch code"
                       />
                     </div>
@@ -3008,7 +3027,7 @@ export default function CreateInvoicePage() {
                         type="text"
                         value={formData.accountName || ''}
                         onChange={(e) => handleInputChange('accountName', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
                         placeholder="Account holder name"
                       />
                     </div>
@@ -3018,7 +3037,7 @@ export default function CreateInvoicePage() {
                         type="text"
                         value={formData.accountNumber || ''}
                         onChange={(e) => handleInputChange('accountNumber', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
                         placeholder="Account number"
                       />
                     </div>
@@ -3027,7 +3046,7 @@ export default function CreateInvoicePage() {
                       <textarea
                         value={formData.branchAddress || ''}
                         onChange={(e) => handleInputChange('branchAddress', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
                         placeholder="Branch address"
                         rows={3}
                       />
@@ -3254,7 +3273,7 @@ export default function CreateInvoicePage() {
                   value={formData.memo}
                   onChange={(e) => handleInputChange('memo', e.target.value)}
                   rows={4}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
                   placeholder="Add a memo..."
                 />
               </div>
@@ -3528,7 +3547,7 @@ function ClientCreationForm({
           type="text"
           value={formData.name}
           onChange={(e) => handleInputChange('name', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
           required
         />
       </div>
@@ -3539,7 +3558,7 @@ function ClientCreationForm({
           type="email"
           value={formData.email}
           onChange={(e) => handleInputChange('email', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
           required
         />
       </div>
@@ -3550,7 +3569,7 @@ function ClientCreationForm({
           type="tel"
           value={formData.phone}
           onChange={(e) => handleInputChange('phone', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
         />
       </div>
       
@@ -3560,7 +3579,7 @@ function ClientCreationForm({
           type="text"
           value={formData.company}
           onChange={(e) => handleInputChange('company', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
         />
       </div>
 
@@ -3570,7 +3589,7 @@ function ClientCreationForm({
           type="text"
           value={formData.address.street}
           onChange={(e) => handleInputChange('address.street', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
         />
       </div>
 
@@ -3581,7 +3600,7 @@ function ClientCreationForm({
             type="text"
             value={formData.address.city}
             onChange={(e) => handleInputChange('address.city', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
           />
         </div>
         <div>
@@ -3590,7 +3609,7 @@ function ClientCreationForm({
             type="text"
             value={formData.address.state}
             onChange={(e) => handleInputChange('address.state', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
           />
         </div>
       </div>
@@ -3602,7 +3621,7 @@ function ClientCreationForm({
             type="text"
             value={formData.address.zipCode}
             onChange={(e) => handleInputChange('address.zipCode', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
           />
         </div>
         <div>
@@ -3673,7 +3692,7 @@ function ClientCreationForm({
           type="text"
           value={formData.taxId}
           onChange={(e) => handleInputChange('taxId', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
         />
       </div>
 
@@ -3683,7 +3702,7 @@ function ClientCreationForm({
           value={formData.notes}
           onChange={(e) => handleInputChange('notes', e.target.value)}
           rows={3}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
         />
       </div>
       
@@ -3807,7 +3826,7 @@ function CompanyEditForm({
           type="text"
           value={editData.companyName}
           onChange={(e) => handleInputChange('companyName', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder-gray-500 bg-white"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
           required
         />
       </div>
@@ -3818,7 +3837,7 @@ function CompanyEditForm({
           type="email"
           value={editData.companyEmail}
           onChange={(e) => handleInputChange('companyEmail', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder-gray-500 bg-white"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
           required
         />
       </div>
@@ -3829,7 +3848,7 @@ function CompanyEditForm({
           type="tel"
           value={editData.companyPhone}
           onChange={(e) => handleInputChange('companyPhone', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder-gray-500 bg-white"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
         />
       </div>
 
@@ -3839,7 +3858,7 @@ function CompanyEditForm({
           type="text"
           value={editData.companyTaxNumber}
           onChange={(e) => handleInputChange('companyTaxNumber', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder-gray-500 bg-white"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
         />
       </div>
 
@@ -3849,7 +3868,7 @@ function CompanyEditForm({
             type="text"
             value={editData.companyAddress.street}
             onChange={(e) => handleInputChange('companyAddress.street', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder-gray-500 bg-white"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
           />
       </div>
 
@@ -3860,7 +3879,7 @@ function CompanyEditForm({
             type="text"
             value={editData.companyAddress.city}
             onChange={(e) => handleInputChange('companyAddress.city', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder-gray-500 bg-white"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
           />
         </div>
         <div>
@@ -3869,7 +3888,7 @@ function CompanyEditForm({
             type="text"
             value={editData.companyAddress.state}
             onChange={(e) => handleInputChange('companyAddress.state', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder-gray-500 bg-white"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
           />
         </div>
       </div>
@@ -3881,7 +3900,7 @@ function CompanyEditForm({
             type="text"
             value={editData.companyAddress.zipCode}
             onChange={(e) => handleInputChange('companyAddress.zipCode', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder-gray-500 bg-white"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
           />
         </div>
         <div>
@@ -3911,7 +3930,7 @@ function CompanyEditForm({
                       value={countrySearch}
                       onChange={(e) => setCountrySearch(e.target.value)}
                       placeholder="Search countries..."
-                      className="w-full pl-10 pr-3 py-2 bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full pl-10 pr-3 py-2 bg-white border border-gray-300 rounded text-black placeholder-gray-600 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
                     />
                   </div>
                 </div>
@@ -4022,7 +4041,7 @@ function ClientEditForm({
           type="text"
           value={editData.clientName}
           onChange={(e) => handleInputChange('clientName', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
           required
         />
       </div>
@@ -4033,7 +4052,7 @@ function ClientEditForm({
           type="text"
           value={editData.clientCompany}
           onChange={(e) => handleInputChange('clientCompany', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
           placeholder="Company name (optional)"
         />
       </div>
@@ -4044,7 +4063,7 @@ function ClientEditForm({
           type="email"
           value={editData.clientEmail}
           onChange={(e) => handleInputChange('clientEmail', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
           required
         />
       </div>
@@ -4055,7 +4074,7 @@ function ClientEditForm({
           type="tel"
           value={editData.clientPhone}
           onChange={(e) => handleInputChange('clientPhone', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
         />
       </div>
 
@@ -4065,7 +4084,7 @@ function ClientEditForm({
           type="text"
           value={editData.clientAddress.street}
           onChange={(e) => handleInputChange('clientAddress.street', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
         />
       </div>
 
@@ -4076,7 +4095,7 @@ function ClientEditForm({
             type="text"
             value={editData.clientAddress.city}
             onChange={(e) => handleInputChange('clientAddress.city', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
           />
         </div>
         <div>
@@ -4085,7 +4104,7 @@ function ClientEditForm({
             type="text"
             value={editData.clientAddress.state}
             onChange={(e) => handleInputChange('clientAddress.state', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
           />
         </div>
       </div>
@@ -4097,7 +4116,7 @@ function ClientEditForm({
             type="text"
             value={editData.clientAddress.zipCode}
             onChange={(e) => handleInputChange('clientAddress.zipCode', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
           />
         </div>
         <div>
