@@ -421,7 +421,7 @@ export default function PaymentMethodsPage() {
                     type="text"
                     value={newPaymentMethod.name}
                     onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, name: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
                     placeholder="e.g., Main Bank Account"
                     required
                   />
@@ -481,7 +481,7 @@ export default function PaymentMethodsPage() {
                         type="text"
                         value={newPaymentMethod.swiftCode}
                         onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, swiftCode: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
                         placeholder="SWIFT/BIC code"
                         required
                       />
@@ -492,7 +492,7 @@ export default function PaymentMethodsPage() {
                         type="text"
                         value={newPaymentMethod.bankCode}
                         onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, bankCode: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
                         placeholder="Bank code"
                         required
                       />
@@ -503,7 +503,7 @@ export default function PaymentMethodsPage() {
                         type="text"
                         value={newPaymentMethod.branchCode}
                         onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, branchCode: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
                         placeholder="Branch code"
                         required
                       />
@@ -514,7 +514,7 @@ export default function PaymentMethodsPage() {
                         type="text"
                         value={newPaymentMethod.accountName}
                         onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, accountName: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
                         placeholder="Account holder name"
                         required
                       />
@@ -525,7 +525,7 @@ export default function PaymentMethodsPage() {
                         type="text"
                         value={newPaymentMethod.accountNumber}
                         onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, accountNumber: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
                         placeholder="Account number"
                         required
                       />
@@ -535,7 +535,7 @@ export default function PaymentMethodsPage() {
                       <textarea
                         value={newPaymentMethod.branchAddress}
                         onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, branchAddress: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
                         placeholder="Branch address"
                         rows={3}
                         required
@@ -546,7 +546,7 @@ export default function PaymentMethodsPage() {
                       <select
                         value={newPaymentMethod.currency}
                         onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, currency: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white font-medium"
                         required
                       >
                         <option value="USD">USD</option>
@@ -576,7 +576,7 @@ export default function PaymentMethodsPage() {
                         type="text"
                         value={newPaymentMethod.network}
                         onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, network: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
                         placeholder="e.g., Ethereum, Bitcoin"
                         required
                         disabled={!walletStatus?.isActivated}
@@ -588,7 +588,7 @@ export default function PaymentMethodsPage() {
                         type="text"
                         value={newPaymentMethod.address}
                         onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, address: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
                         placeholder="Wallet address"
                         required
                       />
@@ -598,7 +598,7 @@ export default function PaymentMethodsPage() {
                       <select
                         value={newPaymentMethod.currency}
                         onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, currency: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white font-medium"
                         required
                       >
                         <option value="ETH">ETH</option>
