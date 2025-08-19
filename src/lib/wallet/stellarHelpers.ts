@@ -42,3 +42,48 @@ export const getAccountDeets = async (publicKey: string) => {
         throw error
     }
 }
+
+export const getTransactionHistory = async (publicKey: string) => {
+    try{
+        const response = await fetch(`https://horizon-testnet.stellar.org/accounts/${publicKey}/operations`)
+        const data = await response.json()
+        
+        // Define types for the operation and payment objects
+        interface StellarOperation {
+            type: string;
+            amount: string;
+            asset_type: string;
+            asset_code?: string;
+            asset_issuer?: string;
+            from?: string;
+            to?: string;
+            created_at: string;
+        }
+
+        interface PaymentRecord {
+            type: string;
+            amount: string;
+            asset: string;
+            from?: string;
+            to?: string;
+            timestamp: string;
+        }
+        
+        const payments: PaymentRecord[] = data._embedded.records.map((op: StellarOperation) => ({
+            type: op.type,
+            amount: op.amount,
+            asset: op.asset_type === "native" ? "XLM" : `${op.asset_code}:${op.asset_issuer}`,
+            from: op.from,
+            to: op.to,
+            timestamp: op.created_at,
+        }));
+
+        const sentPayments = payments.filter((payment: PaymentRecord) => payment.from === publicKey);
+        const receivedPayments = payments.filter((payment: PaymentRecord) => payment.to === publicKey);
+
+        return { sentPayments, receivedPayments };
+    }catch(error){
+        console.error("Error fetching account history", error)
+        throw error
+    }
+}

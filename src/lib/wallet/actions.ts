@@ -2,7 +2,7 @@
 
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { createAndFundStellarWallet, getAccountDeets } from './stellarHelpers';
+import { createAndFundStellarWallet, getAccountDeets, getTransactionHistory as getStellarTransactionHistory } from './stellarHelpers';
 import { UserService } from '@/lib/services/userService';
 import { EncryptionUtil } from '@/lib/utils/encryption';
 
@@ -211,38 +211,52 @@ export async function getTransactionHistory() {
     
     console.log('🔵 [STELLAR WALLET] User authenticated:', session.user.email);
     
-    // TODO: Implement transaction history
-    // - Get user's Stellar wallet address
-    // - Query Stellar network for transaction history
-    // - Format and return transaction data
+    // Get user from database
+    const user = await UserService.getUserByEmail(session.user.email);
+    if (!user) {
+      throw new Error('User not found in database');
+    }
+    
+    // Check if user has an activated wallet
+    if (!user.stellarWallet?.isActivated) {
+      throw new Error('Wallet not activated');
+    }
+    
+    // Get real transaction history from Stellar network
+    const { sentPayments, receivedPayments } = await getStellarTransactionHistory(user.stellarWallet.publicKey);
+    
+    // Format transactions for the frontend
+    const transactions = [
+      // Received payments
+      ...receivedPayments.map((payment, index) => ({
+        id: `receive-${index}`,
+        type: 'receive' as const,
+        amount: parseFloat(payment.amount),
+        currency: payment.asset,
+        to: user.stellarWallet!.publicKey,
+        from: payment.from || 'Unknown',
+        timestamp: new Date(payment.timestamp),
+        status: 'completed' as const,
+        hash: `receive-${index}`
+      })),
+      // Sent payments
+      ...sentPayments.map((payment, index) => ({
+        id: `send-${index}`,
+        type: 'send' as const,
+        amount: parseFloat(payment.amount),
+        currency: payment.asset,
+        to: payment.to || 'Unknown',
+        from: user.stellarWallet!.publicKey,
+        timestamp: new Date(payment.timestamp),
+        status: 'completed' as const,
+        hash: `send-${index}`
+      }))
+    ];
     
     console.log('🔵 [STELLAR WALLET] Transaction history fetched successfully');
+    console.log('🔵 [STELLAR WALLET] Found transactions:', transactions.length);
     
-    // Mock data for now
-    return [
-      {
-        id: '1',
-        type: 'receive' as const,
-        amount: 100,
-        currency: 'XLM',
-        to: 'GABC123456789...',
-        from: 'GDEF987654321...',
-        timestamp: new Date(),
-        status: 'completed' as const,
-        hash: 'abc123...'
-      },
-      {
-        id: '2',
-        type: 'send' as const,
-        amount: 50,
-        currency: 'USDC',
-        to: 'GHIJ456789123...',
-        from: 'GABC123456789...',
-        timestamp: new Date(Date.now() - 86400000),
-        status: 'completed' as const,
-        hash: 'def456...'
-      }
-    ];
+    return transactions;
   } catch (error) {
     console.error('🔴 [STELLAR WALLET] Error getting transaction history:', error);
     throw error;
