@@ -13,7 +13,7 @@ import {
   CreditCard
 } from 'lucide-react';
 import Link from 'next/link';
-import { activateStellarWallet, getWalletBalance, sendTransaction, getTransactionHistory, backupWallet, checkWalletStatus, getWalletAddress } from '../../../../lib/wallet/index';
+import { activateStellarWallet, getWalletBalance, sendTransaction, backupWallet, checkWalletStatus, getWalletAddress } from '../../../../lib/wallet/index';
 
 interface WalletData {
   isActivated: boolean;
@@ -59,7 +59,7 @@ export default function WalletPage() {
       
       if (walletStatus.isActivated) {
         const balance = await getWalletBalance();
-        const history = await getTransactionHistory();
+        // const history = await getTransactionHistory();
         const address = await getWalletAddress();
         
         setWalletData({
@@ -68,7 +68,7 @@ export default function WalletPage() {
           balance: balance,
           lastSyncAt: new Date()
         });
-        setTransactions(history);
+        // setTransactions(history);
       } else {
         // Wallet not activated - set to null to show activation screen
         setWalletData(null);

@@ -2,7 +2,7 @@
 
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { createAndFundStellarWallet } from './stellarHelpers';
+import { createAndFundStellarWallet, getAccountDeets } from './stellarHelpers';
 import { UserService } from '@/lib/services/userService';
 import { EncryptionUtil } from '@/lib/utils/encryption';
 
@@ -42,14 +42,31 @@ export async function activateStellarWallet() {
     // In production, you should use the user's password or a more secure method
     const encryptedSecretKey = await EncryptionUtil.encrypt(walletData.secretKey, 'default-encryption-key');
     
+    // Get real balance from Stellar network
+    const account = await getAccountDeets(walletData.publicKey);
+    const balances: { [currency: string]: number } = {};
+    
+    if (account.balances && Array.isArray(account.balances)) {
+      account.balances.forEach((balance: { asset_type: string; balance: string; asset_code?: string }) => {
+        if (balance.asset_type === 'native') {
+          // Native asset is XLM
+          balances.XLM = parseFloat(balance.balance);
+        } else if (balance.asset_type === 'credit_alphanum4' || balance.asset_type === 'credit_alphanum12') {
+          // Custom tokens (USDC, etc.)
+          const assetCode = balance.asset_code;
+          if (assetCode) {
+            balances[assetCode] = parseFloat(balance.balance);
+          }
+        }
+      });
+    }
+    
     // Create the stellar wallet object
     const stellarWallet = {
       isActivated: true,
       publicKey: walletData.publicKey,
       encryptedPrivateKey: encryptedSecretKey,
-      balance: {
-        XLM: 10000 // Friendbot funds with 10,000 XLM
-      },
+      balance: balances, // Use real balance from Stellar network
       lastSyncAt: new Date(),
       securitySettings: {
         backupEnabled: false,
@@ -62,14 +79,6 @@ export async function activateStellarWallet() {
     try {
       await UserService.updateUser(user._id!.toString(), {
         stellarWallet
-      });
-      
-      console.log('🔵 [STELLAR WALLET] Wallet activation completed', walletData);
-      console.log('🔵 [STELLAR WALLET] Wallet saved to database for user:', session.user.email);
-      console.log('🔵 [STELLAR WALLET] Wallet details:', {
-        publicKey: walletData.publicKey,
-        isActivated: true,
-        balance: stellarWallet.balance
       });
     } catch (dbError) {
       console.error('🔴 [STELLAR WALLET] Database update failed:', dbError);
@@ -89,7 +98,7 @@ export async function activateStellarWallet() {
 
 // Get Wallet Balance
 export async function getWalletBalance() {
-  console.log('🔵 [STELLAR WALLET] Getting wallet balance...');
+  console.log('🔵 [STELLAR WALLET] Getting wallet balance...sssssssssssssssssssssssssssssssssssssssssss');
   
   try {
     const session = await getServerSession(authOptions);
@@ -109,11 +118,49 @@ export async function getWalletBalance() {
     if (!user.stellarWallet?.isActivated) {
       throw new Error('Wallet not activated');
     }
+
+    const account = await getAccountDeets(user.stellarWallet.publicKey);
+    console.log('🔵 [STELLAR WALLET] Account details:', account);
+    
+    // Parse real balances from Stellar network
+    const balances: { [currency: string]: number } = {};
+    
+    if (account.balances && Array.isArray(account.balances)) {
+      account.balances.forEach((balance: { asset_type: string; balance: string; asset_code?: string }) => {
+        if (balance.asset_type === 'native') {
+          // Native asset is XLM
+          balances.XLM = parseFloat(balance.balance);
+        } else if (balance.asset_type === 'credit_alphanum4' || balance.asset_type === 'credit_alphanum12') {
+          // Custom tokens (USDC, etc.)
+          const assetCode = balance.asset_code;
+          if (assetCode) {
+            balances[assetCode] = parseFloat(balance.balance);
+          }
+        }
+      });
+    }
+    
+    console.log('🔵 [STELLAR WALLET] Parsed balances:', balances);
+    
+    // Update the balance in the database to keep it in sync
+    try {
+      await UserService.updateUser(user._id!.toString(), {
+        stellarWallet: {
+          ...user.stellarWallet,
+          balance: balances,
+          lastSyncAt: new Date()
+        }
+      });
+      console.log('🔵 [STELLAR WALLET] Balance updated in database');
+    } catch (dbError) {
+      console.warn('⚠️ [STELLAR WALLET] Failed to update balance in database:', dbError);
+      // Don't throw error, just log warning - balance fetch still works
+    }
     
     console.log('🔵 [STELLAR WALLET] Balance fetched successfully');
     
-    // Return the balance from the database
-    return user.stellarWallet.balance || { XLM: 0 };
+    // Return real balances from Stellar network
+    return balances;
   } catch (error) {
     console.error('🔴 [STELLAR WALLET] Error getting balance:', error);
     throw error;

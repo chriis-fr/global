@@ -1,5 +1,7 @@
 import * as StellarSdk from "@stellar/stellar-sdk";
 
+const server = new StellarSdk.Horizon.Server("https://horizon-testnet.stellar.org");
+
 export const createAndFundStellarWallet = async () => {
     try {
         const pair = StellarSdk.Keypair.random();
@@ -28,5 +30,15 @@ export const createAndFundStellarWallet = async () => {
     } catch (error){
         console.error('Error creating and funding Stellar wallet:', error);
         throw error;
+    }
+}
+
+export const getAccountDeets = async (publicKey: string) => {
+    try{
+        const account = server.loadAccount(publicKey)
+        return account;
+    } catch(error){
+        console.error("Error loading account", error)
+        throw error
     }
 }
