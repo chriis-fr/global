@@ -4,21 +4,16 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Wallet, 
-  Plus, 
   Send, 
   Download, 
   Upload, 
-  Eye,
-  EyeOff,
   Copy,
   RefreshCw,
-  Shield,
   Activity,
-  CreditCard,
-  Star
+  CreditCard
 } from 'lucide-react';
 import Link from 'next/link';
-import { activateStellarWallet, getWalletBalance, sendTransaction, getTransactionHistory, backupWallet, restoreWallet, checkWalletStatus, getWalletAddress } from './index';
+import { activateStellarWallet, getWalletBalance, sendTransaction, getTransactionHistory, backupWallet, checkWalletStatus, getWalletAddress } from './index';
 
 interface WalletData {
   isActivated: boolean;
@@ -45,7 +40,6 @@ export default function WalletPage() {
   const [walletData, setWalletData] = useState<WalletData | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showPrivateKey, setShowPrivateKey] = useState(false);
   const [showSendModal, setShowSendModal] = useState(false);
   const [sendForm, setSendForm] = useState({
     to: '',
@@ -115,15 +109,6 @@ export default function WalletPage() {
       await backupWallet();
     } catch (error) {
       console.error('Error backing up wallet:', error);
-    }
-  };
-
-  const handleRestoreWallet = async () => {
-    try {
-      await restoreWallet();
-      await loadWalletData();
-    } catch (error) {
-      console.error('Error restoring wallet:', error);
     }
   };
 
