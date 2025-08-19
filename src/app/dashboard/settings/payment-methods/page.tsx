@@ -17,7 +17,7 @@ import {
 import Link from 'next/link';
 import BankSelector from '@/components/BankSelector';
 import { Bank } from '@/data';
-import { checkWalletStatus } from '../wallet';
+import { checkWalletStatus } from '../../../../lib/wallet';
 
 interface PaymentMethod {
   _id?: string;

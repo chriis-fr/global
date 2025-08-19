@@ -2,6 +2,12 @@
 
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { createAndFundStellarWallet } from './stellarHelpers';
+import { UserService } from '@/lib/services/userService';
+import { EncryptionUtil } from '@/lib/utils/encryption';
+
+
+// const server = new StellarSdk.Horizon.Server("https://horizon-testnet.stellar.org");
 
 // Stellar Wallet Activation
 export async function activateStellarWallet() {
@@ -12,21 +18,72 @@ export async function activateStellarWallet() {
     if (!session?.user) {
       throw new Error('User not authenticated');
     }
-    
+
     console.log('🔵 [STELLAR WALLET] User authenticated:', session.user.email);
     
-    // TODO: Implement Stellar wallet creation
-    // - Generate Stellar keypair
-    // - Create account on Stellar network
-    // - Store wallet info in database
-    // - Update user record with wallet data
+    // Get user from database
+    const user = await UserService.getUserByEmail(session.user.email);
+    if (!user) {
+      throw new Error('User not found in database');
+    }
+
+    // Check if user already has an activated wallet
+    if (user.stellarWallet?.isActivated) {
+      return { 
+        success: true, 
+        message: 'Wallet already activated',
+        publicKey: user.stellarWallet.publicKey 
+      };
+    }
     
-    console.log('🔵 [STELLAR WALLET] Wallet activation completed');
+    const walletData = await createAndFundStellarWallet();
     
-    return { success: true, message: 'Wallet activated successfully' };
+    // Encrypt the secret key (for now, we'll use a simple encryption)
+    // In production, you should use the user's password or a more secure method
+    const encryptedSecretKey = await EncryptionUtil.encrypt(walletData.secretKey, 'default-encryption-key');
+    
+    // Create the stellar wallet object
+    const stellarWallet = {
+      isActivated: true,
+      publicKey: walletData.publicKey,
+      encryptedPrivateKey: encryptedSecretKey,
+      balance: {
+        XLM: 10000 // Friendbot funds with 10,000 XLM
+      },
+      lastSyncAt: new Date(),
+      securitySettings: {
+        backupEnabled: false,
+        backupMethod: 'private_key' as const,
+        twoFactorEnabled: false
+      }
+    };
+    
+    // Update user record with wallet data
+    try {
+      await UserService.updateUser(user._id!.toString(), {
+        stellarWallet
+      });
+      
+      console.log('🔵 [STELLAR WALLET] Wallet activation completed', walletData);
+      console.log('🔵 [STELLAR WALLET] Wallet saved to database for user:', session.user.email);
+      console.log('🔵 [STELLAR WALLET] Wallet details:', {
+        publicKey: walletData.publicKey,
+        isActivated: true,
+        balance: stellarWallet.balance
+      });
+    } catch (dbError) {
+      console.error('🔴 [STELLAR WALLET] Database update failed:', dbError);
+      throw new Error(`Failed to save wallet to database: ${dbError instanceof Error ? dbError.message : 'Unknown database error'}`);
+    }
+    
+    return { 
+      success: true, 
+      message: 'Wallet activated successfully',
+      publicKey: walletData.publicKey 
+    };
   } catch (error) {
     console.error('🔴 [STELLAR WALLET] Error activating wallet:', error);
-    throw error;
+    throw new Error(`Failed to activate wallet: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
@@ -42,18 +99,21 @@ export async function getWalletBalance() {
     
     console.log('🔵 [STELLAR WALLET] User authenticated:', session.user.email);
     
-    // TODO: Implement balance fetching
-    // - Get user's Stellar wallet address
-    // - Query Stellar network for account info
-    // - Return balance for all assets (XLM, USDC, etc.)
+    // Get user from database
+    const user = await UserService.getUserByEmail(session.user.email);
+    if (!user) {
+      throw new Error('User not found in database');
+    }
+    
+    // Check if user has an activated wallet
+    if (!user.stellarWallet?.isActivated) {
+      throw new Error('Wallet not activated');
+    }
     
     console.log('🔵 [STELLAR WALLET] Balance fetched successfully');
     
-    // Mock data for now
-    return {
-      XLM: 1000,
-      USDC: 500
-    };
+    // Return the balance from the database
+    return user.stellarWallet.balance || { XLM: 0 };
   } catch (error) {
     console.error('🔴 [STELLAR WALLET] Error getting balance:', error);
     throw error;
@@ -208,13 +268,20 @@ export async function getWalletAddress() {
     
     console.log('🔵 [STELLAR WALLET] User authenticated:', session.user.email);
     
-    // TODO: Implement wallet address retrieval
-    // - Get user's Stellar wallet address from database
-    // - Return public address
+    // Get user from database
+    const user = await UserService.getUserByEmail(session.user.email);
+    if (!user) {
+      throw new Error('User not found in database');
+    }
+    
+    // Check if user has an activated wallet
+    if (!user.stellarWallet?.isActivated) {
+      throw new Error('Wallet not activated');
+    }
     
     console.log('🔵 [STELLAR WALLET] Wallet address retrieved successfully');
     
-    return 'GABC123456789...';
+    return user.stellarWallet.publicKey;
   } catch (error) {
     console.error('🔴 [STELLAR WALLET] Error getting wallet address:', error);
     throw error;
@@ -233,16 +300,30 @@ export async function checkWalletStatus() {
     
     console.log('🔵 [STELLAR WALLET] User authenticated:', session.user.email);
     
-    // TODO: Implement wallet status check
-    // - Query user record for stellarWallet.isActivated
-    // - Check if wallet exists and is properly configured
-    // - Verify wallet is still valid on Stellar network
-    // - Return wallet status (active, inactive, error)
+    // Get user from database
+    const user = await UserService.getUserByEmail(session.user.email);
+    if (!user) {
+      throw new Error('User not found in database');
+    }
+    
+    // Check if user has an activated wallet
+    const isActivated = user.stellarWallet?.isActivated || false;
+    const status = isActivated ? 'active' : 'inactive';
     
     console.log('🔵 [STELLAR WALLET] Wallet status checked successfully');
+    console.log('🔵 [STELLAR WALLET] User wallet data:', {
+      isActivated,
+      publicKey: user.stellarWallet?.publicKey || 'none',
+      hasEncryptedKey: !!user.stellarWallet?.encryptedPrivateKey,
+      balance: user.stellarWallet?.balance || {}
+    });
     
-    // Default to inactive - user must activate wallet first
-    return { isActivated: false, status: 'inactive' };
+    return { 
+      isActivated, 
+      status,
+      publicKey: user.stellarWallet?.publicKey || null,
+      balance: user.stellarWallet?.balance || {}
+    };
   } catch (error) {
     console.error('🔴 [STELLAR WALLET] Error checking wallet status:', error);
     throw error;

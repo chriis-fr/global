@@ -21,7 +21,7 @@ export const metadata: Metadata = {
   title: "Chains ERP-Global",
   description: "Blockchain powered Global Business Solutions",
   icons: {
-    icon: "./chains.PNG"
+    icon: "/chains.PNG"
   }
 };
 

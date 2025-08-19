@@ -13,7 +13,7 @@ import {
   CreditCard
 } from 'lucide-react';
 import Link from 'next/link';
-import { activateStellarWallet, getWalletBalance, sendTransaction, getTransactionHistory, backupWallet, checkWalletStatus, getWalletAddress } from './index';
+import { activateStellarWallet, getWalletBalance, sendTransaction, getTransactionHistory, backupWallet, checkWalletStatus, getWalletAddress } from '../../../../lib/wallet/index';
 
 interface WalletData {
   isActivated: boolean;
@@ -55,6 +55,7 @@ export default function WalletPage() {
     try {
       // Check wallet status first
       const walletStatus = await checkWalletStatus();
+      console.log('Wallet status:', walletStatus);
       
       if (walletStatus.isActivated) {
         const balance = await getWalletBalance();
@@ -78,6 +79,8 @@ export default function WalletPage() {
       // On error, assume wallet is not activated
       setWalletData(null);
       setTransactions([]);
+      // Show user-friendly error message
+      alert(`Failed to load wallet data: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -85,10 +88,16 @@ export default function WalletPage() {
 
   const handleActivateWallet = async () => {
     try {
-      await activateStellarWallet();
+      setLoading(true);
+      const result = await activateStellarWallet();
+      console.log('Wallet activation result:', result);
       await loadWalletData();
     } catch (error) {
       console.error('Error activating wallet:', error);
+      // Show user-friendly error message
+      alert(`Failed to activate wallet: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading(false);
     }
   };
 
