@@ -98,7 +98,6 @@ export async function activateStellarWallet() {
 
 // Get Wallet Balance
 export async function getWalletBalance() {
-  console.log('🔵 [STELLAR WALLET] Getting wallet balance...sssssssssssssssssssssssssssssssssssssssssss');
   
   try {
     const session = await getServerSession(authOptions);
@@ -106,7 +105,6 @@ export async function getWalletBalance() {
       throw new Error('User not authenticated');
     }
     
-    console.log('🔵 [STELLAR WALLET] User authenticated:', session.user.email);
     
     // Get user from database
     const user = await UserService.getUserByEmail(session.user.email);
@@ -120,7 +118,6 @@ export async function getWalletBalance() {
     }
 
     const account = await getAccountDeets(user.stellarWallet.publicKey);
-    console.log('🔵 [STELLAR WALLET] Account details:', account);
     
     // Parse real balances from Stellar network
     const balances: { [currency: string]: number } = {};
@@ -140,7 +137,6 @@ export async function getWalletBalance() {
       });
     }
     
-    console.log('🔵 [STELLAR WALLET] Parsed balances:', balances);
     
     // Update the balance in the database to keep it in sync
     try {
@@ -151,13 +147,11 @@ export async function getWalletBalance() {
           lastSyncAt: new Date()
         }
       });
-      console.log('🔵 [STELLAR WALLET] Balance updated in database');
     } catch (dbError) {
       console.warn('⚠️ [STELLAR WALLET] Failed to update balance in database:', dbError);
       // Don't throw error, just log warning - balance fetch still works
     }
     
-    console.log('🔵 [STELLAR WALLET] Balance fetched successfully');
     
     // Return real balances from Stellar network
     return balances;
