@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import Link from 'next/link';
 import { 
   Plus, 
   Search, 
@@ -11,7 +10,6 @@ import {
   Edit3,
   Trash2,
   Loader2,
-  LayoutDashboard,
   FileText,
   DollarSign,
   Calendar,
@@ -21,6 +19,7 @@ import {
 import FormattedNumberDisplay from '@/components/FormattedNumber';
 import { InvoiceService } from '@/lib/services/invoiceService';
 import { Invoice } from '@/models/Invoice';
+import FloatingActionButton from '@/components/dashboard/FloatingActionButton';
 
 export default function InvoicesPage() {
   const router = useRouter();
@@ -838,13 +837,8 @@ export default function InvoicesPage() {
         </div>
       )}
 
-      {/* Floating Dashboard Button */}
-      <Link
-        href="/dashboard"
-        className="fixed bottom-6 right-6 z-50 flex items-center justify-center w-14 h-14 bg-blue-600/80 backdrop-blur-sm text-white rounded-full shadow-lg hover:bg-blue-700/90 transition-all duration-300 hover:scale-110"
-      >
-        <LayoutDashboard className="h-6 w-6" />
-      </Link>
+      {/* Floating Action Button */}
+      <FloatingActionButton />
     </div>
   );
 } 

@@ -4,7 +4,6 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 
-import Link from 'next/link';
 import Image from 'next/image';
 import { 
   ArrowLeft, 
@@ -22,7 +21,6 @@ import {
   Loader2,
   Download,
   AlertCircle,
-  LayoutDashboard,
   ChevronDown,
   Search,
   Mail,
@@ -40,6 +38,7 @@ import { LogoSelector } from '@/components/LogoSelector';
 import { setCriticalOperation } from '@/components/dashboard/NotificationBadge';
 import BankSelector from '@/components/BankSelector';
 import { Bank } from '@/data';
+import FloatingActionButton from '@/components/dashboard/FloatingActionButton';
 
 interface Client {
   _id: string;
@@ -1472,17 +1471,17 @@ export default function CreateInvoicePage() {
           value={value}
           onChange={(e) => handleInputChange(field as keyof InvoiceFormData, e.target.value)}
           onBlur={() => setEditingField(null)}
-          className={`${className} border border-gray-300 rounded px-2 py-1 bg-white`}
+          className={`${className} border border-gray-300 rounded px-2 py-1 bg-white text-xs sm:text-sm`}
           autoFocus
         />
       </div>
     ) : (
       <button
         onClick={() => setEditingField(field)}
-        className={`${className} hover:bg-gray-100 px-2 py-1 rounded flex items-center group`}
+        className={`${className} hover:bg-gray-100 px-2 py-1 rounded flex items-center group touch-manipulation`}
       >
-        {label} {formatDate(value)}
-        <Edit3 className="h-3 w-3 ml-2 opacity-0 group-hover:opacity-100 transition-opacity" />
+        <span className="text-xs sm:text-sm">{label} {formatDate(value)}</span>
+        <Edit3 className="h-3 w-3 ml-1 sm:ml-2 opacity-0 group-hover:opacity-100 transition-opacity" />
       </button>
     );
   };
@@ -2177,7 +2176,7 @@ export default function CreateInvoicePage() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 space-y-4 sm:space-y-0">
           <button
             onClick={() => router.back()}
-            className="flex items-center space-x-2 px-4 py-2 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
+            className="flex items-center space-x-2 px-4 py-3 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm touch-manipulation active:scale-95 min-h-[44px]"
           >
             <ArrowLeft className="h-4 w-4" />
             <span>Back to Dashboard</span>
@@ -2258,8 +2257,50 @@ export default function CreateInvoicePage() {
               </div>
 
               {/* Right Side - Dates and Logo */}
-              <div className="text-right space-y-2 w-full sm:w-auto">
-                <div className="flex flex-col sm:flex-row items-end sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
+              <div className="w-full sm:w-auto">
+                {/* Mobile Layout - Stack vertically */}
+                <div className="flex flex-col space-y-3 sm:hidden">
+                  {/* Logo first on mobile */}
+                  <div 
+                    onClick={() => setShowCompanyEditModal(true)}
+                    className="w-16 h-16 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors cursor-pointer flex-shrink-0 group relative overflow-hidden self-end"
+                  >
+                    {formData.companyLogo ? (
+                      <>
+                        <Image 
+                          src={formData.companyLogo} 
+                          alt="Company Logo" 
+                          width={64}
+                          height={64}
+                          className="object-contain w-full h-full"
+                          unoptimized={formData.companyLogo.startsWith('data:')}
+                        />
+                        <div className="absolute inset-0 bg-white bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center">
+                          <Edit3 className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-center justify-center w-full h-full">
+                        <Plus className="h-6 w-6 text-gray-400" />
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Dates below logo on mobile */}
+                  <div className="text-sm text-gray-600 space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <Calendar className="h-4 w-4 flex-shrink-0" />
+                      {renderEditableDateField('issueDate', formData.issueDate, 'Issued on')}
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Clock className="h-4 w-4 flex-shrink-0" />
+                      {renderEditableDateField('dueDate', formData.dueDate, 'Payment due by')}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Desktop Layout - Side by side */}
+                <div className="hidden sm:flex items-end space-x-4">
                   <div className="text-sm text-gray-600">
                     <div className="flex items-center space-x-2">
                       <Calendar className="h-4 w-4" />
@@ -3311,12 +3352,12 @@ export default function CreateInvoicePage() {
         {/* Client Creation Modal */}
         {showNewClientModal && (
           <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative touch-manipulation">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">Create New Client</h3>
                 <button
                   onClick={() => setShowNewClientModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-gray-400 hover:text-gray-600 transition-colors touch-manipulation active:scale-95 p-2 -m-2"
                 >
                   ×
                 </button>
@@ -3381,12 +3422,12 @@ export default function CreateInvoicePage() {
         {/* Client Edit Modal */}
         {showClientEditModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative shadow-xl">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative shadow-xl touch-manipulation">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">Edit Client Information</h3>
                 <button
                   onClick={() => setShowClientEditModal(false)}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                  className="text-gray-400 hover:text-gray-600 transition-colors touch-manipulation active:scale-95 p-2 -m-2"
                 >
                   ×
                 </button>
@@ -3410,13 +3451,8 @@ export default function CreateInvoicePage() {
         <InvoicePdfView formData={formData} invoiceNumber={formData.invoiceNumber} />
       </div>
 
-      {/* Floating Dashboard Button */}
-      <Link
-        href="/dashboard"
-        className="fixed bottom-6 right-6 z-50 flex items-center justify-center w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-all duration-300 hover:scale-110"
-      >
-        <LayoutDashboard className="h-6 w-6" />
-      </Link>
+      {/* Floating Action Button */}
+      <FloatingActionButton />
     </div>
   );
 }

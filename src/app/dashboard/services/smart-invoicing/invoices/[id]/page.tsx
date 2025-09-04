@@ -792,7 +792,7 @@ export default function InvoiceViewPage() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 space-y-4 sm:space-y-0">
           <button
             onClick={() => router.back()}
-            className="flex items-center space-x-2 px-4 py-2 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
+            className="flex items-center space-x-2 px-4 py-3 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm touch-manipulation active:scale-95 min-h-[44px]"
           >
             <ArrowLeft className="h-4 w-4" />
             <span>Back</span>
