@@ -67,14 +67,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('✅ [Send Invoice] Invoice found for sending:', {
-      invoiceId,
-      invoiceNumber: invoice.invoiceNumber,
-      recipientEmail,
-      total: invoice.totalAmount,
-      ownerType: isOrganization ? 'organization' : 'individual',
-      ownerId: isOrganization ? session.user.organizationId : session.user.email
-    });
 
     // Prepare payment methods for display
     const paymentMethods: string[] = [];
@@ -108,19 +100,11 @@ export async function POST(request: NextRequest) {
     // Determine the greeting name - always use the client name
     const fullName = [invoice.clientDetails?.firstName, invoice.clientDetails?.lastName].filter(Boolean).join(' ');
     
-    console.log('🔍 [Send Invoice] Client details:', {
-      companyName: invoice.clientDetails?.companyName,
-      firstName: invoice.clientDetails?.firstName,
-      lastName: invoice.clientDetails?.lastName,
-      fullName: fullName,
-      hasCompany: !!invoice.clientDetails?.companyName
-    });
     
     const greetingName = invoice.clientDetails?.companyName 
       ? (fullName || invoice.clientDetails?.companyName) // If company exists, use individual name or company name
       : (fullName || 'Client'); // If no company, use individual name or 'Client'
     
-    console.log('🔍 [Send Invoice] Greeting name determined:', greetingName);
 
     // Send invoice email with timeout
     let result: { success: boolean; messageId?: string; error?: Error };

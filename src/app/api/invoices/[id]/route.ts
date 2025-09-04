@@ -57,13 +57,6 @@ export async function GET(
       );
     }
 
-    console.log('✅ [API Invoice] Invoice found:', {
-      id: invoice._id,
-      invoiceNumber: invoice.invoiceNumber,
-      total: invoice.totalAmount,
-      ownerType,
-      ownerId
-    });
 
     // Convert currencies if requested
     let processedInvoice = invoice;
@@ -76,12 +69,6 @@ export async function GET(
         // Convert invoice amounts to preferred currency
         processedInvoice = await CurrencyService.convertInvoiceForReporting(invoice as { [key: string]: unknown }, preferredCurrency) as typeof invoice;
 
-        console.log('✅ [API Invoice] Currency converted:', {
-          originalCurrency: invoice.currency,
-          preferredCurrency: preferredCurrency,
-          originalAmount: invoice.totalAmount,
-          convertedAmount: processedInvoice.totalAmount
-        });
       } catch (error) {
         console.error('❌ [API Invoice] Currency conversion failed:', error);
         // Continue with original invoice if conversion fails
@@ -119,12 +106,6 @@ export async function PUT(
     const ownerId = isOrganization ? session.user.organizationId : session.user.email;
     const ownerType = isOrganization ? 'organization' : 'individual';
 
-    console.log('📝 [API Invoice] Updating invoice:', {
-      id,
-      ownerType,
-      ownerId,
-      updates: body
-    });
 
     const db = await connectToDatabase();
     const collection = db.collection('invoices');
@@ -154,16 +135,7 @@ export async function PUT(
       if (isOrganization) {
         // For organization users, we'll allow organization members to mark invoices as paid
         // You can add more specific permission checks here later
-        console.log('✅ [API Invoice] Organization user marking invoice as paid:', {
-          id,
-          userEmail: session.user.email,
-          organizationId: session.user.organizationId
-        });
       } else {
-        console.log('✅ [API Invoice] Individual user marking invoice as paid:', {
-          id,
-          userEmail: session.user.email
-        });
       }
     }
 
@@ -177,11 +149,6 @@ export async function PUT(
     // If status is being updated to 'paid', add payment date
     if (body.status === 'paid') {
       updateData.paidAt = new Date();
-      console.log('✅ [API Invoice] Marking invoice as paid:', {
-        id,
-        invoiceNumber: existingInvoice.invoiceNumber,
-        paidAt: updateData.paidAt
-      });
     }
 
     const result = await collection.updateOne(
@@ -199,13 +166,6 @@ export async function PUT(
     // Get the updated invoice to return full data
     const updatedInvoice = await collection.findOne({ _id: new ObjectId(id) });
 
-    console.log('✅ [API Invoice] Invoice updated successfully:', {
-      id,
-      status: body.status,
-      ownerType,
-      ownerId,
-      invoiceNumber: updatedInvoice?.invoiceNumber
-    });
 
     return NextResponse.json({
       success: true,
@@ -267,11 +227,6 @@ export async function DELETE(
       );
     }
 
-    console.log('✅ [API Invoice] Invoice deleted successfully:', {
-      id,
-      ownerType,
-      ownerId
-    });
 
     return NextResponse.json({
       success: true,
