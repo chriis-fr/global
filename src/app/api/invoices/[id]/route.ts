@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
+import { CurrencyService } from '@/lib/services/currencyService';
 
 export async function GET(
   request: NextRequest,
@@ -16,6 +17,10 @@ export async function GET(
 
     // Await params to get the id
     const { id } = await params;
+
+    // Get query parameters
+    const { searchParams } = new URL(request.url);
+    const convertToPreferred = searchParams.get('convertToPreferred') === 'true';
 
     // Determine if user is individual or organization
     const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
@@ -52,17 +57,27 @@ export async function GET(
       );
     }
 
-    console.log('✅ [API Invoice] Invoice found:', {
-      id: invoice._id,
-      invoiceNumber: invoice.invoiceNumber,
-      total: invoice.totalAmount,
-      ownerType,
-      ownerId
-    });
+
+    // Convert currencies if requested
+    let processedInvoice = invoice;
+    if (convertToPreferred) {
+      try {
+        // Get user's preferred currency
+        const userPreferences = await CurrencyService.getUserPreferredCurrency(session.user.email);
+        const preferredCurrency = userPreferences.preferredCurrency;
+
+        // Convert invoice amounts to preferred currency
+        processedInvoice = await CurrencyService.convertInvoiceForReporting(invoice as { [key: string]: unknown }, preferredCurrency) as typeof invoice;
+
+      } catch (error) {
+        console.error('❌ [API Invoice] Currency conversion failed:', error);
+        // Continue with original invoice if conversion fails
+      }
+    }
 
     return NextResponse.json({
       success: true,
-      data: invoice
+      data: processedInvoice
     });
   } catch (error) {
     console.error('❌ [API Invoice] Error fetching invoice:', error);
@@ -91,12 +106,6 @@ export async function PUT(
     const ownerId = isOrganization ? session.user.organizationId : session.user.email;
     const ownerType = isOrganization ? 'organization' : 'individual';
 
-    console.log('📝 [API Invoice] Updating invoice:', {
-      id,
-      ownerType,
-      ownerId,
-      updates: body
-    });
 
     const db = await connectToDatabase();
     const collection = db.collection('invoices');
@@ -126,16 +135,7 @@ export async function PUT(
       if (isOrganization) {
         // For organization users, we'll allow organization members to mark invoices as paid
         // You can add more specific permission checks here later
-        console.log('✅ [API Invoice] Organization user marking invoice as paid:', {
-          id,
-          userEmail: session.user.email,
-          organizationId: session.user.organizationId
-        });
       } else {
-        console.log('✅ [API Invoice] Individual user marking invoice as paid:', {
-          id,
-          userEmail: session.user.email
-        });
       }
     }
 
@@ -149,11 +149,6 @@ export async function PUT(
     // If status is being updated to 'paid', add payment date
     if (body.status === 'paid') {
       updateData.paidAt = new Date();
-      console.log('✅ [API Invoice] Marking invoice as paid:', {
-        id,
-        invoiceNumber: existingInvoice.invoiceNumber,
-        paidAt: updateData.paidAt
-      });
     }
 
     const result = await collection.updateOne(
@@ -171,13 +166,6 @@ export async function PUT(
     // Get the updated invoice to return full data
     const updatedInvoice = await collection.findOne({ _id: new ObjectId(id) });
 
-    console.log('✅ [API Invoice] Invoice updated successfully:', {
-      id,
-      status: body.status,
-      ownerType,
-      ownerId,
-      invoiceNumber: updatedInvoice?.invoiceNumber
-    });
 
     return NextResponse.json({
       success: true,
@@ -239,11 +227,6 @@ export async function DELETE(
       );
     }
 
-    console.log('✅ [API Invoice] Invoice deleted successfully:', {
-      id,
-      ownerType,
-      ownerId
-    });
 
     return NextResponse.json({
       success: true,

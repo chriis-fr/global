@@ -254,15 +254,47 @@ export class PaymentMethodService {
         errors.push('Fiat payment details are required');
       } else {
         const fiat = input.fiatDetails;
-        if (!fiat.bankName) errors.push('Bank name is required');
-        if (!fiat.accountNumber) errors.push('Account number is required');
+        if (!fiat.subtype) errors.push('Payment subtype is required');
         if (!fiat.currency) errors.push('Currency is required');
         if (!fiat.country) errors.push('Country is required');
-        if (!fiat.accountType) errors.push('Account type is required');
         
-        // Validate account number format
-        if (fiat.accountNumber && fiat.accountNumber.length < 8) {
-          warnings.push('Account number seems too short');
+        // Validate based on subtype
+        if (fiat.subtype === 'bank') {
+          if (!fiat.bankName) errors.push('Bank name is required');
+          if (!fiat.accountNumber) errors.push('Account number is required');
+          if (!fiat.accountType) errors.push('Account type is required');
+          
+          // Validate account number format
+          if (fiat.accountNumber && fiat.accountNumber.length < 8) {
+            warnings.push('Account number seems too short');
+          }
+        } else if (fiat.subtype === 'mpesa_paybill') {
+          if (!fiat.paybillNumber) errors.push('Paybill number is required');
+          if (!fiat.mpesaAccountNumber) errors.push('Account number is required');
+          // Business name is optional for M-Pesa Paybill
+          
+          // Validate paybill number format (typically 5-7 digits)
+          if (fiat.paybillNumber && !/^\d{5,7}$/.test(fiat.paybillNumber)) {
+            warnings.push('Paybill number should be 5-7 digits');
+          }
+          
+          // Validate country is Kenya
+          if (fiat.country && fiat.country !== 'KE') {
+            errors.push('M-Pesa Paybill is only available for Kenya (KE)');
+          }
+        } else if (fiat.subtype === 'mpesa_till') {
+          if (!fiat.tillNumber) errors.push('Till number is required');
+          // Business name is optional for M-Pesa Till
+          
+          // Validate till number format (typically 7 digits)
+          if (fiat.tillNumber && !/^\d{7}$/.test(fiat.tillNumber)) {
+            warnings.push('Till number should be 7 digits');
+          }
+          
+          // Validate country is Kenya
+          if (fiat.country && fiat.country !== 'KE') {
+            errors.push('M-Pesa Till is only available for Kenya (KE)');
+          }
         }
       }
     }
@@ -282,6 +314,7 @@ export class PaymentMethodService {
         }
       }
     }
+
 
     return {
       isValid: errors.length === 0,

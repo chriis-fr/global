@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import Link from 'next/link';
 import { 
   Plus, 
   Search, 
@@ -11,15 +10,16 @@ import {
   Edit3,
   Trash2,
   Loader2,
-  LayoutDashboard,
   FileText,
   DollarSign,
   Calendar,
-  TrendingUp
+  TrendingUp,
+  Download
 } from 'lucide-react';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
 import { InvoiceService } from '@/lib/services/invoiceService';
 import { Invoice } from '@/models/Invoice';
+import FloatingActionButton from '@/components/dashboard/FloatingActionButton';
 
 export default function InvoicesPage() {
   const router = useRouter();
@@ -29,21 +29,65 @@ export default function InvoicesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'sent' | 'pending' | 'paid' | 'overdue'>('all');
   const [totalRevenue, setTotalRevenue] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalInvoices, setTotalInvoices] = useState(0);
+  const [showAll, setShowAll] = useState(false);
+  const [statusCounts, setStatusCounts] = useState({
+    draft: 0,
+    sent: 0,
+    pending: 0,
+    paid: 0,
+    overdue: 0
+  });
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [downloadCriteria, setDownloadCriteria] = useState({
+    type: 'current', // 'current', 'all', 'selected', 'dateRange', 'status'
+    dateFrom: '',
+    dateTo: '',
+    status: 'all',
+    selectedInvoices: [] as string[]
+  });
+  const [selectedInvoices, setSelectedInvoices] = useState<string[]>([]);
 
   const loadInvoices = useCallback(async () => {
     try {
-      // Fetch invoices with stats to get total revenue from all invoices
-      const response = await fetch('/api/invoices?convertToPreferred=true');
+      setLoading(true);
+      
+      // Build query parameters
+      const params = new URLSearchParams({
+        convertToPreferred: 'true',
+        page: currentPage.toString(),
+        limit: showAll ? '1000' : '10' // Show all or paginated
+      });
+      
+      if (statusFilter !== 'all') {
+        params.append('status', statusFilter);
+      }
+      
+      // Fetch invoices with pagination
+      const response = await fetch(`/api/invoices?${params.toString()}`);
       const data = await response.json();
       
       if (data.success) {
         setInvoices(data.data.invoices || []);
         setTotalRevenue(data.data.stats?.totalRevenue || 0);
+        setTotalPages(data.data.pagination?.pages || 1);
+        setTotalInvoices(data.data.pagination?.total || 0);
+        setStatusCounts(data.data.stats?.statusCounts || {
+          draft: 0,
+          sent: 0,
+          pending: 0,
+          paid: 0,
+          overdue: 0
+        });
       } else {
         // Fallback to InvoiceService if API fails
         const invoicesData = await InvoiceService.getInvoices();
         setInvoices(invoicesData);
         setTotalRevenue(0); // Will be calculated from loaded invoices
+        setTotalPages(1);
+        setTotalInvoices(invoicesData.length);
       }
     } catch (error) {
       console.error('❌ [Invoices Page] Error loading invoices:', error);
@@ -51,10 +95,12 @@ export default function InvoicesPage() {
       const invoicesData = await InvoiceService.getInvoices();
       setInvoices(invoicesData);
       setTotalRevenue(0);
+      setTotalPages(1);
+      setTotalInvoices(invoicesData.length);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentPage, statusFilter, showAll]);
 
   useEffect(() => {
     if (session?.user) {
@@ -75,6 +121,206 @@ export default function InvoicesPage() {
       }
     } catch (error) {
       console.error('Failed to delete invoice:', error);
+    }
+  };
+
+
+  const handleDynamicDownloadCsv = async () => {
+    try {
+      console.log('📤 [Smart Invoicing] Starting dynamic CSV download with criteria:', downloadCriteria);
+
+      // Build query parameters based on criteria
+      const params = new URLSearchParams({
+        convertToPreferred: 'true',
+        limit: '1000' // Get all matching invoices
+      });
+
+      // Add criteria-specific parameters
+      switch (downloadCriteria.type) {
+        case 'current':
+          // Use current filter settings
+          if (statusFilter !== 'all') params.append('status', statusFilter);
+          break;
+        case 'dateRange':
+          if (downloadCriteria.dateFrom) params.append('dateFrom', downloadCriteria.dateFrom);
+          if (downloadCriteria.dateTo) params.append('dateTo', downloadCriteria.dateTo);
+          break;
+        case 'status':
+          if (downloadCriteria.status !== 'all') params.append('status', downloadCriteria.status);
+          break;
+        case 'selected':
+          // For selected invoices, we'll filter after fetching
+          break;
+        case 'all':
+        default:
+          // No additional parameters needed
+          break;
+      }
+
+      // Fetch invoices based on criteria
+      const response = await fetch(`/api/invoices?${params.toString()}`);
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error('Failed to fetch invoices');
+      }
+
+      let invoicesToDownload = data.data.invoices || [];
+
+      // Filter by selected invoices if needed
+      if (downloadCriteria.type === 'selected' && selectedInvoices.length > 0) {
+        invoicesToDownload = invoicesToDownload.filter((invoice: Invoice) => 
+          invoice._id && selectedInvoices.includes(invoice._id.toString())
+        );
+      }
+
+      if (invoicesToDownload.length === 0) {
+        alert('No invoices match your criteria');
+        return;
+      }
+
+      // Generate CSV content (same logic as bulk download)
+      const csvRows = [];
+      
+      // CSV Headers
+      const headers = [
+        'Invoice Number', 'Invoice Name', 'Issue Date', 'Due Date', 'Status',
+        'Company Name', 'Company Email', 'Company Phone', 'Company Address', 'Company Tax Number',
+        'Client Name', 'Client Company', 'Client Email', 'Client Phone', 'Client Address',
+        'Items Description', 'Total Quantity',
+        'Subtotal', 'Total Tax', 'Total Amount', 'Currency',
+        'Payment Method', 'Bank Name', 'Account Number', 'Routing Number', 'Network', 'Payment Address',
+        'Memo', 'Created Date'
+      ];
+      csvRows.push(headers.join(','));
+      
+      // Process each invoice
+      invoicesToDownload.forEach((invoice: Invoice) => {
+        // Get company details
+        const companyName = invoice.companyDetails?.name || 'N/A';
+        const companyEmail = 'N/A';
+        const companyPhone = 'N/A';
+        const companyTaxNumber = invoice.companyDetails?.taxNumber || 'N/A';
+        
+        // Handle company address
+        let companyAddress = 'N/A';
+        if (invoice.companyDetails) {
+          companyAddress = `${invoice.companyDetails.addressLine1 || ''}, ${invoice.companyDetails.city || ''}, ${invoice.companyDetails.region || ''} ${invoice.companyDetails.postalCode || ''}, ${invoice.companyDetails.country || ''}`;
+        }
+        
+        // Get client details
+        const clientName = [invoice.clientDetails?.firstName, invoice.clientDetails?.lastName].filter(Boolean).join(' ') || 'N/A';
+        const clientCompany = invoice.clientDetails?.companyName || 'N/A';
+        const clientEmail = invoice.clientDetails?.email || 'N/A';
+        const clientPhone = 'N/A';
+        
+        // Handle client address
+        let clientAddress = 'N/A';
+        if (invoice.clientDetails) {
+          clientAddress = `${invoice.clientDetails.addressLine1 || ''}, ${invoice.clientDetails.city || ''}, ${invoice.clientDetails.region || ''}, ${invoice.clientDetails.postalCode || ''}, ${invoice.clientDetails.country || ''}`;
+        }
+        
+        // Get payment details
+        const paymentMethod = invoice.paymentSettings?.method === 'fiat' ? 'Bank Transfer' : 
+                             invoice.paymentSettings?.method === 'crypto' ? 'Cryptocurrency' : 'N/A';
+        const bankName = invoice.paymentSettings?.bankAccount?.bankName || 'N/A';
+        const accountNumber = invoice.paymentSettings?.bankAccount?.accountNumber || 'N/A';
+        const routingNumber = invoice.paymentSettings?.bankAccount?.routingNumber || 'N/A';
+        const network = invoice.paymentSettings?.cryptoNetwork || 'N/A';
+        const paymentAddress = invoice.paymentSettings?.walletAddress || 'N/A';
+        
+        // Combine all items into a single description
+        const itemsDescription = invoice.items && invoice.items.length > 0
+          ? invoice.items.map((item) => `${item.description || 'Item'} (Qty: ${item.quantity || 0}, Price: ${item.unitPrice?.toFixed(2) || '0.00'})`).join('; ')
+          : 'No items';
+        
+        // Calculate total quantity
+        const totalQuantity = invoice.items ? invoice.items.reduce((sum: number, item) => sum + (item.quantity || 0), 0) : 0;
+
+        const row = [
+          `"${invoice.invoiceNumber || 'N/A'}"`,
+          `"${invoice.invoiceNumber || 'N/A'}"`,
+          `"${formatDate(invoice.issueDate?.toISOString() || '')}"`,
+          `"${formatDate(invoice.dueDate?.toISOString() || '')}"`,
+          `"${invoice.status || 'N/A'}"`,
+          `"${companyName}"`,
+          `"${companyEmail}"`,
+          `"${companyPhone}"`,
+          `"${companyAddress}"`,
+          `"${companyTaxNumber}"`,
+          `"${clientName}"`,
+          `"${clientCompany}"`,
+          `"${clientEmail}"`,
+          `"${clientPhone}"`,
+          `"${clientAddress}"`,
+          `"${itemsDescription}"`,
+          `"${totalQuantity}"`,
+          `"${invoice.subtotal?.toFixed(2) || '0.00'}"`,
+          `"${invoice.taxes?.reduce((sum, tax) => sum + tax.amount, 0).toFixed(2) || '0.00'}"`,
+          `"${invoice.totalAmount?.toFixed(2) || '0.00'}"`,
+          `"${invoice.currency || 'N/A'}"`,
+          `"${paymentMethod}"`,
+          `"${bankName}"`,
+          `"${accountNumber}"`,
+          `"${routingNumber}"`,
+          `"${network}"`,
+          `"${paymentAddress}"`,
+          `"${invoice.notes || ''}"`,
+          `"${formatDate(invoice.createdAt?.toISOString() || '')}"`
+        ];
+        csvRows.push(row.join(','));
+      });
+      
+      // Convert to CSV string
+      const csvContent = csvRows.join('\n');
+      
+      // Create and download file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      
+      // Generate filename based on criteria
+      let filename = 'invoices';
+      const timestamp = new Date().toISOString().split('T')[0];
+      
+      switch (downloadCriteria.type) {
+        case 'current':
+          filename = `invoices_current_${statusFilter}_${timestamp}`;
+          break;
+        case 'dateRange':
+          filename = `invoices_${downloadCriteria.dateFrom}_to_${downloadCriteria.dateTo}`;
+          break;
+        case 'status':
+          filename = `invoices_${downloadCriteria.status}`;
+          break;
+        case 'selected':
+          filename = `invoices_selected_${selectedInvoices.length}`;
+          break;
+        case 'all':
+        default:
+          filename = `invoices_all_${timestamp}`;
+          break;
+      }
+      
+      link.setAttribute('download', `${filename}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      console.log('✅ [Smart Invoicing] Dynamic CSV downloaded successfully:', {
+        invoiceCount: invoicesToDownload.length,
+        criteria: downloadCriteria.type,
+        filename: `${filename}.csv`
+      });
+      
+      // Close modal
+      setShowDownloadModal(false);
+      
+    } catch (error) {
+      console.error('❌ [Smart Invoicing] Failed to download dynamic CSV:', error);
+      alert('Failed to download CSV. Please try again.');
     }
   };
 
@@ -111,12 +357,12 @@ export default function InvoicesPage() {
     ? filteredInvoices.filter(invoice => invoice.status === 'sent' || invoice.status === 'pending')
     : filteredInvoices.filter(invoice => invoice.status === statusFilter);
 
-  // Calculate stats for the header
+  // Calculate stats for the header using accurate counts from API
   const stats = {
-    totalInvoices: invoices.length,
+    totalInvoices: totalInvoices, // Use total count from API instead of just loaded invoices
     totalRevenue: totalRevenue, // Use total revenue from API (all invoices) instead of just loaded invoices
-    pendingCount: invoices.filter(inv => inv.status === 'sent' || inv.status === 'pending').length,
-    paidCount: invoices.filter(inv => inv.status === 'paid').length
+    pendingCount: statusCounts.sent + statusCounts.pending, // Use accurate counts from API
+    paidCount: statusCounts.paid // Use accurate counts from API
   };
 
   return (
@@ -127,13 +373,22 @@ export default function InvoicesPage() {
           <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Invoices</h1>
           <p className="text-blue-200">Manage your invoices and track payments</p>
         </div>
-        <button
-          onClick={() => router.push('/dashboard/services/smart-invoicing/create')}
-          className="flex items-center justify-center sm:justify-start space-x-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-lg w-full sm:w-auto"
-        >
-          <Plus className="h-5 w-5" />
-          <span className="font-medium">Create Invoice</span>
-        </button>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <button
+            onClick={() => setShowDownloadModal(true)}
+            className="flex items-center justify-center sm:justify-start space-x-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-lg w-full sm:w-auto"
+          >
+            <Download className="h-5 w-5" />
+            <span className="font-medium">Download CSV</span>
+          </button>
+          <button
+            onClick={() => router.push('/dashboard/services/smart-invoicing/create')}
+            className="flex items-center justify-center sm:justify-start space-x-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-lg w-full sm:w-auto"
+          >
+            <Plus className="h-5 w-5" />
+            <span className="font-medium">Create Invoice</span>
+          </button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -252,6 +507,20 @@ export default function InvoicesPage() {
                 <thead className="bg-white/5">
                   <tr>
                     <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
+                      <input
+                        type="checkbox"
+                        checked={selectedInvoices.length === statusFilteredInvoices.length && statusFilteredInvoices.length > 0}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedInvoices(statusFilteredInvoices.map(inv => inv._id?.toString()).filter(Boolean) as string[]);
+                          } else {
+                            setSelectedInvoices([]);
+                          }
+                        }}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                    </th>
+                    <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
                       Invoice
                     </th>
                     <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
@@ -278,6 +547,23 @@ export default function InvoicesPage() {
                       className={`hover:bg-white/5 transition-colors ${invoice.status === 'draft' ? 'cursor-pointer' : ''}`}
                       onClick={invoice.status === 'draft' ? () => router.push(`/dashboard/services/smart-invoicing/create?id=${invoice._id?.toString()}`) : undefined}
                     >
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedInvoices.includes(invoice._id?.toString() || '')}
+                          onChange={(e) => {
+                            const invoiceId = invoice._id?.toString();
+                            if (!invoiceId) return;
+                            
+                            if (e.target.checked) {
+                              setSelectedInvoices(prev => [...prev, invoiceId]);
+                            } else {
+                              setSelectedInvoices(prev => prev.filter(id => id !== invoiceId));
+                            }
+                          }}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                      </td>
                       <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                         <div>
                           <div className="text-sm font-semibold text-white">
@@ -370,13 +656,189 @@ export default function InvoicesPage() {
         )}
       </div>
 
-      {/* Floating Dashboard Button */}
-      <Link
-        href="/dashboard"
-        className="fixed bottom-6 right-6 z-50 flex items-center justify-center w-14 h-14 bg-blue-600/80 backdrop-blur-sm text-white rounded-full shadow-lg hover:bg-blue-700/90 transition-all duration-300 hover:scale-110"
-      >
-        <LayoutDashboard className="h-6 w-6" />
-      </Link>
+      {/* Pagination Controls */}
+      {!showAll && totalPages > 1 && (
+        <div className="mt-6 flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setShowAll(true)}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Show All ({totalInvoices} invoices)
+            </button>
+            <span className="text-sm text-gray-400">
+              Showing {((currentPage - 1) * 10) + 1}-{Math.min(currentPage * 10, totalInvoices)} of {totalInvoices} invoices
+            </span>
+          </div>
+          
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            
+            <div className="flex items-center space-x-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                const pageNum = Math.max(1, Math.min(totalPages - 4, currentPage - 2)) + i;
+                if (pageNum > totalPages) return null;
+                
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setCurrentPage(pageNum)}
+                    className={`px-3 py-2 rounded-lg transition-colors ${
+                      currentPage === pageNum
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-700 text-white hover:bg-gray-600'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+            </div>
+            
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Show All Toggle */}
+      {showAll && (
+        <div className="mt-6 flex items-center justify-center">
+          <button
+            onClick={() => {
+              setShowAll(false);
+              setCurrentPage(1);
+            }}
+            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+          >
+            Show Paginated View
+          </button>
+        </div>
+      )}
+
+      {/* Dynamic Download Modal */}
+      {showDownloadModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Download Invoices</h3>
+                <button
+                  onClick={() => setShowDownloadModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                {/* Download Type Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Download Type</label>
+                  <select
+                    value={downloadCriteria.type}
+                    onChange={(e) => setDownloadCriteria(prev => ({ ...prev, type: e.target.value as 'current' | 'all' | 'dateRange' | 'selected' }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="current">Current View ({statusFilteredInvoices.length} invoices)</option>
+                    <option value="all">All Invoices</option>
+                    <option value="dateRange">Date Range</option>
+                    <option value="status">By Status</option>
+                    <option value="selected">Selected Invoices</option>
+                  </select>
+                </div>
+
+                {/* Date Range Options */}
+                {downloadCriteria.type === 'dateRange' && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>
+                      <input
+                        type="date"
+                        value={downloadCriteria.dateFrom}
+                        onChange={(e) => setDownloadCriteria(prev => ({ ...prev, dateFrom: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">To Date</label>
+                      <input
+                        type="date"
+                        value={downloadCriteria.dateTo}
+                        onChange={(e) => setDownloadCriteria(prev => ({ ...prev, dateTo: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Status Selection */}
+                {downloadCriteria.type === 'status' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                    <select
+                      value={downloadCriteria.status}
+                      onChange={(e) => setDownloadCriteria(prev => ({ ...prev, status: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="all">All Statuses</option>
+                      <option value="draft">Draft</option>
+                      <option value="sent">Sent</option>
+                      <option value="pending">Pending</option>
+                      <option value="paid">Paid</option>
+                      <option value="overdue">Overdue</option>
+                    </select>
+                  </div>
+                )}
+
+                {/* Selected Invoices Info */}
+                {downloadCriteria.type === 'selected' && (
+                  <div className="p-3 bg-gray-50 rounded-md">
+                    <p className="text-sm text-gray-600">
+                      Select invoices from the table below by clicking the checkboxes, then use this download option.
+                    </p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Selected: {selectedInvoices.length} invoices
+                    </p>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex space-x-3 pt-4">
+                  <button
+                    onClick={() => setShowDownloadModal(false)}
+                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDynamicDownloadCsv}
+                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                  >
+                    Download CSV
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Action Button */}
+      <FloatingActionButton />
     </div>
   );
 } 

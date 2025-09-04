@@ -36,7 +36,6 @@ const getEmailHeaders = () => {
 // Test email configuration
 export const testEmailConnection = async () => {
   try {
-    console.log('📧 [Email Service] Testing SMTP connection...');
     const startTime = Date.now();
     await transporter.verify();
     const endTime = Date.now();
@@ -300,24 +299,13 @@ The Chains ERP-Global Team
   }
 
   try {
-    console.log('📧 [Email Service] Starting to send invoice notification email...');
-    console.log('📧 [Email Service] Email details:', {
-      to: userEmail,
-      subject: mailOptions.subject,
-      hasPdfAttachment: !!pdfBuffer,
-      pdfSize: pdfBuffer ? `${(pdfBuffer.length / 1024).toFixed(2)} KB` : 'N/A',
-      additionalAttachmentsCount: additionalAttachments?.length || 0,
-      totalAttachmentsCount: attachments.length
-    });
     
     const startTime = Date.now();
     const info = await transporter.sendMail(mailOptions);
     const endTime = Date.now();
     const duration = endTime - startTime;
     
-    console.log('✅ Invoice notification email sent successfully');
-    console.log('📧 [Email Service] Email sent in', duration, 'ms');
-    console.log('📧 [Email Service] Message ID:', info.messageId);
+    console.log('✅ Invoice notification email sent successfully (took', duration, 'ms)');
     return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error('❌ Failed to send invoice notification email:', error);

@@ -1,13 +1,15 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/dashboard/Sidebar';
+import Breadcrumb from '@/components/dashboard/Breadcrumb';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [sidebarState, setSidebarState] = useState<'expanded' | 'collapsed' | 'auto-hidden'>('expanded');
+  const mainContentRef = useRef<HTMLDivElement>(null);
 
   // Redirect to auth page if not authenticated
   useEffect(() => {
@@ -51,6 +53,32 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, []);
 
+  // Touch gesture handlers for mobile sidebar
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    
+    const distance = touchStart - touchEnd;
+    const isRightSwipe = distance < -50; // Swipe right to open sidebar
+
+    if (isRightSwipe && touchStart < 50) { // Only trigger if swipe starts from left edge
+      // Trigger sidebar open by dispatching a custom event
+      const event = new CustomEvent('openMobileSidebar');
+      window.dispatchEvent(event);
+    }
+  };
+
   // Show loading while checking authentication
   if (status === 'loading') {
     return (
@@ -71,10 +99,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="h-screen flex bg-gradient-to-br from-blue-900 to-blue-950 overflow-hidden">
       <Sidebar />
-      <main className={`flex-1 p-3 sm:p-4 md:p-8 overflow-y-auto overflow-x-hidden transition-all duration-300 ease-in-out min-w-0 ${
-        sidebarState === 'expanded' ? 'lg:ml-0' : 'lg:ml-16'
-      } lg:ml-16 ml-0`}>
+      <main 
+        ref={mainContentRef}
+        className={`flex-1 p-3 sm:p-4 md:p-8 overflow-y-auto overflow-x-hidden transition-all duration-300 ease-in-out min-w-0 ${
+          sidebarState === 'expanded' ? 'lg:ml-0' : 'lg:ml-16'
+        } lg:ml-16 ml-0`}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
         <div className="max-w-full">
+          <Breadcrumb />
           {children}
         </div>
       </main>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { useSession } from 'next-auth/react';
 import { 
   Plus, 
   CreditCard, 
@@ -11,7 +12,8 @@ import {
   Star,
   Eye,
   EyeOff,
-  LayoutDashboard
+  LayoutDashboard,
+  Smartphone
 } from 'lucide-react';
 import Link from 'next/link';
 import BankSelector from '@/components/BankSelector';
@@ -24,14 +26,23 @@ interface PaymentMethod {
   isDefault: boolean;
   isActive: boolean;
   fiatDetails?: {
-    bankName: string;
-    swiftCode: string;
-    bankCode: string;
-    branchCode: string;
-    accountName: string;
-    accountNumber: string;
-    branchAddress: string;
+    subtype: 'bank' | 'mpesa_paybill' | 'mpesa_till';
+    // Bank details
+    bankName?: string;
+    swiftCode?: string;
+    bankCode?: string;
+    branchCode?: string;
+    accountName?: string;
+    accountNumber?: string;
+    branchAddress?: string;
+    accountType?: string;
+    // M-Pesa details
+    paybillNumber?: string;
+    mpesaAccountNumber?: string;
+    tillNumber?: string;
+    businessName?: string;
     currency: string;
+    country: string;
   };
   cryptoDetails?: {
     address: string;
@@ -41,6 +52,7 @@ interface PaymentMethod {
 }
 
 export default function PaymentMethodsPage() {
+  const { data: session } = useSession();
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [loading, setLoading] = useState(true);
   const [showSensitiveData, setShowSensitiveData] = useState<Record<string, boolean>>({});
@@ -48,6 +60,8 @@ export default function PaymentMethodsPage() {
   const [newPaymentMethod, setNewPaymentMethod] = useState({
     name: '',
     type: 'fiat' as 'fiat' | 'crypto',
+    subtype: 'bank' as 'bank' | 'mpesa_paybill' | 'mpesa_till',
+    // Bank fields
     bankName: '',
     swiftCode: '',
     bankCode: '',
@@ -55,7 +69,16 @@ export default function PaymentMethodsPage() {
     accountName: '',
     accountNumber: '',
     branchAddress: '',
+    accountType: 'checking' as 'checking' | 'savings' | 'business',
+    // M-Pesa fields
+    paybillNumber: '',
+    mpesaAccountNumber: '',
+    tillNumber: '',
+    businessName: '',
+    // Common fields
     currency: 'USD',
+    country: 'US',
+    // Crypto fields
     network: '',
     address: '',
     isDefault: false
@@ -65,13 +88,29 @@ export default function PaymentMethodsPage() {
     loadPaymentMethods();
   }, []);
 
+  // Check if user is from Kenya to show M-Pesa options
+  const isKenyanUser = () => {
+    const userCountry = session?.user?.address?.country;
+    const isKenya = userCountry === 'KE' || newPaymentMethod.currency === 'KES';
+    
+    // Debug logging
+    console.log('isKenyanUser check:', {
+      userCountry,
+      currency: newPaymentMethod.currency,
+      isKenya,
+      session: !!session
+    });
+    
+    return isKenya;
+  };
+
   const loadPaymentMethods = async () => {
     try {
       const response = await fetch('/api/payment-methods');
       const data = await response.json();
       
       if (data.success) {
-        setPaymentMethods(data.data.paymentMethods);
+        setPaymentMethods(data.paymentMethods);
       }
     } catch (error) {
       console.error('Error loading payment methods:', error);
@@ -183,12 +222,20 @@ export default function PaymentMethodsPage() {
               <div className="flex items-start justify-between">
                 <div className="flex items-center space-x-4">
                   <div className={`p-3 rounded-lg ${
-                    method.type === 'fiat' ? 'bg-green-500/20' : 'bg-purple-500/20'
+                    method.type === 'fiat' ? 
+                      method.fiatDetails?.subtype === 'mpesa_paybill' || method.fiatDetails?.subtype === 'mpesa_till' ? 'bg-orange-500/20' : 'bg-green-500/20'
+                    : method.type === 'crypto' ? 'bg-purple-500/20' : 'bg-green-500/20'
                   }`}>
                     {method.type === 'fiat' ? (
-                      <CreditCard className="h-6 w-6 text-green-400" />
-                    ) : (
+                      method.fiatDetails?.subtype === 'mpesa_paybill' || method.fiatDetails?.subtype === 'mpesa_till' ? (
+                        <Smartphone className="h-6 w-6 text-orange-400" />
+                      ) : (
+                        <CreditCard className="h-6 w-6 text-green-400" />
+                      )
+                    ) : method.type === 'crypto' ? (
                       <Wallet className="h-6 w-6 text-purple-400" />
+                    ) : (
+                      <CreditCard className="h-6 w-6 text-green-400" />
                     )}
                   </div>
                   <div>
@@ -242,22 +289,44 @@ export default function PaymentMethodsPage() {
                   <h4 className="text-sm font-medium text-white mb-2">Payment Details</h4>
                   {method.type === 'fiat' && method.fiatDetails ? (
                     <div className="text-sm space-y-1">
-                      <div>
-                        <span className="text-blue-200">Account Name:</span>
-                        <span className="text-white ml-2">{method.fiatDetails.accountName}</span>
-                      </div>
-                      <div>
-                        <span className="text-blue-200">Account Number:</span>
-                        <span className="text-white ml-2 font-mono">{method.fiatDetails.accountNumber}</span>
-                      </div>
-                      <div>
-                        <span className="text-blue-200">SWIFT Code:</span>
-                        <span className="text-white ml-2 font-mono">{method.fiatDetails.swiftCode}</span>
-                      </div>
-                      <div>
-                        <span className="text-blue-200">Bank Code:</span>
-                        <span className="text-white ml-2">{method.fiatDetails.bankCode}</span>
-                      </div>
+                      {method.fiatDetails.subtype === 'bank' && (
+                        <>
+                          <div>
+                            <span className="text-blue-200">Account Name:</span>
+                            <span className="text-white ml-2">{method.fiatDetails.accountName}</span>
+                          </div>
+                          <div>
+                            <span className="text-blue-200">Account Number:</span>
+                            <span className="text-white ml-2 font-mono">{method.fiatDetails.accountNumber}</span>
+                          </div>
+                          <div>
+                            <span className="text-blue-200">SWIFT Code:</span>
+                            <span className="text-white ml-2 font-mono">{method.fiatDetails.swiftCode}</span>
+                          </div>
+                          <div>
+                            <span className="text-blue-200">Bank Code:</span>
+                            <span className="text-white ml-2">{method.fiatDetails.bankCode}</span>
+                          </div>
+                        </>
+                      )}
+                      {method.fiatDetails.subtype === 'mpesa_paybill' && (
+                        <>
+                          <div>
+                            <span className="text-blue-200">Paybill:</span>
+                            <span className="text-white ml-2 font-mono">{method.fiatDetails.paybillNumber}</span>
+                          </div>
+                          <div>
+                            <span className="text-blue-200">Account:</span>
+                            <span className="text-white ml-2">{method.fiatDetails.mpesaAccountNumber}</span>
+                          </div>
+                        </>
+                      )}
+                      {method.fiatDetails.subtype === 'mpesa_till' && (
+                        <div>
+                          <span className="text-blue-200">Till Number:</span>
+                          <span className="text-white ml-2 font-mono">{method.fiatDetails.tillNumber}</span>
+                        </div>
+                      )}
                     </div>
                   ) : method.type === 'crypto' && method.cryptoDetails ? (
                     <div className="text-sm">
@@ -304,17 +373,25 @@ export default function PaymentMethodsPage() {
                     name: newPaymentMethod.name,
                     type: newPaymentMethod.type,
                     isDefault: newPaymentMethod.isDefault,
-                                         fiatDetails: newPaymentMethod.type === 'fiat' ? {
-                       bankName: newPaymentMethod.bankName,
-                       swiftCode: newPaymentMethod.swiftCode,
-                       bankCode: newPaymentMethod.bankCode,
-                       branchCode: newPaymentMethod.branchCode,
-                       accountName: newPaymentMethod.accountName,
-                       accountNumber: newPaymentMethod.accountNumber,
-                       branchAddress: newPaymentMethod.branchAddress,
-                       currency: newPaymentMethod.currency,
-                       accountType: 'checking',
-                       country: 'US'
+                                                             fiatDetails: newPaymentMethod.type === 'fiat' ? {
+                      subtype: newPaymentMethod.subtype,
+                      // Bank details
+                      bankName: newPaymentMethod.bankName,
+                      swiftCode: newPaymentMethod.swiftCode,
+                      bankCode: newPaymentMethod.bankCode,
+                      branchCode: newPaymentMethod.branchCode,
+                      accountName: newPaymentMethod.accountName,
+                      accountNumber: newPaymentMethod.accountNumber,
+                      branchAddress: newPaymentMethod.branchAddress,
+                      accountType: newPaymentMethod.accountType,
+                      // M-Pesa details
+                      paybillNumber: newPaymentMethod.paybillNumber,
+                      mpesaAccountNumber: newPaymentMethod.mpesaAccountNumber,
+                      tillNumber: newPaymentMethod.tillNumber,
+                      businessName: newPaymentMethod.businessName,
+                      // Common fields
+                      currency: newPaymentMethod.currency,
+                      country: newPaymentMethod.country
                      } : undefined,
                     cryptoDetails: newPaymentMethod.type === 'crypto' ? {
                       address: newPaymentMethod.address,
@@ -329,6 +406,7 @@ export default function PaymentMethodsPage() {
                   setNewPaymentMethod({
                     name: '',
                     type: 'fiat',
+                    subtype: 'bank',
                     bankName: '',
                     swiftCode: '',
                     bankCode: '',
@@ -336,7 +414,13 @@ export default function PaymentMethodsPage() {
                     accountName: '',
                     accountNumber: '',
                     branchAddress: '',
+                    accountType: 'checking',
+                    paybillNumber: '',
+                    mpesaAccountNumber: '',
+                    tillNumber: '',
+                    businessName: '',
                     currency: 'USD',
+                    country: 'US',
                     network: '',
                     address: '',
                     isDefault: false
@@ -362,7 +446,7 @@ export default function PaymentMethodsPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-                  <div className="flex space-x-4">
+                  <div className="space-y-2">
                     <label className="flex items-center">
                       <input
                         type="radio"
@@ -371,7 +455,7 @@ export default function PaymentMethodsPage() {
                         onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, type: e.target.value as 'fiat' | 'crypto' }))}
                         className="mr-2"
                       />
-                      Bank Transfer
+                      Fiat Payment
                     </label>
                     <label className="flex items-center">
                       <input
@@ -389,87 +473,207 @@ export default function PaymentMethodsPage() {
                 {newPaymentMethod.type === 'fiat' ? (
                   <div className="space-y-4 max-h-48 overflow-y-auto pr-2">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Bank Name</label>
-                      <BankSelector
-                        countryCode="KE"
-                        value={newPaymentMethod.bankName}
-                        onBankSelectAction={handleBankSelect}
-                        onInputChangeAction={(value) => setNewPaymentMethod(prev => ({ ...prev, bankName: value }))}
-                        placeholder="Search for a bank..."
-                      />
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Payment Subtype</label>
+                      <div className="space-y-2">
+                        <label className="flex items-center">
+                          <input
+                            type="radio"
+                            value="bank"
+                            checked={newPaymentMethod.subtype === 'bank'}
+                            onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, subtype: e.target.value as 'bank' | 'mpesa_paybill' | 'mpesa_till' }))}
+                            className="mr-2"
+                          />
+                          Bank Transfer
+                        </label>
+                        {(isKenyanUser() || true) && (
+                          <>
+                            <label className="flex items-center">
+                              <input
+                                type="radio"
+                                value="mpesa_paybill"
+                                checked={newPaymentMethod.subtype === 'mpesa_paybill'}
+                                onChange={(e) => setNewPaymentMethod(prev => ({ 
+                                  ...prev, 
+                                  subtype: e.target.value as 'bank' | 'mpesa_paybill' | 'mpesa_till',
+                                  currency: 'KES',
+                                  country: 'KE'
+                                }))}
+                                className="mr-2"
+                              />
+                              <Smartphone className="h-4 w-4 mr-2" />
+                              M-Pesa Paybill
+                            </label>
+                            <label className="flex items-center">
+                              <input
+                                type="radio"
+                                value="mpesa_till"
+                                checked={newPaymentMethod.subtype === 'mpesa_till'}
+                                onChange={(e) => setNewPaymentMethod(prev => ({ 
+                                  ...prev, 
+                                  subtype: e.target.value as 'bank' | 'mpesa_paybill' | 'mpesa_till',
+                                  currency: 'KES',
+                                  country: 'KE'
+                                }))}
+                                className="mr-2"
+                              />
+                              <Smartphone className="h-4 w-4 mr-2" />
+                              M-Pesa Till Number
+                            </label>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">SWIFT Code</label>
-                      <input
-                        type="text"
-                        value={newPaymentMethod.swiftCode}
-                        onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, swiftCode: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                        placeholder="SWIFT/BIC code"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Bank Code</label>
-                      <input
-                        type="text"
-                        value={newPaymentMethod.bankCode}
-                        onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, bankCode: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                        placeholder="Bank code"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Branch Code</label>
-                      <input
-                        type="text"
-                        value={newPaymentMethod.branchCode}
-                        onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, branchCode: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                        placeholder="Branch code"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Account Name</label>
-                      <input
-                        type="text"
-                        value={newPaymentMethod.accountName}
-                        onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, accountName: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                        placeholder="Account holder name"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Account Number</label>
-                      <input
-                        type="text"
-                        value={newPaymentMethod.accountNumber}
-                        onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, accountNumber: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                        placeholder="Account number"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Branch Address</label>
-                      <textarea
-                        value={newPaymentMethod.branchAddress}
-                        onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, branchAddress: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                        placeholder="Branch address"
-                        rows={3}
-                        required
-                      />
-                    </div>
+                    {newPaymentMethod.subtype === 'bank' && (
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Bank Name</label>
+                          <BankSelector
+                            countryCode="KE"
+                            value={newPaymentMethod.bankName}
+                            onBankSelectAction={handleBankSelect}
+                            onInputChangeAction={(value) => setNewPaymentMethod(prev => ({ ...prev, bankName: value }))}
+                            placeholder="Search for a bank..."
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">SWIFT Code</label>
+                          <input
+                            type="text"
+                            value={newPaymentMethod.swiftCode}
+                            onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, swiftCode: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="SWIFT/BIC code"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Bank Code</label>
+                          <input
+                            type="text"
+                            value={newPaymentMethod.bankCode}
+                            onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, bankCode: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="Bank code"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Branch Code</label>
+                          <input
+                            type="text"
+                            value={newPaymentMethod.branchCode}
+                            onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, branchCode: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="Branch code"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Account Name</label>
+                          <input
+                            type="text"
+                            value={newPaymentMethod.accountName}
+                            onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, accountName: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="Account holder name"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Account Number</label>
+                          <input
+                            type="text"
+                            value={newPaymentMethod.accountNumber}
+                            onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, accountNumber: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="Account number"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Branch Address</label>
+                          <textarea
+                            value={newPaymentMethod.branchAddress}
+                            onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, branchAddress: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="Branch address"
+                            rows={3}
+                            required
+                          />
+                        </div>
+                      </>
+                    )}
+                    
+                    {newPaymentMethod.subtype === 'mpesa_paybill' && (
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Paybill Number</label>
+                          <input
+                            type="text"
+                            value={newPaymentMethod.paybillNumber}
+                            onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, paybillNumber: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="e.g., 123456"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Account Number</label>
+                          <input
+                            type="text"
+                            value={newPaymentMethod.mpesaAccountNumber}
+                            onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, mpesaAccountNumber: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="Account number for paybill"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Business Name (Optional)</label>
+                          <input
+                            type="text"
+                            value={newPaymentMethod.businessName}
+                            onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, businessName: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="Your business name (optional)"
+                          />
+                        </div>
+                      </>
+                    )}
+                    
+                    {newPaymentMethod.subtype === 'mpesa_till' && (
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Till Number</label>
+                          <input
+                            type="text"
+                            value={newPaymentMethod.tillNumber}
+                            onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, tillNumber: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="e.g., 1234567"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Business Name (Optional)</label>
+                          <input
+                            type="text"
+                            value={newPaymentMethod.businessName}
+                            onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, businessName: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="Your business name (optional)"
+                          />
+                        </div>
+                      </>
+                    )}
+                    
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
                       <select
-                        value={newPaymentMethod.currency}
+                        value={newPaymentMethod.subtype === 'mpesa_paybill' || newPaymentMethod.subtype === 'mpesa_till' ? 'KES' : newPaymentMethod.currency}
                         onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, currency: e.target.value }))}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white font-medium"
+                        disabled={newPaymentMethod.subtype === 'mpesa_paybill' || newPaymentMethod.subtype === 'mpesa_till'}
                         required
                       >
                         <option value="USD">USD</option>
@@ -519,6 +723,7 @@ export default function PaymentMethodsPage() {
                     </div>
                   </div>
                 )}
+
 
                 <div className="flex items-center">
                   <input
