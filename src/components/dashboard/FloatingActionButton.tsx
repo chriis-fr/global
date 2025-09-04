@@ -70,7 +70,7 @@ export default function FloatingActionButton() {
             <Link
               key={action.href}
               href={action.href}
-              className={`flex items-center space-x-3 px-4 py-3 ${action.color} text-white rounded-lg shadow-lg transition-all duration-200 hover:scale-105 touch-manipulation active:scale-95 min-w-[160px]`}
+              className={`flex items-center space-x-3 px-4 py-3 ${action.color} text-white font-medium rounded-lg shadow-lg transition-all duration-200 hover:scale-105 touch-manipulation active:scale-95 min-w-[160px]`}
               onClick={() => setIsOpen(false)}
               style={{
                 animationDelay: `${index * 50}ms`,

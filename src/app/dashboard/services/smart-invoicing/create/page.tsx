@@ -2301,7 +2301,7 @@ export default function CreateInvoicePage() {
 
                 {/* Desktop Layout - Side by side */}
                 <div className="hidden sm:flex items-end space-x-4">
-                  <div className="text-sm text-gray-600">
+                  <div className="text-sm text-gray-700">
                     <div className="flex items-center space-x-2">
                       <Calendar className="h-4 w-4" />
                       {renderEditableDateField('issueDate', formData.issueDate, 'Issued on')}
@@ -2365,7 +2365,7 @@ export default function CreateInvoicePage() {
                     <div className="font-medium">
                       {formData.companyName || 'Company Name'}
                     </div>
-                    <div className="text-gray-600 space-y-1">
+                    <div className="text-gray-700 space-y-1">
                       <div>{formData.companyAddress.street || 'Street Address'}</div>
                       <div className="flex flex-wrap space-x-2">
                         <span>{formData.companyAddress.city || 'City'}</span>
@@ -2376,13 +2376,13 @@ export default function CreateInvoicePage() {
                         {formData.companyAddress.country ? countries.find(c => c.code === formData.companyAddress.country)?.name || formData.companyAddress.country : 'Country'}
                       </div>
                     </div>
-                    <div className="text-gray-600">
+                    <div className="text-gray-700">
                       Tax: {formData.companyTaxNumber || 'Tax Number'}
                     </div>
-                    <div className="text-gray-600">
+                    <div className="text-gray-700">
                       {formData.companyEmail || 'Email'}
                     </div>
-                    <div className="text-gray-600">
+                    <div className="text-gray-700">
                       {formData.companyPhone || 'Phone'}
                     </div>
                   </div>
@@ -2466,11 +2466,11 @@ export default function CreateInvoicePage() {
                     {formData.clientCompany ? formData.clientCompany : formData.clientName || 'Client Name'}
                   </div>
                   {formData.clientCompany && (
-                    <div className="text-gray-600">
+                    <div className="text-gray-700">
                       Attn: {formData.clientName || 'Client Name'}
                     </div>
                   )}
-                  <div className="text-gray-600 space-y-1">
+                  <div className="text-gray-700 space-y-1">
                     <div>{formData.clientAddress.street || 'Street Address'}</div>
                     <div className="flex space-x-2">
                       <span>{formData.clientAddress.city || 'City'}</span>
@@ -2479,10 +2479,10 @@ export default function CreateInvoicePage() {
                     </div>
                     <div>{formData.clientAddress.country ? countries.find(c => c.code === formData.clientAddress.country)?.name || formData.clientAddress.country : 'Country'}</div>
                   </div>
-                  <div className="text-gray-600">
+                  <div className="text-gray-7700">
                     {formData.clientEmail || 'Email'}
                   </div>
-                  <div className="text-gray-600">
+                  <div className="text-gray-700">
                     {formData.clientPhone || 'Phone'}
                   </div>
                 </div>
@@ -2782,7 +2782,7 @@ export default function CreateInvoicePage() {
                       <CreditCard className="h-5 w-5 text-green-600 mr-2" />
                       <div>
                         <div className="font-medium">Fiat ({formData.currency})</div>
-                        <div className="text-sm text-gray-500">
+                        <div className="text-sm text-gray-700">
                           {formData.companyAddress.country === 'KE' ? ' Dynamic Selection' : 'Bank Transfer'}
                         </div>
                       </div>
@@ -2800,7 +2800,7 @@ export default function CreateInvoicePage() {
                       <Wallet className="h-5 w-5 text-blue-600 mr-2" />
                       <div>
                         <div className="font-medium">Crypto</div>
-                        <div className="text-sm text-gray-500">Cryptocurrency payment</div>
+                        <div className="text-sm text-gray-700">Cryptocurrency payment</div>
                       </div>
                     </div>
                   </label>
@@ -2857,7 +2857,7 @@ export default function CreateInvoicePage() {
                     {formData.fiatPaymentSubtype === 'bank' && (
                       <div className="space-y-4">
                         <div>
-                          <label className="block text-sm text-gray-600 mb-1">Bank Name</label>
+                          <label className="block text-sm text-gray-700 mb-1">Bank Name</label>
                           <BankSelector
                             countryCode="KE"
                             value={formData.bankName || ''}
@@ -2867,7 +2867,7 @@ export default function CreateInvoicePage() {
                           />
                         </div>
                         <div>
-                          <label className="block text-sm text-gray-600 mb-1">SWIFT Code</label>
+                          <label className="block text-sm text-gray-700 mb-1">SWIFT Code</label>
                           <input
                             type="text"
                             value={formData.swiftCode || ''}
@@ -2877,7 +2877,7 @@ export default function CreateInvoicePage() {
                           />
                         </div>
                         <div>
-                          <label className="block text-sm text-gray-600 mb-1">Account Number</label>
+                          <label className="block text-sm text-gray-700 mb-1">Account Number</label>
                           <input
                             type="text"
                             value={formData.accountNumber || ''}
@@ -2887,7 +2887,7 @@ export default function CreateInvoicePage() {
                           />
                         </div>
                         <div>
-                          <label className="block text-sm text-gray-600 mb-1">Account Name</label>
+                          <label className="block text-sm text-gray-700 mb-1">Account Name</label>
                           <input
                             type="text"
                             value={formData.accountName || ''}
@@ -2902,7 +2902,7 @@ export default function CreateInvoicePage() {
                     {formData.fiatPaymentSubtype === 'mpesa_paybill' && (
                       <div className="space-y-4">
                         <div>
-                          <label className="block text-sm text-gray-600 mb-1">Paybill Number</label>
+                          <label className="block text-sm text-gray-700 mb-1">Paybill Number</label>
                           <input
                             type="text"
                             value={formData.paybillNumber || ''}

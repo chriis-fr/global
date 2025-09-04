@@ -273,7 +273,7 @@ export default function Sidebar() {
                   className={`flex items-center px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation ${
                     active 
                       ? 'bg-blue-800 text-white' 
-                      : 'text-white/70 hover:bg-blue-900/50 hover:text-white'
+                      : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
                   }`}
                   style={{ textDecoration: 'none' }}
                   title={isCollapsed && !isAutoHidden ? link.label : undefined}
@@ -310,7 +310,7 @@ export default function Sidebar() {
                     className={`flex items-center px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation ${
                       active 
                         ? 'bg-blue-800 text-white' 
-                        : 'text-white/70 hover:bg-blue-900/50 hover:text-white'
+                        : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
                     }`}
                     style={{ textDecoration: 'none' }}
                     title={isCollapsed && !isAutoHidden ? link.label : undefined}
@@ -342,7 +342,7 @@ export default function Sidebar() {
             className={`flex items-center justify-between w-full px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation ${
               pathname.startsWith('/dashboard/settings') 
                 ? 'bg-blue-800 text-white' 
-                : 'text-white/70 hover:bg-blue-900/50 hover:text-white'
+                : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
             }`}
             title={isCollapsed && !isAutoHidden ? 'Settings' : undefined}
           >
@@ -379,7 +379,7 @@ export default function Sidebar() {
                     className={`flex items-center px-3 py-3 rounded-lg transition-colors text-sm font-medium group relative touch-manipulation ${
                       active 
                         ? 'bg-blue-800 text-white' 
-                        : 'text-white/70 hover:bg-blue-900/50 hover:text-white'
+                        : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
                     }`}
                     style={{ textDecoration: 'none' }}
                     title={isCollapsed && !isAutoHidden ? link.label : undefined}
@@ -423,7 +423,7 @@ export default function Sidebar() {
               signOut({ callbackUrl: '/auth' });
               closeMobileMenu();
             }}
-            className="flex items-center w-full px-3 py-3 rounded-lg text-sm font-medium text-white/70 hover:bg-blue-900/50 hover:text-white transition-colors group touch-manipulation"
+            className="flex items-center w-full px-3 py-3 rounded-lg text-sm font-medium text-white/80 hover:bg-blue-900/50 hover:text-white transition-colors group touch-manipulation"
             title={isCollapsed && !isAutoHidden ? 'Sign Out' : undefined}
           >
             <LogOut className="h-4 w-4 mr-3 flex-shrink-0" />
@@ -442,7 +442,7 @@ export default function Sidebar() {
         <div className="hidden lg:block border-t border-white/10 p-2">
           <button
             onClick={toggleCollapse}
-            className="w-full flex items-center justify-center p-2 rounded-lg text-white/70 hover:bg-blue-900/50 hover:text-white transition-colors"
+            className="w-full flex items-center justify-center p-2 rounded-lg text-white/80 hover:bg-blue-900/50 hover:text-white transition-colors"
             title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
           >
             {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
@@ -460,7 +460,7 @@ export default function Sidebar() {
             className={`flex items-center justify-between w-full px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation ${
               pathname.startsWith('/dashboard/notifications') 
                 ? 'bg-blue-800 text-white' 
-                : 'text-white/70 hover:bg-blue-900/50 hover:text-white'
+                : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
             }`}
             style={{ textDecoration: 'none' }}
           >
@@ -479,7 +479,7 @@ export default function Sidebar() {
             className={`flex items-center justify-between w-full px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation ${
               pathname.startsWith('/dashboard/settings') 
                 ? 'bg-blue-800 text-white' 
-                : 'text-white/70 hover:bg-blue-900/50 hover:text-white'
+                : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
             }`}
           >
             <div className="flex items-center">
@@ -506,7 +506,7 @@ export default function Sidebar() {
                     className={`flex items-center px-3 py-3 rounded-lg transition-colors text-sm font-medium group relative touch-manipulation ${
                       active 
                         ? 'bg-blue-800 text-white' 
-                        : 'text-white/70 hover:bg-blue-900/50 hover:text-white'
+                        : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
                     }`}
                     style={{ textDecoration: 'none' }}
                   >
@@ -542,7 +542,7 @@ export default function Sidebar() {
               signOut({ callbackUrl: '/auth' });
               closeMobileMenu();
             }}
-            className="flex items-center w-full px-3 py-3 rounded-lg text-sm font-medium text-white/70 hover:bg-blue-900/50 hover:text-white transition-colors group touch-manipulation"
+            className="flex items-center w-full px-3 py-3 rounded-lg text-sm font-medium text-white/80 hover:bg-blue-900/50 hover:text-white transition-colors group touch-manipulation"
           >
             <LogOut className="h-4 w-4 mr-3 flex-shrink-0" />
             <span className="whitespace-nowrap">Sign Out</span>

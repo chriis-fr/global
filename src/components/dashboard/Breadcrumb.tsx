@@ -96,23 +96,23 @@ export default function Breadcrumb() {
   }
 
   return (
-    <nav className="flex items-center space-x-1 text-sm text-gray-600 mb-4 px-1" aria-label="Breadcrumb">
+    <nav className="flex items-center space-x-1 text-sm text-white/80 mb-4 px-1" aria-label="Breadcrumb">
       <Link 
         href="/dashboard" 
-        className="flex items-center hover:text-blue-600 transition-colors touch-manipulation"
+        className="flex items-center hover:text-blue-300 transition-colors touch-manipulation"
       >
         <Home className="h-4 w-4" />
       </Link>
       
       {breadcrumbs.slice(1).map((breadcrumb) => (
         <div key={breadcrumb.href} className="flex items-center space-x-1">
-          <ChevronRight className="h-4 w-4 text-gray-400" />
+          <ChevronRight className="h-4 w-4 text-white/60" />
           {breadcrumb.isActive ? (
-            <span className="text-gray-900 font-medium">{breadcrumb.label}</span>
+            <span className="text-white font-medium">{breadcrumb.label}</span>
           ) : (
             <Link 
               href={breadcrumb.href}
-              className="hover:text-blue-600 transition-colors touch-manipulation"
+              className="hover:text-blue-300 transition-colors touch-manipulation"
             >
               {breadcrumb.label}
             </Link>
