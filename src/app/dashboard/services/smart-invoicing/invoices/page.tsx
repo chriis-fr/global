@@ -15,7 +15,8 @@ import {
   FileText,
   DollarSign,
   Calendar,
-  TrendingUp
+  TrendingUp,
+  Download
 } from 'lucide-react';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
 import { InvoiceService } from '@/lib/services/invoiceService';
@@ -78,6 +79,163 @@ export default function InvoicesPage() {
     }
   };
 
+  // Handle bulk CSV download
+  const handleBulkDownloadCsv = () => {
+    if (statusFilteredInvoices.length === 0) {
+      alert('No invoices to download');
+      return;
+    }
+
+    try {
+      console.log('📤 [Smart Invoicing] Starting bulk CSV download for', statusFilteredInvoices.length, 'invoices');
+
+      // Create simple CSV structure for easy bulk processing
+      const csvRows = [];
+      
+      // CSV Headers - simple and clean (one row per invoice)
+      const headers = [
+        'Invoice Number',
+        'Invoice Name', 
+        'Issue Date',
+        'Due Date',
+        'Status',
+        'Company Name',
+        'Company Email',
+        'Company Phone',
+        'Company Address',
+        'Company Tax Number',
+        'Client Name',
+        'Client Company',
+        'Client Email',
+        'Client Phone',
+        'Client Address',
+        'Items Description',
+        'Total Quantity',
+        'Subtotal',
+        'Total Tax',
+        'Total Amount',
+        'Currency',
+        'Payment Method',
+        'Bank Name',
+        'Account Number',
+        'Routing Number',
+        'Network',
+        'Payment Address',
+        'Memo',
+        'Created Date'
+      ];
+      csvRows.push(headers.join(','));
+      
+      // Process each invoice
+      statusFilteredInvoices.forEach(invoice => {
+        // Get company details
+        const companyName = invoice.companyName || invoice.companyDetails?.name || 'N/A';
+        const companyEmail = invoice.companyEmail || 'N/A';
+        const companyPhone = invoice.companyPhone || 'N/A';
+        const companyTaxNumber = invoice.companyTaxNumber || invoice.companyDetails?.taxNumber || 'N/A';
+        
+        // Handle company address
+        let companyAddress = 'N/A';
+        if (invoice.companyAddress) {
+          companyAddress = `${invoice.companyAddress.street || ''}, ${invoice.companyAddress.city || ''}, ${invoice.companyAddress.state || ''} ${invoice.companyAddress.zipCode || ''}, ${invoice.companyAddress.country || ''}`;
+        } else if (invoice.companyDetails) {
+          companyAddress = `${invoice.companyDetails.addressLine1 || ''}, ${invoice.companyDetails.city || ''}, ${invoice.companyDetails.region || ''} ${invoice.companyDetails.postalCode || ''}, ${invoice.companyDetails.country || ''}`;
+        }
+        
+        // Get client details
+        const clientName = invoice.clientName || [invoice.clientDetails?.firstName, invoice.clientDetails?.lastName].filter(Boolean).join(' ') || 'N/A';
+        const clientCompany = invoice.clientDetails?.companyName || 'N/A';
+        const clientEmail = invoice.clientEmail || 'N/A';
+        const clientPhone = invoice.clientPhone || 'N/A';
+        
+        // Handle client address
+        let clientAddress = 'N/A';
+        if (invoice.clientAddress) {
+          clientAddress = `${invoice.clientAddress.street || ''}, ${invoice.clientAddress.city || ''}, ${invoice.clientAddress.state || ''} ${invoice.clientAddress.zipCode || ''}, ${invoice.clientAddress.country || ''}`;
+        } else if (invoice.clientDetails) {
+          clientAddress = `${invoice.clientDetails.addressLine1 || ''}, ${invoice.clientDetails.city || ''}, ${invoice.clientDetails.region || ''}, ${invoice.clientDetails.postalCode || ''}, ${invoice.clientDetails.country || ''}`;
+        }
+        
+        // Get payment details
+        const paymentMethod = invoice.paymentMethod || invoice.paymentSettings?.method;
+        const paymentMethodText = paymentMethod === 'fiat' ? 'Bank Transfer' : 'Cryptocurrency';
+        const bankAccount = invoice.paymentSettings?.bankAccount;
+        const bankName = bankAccount?.bankName || 'N/A';
+        const accountNumber = bankAccount?.accountNumber || 'N/A';
+        const routingNumber = bankAccount?.routingNumber || 'N/A';
+        const network = invoice.paymentNetwork || invoice.paymentSettings?.cryptoNetwork || 'N/A';
+        const paymentAddress = invoice.paymentAddress || invoice.paymentSettings?.walletAddress || 'N/A';
+        
+        // Get original currency (preserve the invoice's original currency)
+        const originalCurrency = invoice.currency || invoice.paymentSettings?.currency || 'USD';
+        
+        // Create one row per invoice (combine all items into a single description)
+        const itemsDescription = invoice.items && invoice.items.length > 0 
+          ? invoice.items.map(item => `${item.description || 'Item'} (Qty: ${item.quantity || 0}, Price: ${item.unitPrice?.toFixed(2) || '0.00'})`).join('; ')
+          : 'No items';
+        
+        const totalQuantity = invoice.items ? invoice.items.reduce((sum, item) => sum + (item.quantity || 0), 0) : 0;
+        
+        const row = [
+          `"${invoice.invoiceNumber || 'N/A'}"`,
+          `"${invoice.invoiceName || 'Invoice'}"`,
+          `"${formatDate(invoice.issueDate || '')}"`,
+          `"${formatDate(invoice.dueDate || '')}"`,
+          `"${invoice.status || 'Draft'}"`,
+          `"${companyName}"`,
+          `"${companyEmail}"`,
+          `"${companyPhone}"`,
+          `"${companyAddress}"`,
+          `"${companyTaxNumber}"`,
+          `"${clientName}"`,
+          `"${clientCompany}"`,
+          `"${clientEmail}"`,
+          `"${clientPhone}"`,
+          `"${clientAddress}"`,
+          `"${itemsDescription}"`,
+          `"${totalQuantity}"`,
+          `"${invoice.subtotal?.toFixed(2) || '0.00'}"`,
+          `"${invoice.totalTax?.toFixed(2) || '0.00'}"`,
+          `"${invoice.totalAmount?.toFixed(2) || '0.00'}"`,
+          `"${originalCurrency}"`,
+          `"${paymentMethodText}"`,
+          `"${bankName}"`,
+          `"${accountNumber}"`,
+          `"${routingNumber}"`,
+          `"${network}"`,
+          `"${paymentAddress}"`,
+          `"${invoice.memo || ''}"`,
+          `"${formatDate(invoice.createdAt || '')}"`
+        ];
+        csvRows.push(row.join(','));
+      });
+      
+      // Convert to CSV string
+      const csvContent = csvRows.join('\n');
+      
+      // Create and download file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      const timestamp = new Date().toISOString().split('T')[0];
+      link.setAttribute('download', `invoices_bulk_${timestamp}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      console.log('✅ [Smart Invoicing] Bulk CSV downloaded successfully:', {
+        invoiceCount: statusFilteredInvoices.length,
+        filename: `invoices_bulk_${timestamp}.csv`
+      });
+      
+    } catch (error) {
+      console.error('❌ [Smart Invoicing] Failed to download bulk CSV:', error);
+      alert('Failed to download CSV. Please try again.');
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'draft': return 'bg-gray-100 text-gray-800';
@@ -127,13 +285,24 @@ export default function InvoicesPage() {
           <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Invoices</h1>
           <p className="text-blue-200">Manage your invoices and track payments</p>
         </div>
-        <button
-          onClick={() => router.push('/dashboard/services/smart-invoicing/create')}
-          className="flex items-center justify-center sm:justify-start space-x-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-lg w-full sm:w-auto"
-        >
-          <Plus className="h-5 w-5" />
-          <span className="font-medium">Create Invoice</span>
-        </button>
+        <div className="flex flex-col sm:flex-row gap-3">
+          {statusFilteredInvoices.length > 0 && (
+            <button
+              onClick={handleBulkDownloadCsv}
+              className="flex items-center justify-center sm:justify-start space-x-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-lg w-full sm:w-auto"
+            >
+              <Download className="h-5 w-5" />
+              <span className="font-medium">Download CSV ({statusFilteredInvoices.length})</span>
+            </button>
+          )}
+          <button
+            onClick={() => router.push('/dashboard/services/smart-invoicing/create')}
+            className="flex items-center justify-center sm:justify-start space-x-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-lg w-full sm:w-auto"
+          >
+            <Plus className="h-5 w-5" />
+            <span className="font-medium">Create Invoice</span>
+          </button>
+        </div>
       </div>
 
       {/* Stats Cards */}

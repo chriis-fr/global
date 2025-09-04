@@ -270,125 +270,124 @@ export default function InvoiceViewPage() {
     try {
       console.log('📤 [Smart Invoicing] Starting CSV download for invoice:', invoice.invoiceNumber);
 
-      // Create CSV content
+      // Create simple CSV structure for easy bulk processing
       const csvRows = [];
       
-      // Header row
-      const headers = ['Invoice Details'];
+      // CSV Headers - simple and clean (one row per invoice)
+      const headers = [
+        'Invoice Number',
+        'Invoice Name', 
+        'Issue Date',
+        'Due Date',
+        'Status',
+        'Company Name',
+        'Company Email',
+        'Company Phone',
+        'Company Address',
+        'Company Tax Number',
+        'Client Name',
+        'Client Company',
+        'Client Email',
+        'Client Phone',
+        'Client Address',
+        'Items Description',
+        'Total Quantity',
+        'Subtotal',
+        'Total Tax',
+        'Total Amount',
+        'Currency',
+        'Payment Method',
+        'Bank Name',
+        'Account Number',
+        'Routing Number',
+        'Network',
+        'Payment Address',
+        'Memo',
+        'Created Date'
+      ];
       csvRows.push(headers.join(','));
       
-      // Invoice information
-      csvRows.push(['Invoice Name', invoice.invoiceName || 'Invoice']);
-      csvRows.push(['Invoice Number', invoice.invoiceNumber || 'N/A']);
-      csvRows.push(['Issue Date', formatDate(invoice.issueDate || '')]);
-      csvRows.push(['Due Date', formatDate(invoice.dueDate || '')]);
-      csvRows.push(['Status', invoice.status || 'Draft']);
-      csvRows.push(['']);
+      // Get company details
+      const companyName = invoice.companyName || invoice.companyDetails?.name || 'N/A';
+      const companyEmail = invoice.companyEmail || 'N/A';
+      const companyPhone = invoice.companyPhone || 'N/A';
+      const companyTaxNumber = invoice.companyTaxNumber || invoice.companyDetails?.taxNumber || 'N/A';
       
-      // Company information
-      csvRows.push(['Company Information']);
-      csvRows.push(['Company Name', invoice.companyName || invoice.companyDetails?.name || 'N/A']);
-      csvRows.push(['Email', invoice.companyEmail || 'N/A']);
-      csvRows.push(['Phone', invoice.companyPhone || 'N/A']);
-      
-      // Handle company address with different formats
-      let companyAddressStr = 'N/A';
+      // Handle company address
+      let companyAddress = 'N/A';
       if (invoice.companyAddress) {
-        companyAddressStr = `${invoice.companyAddress.street || ''}, ${invoice.companyAddress.city || ''}, ${invoice.companyAddress.state || ''} ${invoice.companyAddress.zipCode || ''}, ${invoice.companyAddress.country || ''}`;
+        companyAddress = `${invoice.companyAddress.street || ''}, ${invoice.companyAddress.city || ''}, ${invoice.companyAddress.state || ''} ${invoice.companyAddress.zipCode || ''}, ${invoice.companyAddress.country || ''}`;
       } else if (invoice.companyDetails) {
-        companyAddressStr = `${invoice.companyDetails.addressLine1 || ''}, ${invoice.companyDetails.city || ''}, ${invoice.companyDetails.region || ''} ${invoice.companyDetails.postalCode || ''}, ${invoice.companyDetails.country || ''}`;
+        companyAddress = `${invoice.companyDetails.addressLine1 || ''}, ${invoice.companyDetails.city || ''}, ${invoice.companyDetails.region || ''} ${invoice.companyDetails.postalCode || ''}, ${invoice.companyDetails.country || ''}`;
       }
-      csvRows.push(['Address', companyAddressStr]);
-      csvRows.push(['Tax Number', invoice.companyTaxNumber || invoice.companyDetails?.taxNumber || 'N/A']);
-      csvRows.push(['']);
       
-      // Client information
-      csvRows.push(['Client Information']);
-      if (invoice.clientDetails?.companyName) {
-        csvRows.push(['Company', invoice.clientDetails.companyName]);
-        csvRows.push(['Contact Person', invoice.clientName || 'N/A']);
-      } else {
-        csvRows.push(['Client Name', invoice.clientName || 'N/A']);
-      }
-      csvRows.push(['Email', invoice.clientEmail || 'N/A']);
-      csvRows.push(['Phone', invoice.clientPhone || 'N/A']);
+      // Get client details
+      const clientName = invoice.clientName || [invoice.clientDetails?.firstName, invoice.clientDetails?.lastName].filter(Boolean).join(' ') || 'N/A';
+      const clientCompany = invoice.clientDetails?.companyName || 'N/A';
+      const clientEmail = invoice.clientEmail || 'N/A';
+      const clientPhone = invoice.clientPhone || 'N/A';
       
-      // Handle client address with different formats
-      let clientAddressStr = 'N/A';
+      // Handle client address
+      let clientAddress = 'N/A';
       if (invoice.clientAddress) {
-        clientAddressStr = `${invoice.clientAddress.street || ''}, ${invoice.clientAddress.city || ''}, ${invoice.clientAddress.state || ''} ${invoice.clientAddress.zipCode || ''}, ${invoice.clientAddress.country || ''}`;
+        clientAddress = `${invoice.clientAddress.street || ''}, ${invoice.clientAddress.city || ''}, ${invoice.clientAddress.state || ''} ${invoice.clientAddress.zipCode || ''}, ${invoice.clientAddress.country || ''}`;
       } else if (invoice.clientDetails) {
-        clientAddressStr = `${invoice.clientDetails.addressLine1 || ''}, ${invoice.clientDetails.city || ''}, ${invoice.clientDetails.region || ''} ${invoice.clientDetails.postalCode || ''}, ${invoice.clientDetails.country || ''}`;
+        clientAddress = `${invoice.clientDetails.addressLine1 || ''}, ${invoice.clientDetails.city || ''}, ${invoice.clientDetails.region || ''}, ${invoice.clientDetails.postalCode || ''}, ${invoice.clientDetails.country || ''}`;
       }
-      csvRows.push(['Address', clientAddressStr]);
-      csvRows.push(['']);
       
-      // Items header
-      const itemHeaders = ['Description', 'Quantity', 'Unit Price'];
-      if (hasAnyDiscounts) {
-        itemHeaders.push('Discount %');
-      }
-      if (hasAnyTaxes) {
-        itemHeaders.push('Tax %');
-      }
-      itemHeaders.push('Amount');
-      csvRows.push(['Invoice Items']);
-      csvRows.push(itemHeaders.join(','));
-      
-      // Items data
-      invoice.items?.forEach(item => {
-        const itemRow = [
-          item.description || 'Item description',
-          item.quantity?.toString() || '0',
-          `${getCurrencySymbol(invoice.currency || '')}${item.unitPrice?.toFixed(2) || '0.00'}`
-        ];
-        if (hasAnyDiscounts) {
-          itemRow.push((item.discount || 0) > 0 ? (item.discount || 0).toString() + '%' : '');
-        }
-        if (hasAnyTaxes) {
-          itemRow.push((item.tax || 0) > 0 ? (item.tax || 0).toString() + '%' : '');
-        }
-        itemRow.push(`${getCurrencySymbol(invoice.currency || '')}${item.amount?.toFixed(2) || '0.00'}`);
-        csvRows.push(itemRow.join(','));
-      });
-      
-      csvRows.push(['']);
-      
-      // Summary
-      csvRows.push(['Summary']);
-      csvRows.push(['Subtotal', `${getCurrencySymbol(invoice.currency || '')}${invoice.subtotal?.toFixed(2) || '0.00'}`]);
-      csvRows.push(['Total Tax', `${getCurrencySymbol(invoice.currency || '')}${invoice.totalTax?.toFixed(2) || '0.00'}`]);
-      csvRows.push(['Total Amount', `${getCurrencySymbol(invoice.currency || '')}${invoice.totalAmount?.toFixed(2) || '0.00'}`]);
-      csvRows.push(['']);
-      
-      // Payment information
-      csvRows.push(['Payment Information']);
+      // Get payment details
       const paymentMethod = invoice.paymentMethod || invoice.paymentSettings?.method;
-      csvRows.push(['Payment Method', paymentMethod === 'fiat' ? 'Bank Transfer' : 'Cryptocurrency']);
-      csvRows.push(['Currency', invoice.currency || invoice.paymentSettings?.currency || 'N/A']);
+      const paymentMethodText = paymentMethod === 'fiat' ? 'Bank Transfer' : 'Cryptocurrency';
+      const bankAccount = invoice.paymentSettings?.bankAccount;
+      const bankName = bankAccount?.bankName || 'N/A';
+      const accountNumber = bankAccount?.accountNumber || 'N/A';
+      const routingNumber = bankAccount?.routingNumber || 'N/A';
+      const network = invoice.paymentNetwork || invoice.paymentSettings?.cryptoNetwork || 'N/A';
+      const paymentAddress = invoice.paymentAddress || invoice.paymentSettings?.walletAddress || 'N/A';
       
-      if (paymentMethod === 'fiat') {
-        const bankAccount = invoice.paymentSettings?.bankAccount;
-        if (bankAccount?.bankName) csvRows.push(['Bank Name', bankAccount.bankName]);
-        if (bankAccount?.accountNumber) csvRows.push(['Account Number', bankAccount.accountNumber]);
-        if (bankAccount?.routingNumber) csvRows.push(['Routing Number', bankAccount.routingNumber]);
-      } else {
-        if (invoice.paymentNetwork || invoice.paymentSettings?.cryptoNetwork) csvRows.push(['Network', invoice.paymentNetwork || invoice.paymentSettings?.cryptoNetwork]);
-        if (invoice.paymentAddress || invoice.paymentSettings?.walletAddress) csvRows.push(['Payment Address', invoice.paymentAddress || invoice.paymentSettings?.walletAddress]);
-      }
+      // Get original currency (preserve the invoice's original currency)
+      const originalCurrency = invoice.currency || invoice.paymentSettings?.currency || 'USD';
       
-      csvRows.push(['']);
+      // Create one row per invoice (combine all items into a single description)
+      const itemsDescription = invoice.items && invoice.items.length > 0 
+        ? invoice.items.map(item => `${item.description || 'Item'} (Qty: ${item.quantity || 0}, Price: ${item.unitPrice?.toFixed(2) || '0.00'})`).join('; ')
+        : 'No items';
       
-      // Memo
-      if (invoice.memo) {
-        csvRows.push(['Memo']);
-        csvRows.push([invoice.memo]);
-        csvRows.push(['']);
-      }
+      const totalItems = invoice.items ? invoice.items.length : 0;
+      const totalQuantity = invoice.items ? invoice.items.reduce((sum, item) => sum + (item.quantity || 0), 0) : 0;
       
-      // Footer
-      csvRows.push(['Generated by Chains-ERP']);
-      csvRows.push([`Invoice Number: ${invoice.invoiceNumber || 'N/A'} | Date: ${formatDate(invoice.issueDate || '')}`]);
+      const row = [
+        `"${invoice.invoiceNumber || 'N/A'}"`,
+        `"${invoice.invoiceName || 'Invoice'}"`,
+        `"${formatDate(invoice.issueDate || '')}"`,
+        `"${formatDate(invoice.dueDate || '')}"`,
+        `"${invoice.status || 'Draft'}"`,
+        `"${companyName}"`,
+        `"${companyEmail}"`,
+        `"${companyPhone}"`,
+        `"${companyAddress}"`,
+        `"${companyTaxNumber}"`,
+        `"${clientName}"`,
+        `"${clientCompany}"`,
+        `"${clientEmail}"`,
+        `"${clientPhone}"`,
+        `"${clientAddress}"`,
+        `"${itemsDescription}"`,
+        `"${totalQuantity}"`,
+        `"${invoice.subtotal?.toFixed(2) || '0.00'}"`,
+        `"${invoice.totalTax?.toFixed(2) || '0.00'}"`,
+        `"${invoice.totalAmount?.toFixed(2) || '0.00'}"`,
+        `"${originalCurrency}"`,
+        `"${paymentMethodText}"`,
+        `"${bankName}"`,
+        `"${accountNumber}"`,
+        `"${routingNumber}"`,
+        `"${network}"`,
+        `"${paymentAddress}"`,
+        `"${invoice.memo || ''}"`,
+        `"${formatDate(invoice.createdAt || '')}"`
+      ];
+      csvRows.push(row.join(','));
       
       // Convert to CSV string
       const csvContent = csvRows.join('\n');
@@ -406,7 +405,8 @@ export default function InvoiceViewPage() {
       
       console.log('✅ [Smart Invoicing] CSV downloaded successfully:', {
         invoiceNumber: invoice.invoiceNumber,
-        filename: `${invoice.invoiceNumber || 'invoice'}_${formatDate(invoice.issueDate || '').replace(/,/g, '')}.csv`
+        filename: `${invoice.invoiceNumber || 'invoice'}_${formatDate(invoice.issueDate || '').replace(/,/g, '')}.csv`,
+        currency: originalCurrency
       });
       
     } catch (error) {
