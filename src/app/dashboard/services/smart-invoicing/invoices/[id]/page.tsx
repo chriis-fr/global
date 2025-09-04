@@ -18,6 +18,8 @@ import {
   File,
   ChevronDown as ChevronDownIcon
 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import { countries } from '@/data/countries';
 import { getCurrencyByCode } from '@/data/currencies';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
@@ -87,6 +89,8 @@ interface Invoice {
   };
   clientDetails?: {
     companyName: string;
+    firstName?: string;
+    lastName?: string;
     addressLine1?: string;
     city?: string;
     region?: string;
@@ -115,15 +119,127 @@ export default function InvoiceViewPage() {
   const [loading, setLoading] = useState(true);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [showDownloadDropdown, setShowDownloadDropdown] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   // Check if any items have discounts or taxes
   const hasAnyDiscounts = invoice?.items?.some(item => (item.discount || 0) > 0) || false;
   const hasAnyTaxes = invoice?.items?.some(item => (item.tax || 0) > 0) || false;
 
+  // PDF generation functions
+  const optimizeCanvasForPdf = (canvas: HTMLCanvasElement): HTMLCanvasElement => {
+    const optimizedCanvas = document.createElement('canvas');
+    const ctx = optimizedCanvas.getContext('2d');
+    if (!ctx) return canvas;
+
+    // Set optimized dimensions
+    const maxWidth = 800;
+    const maxHeight = 1200;
+    const scale = Math.min(maxWidth / canvas.width, maxHeight / canvas.height, 1);
+    
+    optimizedCanvas.width = canvas.width * scale;
+    optimizedCanvas.height = canvas.height * scale;
+
+    // Draw with optimization
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(canvas, 0, 0, optimizedCanvas.width, optimizedCanvas.height);
+
+    return optimizedCanvas;
+  };
+
+  const generateOptimizedPdf = async (pdfContainer: HTMLElement): Promise<{ pdf: jsPDF; base64: string }> => {
+    // Generate PDF using html2canvas with optimized options
+    const canvas = await html2canvas(pdfContainer, {
+      logging: false,
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: '#ffffff',
+      scale: 1.5, // Reduced from 2 for better size/quality balance
+      width: 800,
+      height: pdfContainer.scrollHeight,
+      scrollX: 0,
+      scrollY: 0,
+      // Add performance optimizations
+      removeContainer: true,
+      foreignObjectRendering: false, // Disable for better performance
+      imageTimeout: 15000 // 15 second timeout for images
+    });
+
+    // Optimize canvas
+    const optimizedCanvas = optimizeCanvasForPdf(canvas);
+    
+    // Create PDF with optimized settings
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4',
+      compress: true
+    });
+
+    // Calculate dimensions
+    const imgWidth = 210; // A4 width in mm
+    const pageHeight = 297; // A4 height in mm
+    const imgHeight = (optimizedCanvas.height * imgWidth) / optimizedCanvas.width;
+    let heightLeft = imgHeight;
+
+    let position = 0;
+
+    // Add image to PDF - use JPEG for better quality and smaller size
+    const imgData = optimizedCanvas.toDataURL('image/jpeg', 0.85);
+    pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+
+    // Add additional pages if needed
+    while (heightLeft >= 0) {
+      position = heightLeft - imgHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+    }
+
+    // Generate base64
+    const base64 = pdf.output('datauristring').split(',')[1];
+    
+    return { pdf, base64 };
+  };
+
+  const addWatermark = (pdf: jsPDF, invoiceNumber?: string) => {
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    
+    // Add watermark text with better styling
+    pdf.setTextColor(240, 240, 240); // Very light gray
+    pdf.setFontSize(24);
+    pdf.setFont('helvetica', 'normal');
+    
+    // Add watermark in center
+    const text = 'DIGITAL INVOICE';
+    const textWidth = pdf.getTextWidth(text);
+    const x = (pageWidth - textWidth) / 2;
+    const y = pageHeight / 2;
+    
+    // Add watermark with transparency effect
+    pdf.text(text, x, y);
+    
+    // Add invoice number watermark if provided
+    if (invoiceNumber) {
+      pdf.setFontSize(16);
+      const invoiceText = `Invoice: ${invoiceNumber}`;
+      const invoiceTextWidth = pdf.getTextWidth(invoiceText);
+      const invoiceX = (pageWidth - invoiceTextWidth) / 2;
+      const invoiceY = y + 20; // Below the main watermark
+      
+      pdf.text(invoiceText, invoiceX, invoiceY);
+    }
+    
+    // Reset text color for normal content
+    pdf.setTextColor(0, 0, 0);
+  };
+
   const loadInvoice = useCallback(async (id: string) => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/invoices/${id}`);
+      const response = await fetch(`/api/invoices/${id}?convertToPreferred=true`);
       const data = await response.json();
       
       if (data.success && data.data) {
@@ -270,125 +386,123 @@ export default function InvoiceViewPage() {
     try {
       console.log('📤 [Smart Invoicing] Starting CSV download for invoice:', invoice.invoiceNumber);
 
-      // Create CSV content
+      // Create simple CSV structure for easy bulk processing
       const csvRows = [];
       
-      // Header row
-      const headers = ['Invoice Details'];
+      // CSV Headers - simple and clean (one row per invoice)
+      const headers = [
+        'Invoice Number',
+        'Invoice Name', 
+        'Issue Date',
+        'Due Date',
+        'Status',
+        'Company Name',
+        'Company Email',
+        'Company Phone',
+        'Company Address',
+        'Company Tax Number',
+        'Client Name',
+        'Client Company',
+        'Client Email',
+        'Client Phone',
+        'Client Address',
+        'Items Description',
+        'Total Quantity',
+        'Subtotal',
+        'Total Tax',
+        'Total Amount',
+        'Currency',
+        'Payment Method',
+        'Bank Name',
+        'Account Number',
+        'Routing Number',
+        'Network',
+        'Payment Address',
+        'Memo',
+        'Created Date'
+      ];
       csvRows.push(headers.join(','));
       
-      // Invoice information
-      csvRows.push(['Invoice Name', invoice.invoiceName || 'Invoice']);
-      csvRows.push(['Invoice Number', invoice.invoiceNumber || 'N/A']);
-      csvRows.push(['Issue Date', formatDate(invoice.issueDate || '')]);
-      csvRows.push(['Due Date', formatDate(invoice.dueDate || '')]);
-      csvRows.push(['Status', invoice.status || 'Draft']);
-      csvRows.push(['']);
+      // Get company details
+      const companyName = invoice.companyName || invoice.companyDetails?.name || 'N/A';
+      const companyEmail = invoice.companyEmail || 'N/A';
+      const companyPhone = invoice.companyPhone || 'N/A';
+      const companyTaxNumber = invoice.companyTaxNumber || invoice.companyDetails?.taxNumber || 'N/A';
       
-      // Company information
-      csvRows.push(['Company Information']);
-      csvRows.push(['Company Name', invoice.companyName || invoice.companyDetails?.name || 'N/A']);
-      csvRows.push(['Email', invoice.companyEmail || 'N/A']);
-      csvRows.push(['Phone', invoice.companyPhone || 'N/A']);
-      
-      // Handle company address with different formats
-      let companyAddressStr = 'N/A';
+      // Handle company address
+      let companyAddress = 'N/A';
       if (invoice.companyAddress) {
-        companyAddressStr = `${invoice.companyAddress.street || ''}, ${invoice.companyAddress.city || ''}, ${invoice.companyAddress.state || ''} ${invoice.companyAddress.zipCode || ''}, ${invoice.companyAddress.country || ''}`;
+        companyAddress = `${invoice.companyAddress.street || ''}, ${invoice.companyAddress.city || ''}, ${invoice.companyAddress.state || ''} ${invoice.companyAddress.zipCode || ''}, ${invoice.companyAddress.country || ''}`;
       } else if (invoice.companyDetails) {
-        companyAddressStr = `${invoice.companyDetails.addressLine1 || ''}, ${invoice.companyDetails.city || ''}, ${invoice.companyDetails.region || ''} ${invoice.companyDetails.postalCode || ''}, ${invoice.companyDetails.country || ''}`;
+        companyAddress = `${invoice.companyDetails.addressLine1 || ''}, ${invoice.companyDetails.city || ''}, ${invoice.companyDetails.region || ''} ${invoice.companyDetails.postalCode || ''}, ${invoice.companyDetails.country || ''}`;
       }
-      csvRows.push(['Address', companyAddressStr]);
-      csvRows.push(['Tax Number', invoice.companyTaxNumber || invoice.companyDetails?.taxNumber || 'N/A']);
-      csvRows.push(['']);
       
-      // Client information
-      csvRows.push(['Client Information']);
-      if (invoice.clientDetails?.companyName) {
-        csvRows.push(['Company', invoice.clientDetails.companyName]);
-        csvRows.push(['Contact Person', invoice.clientName || 'N/A']);
-      } else {
-        csvRows.push(['Client Name', invoice.clientName || 'N/A']);
-      }
-      csvRows.push(['Email', invoice.clientEmail || 'N/A']);
-      csvRows.push(['Phone', invoice.clientPhone || 'N/A']);
+      // Get client details
+      const clientName = invoice.clientName || [invoice.clientDetails?.firstName, invoice.clientDetails?.lastName].filter(Boolean).join(' ') || 'N/A';
+      const clientCompany = invoice.clientDetails?.companyName || 'N/A';
+      const clientEmail = invoice.clientEmail || 'N/A';
+      const clientPhone = invoice.clientPhone || 'N/A';
       
-      // Handle client address with different formats
-      let clientAddressStr = 'N/A';
+      // Handle client address
+      let clientAddress = 'N/A';
       if (invoice.clientAddress) {
-        clientAddressStr = `${invoice.clientAddress.street || ''}, ${invoice.clientAddress.city || ''}, ${invoice.clientAddress.state || ''} ${invoice.clientAddress.zipCode || ''}, ${invoice.clientAddress.country || ''}`;
+        clientAddress = `${invoice.clientAddress.street || ''}, ${invoice.clientAddress.city || ''}, ${invoice.clientAddress.state || ''} ${invoice.clientAddress.zipCode || ''}, ${invoice.clientAddress.country || ''}`;
       } else if (invoice.clientDetails) {
-        clientAddressStr = `${invoice.clientDetails.addressLine1 || ''}, ${invoice.clientDetails.city || ''}, ${invoice.clientDetails.region || ''} ${invoice.clientDetails.postalCode || ''}, ${invoice.clientDetails.country || ''}`;
+        clientAddress = `${invoice.clientDetails.addressLine1 || ''}, ${invoice.clientDetails.city || ''}, ${invoice.clientDetails.region || ''}, ${invoice.clientDetails.postalCode || ''}, ${invoice.clientDetails.country || ''}`;
       }
-      csvRows.push(['Address', clientAddressStr]);
-      csvRows.push(['']);
       
-      // Items header
-      const itemHeaders = ['Description', 'Quantity', 'Unit Price'];
-      if (hasAnyDiscounts) {
-        itemHeaders.push('Discount %');
-      }
-      if (hasAnyTaxes) {
-        itemHeaders.push('Tax %');
-      }
-      itemHeaders.push('Amount');
-      csvRows.push(['Invoice Items']);
-      csvRows.push(itemHeaders.join(','));
-      
-      // Items data
-      invoice.items?.forEach(item => {
-        const itemRow = [
-          item.description || 'Item description',
-          item.quantity?.toString() || '0',
-          `${getCurrencySymbol(invoice.currency || '')}${item.unitPrice?.toFixed(2) || '0.00'}`
-        ];
-        if (hasAnyDiscounts) {
-          itemRow.push((item.discount || 0) > 0 ? (item.discount || 0).toString() + '%' : '');
-        }
-        if (hasAnyTaxes) {
-          itemRow.push((item.tax || 0) > 0 ? (item.tax || 0).toString() + '%' : '');
-        }
-        itemRow.push(`${getCurrencySymbol(invoice.currency || '')}${item.amount?.toFixed(2) || '0.00'}`);
-        csvRows.push(itemRow.join(','));
-      });
-      
-      csvRows.push(['']);
-      
-      // Summary
-      csvRows.push(['Summary']);
-      csvRows.push(['Subtotal', `${getCurrencySymbol(invoice.currency || '')}${invoice.subtotal?.toFixed(2) || '0.00'}`]);
-      csvRows.push(['Total Tax', `${getCurrencySymbol(invoice.currency || '')}${invoice.totalTax?.toFixed(2) || '0.00'}`]);
-      csvRows.push(['Total Amount', `${getCurrencySymbol(invoice.currency || '')}${invoice.totalAmount?.toFixed(2) || '0.00'}`]);
-      csvRows.push(['']);
-      
-      // Payment information
-      csvRows.push(['Payment Information']);
+      // Get payment details
       const paymentMethod = invoice.paymentMethod || invoice.paymentSettings?.method;
-      csvRows.push(['Payment Method', paymentMethod === 'fiat' ? 'Bank Transfer' : 'Cryptocurrency']);
-      csvRows.push(['Currency', invoice.currency || invoice.paymentSettings?.currency || 'N/A']);
+      const paymentMethodText = paymentMethod === 'fiat' ? 'Bank Transfer' : 'Cryptocurrency';
+      const bankAccount = invoice.paymentSettings?.bankAccount;
+      const bankName = bankAccount?.bankName || 'N/A';
+      const accountNumber = bankAccount?.accountNumber || 'N/A';
+      const routingNumber = bankAccount?.routingNumber || 'N/A';
+      const network = invoice.paymentNetwork || invoice.paymentSettings?.cryptoNetwork || 'N/A';
+      const paymentAddress = invoice.paymentAddress || invoice.paymentSettings?.walletAddress || 'N/A';
       
-      if (paymentMethod === 'fiat') {
-        const bankAccount = invoice.paymentSettings?.bankAccount;
-        if (bankAccount?.bankName) csvRows.push(['Bank Name', bankAccount.bankName]);
-        if (bankAccount?.accountNumber) csvRows.push(['Account Number', bankAccount.accountNumber]);
-        if (bankAccount?.routingNumber) csvRows.push(['Routing Number', bankAccount.routingNumber]);
-      } else {
-        if (invoice.paymentNetwork || invoice.paymentSettings?.cryptoNetwork) csvRows.push(['Network', invoice.paymentNetwork || invoice.paymentSettings?.cryptoNetwork]);
-        if (invoice.paymentAddress || invoice.paymentSettings?.walletAddress) csvRows.push(['Payment Address', invoice.paymentAddress || invoice.paymentSettings?.walletAddress]);
-      }
+      // Get original currency (preserve the invoice's original currency)
+      const originalCurrency = invoice.currency || invoice.paymentSettings?.currency || 'USD';
       
-      csvRows.push(['']);
+      // Create one row per invoice (combine all items into a single description)
+      const itemsDescription = invoice.items && invoice.items.length > 0 
+        ? invoice.items.map(item => `${item.description || 'Item'} (Qty: ${item.quantity || 0}, Price: ${item.unitPrice?.toFixed(2) || '0.00'})`).join('; ')
+        : 'No items';
       
-      // Memo
-      if (invoice.memo) {
-        csvRows.push(['Memo']);
-        csvRows.push([invoice.memo]);
-        csvRows.push(['']);
-      }
+      const totalQuantity = invoice.items ? invoice.items.reduce((sum, item) => sum + (item.quantity || 0), 0) : 0;
       
-      // Footer
-      csvRows.push(['Generated by Chains-ERP']);
-      csvRows.push([`Invoice Number: ${invoice.invoiceNumber || 'N/A'} | Date: ${formatDate(invoice.issueDate || '')}`]);
+      const row = [
+        `"${invoice.invoiceNumber || 'N/A'}"`,
+        `"${invoice.invoiceName || 'Invoice'}"`,
+        `"${formatDate(invoice.issueDate || '')}"`,
+        `"${formatDate(invoice.dueDate || '')}"`,
+        `"${invoice.status || 'Draft'}"`,
+        `"${companyName}"`,
+        `"${companyEmail}"`,
+        `"${companyPhone}"`,
+        `"${companyAddress}"`,
+        `"${companyTaxNumber}"`,
+        `"${clientName}"`,
+        `"${clientCompany}"`,
+        `"${clientEmail}"`,
+        `"${clientPhone}"`,
+        `"${clientAddress}"`,
+        `"${itemsDescription}"`,
+        `"${totalQuantity}"`,
+        `"${invoice.subtotal?.toFixed(2) || '0.00'}"`,
+        `"${invoice.totalTax?.toFixed(2) || '0.00'}"`,
+        `"${invoice.totalAmount?.toFixed(2) || '0.00'}"`,
+        `"${originalCurrency}"`,
+        `"${paymentMethodText}"`,
+        `"${bankName}"`,
+        `"${accountNumber}"`,
+        `"${routingNumber}"`,
+        `"${network}"`,
+        `"${paymentAddress}"`,
+        `"${invoice.memo || ''}"`,
+        `"${formatDate(invoice.createdAt || '')}"`
+      ];
+      csvRows.push(row.join(','));
       
       // Convert to CSV string
       const csvContent = csvRows.join('\n');
@@ -406,12 +520,241 @@ export default function InvoiceViewPage() {
       
       console.log('✅ [Smart Invoicing] CSV downloaded successfully:', {
         invoiceNumber: invoice.invoiceNumber,
-        filename: `${invoice.invoiceNumber || 'invoice'}_${formatDate(invoice.issueDate || '').replace(/,/g, '')}.csv`
+        filename: `${invoice.invoiceNumber || 'invoice'}_${formatDate(invoice.issueDate || '').replace(/,/g, '')}.csv`,
+        currency: originalCurrency
       });
       
     } catch (error) {
       console.error('❌ [Smart Invoicing] Failed to download CSV:', error);
       alert('Failed to download CSV. Please try again.');
+    }
+  };
+
+  // Handle PDF download
+  const handleDownloadPdf = async () => {
+    if (!invoice) return;
+
+    try {
+      setDownloadingPdf(true);
+      console.log('📤 [Smart Invoicing] Starting PDF download for invoice:', invoice.invoiceNumber);
+
+      // Create a temporary container for PDF generation
+      const pdfContainer = document.createElement('div');
+      pdfContainer.style.position = 'absolute';
+      pdfContainer.style.left = '-9999px';
+      pdfContainer.style.top = '-9999px';
+      pdfContainer.style.width = '800px';
+      pdfContainer.style.backgroundColor = '#ffffff';
+      pdfContainer.style.padding = '40px';
+      pdfContainer.style.fontFamily = 'Arial, sans-serif';
+      document.body.appendChild(pdfContainer);
+
+      // Generate the PDF content HTML
+      const pdfContent = `
+        <div style="max-width: 800px; margin: 0 auto; background: white; padding: 40px; font-family: Arial, sans-serif;">
+          <!-- Header -->
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; border-bottom: 2px solid #e5e7eb; padding-bottom: 20px;">
+            <div>
+              <h1 style="color: #1f2937; font-size: 32px; font-weight: bold; margin: 0;">${invoice.invoiceName || 'INVOICE'}</h1>
+              <p style="color: #6b7280; font-size: 16px; margin: 5px 0 0 0;">Invoice #: ${invoice.invoiceNumber || 'N/A'}</p>
+            </div>
+            <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 10px;">
+              <!-- Dates -->
+              <div style="text-align: right;">
+                <div style="color: #6b7280; font-size: 14px; margin-bottom: 5px;">
+                  <span style="display: inline-flex; align-items: center; margin-bottom: 3px;">
+                    📅 Issued on ${formatDate(invoice.issueDate || new Date().toISOString())}
+                  </span>
+                </div>
+                <div style="color: #6b7280; font-size: 14px;">
+                  <span style="display: inline-flex; align-items: center;">
+                    🕐 Payment due by ${formatDate(invoice.dueDate || new Date().toISOString())}
+                  </span>
+                </div>
+              </div>
+              <!-- Logo -->
+              ${invoice.companyLogo ? `<img src="${invoice.companyLogo}" alt="Company Logo" style="max-height: 60px; max-width: 200px;">` : ''}
+            </div>
+          </div>
+
+          <!-- Company and Client Info -->
+          <div style="display: flex; justify-content: space-between; margin-bottom: 40px;">
+            <div style="flex: 1; margin-right: 20px;">
+              <h3 style="color: #374151; font-size: 18px; font-weight: bold; margin: 0 0 15px 0;">From:</h3>
+              <div style="color: #4b5563; line-height: 1.6;">
+                <p style="font-weight: bold; margin: 0 0 5px 0; font-size: 16px;">${invoice.companyName || invoice.companyDetails?.name || 'Company Name'}</p>
+                <p style="margin: 0 0 5px 0;">${invoice.companyEmail || 'N/A'}</p>
+                <p style="margin: 0 0 5px 0;">${invoice.companyPhone || 'N/A'}</p>
+                <p style="margin: 0 0 5px 0;">
+                  ${invoice.companyAddress ? 
+                    `${invoice.companyAddress.street || ''}, ${invoice.companyAddress.city || ''}, ${invoice.companyAddress.state || ''} ${invoice.companyAddress.zipCode || ''}, ${invoice.companyAddress.country || ''}` :
+                    invoice.companyDetails ? 
+                    `${invoice.companyDetails.addressLine1 || ''}, ${invoice.companyDetails.city || ''}, ${invoice.companyDetails.region || ''} ${invoice.companyDetails.postalCode || ''}, ${invoice.companyDetails.country || ''}` :
+                    'N/A'
+                  }
+                </p>
+                <p style="margin: 0;">Tax Number: ${invoice.companyTaxNumber || invoice.companyDetails?.taxNumber || 'N/A'}</p>
+              </div>
+            </div>
+            <div style="flex: 1; margin-left: 20px;">
+              <h3 style="color: #374151; font-size: 18px; font-weight: bold; margin: 0 0 15px 0;">To:</h3>
+              <div style="color: #4b5563; line-height: 1.6;">
+                <p style="font-weight: bold; margin: 0 0 5px 0; font-size: 16px;">${invoice.clientName || [invoice.clientDetails?.firstName, invoice.clientDetails?.lastName].filter(Boolean).join(' ') || 'Client Name'}</p>
+                ${invoice.clientDetails?.companyName ? `<p style="margin: 0 0 5px 0; font-weight: bold;">${invoice.clientDetails.companyName}</p>` : ''}
+                <p style="margin: 0 0 5px 0;">${invoice.clientEmail || 'N/A'}</p>
+                <p style="margin: 0 0 5px 0;">${invoice.clientPhone || 'N/A'}</p>
+                <p style="margin: 0 0 5px 0;">
+                  ${invoice.clientAddress ? 
+                    `${invoice.clientAddress.street || ''}, ${invoice.clientAddress.city || ''}, ${invoice.clientAddress.state || ''} ${invoice.clientAddress.zipCode || ''}, ${invoice.clientAddress.country || ''}` :
+                    invoice.clientDetails ? 
+                    `${invoice.clientDetails.addressLine1 || ''}, ${invoice.clientDetails.city || ''}, ${invoice.clientDetails.region || ''}, ${invoice.clientDetails.postalCode || ''}, ${invoice.clientDetails.country || ''}` :
+                    'N/A'
+                  }
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Invoice Details -->
+          <div style="display: flex; justify-content: space-between; margin-bottom: 40px; background: #f9fafb; padding: 20px; border-radius: 8px;">
+            <div>
+              <p style="margin: 0 0 5px 0; color: #6b7280; font-size: 14px;">Issue Date</p>
+              <p style="margin: 0; font-weight: bold; color: #374151;">${formatDate(invoice.issueDate || '')}</p>
+            </div>
+            <div>
+              <p style="margin: 0 0 5px 0; color: #6b7280; font-size: 14px;">Due Date</p>
+              <p style="margin: 0; font-weight: bold; color: #374151;">${formatDate(invoice.dueDate || '')}</p>
+            </div>
+            <div>
+              <p style="margin: 0 0 5px 0; color: #6b7280; font-size: 14px;">Status</p>
+              <p style="margin: 0; font-weight: bold; color: #374151;">${invoice.status || 'Draft'}</p>
+            </div>
+            <div>
+              <p style="margin: 0 0 5px 0; color: #6b7280; font-size: 14px;">Currency</p>
+              <p style="margin: 0; font-weight: bold; color: #374151;">${invoice.currency || 'USD'}</p>
+            </div>
+          </div>
+
+          <!-- Items Table -->
+          <div style="margin-bottom: 40px;">
+            <table style="width: 100%; border-collapse: collapse; border: 1px solid #e5e7eb;">
+              <thead>
+                <tr style="background: #f9fafb;">
+                  <th style="padding: 15px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Description</th>
+                  <th style="padding: 15px; text-align: center; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Qty</th>
+                  <th style="padding: 15px; text-align: right; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Unit Price</th>
+                  ${hasAnyDiscounts ? '<th style="padding: 15px; text-align: center; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Discount</th>' : ''}
+                  ${hasAnyTaxes ? '<th style="padding: 15px; text-align: center; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Tax</th>' : ''}
+                  <th style="padding: 15px; text-align: right; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${invoice.items?.map(item => `
+                  <tr>
+                    <td style="padding: 15px; border-bottom: 1px solid #e5e7eb; color: #374151;">${item.description || 'Item description'}</td>
+                    <td style="padding: 15px; text-align: center; border-bottom: 1px solid #e5e7eb; color: #374151;">${item.quantity || 0}</td>
+                    <td style="padding: 15px; text-align: right; border-bottom: 1px solid #e5e7eb; color: #374151;">${getCurrencySymbol(invoice.currency || '')}${item.unitPrice?.toFixed(2) || '0.00'}</td>
+                    ${hasAnyDiscounts ? `<td style="padding: 15px; text-align: center; border-bottom: 1px solid #e5e7eb; color: #374151;">${(item.discount || 0) > 0 ? (item.discount || 0) + '%' : ''}</td>` : ''}
+                    ${hasAnyTaxes ? `<td style="padding: 15px; text-align: center; border-bottom: 1px solid #e5e7eb; color: #374151;">${(item.tax || 0) > 0 ? (item.tax || 0) + '%' : ''}</td>` : ''}
+                    <td style="padding: 15px; text-align: right; border-bottom: 1px solid #e5e7eb; color: #374151; font-weight: bold;">${getCurrencySymbol(invoice.currency || '')}${item.amount?.toFixed(2) || '0.00'}</td>
+                  </tr>
+                `).join('') || '<tr><td colspan="6" style="padding: 15px; text-align: center; color: #6b7280;">No items</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Summary -->
+          <div style="display: flex; justify-content: flex-end; margin-bottom: 40px;">
+            <div style="width: 300px;">
+              <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e5e7eb;">
+                <span style="color: #6b7280;">Subtotal:</span>
+                <span style="font-weight: bold; color: #374151;">${getCurrencySymbol(invoice.currency || '')}${invoice.subtotal?.toFixed(2) || '0.00'}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e5e7eb;">
+                <span style="color: #6b7280;">Tax:</span>
+                <span style="font-weight: bold; color: #374151;">${getCurrencySymbol(invoice.currency || '')}${invoice.totalTax?.toFixed(2) || '0.00'}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; padding: 15px 0; background: #f9fafb; margin-top: 10px; border-radius: 8px; padding: 15px;">
+                <span style="font-size: 18px; font-weight: bold; color: #1f2937;">Total:</span>
+                <span style="font-size: 18px; font-weight: bold; color: #1f2937;">${getCurrencySymbol(invoice.currency || '')}${invoice.totalAmount?.toFixed(2) || '0.00'}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Payment Information -->
+          <div style="margin-bottom: 40px; background: #f9fafb; padding: 20px; border-radius: 8px;">
+            <h3 style="color: #374151; font-size: 18px; font-weight: bold; margin: 0 0 15px 0;">Payment Information</h3>
+            <div style="color: #4b5563; line-height: 1.6;">
+              <p style="margin: 0 0 10px 0;"><strong>Payment Method:</strong> ${(invoice.paymentMethod || invoice.paymentSettings?.method) === 'fiat' ? 'Bank Transfer' : 'Cryptocurrency'}</p>
+              <p style="margin: 0 0 10px 0;"><strong>Currency:</strong> ${invoice.currency || invoice.paymentSettings?.currency || 'USD'}</p>
+              ${(invoice.paymentMethod || invoice.paymentSettings?.method) === 'fiat' ? `
+                ${invoice.paymentSettings?.bankAccount?.bankName ? `<p style="margin: 0 0 5px 0;"><strong>Bank:</strong> ${invoice.paymentSettings.bankAccount.bankName}</p>` : ''}
+                ${invoice.paymentSettings?.bankAccount?.accountNumber ? `<p style="margin: 0 0 5px 0;"><strong>Account Number:</strong> ${invoice.paymentSettings.bankAccount.accountNumber}</p>` : ''}
+                ${invoice.paymentSettings?.bankAccount?.routingNumber ? `<p style="margin: 0 0 5px 0;"><strong>Routing Number:</strong> ${invoice.paymentSettings.bankAccount.routingNumber}</p>` : ''}
+              ` : `
+                ${invoice.paymentNetwork || invoice.paymentSettings?.cryptoNetwork ? `<p style="margin: 0 0 5px 0;"><strong>Network:</strong> ${invoice.paymentNetwork || invoice.paymentSettings?.cryptoNetwork}</p>` : ''}
+                ${invoice.paymentAddress || invoice.paymentSettings?.walletAddress ? `<p style="margin: 0 0 5px 0;"><strong>Payment Address:</strong> ${invoice.paymentAddress || invoice.paymentSettings?.walletAddress}</p>` : ''}
+              `}
+            </div>
+          </div>
+
+          <!-- Memo -->
+          ${invoice.memo ? `
+            <div style="margin-bottom: 40px;">
+              <h3 style="color: #374151; font-size: 18px; font-weight: bold; margin: 0 0 15px 0;">Notes</h3>
+              <p style="color: #4b5563; line-height: 1.6; margin: 0;">${invoice.memo}</p>
+            </div>
+          ` : ''}
+
+          <!-- Footer -->
+          <div style="text-align: center; margin-top: 60px; padding-top: 20px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 14px;">
+            <p style="margin: 0;">Generated by Chains-ERP</p>
+            <p style="margin: 5px 0 0 0;">Invoice Number: ${invoice.invoiceNumber || 'N/A'} | Date: ${formatDate(invoice.issueDate || '')}</p>
+          </div>
+        </div>
+      `;
+
+      pdfContainer.innerHTML = pdfContent;
+
+      // Wait for images to load
+      const images = pdfContainer.querySelectorAll('img');
+      if (images.length > 0) {
+        await Promise.all(Array.from(images).map(img => {
+          return new Promise((resolve) => {
+            if (img.complete) {
+              resolve(null);
+            } else {
+              img.onload = () => resolve(null);
+              img.onerror = () => resolve(null);
+            }
+          });
+        }));
+      }
+
+      // Generate optimized PDF
+      const { pdf } = await generateOptimizedPdf(pdfContainer);
+
+      // Remove the temporary element
+      document.body.removeChild(pdfContainer);
+
+      // Add watermark
+      addWatermark(pdf, invoice.invoiceNumber);
+
+      // Download the PDF
+      const filename = `${invoice.invoiceNumber || 'invoice'}_${formatDate(invoice.issueDate || '').replace(/,/g, '')}.pdf`;
+      pdf.save(filename);
+
+      console.log('✅ [Smart Invoicing] PDF downloaded successfully:', {
+        invoiceNumber: invoice.invoiceNumber,
+        filename: filename,
+        currency: invoice.currency
+      });
+
+    } catch (error) {
+      console.error('❌ [Smart Invoicing] Failed to download PDF:', error);
+      alert('Failed to download PDF. Please try again.');
+    } finally {
+      setDownloadingPdf(false);
     }
   };
 
@@ -449,7 +792,7 @@ export default function InvoiceViewPage() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 space-y-4 sm:space-y-0">
           <button
             onClick={() => router.back()}
-            className="flex items-center space-x-2 px-4 py-2 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
+            className="flex items-center space-x-2 px-4 py-3 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm touch-manipulation active:scale-95 min-h-[44px]"
           >
             <ArrowLeft className="h-4 w-4" />
             <span>Back</span>
@@ -476,14 +819,18 @@ export default function InvoiceViewPage() {
                 <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
                   <button
                     onClick={() => {
-                      // For now, just show a message since PDF download isn't implemented here
-                      alert('PDF download functionality will be implemented soon.');
+                      handleDownloadPdf();
                       setShowDownloadDropdown(false);
                     }}
-                    className="w-full flex items-center space-x-2 px-4 py-2 text-left hover:bg-gray-50 transition-colors"
+                    disabled={downloadingPdf}
+                    className="w-full flex items-center space-x-2 px-4 py-2 text-left hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <File className="h-4 w-4 text-red-500" />
-                    <span>Download as PDF</span>
+                    {downloadingPdf ? (
+                      <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
+                    ) : (
+                      <File className="h-4 w-4 text-red-500" />
+                    )}
+                    <span>{downloadingPdf ? 'Generating PDF...' : 'Download as PDF'}</span>
                   </button>
                   <button
                     onClick={() => {
@@ -543,18 +890,36 @@ export default function InvoiceViewPage() {
                 )}
               </div>
 
-              {/* Right Side - Dates */}
-              <div className="text-right space-y-2">
-                <div className="text-sm text-gray-600">
-                  <div className="flex items-center space-x-2">
-                    <Calendar className="h-4 w-4" />
-                    <span>Issued on {formatDate(invoice.issueDate || new Date().toISOString())}</span>
-                  </div>
-                  <div className="flex items-center space-x-2 mt-1">
-                    <Clock className="h-4 w-4" />
-                    <span>Payment due by {formatDate(invoice.dueDate || new Date().toISOString())}</span>
+              {/* Right Side - Dates and Logo */}
+              <div className="flex items-center space-x-4">
+                {/* Dates */}
+                <div className="text-right space-y-2">
+                  <div className="text-sm text-gray-600">
+                    <div className="flex items-center space-x-2">
+                      <Calendar className="h-4 w-4" />
+                      <span>Issued on {formatDate(invoice.issueDate || new Date().toISOString())}</span>
+                    </div>
+                    <div className="flex items-center space-x-2 mt-1">
+                      <Clock className="h-4 w-4" />
+                      <span>Payment due by {formatDate(invoice.dueDate || new Date().toISOString())}</span>
+                    </div>
                   </div>
                 </div>
+                
+                {/* Company Logo */}
+                {invoice.companyLogo && (
+                  <div className="w-16 h-16 bg-white border border-gray-200 rounded-lg flex items-center justify-center overflow-hidden">
+                    <Image 
+                      src={invoice.companyLogo} 
+                      alt="Company Logo" 
+                      width={64}
+                      height={64}
+                      className="object-contain w-full h-full"
+                      unoptimized={invoice.companyLogo.startsWith('data:')}
+                      style={{ backgroundColor: 'white' }}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -568,19 +933,6 @@ export default function InvoiceViewPage() {
                   From
                 </h3>
                 <div className="space-y-2">
-                  {invoice.companyLogo && (
-                    <div className="mb-4">
-                      <Image 
-                        src={invoice.companyLogo} 
-                        alt="Company Logo" 
-                        width={48}
-                        height={48}
-                        className="h-12 w-auto object-contain rounded-md"
-                        style={{ backgroundColor: 'white' }}
-                        unoptimized
-                      />
-                    </div>
-                  )}
                   <div className="font-medium text-gray-900">{invoice.companyName || invoice.companyDetails?.name || 'Company Name'}</div>
                   <div className="text-gray-600">
                     {invoice.companyAddress?.street || invoice.companyDetails?.addressLine1 ? <div>{invoice.companyAddress?.street || invoice.companyDetails?.addressLine1}</div> : null}
@@ -702,7 +1054,6 @@ export default function InvoiceViewPage() {
                           <div className="text-gray-900">
                             <FormattedNumberDisplay 
                               value={item.unitPrice || 0} 
-                              currency={getCurrencySymbol(invoice.currency || '')}
                             />
                           </div>
                         </td>
@@ -720,7 +1071,6 @@ export default function InvoiceViewPage() {
                           <div className="text-gray-900">
                             <FormattedNumberDisplay 
                               value={item.amount || 0} 
-                              currency={getCurrencySymbol(invoice.currency || '')}
                             />
                           </div>
                         </td>
@@ -739,7 +1089,6 @@ export default function InvoiceViewPage() {
                   <span>
                     <FormattedNumberDisplay 
                       value={invoice.subtotal || 0} 
-                      currency={getCurrencySymbol(invoice.currency || '')}
                     />
                   </span>
                 </div>
@@ -748,7 +1097,6 @@ export default function InvoiceViewPage() {
                   <span>
                     <FormattedNumberDisplay 
                       value={invoice.totalTax || 0} 
-                      currency={getCurrencySymbol(invoice.currency || '')}
                     />
                   </span>
                 </div>
@@ -757,7 +1105,6 @@ export default function InvoiceViewPage() {
                   <span>
                     <FormattedNumberDisplay 
                       value={invoice.totalAmount || 0} 
-                      currency={getCurrencySymbol(invoice.currency || '')}
                     />
                   </span>
                 </div>
@@ -766,7 +1113,6 @@ export default function InvoiceViewPage() {
                   <span>
                     <FormattedNumberDisplay 
                       value={invoice.totalAmount || 0} 
-                      currency={getCurrencySymbol(invoice.currency || '')}
                     />
                   </span>
                 </div>

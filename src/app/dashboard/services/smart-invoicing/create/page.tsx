@@ -1,10 +1,9 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 
-import Link from 'next/link';
 import Image from 'next/image';
 import { 
   ArrowLeft, 
@@ -21,14 +20,13 @@ import {
   Edit3,
   Loader2,
   Download,
-  Send,
   AlertCircle,
-  LayoutDashboard,
   ChevronDown,
   Search,
   Mail,
   File,
-  ChevronDown as ChevronDownIcon
+  ChevronDown as ChevronDownIcon,
+  Smartphone
 } from 'lucide-react';
 import { fiatCurrencies, cryptoCurrencies, getCurrencyByCode } from '@/data/currencies';
 import { countries, getTaxRatesByCountry } from '@/data/countries';
@@ -40,6 +38,7 @@ import { LogoSelector } from '@/components/LogoSelector';
 import { setCriticalOperation } from '@/components/dashboard/NotificationBadge';
 import BankSelector from '@/components/BankSelector';
 import { Bank } from '@/data';
+import FloatingActionButton from '@/components/dashboard/FloatingActionButton';
 
 interface Client {
   _id: string;
@@ -83,6 +82,7 @@ interface InvoiceFormData {
   };
   currency: string;
   paymentMethod: 'fiat' | 'crypto';
+  fiatPaymentSubtype?: 'bank' | 'mpesa_paybill' | 'mpesa_till';
   paymentNetwork?: string;
   paymentAddress?: string;
   bankName?: string;
@@ -92,6 +92,12 @@ interface InvoiceFormData {
   accountName?: string;
   accountNumber?: string;
   branchAddress?: string;
+  // M-Pesa Paybill fields
+  paybillNumber?: string;
+  mpesaAccountNumber?: string;
+  // M-Pesa Till fields
+  tillNumber?: string;
+  businessName?: string;
   enableMultiCurrency: boolean;
   invoiceType: 'regular' | 'recurring';
   items: Array<{
@@ -148,6 +154,7 @@ const defaultInvoiceData: InvoiceFormData = {
   },
   currency: 'USD',
   paymentMethod: 'fiat',
+  fiatPaymentSubtype: 'bank',
   paymentNetwork: '',
   paymentAddress: '',
   bankName: '',
@@ -157,6 +164,10 @@ const defaultInvoiceData: InvoiceFormData = {
   accountName: '',
   accountNumber: '',
   branchAddress: '',
+  paybillNumber: '',
+  mpesaAccountNumber: '',
+  tillNumber: '',
+  businessName: '',
   enableMultiCurrency: false,
   invoiceType: 'regular',
   items: [
@@ -177,6 +188,56 @@ const defaultInvoiceData: InvoiceFormData = {
   attachedFiles: [],
   status: 'draft',
   ccClients: []
+};
+
+// Custom hook for form persistence
+const useFormPersistence = (key: string, initialData: InvoiceFormData, setAutoSaveStatus: (status: 'saved' | 'saving' | 'error' | null) => void) => {
+  const [formData, setFormData] = useState<InvoiceFormData>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem(key);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          // Merge with default data to handle new fields
+          return { ...initialData, ...parsed };
+        }
+      } catch (error) {
+        console.warn('Failed to load saved form data:', error);
+      }
+    }
+    return initialData;
+  });
+
+  const updateFormData = (newData: InvoiceFormData | ((prev: InvoiceFormData) => InvoiceFormData)) => {
+    setFormData(prev => {
+      const updated = typeof newData === 'function' ? newData(prev) : newData;
+      
+      // Auto-save to localStorage with status indication
+      if (typeof window !== 'undefined') {
+        setAutoSaveStatus('saving');
+        try {
+          localStorage.setItem(key, JSON.stringify(updated));
+          setAutoSaveStatus('saved');
+          // Clear status after 2 seconds
+          setTimeout(() => setAutoSaveStatus(null), 2000);
+        } catch (error) {
+          console.warn('Failed to save form data:', error);
+          setAutoSaveStatus('error');
+          setTimeout(() => setAutoSaveStatus(null), 3000);
+        }
+      }
+      
+      return updated;
+    });
+  };
+
+  const clearSavedData = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(key);
+    }
+  };
+
+  return { formData, setFormData: updateFormData, clearSavedData };
 };
 
 // Add this utility function at the top of the file, after imports
@@ -314,7 +375,16 @@ export default function CreateInvoicePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session } = useSession();
-  const [formData, setFormData] = useState<InvoiceFormData>(defaultInvoiceData);
+  
+  // Auto-save status state
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null);
+  
+  // Use form persistence hook
+  const { formData, setFormData, clearSavedData } = useFormPersistence(
+    `invoice-draft-${session?.user?.email || 'anonymous'}`, 
+    defaultInvoiceData,
+    setAutoSaveStatus
+  );
   const [loading, setLoading] = useState(false);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [showClientSelector, setShowClientSelector] = useState(false);
@@ -334,6 +404,13 @@ export default function CreateInvoicePage() {
   const pdfRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Helper function to check if user is from Kenya
+  const isKenyanUser = () => {
+    return session?.user?.address?.country === 'KE' || 
+           formData.companyAddress?.country === 'KE' ||
+           formData.currency === 'KES';
+  };
+
   // Currency dropdown state
   const [showCurrencyDropdown, setShowCurrencyDropdown] = useState(false);
   const [currencySearch, setCurrencySearch] = useState('');
@@ -346,13 +423,20 @@ export default function CreateInvoicePage() {
     name: string;
     type: 'fiat' | 'crypto';
     fiatDetails?: {
-      bankName: string;
-      swiftCode: string;
-      bankCode: string;
-      branchCode: string;
-      accountName: string;
-      accountNumber: string;
-      branchAddress: string;
+      subtype: 'bank' | 'mpesa_paybill' | 'mpesa_till';
+      // Bank details
+      bankName?: string;
+      swiftCode?: string;
+      bankCode?: string;
+      branchCode?: string;
+      accountName?: string;
+      accountNumber?: string;
+      branchAddress?: string;
+      // M-Pesa details
+      paybillNumber?: string;
+      mpesaAccountNumber?: string;
+      tillNumber?: string;
+      businessName?: string;
     };
     cryptoDetails?: {
       network: string;
@@ -371,53 +455,7 @@ export default function CreateInvoicePage() {
   // Download dropdown state
   const [showDownloadDropdown, setShowDownloadDropdown] = useState(false);
 
-
-
-  useEffect(() => {
-    // useEffect triggered
-    if (invoiceId) {
-      loadInvoice(invoiceId);
-    } else if (session?.user) {
-      // Loading data for user
-      loadServiceOnboardingData();
-      loadOrganizationData();
-      loadClients();
-      loadLogoFromSettings();
-      loadSavedPaymentMethods();
-    }
-  }, [invoiceId, session]);
-
-    // Monitor formData changes for debugging (disabled during sending)
-  useEffect(() => {
-    if (!sendingInvoice) {
-      // FormData updated with logo
-    }
-  }, [formData.companyLogo, sendingInvoice]);
-
-  // Handle click outside for dropdowns
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Element;
-      if (!target.closest('.currency-dropdown-container')) {
-        setShowCurrencyDropdown(false);
-        setCurrencySearch('');
-      }
-      if (!target.closest('.network-dropdown-container')) {
-        setShowNetworkDropdown(false);
-        setNetworkSearch('');
-      }
-      if (!target.closest('.download-dropdown-container')) {
-        setShowDownloadDropdown(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-
-  const loadInvoice = async (id: string) => {
+  const loadInvoice = useCallback(async (id: string) => {
     try {
       setLoading(true);
       const response = await fetch(`/api/invoices/${id}`);
@@ -439,9 +477,9 @@ export default function CreateInvoicePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const loadServiceOnboardingData = async () => {
+  const loadServiceOnboardingData = useCallback(async () => {
     try {
       const response = await fetch('/api/onboarding/service?service=smartInvoicing');
       const data = await response.json();
@@ -475,9 +513,9 @@ export default function CreateInvoicePage() {
     } catch (error) {
       console.error('Error loading service onboarding data:', error);
     }
-  };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const loadOrganizationData = async () => {
+  const loadOrganizationData = useCallback(async () => {
     try {
       const response = await fetch('/api/user/settings');
       const data = await response.json();
@@ -507,21 +545,9 @@ export default function CreateInvoicePage() {
     } catch (error) {
       console.error('Failed to load organization data:', error);
     }
-  };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const loadClients = async () => {
-    try {
-      const response = await fetch('/api/clients');
-      const data = await response.json();
-      if (data.success && data.data) {
-        setClients(data.data);
-      }
-    } catch (error) {
-      console.error('Failed to load clients:', error);
-    }
-  };
-
-  const loadLogoFromSettings = async () => {
+  const loadLogoFromSettings = useCallback(async () => {
     try {
       
       const response = await fetch('/api/user/logo');
@@ -553,10 +579,75 @@ export default function CreateInvoicePage() {
     } catch (error) {
       console.error('❌ [Invoice Create] Failed to load logo from settings:', error);
     }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    // useEffect triggered
+    if (invoiceId) {
+      loadInvoice(invoiceId);
+    } else if (session?.user) {
+      // Loading data for user
+      loadServiceOnboardingData();
+      loadOrganizationData();
+      loadClients();
+      loadLogoFromSettings();
+      loadSavedPaymentMethods();
+    }
+  }, [invoiceId, session, loadInvoice, loadLogoFromSettings, loadOrganizationData, loadServiceOnboardingData]);
+
+    // Monitor formData changes for debugging (disabled during sending)
+  useEffect(() => {
+    if (!sendingInvoice) {
+      // FormData updated with logo
+    }
+  }, [formData.companyLogo, sendingInvoice]);
+
+  // Handle click outside for dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (!target.closest('.currency-dropdown-container')) {
+        setShowCurrencyDropdown(false);
+        setCurrencySearch('');
+      }
+      if (!target.closest('.network-dropdown-container')) {
+        setShowNetworkDropdown(false);
+        setNetworkSearch('');
+      }
+      if (!target.closest('.download-dropdown-container')) {
+        setShowDownloadDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const loadClients = async () => {
+    try {
+      const response = await fetch('/api/clients');
+      const data = await response.json();
+      if (data.success && data.data) {
+        setClients(data.data);
+      }
+    } catch (error) {
+      console.error('Failed to load clients:', error);
+    }
   };
 
   const handleInputChange = (field: keyof InvoiceFormData, value: string | number | boolean) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleFiatPaymentSubtypeChange = (value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      fiatPaymentSubtype: value as 'bank' | 'mpesa_paybill' | 'mpesa_till',
+      // Automatically set currency to KES for M-Pesa payments
+      currency: (value === 'mpesa_paybill' || value === 'mpesa_till') ? 'KES' : prev.currency
+    }));
   };
 
   const handleBankSelect = (bank: Bank) => {
@@ -974,6 +1065,576 @@ export default function CreateInvoicePage() {
                   <div style="font-size: 14px; color: #6b7280;">
                     Payment due by ${formatDate(formData.dueDate)}
                   </div>
+                  ${primaryInvoiceNumber || formData.invoiceNumber ? `
+                    <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                      Invoice: ${primaryInvoiceNumber || formData.invoiceNumber}
+                    </div>
+                  ` : ''}
+                </div>
+                ${formData.companyLogo ? `
+                  <div style="width: 64px; height: 64px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                    <img src="${formData.companyLogo}" alt="Company Logo" style="width: 100%; height: 100%; object-fit: contain; background: white;" />
+                  </div>
+                ` : `
+                  <div style="width: 64px; height: 64px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                    <svg style="width: 32px; height: 32px; color: #9ca3af;" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 2L2 7v10c0 5.55 3.84 9.74 9 11 5.16-1.26 9-5.45 9-11V7l-10-5zM12 22c-4.75-1.11-8-4.67-8-9V8l8-4v18z"/>
+                    </svg>
+                  </div>
+                `}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
+          <div style="display: flex; justify-content: space-between; gap: 48px;">
+            <div style="flex: 1;">
+              <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0; display: flex; align-items: center;">
+                <svg style="width: 20px; height: 20px; color: #6b7280; margin-right: 8px;" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2L2 7v10c0 5.55 3.84 9.74 9 11 5.16-1.26 9-5.45 9-11V7l-10-5zM12 22c-4.75-1.11-8-4.67-8-9V8l8-4v18z"/>
+                </svg>
+                From
+              </h3>
+              <div style="font-weight: 500; margin-bottom: 8px;">
+                ${formData.companyName || 'Company Name'}
+              </div>
+              <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
+                <div>${formData.companyAddress.street || 'Street Address'}</div>
+                <div>${formData.companyAddress.city || 'City'}, ${formData.companyAddress.state || 'State'} ${formData.companyAddress.zipCode || 'ZIP'}</div>
+                <div>${formData.companyAddress.country ? countries.find(c => c.code === formData.companyAddress.country)?.name || formData.companyAddress.country : 'Country'}</div>
+                <div>Tax: ${formData.companyTaxNumber || 'Tax Number'}</div>
+                <div>${formData.companyEmail || 'Email'}</div>
+                <div>${formData.companyPhone || 'Phone'}</div>
+              </div>
+            </div>
+            <div style="flex: 1;">
+              <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0; display: flex; align-items: center;">
+                <svg style="width: 20px; height: 20px; color: #6b7280; margin-right: 8px;" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                </svg>
+                Bill To
+              </h3>
+              <div style="font-weight: 500; margin-bottom: 8px;">
+                ${formData.clientCompany ? formData.clientCompany : formData.clientName || 'Client Name'}
+              </div>
+              ${formData.clientCompany ? `
+              <div style="color: #6b7280; font-size: 14px; margin-bottom: 8px;">
+                Attn: ${formData.clientName || 'Client Name'}
+              </div>
+              ` : ''}
+              <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
+                <div>${formData.clientAddress.street || 'Street Address'}</div>
+                <div>${formData.clientAddress.city || 'City'}, ${formData.clientAddress.state || 'State'} ${formData.clientAddress.zipCode || 'ZIP'}</div>
+                <div>${formData.clientAddress.country ? countries.find(c => c.code === formData.clientAddress.country)?.name || formData.clientAddress.country : 'Country'}</div>
+                <div>${formData.clientEmail || 'Email'}</div>
+                <div>${formData.clientPhone || 'Phone'}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
+          <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 24px 0;">Invoice Items</h3>
+          
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
+            <thead style="background: #f9fafb;">
+              <tr>
+                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Description</th>
+                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Qty</th>
+                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Unit Price</th>
+                ${hasAnyDiscounts ? '<th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Discount</th>' : ''}
+                ${hasAnyTaxes ? '<th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Tax</th>' : ''}
+                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${formData.items.map(item => `
+                <tr style="border-bottom: 1px solid #e5e7eb;">
+                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.description || 'Item description'}</td>
+                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.quantity}</td>
+                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${getCurrencySymbol()}${item.unitPrice.toFixed(2)}</td>
+                  ${hasAnyDiscounts ? `<td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.discount > 0 ? `${item.discount}%` : ''}</td>` : ''}
+                  ${hasAnyTaxes ? `<td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.tax > 0 ? `${item.tax}%` : ''}</td>` : ''}
+                  <td style="padding: 12px 16px; font-size: 14px; font-weight: 500; color: #111827;">${getCurrencySymbol()}${item.amount.toFixed(2)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+
+          <div style="display: flex; justify-content: flex-end;">
+            <div style="width: 256px;">
+              <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 14px; margin-bottom: 8px;">
+                <span>Amount without tax</span>
+                <span>${getCurrencySymbol()}${formData.subtotal.toFixed(2)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 14px; margin-bottom: 8px;">
+                <span>Total Tax amount</span>
+                <span>${getCurrencySymbol()}${formData.totalTax.toFixed(2)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 600; border-top: 1px solid #e5e7eb; padding-top: 8px; margin-bottom: 8px;">
+                <span>Total amount</span>
+                <span>${getCurrencySymbol()}${formData.total.toFixed(2)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 600; color: #2563eb;">
+                <span>Due</span>
+                <span>${getCurrencySymbol()}${formData.total.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
+          <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0;">Payment Information</h3>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+            <div>
+              <h4 style="font-weight: 500; color: #111827; margin: 0 0 8px 0;">Payment Method</h4>
+              <div style="font-size: 14px; color: #6b7280;">
+                ${formData.paymentMethod === 'crypto' ? 'Cryptocurrency' : 
+                  formData.fiatPaymentSubtype === 'mpesa_paybill' ? 'M-Pesa Paybill' :
+                  formData.fiatPaymentSubtype === 'mpesa_till' ? 'M-Pesa Till' :
+                  'Bank Transfer'}
+              </div>
+              ${formData.paymentMethod === 'crypto' && formData.paymentNetwork ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Network: ${formData.paymentNetwork}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'crypto' && formData.paymentAddress ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Address: ${formData.paymentAddress}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.bankName ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Bank: ${formData.bankName}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.accountNumber ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Account: ${formData.accountNumber}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.swiftCode ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  SWIFT Code: ${formData.swiftCode}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.accountName ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Account Name: ${formData.accountName}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.branchAddress ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Branch Address: ${formData.branchAddress}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'mpesa_paybill' && formData.paybillNumber ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Paybill Number: ${formData.paybillNumber}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'mpesa_paybill' && formData.mpesaAccountNumber ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Account Number: ${formData.mpesaAccountNumber}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'mpesa_till' && formData.tillNumber ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Till Number: ${formData.tillNumber}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && (formData.fiatPaymentSubtype === 'mpesa_paybill' || formData.fiatPaymentSubtype === 'mpesa_till') && formData.businessName ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Business Name: ${formData.businessName}
+                </div>
+              ` : ''}
+            </div>
+            <div>
+              <h4 style="font-weight: 500; color: #111827; margin: 0 0 8px 0;">Currency</h4>
+              <div style="font-size: 14px; color: #6b7280;">
+                ${formData.currency} (${getCurrencySymbol()})
+              </div>
+            </div>
+          </div>
+        </div>
+
+        ${formData.memo ? `
+          <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
+            <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0;">Memo</h3>
+            <div style="font-size: 14px; color: #374151; white-space: pre-wrap;">
+              ${formData.memo}
+            </div>
+          </div>
+        ` : ''}
+
+        ${formData.invoiceNumber ? `
+          <div style="padding: 32px 0; text-align: center;">
+            <div style="font-size: 14px; color: #6b7280;">
+              Invoice Number: ${formData.invoiceNumber}
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- Footer with watermark and security info -->
+        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center;">
+          <div style="font-size: 12px; color: #9ca3af; line-height: 1.5;">
+            <div style="margin-bottom: 8px; font-weight: 500;">
+              Generated by Chains-ERP for ${formData.companyName || 'Company'}
+            </div>
+            <div style="margin-bottom: 8px; font-size: 11px;">
+              Invoice Number: ${formData.invoiceNumber || 'N/A'} | Date: ${formatDate(formData.issueDate)}
+            </div>
+            <div style="font-size: 10px; color: #d1d5db;">
+              Digital Invoice | Secure Payment Processing | Blockchain Verification
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Append to body temporarily
+      document.body.appendChild(pdfContainer);
+
+      // Wait for images to load
+      const images = pdfContainer.querySelectorAll('img');
+      if (images.length > 0) {
+        await Promise.all(Array.from(images).map(img => {
+          return new Promise((resolve) => {
+            if (img.complete) {
+              resolve(null);
+            } else {
+              img.onload = () => resolve(null);
+              img.onerror = () => resolve(null);
+            }
+          });
+        }));
+      }
+
+      // Generate optimized PDF
+      const { pdf, base64: pdfBase64 } = await generateOptimizedPdf(pdfContainer, formData.invoiceNumber || 'temp');
+
+      // Remove the temporary element
+      document.body.removeChild(pdfContainer);
+
+      // Add watermark
+      addWatermark(pdf, formData.invoiceNumber || 'temp');
+
+      console.log('📄 [PDF Generation] Converting PDF to base64...');
+      const base64StartTime = Date.now();
+      
+      const base64EndTime = Date.now();
+      console.log('📄 [PDF Generation] PDF base64 conversion completed in', base64EndTime - base64StartTime, 'ms');
+      console.log('📄 [PDF Generation] PDF size:', (pdfBase64.length / 1024).toFixed(2), 'KB');
+      
+      // Sending invoice via email...
+      
+      console.log('📄 [PDF Generation] Converting attached files to base64...');
+      const filesStartTime = Date.now();
+      
+      // Convert attached files to base64
+      const attachedFilesBase64 = await Promise.all(
+        (formData.attachedFiles || []).map(async (file) => {
+          return new Promise<{ filename: string; content: string; contentType: string }>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const base64 = (reader.result as string).split(',')[1];
+              resolve({
+                filename: file.name,
+                content: base64,
+                contentType: file.type
+              });
+            };
+            reader.readAsDataURL(file);
+          });
+        })
+      );
+      
+      const filesEndTime = Date.now();
+      console.log('📄 [PDF Generation] File attachments conversion completed in', filesEndTime - filesStartTime, 'ms');
+
+      console.log('📧 [Email Sending] Starting email request...');
+      const emailStartTime = Date.now();
+      
+      // Send invoice via email with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+
+      const response = await fetch('/api/invoices/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          invoiceId: primaryInvoiceId,
+          recipientEmail: formData.clientEmail,
+          pdfBuffer: pdfBase64,
+          attachedFiles: attachedFilesBase64
+        }),
+        signal: controller.signal
+      });
+      
+      const emailEndTime = Date.now();
+      console.log('📧 [Email Sending] Email request completed in', emailEndTime - emailStartTime, 'ms');
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Server error: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        console.log('✅ [Smart Invoicing] Invoice sent successfully:', {
+          invoiceNumber: formData.invoiceNumber,
+          recipientEmail: formData.clientEmail,
+          total: formData.total
+        });
+        alert('Invoice sent successfully! Check your email for confirmation.');
+        // Clear saved form data after successful send
+        clearSavedData();
+        // Redirect to invoices page
+        router.push('/dashboard/services/smart-invoicing/invoices');
+      } else {
+        console.error('❌ [Smart Invoicing] Failed to send invoice:', result.message);
+        alert(`Failed to send invoice: ${result.message}`);
+      }
+    } catch (error) {
+      console.error('❌ [Smart Invoicing] Failed to send invoice:', error);
+      
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          alert('Request timed out. Please try again or contact support if the issue persists.');
+        } else {
+          alert(`Failed to send invoice: ${error.message}`);
+        }
+      } else {
+        alert('Failed to send invoice. Please try again.');
+      }
+    } finally {
+      setSendingInvoice(false);
+      setCriticalOperation(false); // Re-enable notification polling
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+  };
+
+  const getCurrencySymbol = () => {
+    return getCurrencyByCode(formData.currency)?.symbol || '€';
+  };
+
+  const renderEditableField = (
+    field: string,
+    value: string,
+    placeholder: string,
+    className: string = "text-3xl font-bold text-gray-900"
+  ) => {
+    return editingField === field ? (
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => handleInputChange(field as keyof InvoiceFormData, e.target.value)}
+        onBlur={() => setEditingField(null)}
+        className={`${className} border-none outline-none bg-transparent`}
+        autoFocus
+      />
+    ) : (
+      <button
+        onClick={() => setEditingField(field)}
+        className={`${className} hover:bg-gray-100 px-2 py-1 rounded flex items-center group`}
+      >
+        {value || placeholder}
+        <Edit3 className="h-4 w-4 ml-2 opacity-0 group-hover:opacity-100 transition-opacity" />
+      </button>
+    );
+  };
+
+  const renderEditableDateField = (
+    field: string,
+    value: string,
+    label: string,
+    className: string = "text-sm text-gray-600"
+  ) => {
+    return editingField === field ? (
+      <div className="flex items-center space-x-2">
+        <input
+          type="date"
+          value={value}
+          onChange={(e) => handleInputChange(field as keyof InvoiceFormData, e.target.value)}
+          onBlur={() => setEditingField(null)}
+          className={`${className} border border-gray-300 rounded px-2 py-1 bg-white text-xs sm:text-sm`}
+          autoFocus
+        />
+      </div>
+    ) : (
+      <button
+        onClick={() => setEditingField(field)}
+        className={`${className} hover:bg-gray-100 px-2 py-1 rounded flex items-center group touch-manipulation`}
+      >
+        <span className="text-xs sm:text-sm">{label} {formatDate(value)}</span>
+        <Edit3 className="h-3 w-3 ml-1 sm:ml-2 opacity-0 group-hover:opacity-100 transition-opacity" />
+      </button>
+    );
+  };
+
+  const validateInvoiceForPdf = () => {
+    const errors: string[] = [];
+    
+    // Required fields validation
+    if (!formData.invoiceName || formData.invoiceName.trim() === '') {
+      errors.push('Invoice name is required');
+    }
+    if (!formData.companyName || formData.companyName.trim() === '') {
+      errors.push('Company name is required');
+    }
+    if (!formData.clientName || formData.clientName.trim() === '') {
+      errors.push('Client name is required');
+    }
+    if (!formData.companyAddress.street || formData.companyAddress.street.trim() === '') {
+      errors.push('Company address is required');
+    }
+    if (!formData.clientAddress.street || formData.clientAddress.street.trim() === '') {
+      errors.push('Client address is required');
+    }
+    
+    // Items validation
+    const hasValidItems = formData.items.some((item: { description: string; quantity: number; unitPrice: number }) => 
+      item.description && item.description.trim() !== '' && 
+      item.quantity > 0 && item.unitPrice > 0
+    );
+    if (!hasValidItems) {
+      errors.push('At least one item with description, quantity, and unit price is required');
+    }
+    
+    return errors;
+  };
+
+  const handleDownloadPdf = async () => {
+    const errors = validateInvoiceForPdf();
+    if (errors.length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
+    setValidationErrors([]);
+
+    setSendingInvoice(true);
+
+    try {
+      console.log('📤 [Smart Invoicing] Starting PDF download...', {
+        invoiceNumber: formData.invoiceNumber,
+        clientEmail: formData.clientEmail,
+        total: formData.total
+      });
+
+      let primaryInvoiceId: string;
+      let primaryInvoiceNumber: string;
+
+      // If this is a draft invoice (has _id), update it instead of creating new
+      if (formData._id) {
+        // Updating draft invoice...
+        const updateResponse = await fetch(`/api/invoices/${formData._id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...formData,
+            status: 'sent'
+          })
+        });
+
+        if (!updateResponse.ok) {
+          const errorText = await updateResponse.text();
+          console.error('❌ [Smart Invoicing] Update invoice response error:', errorText);
+          throw new Error(`Failed to update invoice: ${updateResponse.status} ${errorText}`);
+        }
+
+        const updateData = await updateResponse.json();
+
+        if (!updateData.success) {
+          throw new Error(`Failed to update invoice: ${updateData.message}`);
+        }
+
+        primaryInvoiceId = updateData.invoice._id;
+        primaryInvoiceNumber = updateData.invoice.invoiceNumber;
+
+        // Draft invoice updated successfully
+      } else {
+        // Create new invoice
+        const primaryInvoiceResponse = await fetch('/api/invoices', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...formData,
+            status: 'sent'
+          })
+        });
+
+        if (!primaryInvoiceResponse.ok) {
+          const errorText = await primaryInvoiceResponse.text();
+          console.error('❌ [Smart Invoicing] Create invoice response error:', errorText);
+          throw new Error(`Failed to create invoice: ${primaryInvoiceResponse.status} ${errorText}`);
+        }
+
+        const primaryInvoiceData = await primaryInvoiceResponse.json();
+
+        if (!primaryInvoiceData.success) {
+          throw new Error(`Failed to create invoice: ${primaryInvoiceData.message}`);
+        }
+
+        primaryInvoiceId = primaryInvoiceData.invoice._id;
+        primaryInvoiceNumber = primaryInvoiceData.invoice.invoiceNumber;
+
+        // Primary invoice saved successfully
+      }
+
+      // Update formData with the new invoice ID and number
+      setFormData(prev => ({
+        ...prev,
+        _id: primaryInvoiceId,
+        invoiceNumber: primaryInvoiceNumber
+      }));
+
+      // Create a simplified version of the invoice for PDF generation
+      const pdfContainer = document.createElement('div');
+      pdfContainer.style.cssText = `
+        position: absolute;
+        left: -9999px;
+        top: 0;
+        width: 800px;
+        background: white;
+        color: black;
+        font-family: Arial, sans-serif;
+        padding: 32px;
+        border: none;
+        outline: none;
+      `;
+
+      // Create the exact invoice structure
+      pdfContainer.innerHTML = `
+        <div style="border-bottom: 1px solid #e5e7eb; padding-bottom: 32px; margin-bottom: 32px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div style="flex: 1;">
+              <h1 style="font-size: 30px; font-weight: bold; color: #111827; margin: 0;">
+                ${formData.invoiceName || 'Invoice'}
+              </h1>
+            </div>
+            <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end;">
+              <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 16px;">
+                <div>
+                  <div style="font-size: 14px; color: #6b7280; margin-bottom: 4px;">
+                    Issued on ${formatDate(formData.issueDate)}
+                  </div>
+                  <div style="font-size: 14px; color: #6b7280;">
+                    Payment due by ${formatDate(formData.dueDate)}
+                  </div>
                   ${primaryInvoiceNumber ? `
                     <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
                       Invoice: ${primaryInvoiceNumber}
@@ -1099,7 +1760,10 @@ export default function CreateInvoicePage() {
             <div>
               <h4 style="font-weight: 500; color: #111827; margin: 0 0 8px 0;">Payment Method</h4>
               <div style="font-size: 14px; color: #6b7280;">
-                ${formData.paymentMethod === 'crypto' ? 'Cryptocurrency' : 'Bank Transfer'}
+                ${formData.paymentMethod === 'crypto' ? 'Cryptocurrency' : 
+                  formData.fiatPaymentSubtype === 'mpesa_paybill' ? 'M-Pesa Paybill' :
+                  formData.fiatPaymentSubtype === 'mpesa_till' ? 'M-Pesa Till' :
+                  'Bank Transfer'}
               </div>
               ${formData.paymentMethod === 'crypto' && formData.paymentNetwork ? `
                 <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
@@ -1136,485 +1800,24 @@ export default function CreateInvoicePage() {
                   Branch Address: ${formData.branchAddress}
                 </div>
               ` : ''}
-            </div>
-            <div>
-              <h4 style="font-weight: 500; color: #111827; margin: 0 0 8px 0;">Currency</h4>
-              <div style="font-size: 14px; color: #6b7280;">
-                ${formData.currency} (${getCurrencySymbol()})
-              </div>
-            </div>
-          </div>
-        </div>
-
-        ${formData.memo ? `
-          <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
-            <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0;">Memo</h3>
-            <div style="font-size: 14px; color: #374151; white-space: pre-wrap;">
-              ${formData.memo}
-            </div>
-          </div>
-        ` : ''}
-
-        ${formData.invoiceNumber ? `
-          <div style="padding: 32px 0; text-align: center;">
-            <div style="font-size: 14px; color: #6b7280;">
-              Invoice Number: ${formData.invoiceNumber}
-            </div>
-          </div>
-        ` : ''}
-
-        <!-- Footer with watermark and security info -->
-        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center;">
-          <div style="font-size: 12px; color: #9ca3af; line-height: 1.5;">
-            <div style="margin-bottom: 8px; font-weight: 500;">
-              Generated by Chains-ERP for ${formData.companyName || 'Company'}
-            </div>
-            <div style="margin-bottom: 8px; font-size: 11px;">
-              Invoice Number: ${formData.invoiceNumber || 'N/A'} | Date: ${formatDate(formData.issueDate)}
-            </div>
-            <div style="font-size: 10px; color: #d1d5db;">
-              Digital Invoice | Secure Payment Processing | Blockchain Verification
-            </div>
-          </div>
-        </div>
-      `;
-
-      // Append to body temporarily
-      document.body.appendChild(pdfContainer);
-
-      // Wait for images to load
-      const images = pdfContainer.querySelectorAll('img');
-      if (images.length > 0) {
-        await Promise.all(Array.from(images).map(img => {
-          return new Promise((resolve) => {
-            if (img.complete) {
-              resolve(null);
-            } else {
-              img.onload = () => resolve(null);
-              img.onerror = () => resolve(null);
-            }
-          });
-        }));
-      }
-
-      // Generate optimized PDF
-      const { pdf, base64: pdfBase64 } = await generateOptimizedPdf(pdfContainer, formData.invoiceNumber || 'temp');
-
-      // Remove the temporary element
-      document.body.removeChild(pdfContainer);
-
-      // Add watermark
-      addWatermark(pdf);
-
-      console.log('📄 [PDF Generation] Converting PDF to base64...');
-      const base64StartTime = Date.now();
-      
-      const base64EndTime = Date.now();
-      console.log('📄 [PDF Generation] PDF base64 conversion completed in', base64EndTime - base64StartTime, 'ms');
-      console.log('📄 [PDF Generation] PDF size:', (pdfBase64.length / 1024).toFixed(2), 'KB');
-      
-      // Sending invoice via email...
-      
-      console.log('📄 [PDF Generation] Converting attached files to base64...');
-      const filesStartTime = Date.now();
-      
-      // Convert attached files to base64
-      const attachedFilesBase64 = await Promise.all(
-        (formData.attachedFiles || []).map(async (file) => {
-          return new Promise<{ filename: string; content: string; contentType: string }>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-              const base64 = (reader.result as string).split(',')[1];
-              resolve({
-                filename: file.name,
-                content: base64,
-                contentType: file.type
-              });
-            };
-            reader.readAsDataURL(file);
-          });
-        })
-      );
-      
-      const filesEndTime = Date.now();
-      console.log('📄 [PDF Generation] File attachments conversion completed in', filesEndTime - filesStartTime, 'ms');
-
-      console.log('📧 [Email Sending] Starting email request...');
-      const emailStartTime = Date.now();
-      
-      // Send invoice via email with timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
-
-      const response = await fetch('/api/invoices/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          invoiceId: primaryInvoiceId,
-          recipientEmail: formData.clientEmail,
-          pdfBuffer: pdfBase64,
-          attachedFiles: attachedFilesBase64
-        }),
-        signal: controller.signal
-      });
-      
-      const emailEndTime = Date.now();
-      console.log('📧 [Email Sending] Email request completed in', emailEndTime - emailStartTime, 'ms');
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Server error: ${response.status} - ${errorText}`);
-      }
-
-      const result = await response.json();
-
-      if (result.success) {
-        console.log('✅ [Smart Invoicing] Invoice sent successfully:', {
-          invoiceNumber: formData.invoiceNumber,
-          recipientEmail: formData.clientEmail,
-          total: formData.total
-        });
-        alert('Invoice sent successfully! Check your email for confirmation.');
-        // Redirect to invoices page
-        router.push('/dashboard/services/smart-invoicing/invoices');
-      } else {
-        console.error('❌ [Smart Invoicing] Failed to send invoice:', result.message);
-        alert(`Failed to send invoice: ${result.message}`);
-      }
-    } catch (error) {
-      console.error('❌ [Smart Invoicing] Failed to send invoice:', error);
-      
-      if (error instanceof Error) {
-        if (error.name === 'AbortError') {
-          alert('Request timed out. Please try again or contact support if the issue persists.');
-        } else {
-          alert(`Failed to send invoice: ${error.message}`);
-        }
-      } else {
-        alert('Failed to send invoice. Please try again.');
-      }
-    } finally {
-      setSendingInvoice(false);
-      setCriticalOperation(false); // Re-enable notification polling
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    });
-  };
-
-  const getCurrencySymbol = () => {
-    return getCurrencyByCode(formData.currency)?.symbol || '€';
-  };
-
-  const renderEditableField = (
-    field: string,
-    value: string,
-    placeholder: string,
-    className: string = "text-3xl font-bold text-gray-900"
-  ) => {
-    return editingField === field ? (
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => handleInputChange(field as keyof InvoiceFormData, e.target.value)}
-        onBlur={() => setEditingField(null)}
-        className={`${className} border-none outline-none bg-transparent`}
-        autoFocus
-      />
-    ) : (
-      <button
-        onClick={() => setEditingField(field)}
-        className={`${className} hover:bg-gray-100 px-2 py-1 rounded flex items-center group`}
-      >
-        {value || placeholder}
-        <Edit3 className="h-4 w-4 ml-2 opacity-0 group-hover:opacity-100 transition-opacity" />
-      </button>
-    );
-  };
-
-  const renderEditableDateField = (
-    field: string,
-    value: string,
-    label: string,
-    className: string = "text-sm text-gray-600"
-  ) => {
-    return editingField === field ? (
-      <div className="flex items-center space-x-2">
-        <input
-          type="date"
-          value={value}
-          onChange={(e) => handleInputChange(field as keyof InvoiceFormData, e.target.value)}
-          onBlur={() => setEditingField(null)}
-          className={`${className} border border-gray-300 rounded px-2 py-1 bg-white`}
-          autoFocus
-        />
-      </div>
-    ) : (
-      <button
-        onClick={() => setEditingField(field)}
-        className={`${className} hover:bg-gray-100 px-2 py-1 rounded flex items-center group`}
-      >
-        {label} {formatDate(value)}
-        <Edit3 className="h-3 w-3 ml-2 opacity-0 group-hover:opacity-100 transition-opacity" />
-      </button>
-    );
-  };
-
-  const validateInvoiceForPdf = () => {
-    const errors: string[] = [];
-    
-    // Required fields validation
-    if (!formData.invoiceName || formData.invoiceName.trim() === '') {
-      errors.push('Invoice name is required');
-    }
-    if (!formData.companyName || formData.companyName.trim() === '') {
-      errors.push('Company name is required');
-    }
-    if (!formData.clientName || formData.clientName.trim() === '') {
-      errors.push('Client name is required');
-    }
-    if (!formData.companyAddress.street || formData.companyAddress.street.trim() === '') {
-      errors.push('Company address is required');
-    }
-    if (!formData.clientAddress.street || formData.clientAddress.street.trim() === '') {
-      errors.push('Client address is required');
-    }
-    
-    // Items validation
-    const hasValidItems = formData.items.some((item: { description: string; quantity: number; unitPrice: number }) => 
-      item.description && item.description.trim() !== '' && 
-      item.quantity > 0 && item.unitPrice > 0
-    );
-    if (!hasValidItems) {
-      errors.push('At least one item with description, quantity, and unit price is required');
-    }
-    
-    return errors;
-  };
-
-  const handleDownloadPdf = async () => {
-    const errors = validateInvoiceForPdf();
-    if (errors.length > 0) {
-      setValidationErrors(errors);
-      return;
-    }
-    setValidationErrors([]);
-
-    // Invoice number will be generated by the backend API
-    // No need to generate it here
-
-    setSendingInvoice(true);
-
-    try {
-      console.log('📤 [Smart Invoicing] Starting PDF download...', {
-        invoiceNumber: formData.invoiceNumber,
-        clientEmail: formData.clientEmail,
-        total: formData.total
-      });
-
-      // Create a simplified version of the invoice for PDF generation
-      const pdfContainer = document.createElement('div');
-      pdfContainer.style.cssText = `
-        position: absolute;
-        left: -9999px;
-        top: 0;
-        width: 800px;
-        background: white;
-        color: black;
-        font-family: Arial, sans-serif;
-        padding: 32px;
-        border: none;
-        outline: none;
-      `;
-
-      // Create the exact invoice structure
-      pdfContainer.innerHTML = `
-        <div style="border-bottom: 1px solid #e5e7eb; padding-bottom: 32px; margin-bottom: 32px;">
-          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-            <div style="flex: 1;">
-              <h1 style="font-size: 30px; font-weight: bold; color: #111827; margin: 0;">
-                ${formData.invoiceName || 'Invoice'}
-              </h1>
-            </div>
-            <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end;">
-              <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 16px;">
-                <div>
-                  <div style="font-size: 14px; color: #6b7280; margin-bottom: 4px;">
-                    Issued on ${formatDate(formData.issueDate)}
-                  </div>
-                  <div style="font-size: 14px; color: #6b7280;">
-                    Payment due by ${formatDate(formData.dueDate)}
-                  </div>
-                  ${formData.invoiceNumber ? `
-                    <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                      Invoice: ${formData.invoiceNumber}
-                    </div>
-                  ` : ''}
-                </div>
-                ${formData.companyLogo ? `
-                  <div style="width: 64px; height: 64px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
-                    <img src="${formData.companyLogo}" alt="Company Logo" style="width: 100%; height: 100%; object-fit: contain; background: white;" />
-                  </div>
-                ` : `
-                  <div style="width: 64px; height: 64px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-                    <svg style="width: 32px; height: 32px; color: #9ca3af;" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 2L2 7v10c0 5.55 3.84 9.74 9 11 5.16-1.26 9-5.45 9-11V7l-10-5zM12 22c-4.75-1.11-8-4.67-8-9V8l8-4v18z"/>
-                    </svg>
-                  </div>
-                `}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
-          <div style="display: flex; justify-content: space-between; gap: 48px;">
-            <div style="flex: 1;">
-              <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0; display: flex; align-items: center;">
-                <svg style="width: 20px; height: 20px; color: #6b7280; margin-right: 8px;" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 2L2 7v10c0 5.55 3.84 9.74 9 11 5.16-1.26 9-5.45 9-11V7l-10-5zM12 22c-4.75-1.11-8-4.67-8-9V8l8-4v18z"/>
-                </svg>
-                From
-              </h3>
-              <div style="font-weight: 500; margin-bottom: 8px;">
-                ${formData.companyName || 'Company Name'}
-              </div>
-              <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
-                <div>${formData.companyAddress.street || 'Street Address'}</div>
-                <div>${formData.companyAddress.city || 'City'}, ${formData.companyAddress.state || 'State'} ${formData.companyAddress.zipCode || 'ZIP'}</div>
-                <div>${formData.companyAddress.country ? countries.find(c => c.code === formData.companyAddress.country)?.name || formData.companyAddress.country : 'Country'}</div>
-                <div>Tax: ${formData.companyTaxNumber || 'Tax Number'}</div>
-                <div>${formData.companyEmail || 'Email'}</div>
-                <div>${formData.companyPhone || 'Phone'}</div>
-              </div>
-            </div>
-            <div style="flex: 1;">
-              <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0; display: flex; align-items: center;">
-                <svg style="width: 20px; height: 20px; color: #6b7280; margin-right: 8px;" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                </svg>
-                Bill To
-              </h3>
-              <div style="font-weight: 500; margin-bottom: 8px;">
-                ${formData.clientCompany ? formData.clientCompany : formData.clientName || 'Client Name'}
-              </div>
-              ${formData.clientCompany ? `
-              <div style="color: #6b7280; font-size: 14px; margin-bottom: 8px;">
-                Attn: ${formData.clientName || 'Client Name'}
-              </div>
-              ` : ''}
-              <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
-                <div>${formData.clientAddress.street || 'Street Address'}</div>
-                <div>${formData.clientAddress.city || 'City'}, ${formData.clientAddress.state || 'State'} ${formData.clientAddress.zipCode || 'ZIP'}</div>
-                <div>${formData.clientAddress.country ? countries.find(c => c.code === formData.clientAddress.country)?.name || formData.clientAddress.country : 'Country'}</div>
-                <div>${formData.clientEmail || 'Email'}</div>
-                <div>${formData.clientPhone || 'Phone'}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
-          <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 24px 0;">Invoice Items</h3>
-          
-          <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
-            <thead style="background: #f9fafb;">
-              <tr>
-                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Description</th>
-                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Qty</th>
-                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Unit Price</th>
-                ${hasAnyDiscounts ? '<th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Discount</th>' : ''}
-                ${hasAnyTaxes ? '<th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Tax</th>' : ''}
-                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${formData.items.map(item => `
-                <tr style="border-bottom: 1px solid #e5e7eb;">
-                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.description || 'Item description'}</td>
-                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.quantity}</td>
-                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${getCurrencySymbol()}${item.unitPrice.toFixed(2)}</td>
-                  ${hasAnyDiscounts ? `<td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.discount > 0 ? `${item.discount}%` : ''}</td>` : ''}
-                  ${hasAnyTaxes ? `<td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.tax > 0 ? `${item.tax}%` : ''}</td>` : ''}
-                  <td style="padding: 12px 16px; font-size: 14px; font-weight: 500; color: #111827;">${getCurrencySymbol()}${item.amount.toFixed(2)}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-
-          <div style="display: flex; justify-content: flex-end;">
-            <div style="width: 256px;">
-              <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 14px; margin-bottom: 8px;">
-                <span>Amount without tax</span>
-                <span>${getCurrencySymbol()}${formData.subtotal.toFixed(2)}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 14px; margin-bottom: 8px;">
-                <span>Total Tax amount</span>
-                <span>${getCurrencySymbol()}${formData.totalTax.toFixed(2)}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 600; border-top: 1px solid #e5e7eb; padding-top: 8px; margin-bottom: 8px;">
-                <span>Total amount</span>
-                <span>${getCurrencySymbol()}${formData.total.toFixed(2)}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 600; color: #2563eb;">
-                <span>Due</span>
-                <span>${getCurrencySymbol()}${formData.total.toFixed(2)}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
-          <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0;">Payment Information</h3>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
-            <div>
-              <h4 style="font-weight: 500; color: #111827; margin: 0 0 8px 0;">Payment Method</h4>
-              <div style="font-size: 14px; color: #6b7280;">
-                ${formData.paymentMethod === 'crypto' ? 'Cryptocurrency' : 'Bank Transfer'}
-              </div>
-              ${formData.paymentMethod === 'crypto' && formData.paymentNetwork ? `
+              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'mpesa_paybill' && formData.paybillNumber ? `
                 <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Network: ${formData.paymentNetwork}
+                  Paybill Number: ${formData.paybillNumber}
                 </div>
               ` : ''}
-              ${formData.paymentMethod === 'crypto' && formData.paymentAddress ? `
+              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'mpesa_paybill' && formData.mpesaAccountNumber ? `
                 <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Address: ${formData.paymentAddress}
+                  Account Number: ${formData.mpesaAccountNumber}
                 </div>
               ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.bankName ? `
+              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'mpesa_till' && formData.tillNumber ? `
                 <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Bank: ${formData.bankName}
+                  Till Number: ${formData.tillNumber}
                 </div>
               ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.accountNumber ? `
+              ${formData.paymentMethod === 'fiat' && (formData.fiatPaymentSubtype === 'mpesa_paybill' || formData.fiatPaymentSubtype === 'mpesa_till') && formData.businessName ? `
                 <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Account: ${formData.accountNumber}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.swiftCode ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  SWIFT Code: ${formData.swiftCode}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.accountName ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Account Name: ${formData.accountName}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.branchAddress ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Branch Address: ${formData.branchAddress}
+                  Business Name: ${formData.businessName}
                 </div>
               ` : ''}
             </div>
@@ -1636,10 +1839,10 @@ export default function CreateInvoicePage() {
           </div>
         ` : ''}
 
-        ${formData.invoiceNumber ? `
+        ${primaryInvoiceNumber ? `
           <div style="padding: 32px 0; text-align: center;">
             <div style="font-size: 14px; color: #6b7280;">
-              Invoice Number: ${formData.invoiceNumber}
+              Invoice Number: ${primaryInvoiceNumber}
             </div>
           </div>
         ` : ''}
@@ -1651,7 +1854,7 @@ export default function CreateInvoicePage() {
               Generated by Chains-ERP for ${formData.companyName || 'Company'}
             </div>
             <div style="margin-bottom: 8px; font-size: 11px;">
-              Invoice Number: ${formData.invoiceNumber || 'N/A'} | Date: ${formatDate(formData.issueDate)}
+              Invoice Number: ${primaryInvoiceNumber || 'N/A'} | Date: ${formatDate(formData.issueDate)}
             </div>
             <div style="font-size: 10px; color: #d1d5db;">
               Digital Invoice | Secure Payment Processing | Blockchain Verification
@@ -1679,70 +1882,38 @@ export default function CreateInvoicePage() {
       }
 
             // Generate optimized PDF
-      const { pdf, base64: pdfBase64 } = await generateOptimizedPdf(pdfContainer, formData.invoiceNumber || 'temp');
+      const { pdf, base64: pdfBase64 } = await generateOptimizedPdf(pdfContainer, primaryInvoiceNumber);
 
       // Remove the temporary element
       document.body.removeChild(pdfContainer);
 
       // Add watermark
-      addWatermark(pdf);
+      addWatermark(pdf, primaryInvoiceNumber);
       
-      console.log('📧 [Smart Invoicing] Sending invoice via email...', {
-        recipientEmail: formData.clientEmail,
-        invoiceNumber: formData.invoiceNumber,
+      console.log('📄 [Smart Invoicing] Downloading PDF...', {
+        invoiceNumber: primaryInvoiceNumber,
         pdfSize: pdfBase64.length
       });
       
-      // Convert attached files to base64
-      const attachedFilesBase64 = await Promise.all(
-        (formData.attachedFiles || []).map(async (file) => {
-          return new Promise<{ filename: string; content: string; contentType: string }>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-              const base64 = (reader.result as string).split(',')[1];
-              resolve({
-                filename: file.name,
-                content: base64,
-                contentType: file.type
-              });
-            };
-            reader.readAsDataURL(file);
-          });
-        })
-      );
+      // Download the PDF directly
+      const blob = new Blob([pdf.output('blob')], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `invoice-${primaryInvoiceNumber}-${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
 
-      // Send invoice via email
-      const response = await fetch('/api/invoices/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          invoiceId: formData._id,
-          recipientEmail: formData.clientEmail,
-          pdfBuffer: pdfBase64,
-          attachedFiles: attachedFilesBase64
-        }),
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        console.log('✅ [Smart Invoicing] Invoice sent successfully:', {
-          invoiceNumber: formData.invoiceNumber,
-          recipientEmail: formData.clientEmail,
+      console.log('✅ [Smart Invoicing] PDF downloaded successfully:', {
+        invoiceNumber: primaryInvoiceNumber,
           total: formData.total
         });
-        alert('Invoice sent successfully! Check your email for confirmation.');
-        // Redirect to invoices page
-        router.push('/dashboard/services/smart-invoicing/invoices');
-      } else {
-        console.error('❌ [Smart Invoicing] Failed to send invoice:', result.message);
-        alert(`Failed to send invoice: ${result.message}`);
-      }
+      alert(`PDF downloaded successfully! Invoice ${primaryInvoiceNumber} has been saved to your invoices.`);
     } catch (error) {
-      console.error('❌ [Smart Invoicing] Failed to send invoice:', error);
-      alert('Failed to send invoice. Please try again.');
+      console.error('❌ [Smart Invoicing] Failed to download PDF:', error);
+      alert('Failed to download PDF. Please try again.');
     } finally {
       setSendingInvoice(false);
       setCriticalOperation(false); // Re-enable notification polling
@@ -1758,9 +1929,6 @@ export default function CreateInvoicePage() {
     }
     setValidationErrors([]);
 
-    // Invoice number will be generated by the backend API
-    // No need to generate it here
-
     try {
       console.log('📤 [Smart Invoicing] Starting CSV download...', {
         invoiceNumber: formData.invoiceNumber,
@@ -1768,104 +1936,110 @@ export default function CreateInvoicePage() {
         total: formData.total
       });
 
-      // Create CSV content
+      // Create simple CSV structure for easy bulk processing
       const csvRows = [];
       
-      // Header row
-      const headers = ['Invoice Details'];
+      // CSV Headers - simple and clean (one row per invoice)
+      const headers = [
+        'Invoice Number',
+        'Invoice Name', 
+        'Issue Date',
+        'Due Date',
+        'Status',
+        'Company Name',
+        'Company Email',
+        'Company Phone',
+        'Company Address',
+        'Company Tax Number',
+        'Client Name',
+        'Client Company',
+        'Client Email',
+        'Client Phone',
+        'Client Address',
+        'Items Description',
+        'Total Quantity',
+        'Subtotal',
+        'Total Tax',
+        'Total Amount',
+        'Currency',
+        'Payment Method',
+        'Bank Name',
+        'Account Number',
+        'Routing Number',
+        'Network',
+        'Payment Address',
+        'Memo',
+        'Created Date'
+      ];
       csvRows.push(headers.join(','));
       
-      // Invoice information
-      csvRows.push(['Invoice Name', formData.invoiceName || 'Invoice']);
-      csvRows.push(['Invoice Number', formData.invoiceNumber || 'N/A']);
-      csvRows.push(['Issue Date', formatDate(formData.issueDate)]);
-      csvRows.push(['Due Date', formatDate(formData.dueDate)]);
-      csvRows.push(['']);
+      // Get company details
+      const companyName = formData.companyName;
+      const companyEmail = formData.companyEmail;
+      const companyPhone = formData.companyPhone;
+      const companyTaxNumber = formData.companyTaxNumber;
+      const companyAddress = `${formData.companyAddress.street}, ${formData.companyAddress.city}, ${formData.companyAddress.state} ${formData.companyAddress.zipCode}, ${formData.companyAddress.country}`;
       
-      // Company information
-      csvRows.push(['Company Information']);
-      csvRows.push(['Company Name', formData.companyName]);
-      csvRows.push(['Email', formData.companyEmail]);
-      csvRows.push(['Phone', formData.companyPhone]);
-      csvRows.push(['Address', `${formData.companyAddress.street}, ${formData.companyAddress.city}, ${formData.companyAddress.state} ${formData.companyAddress.zipCode}, ${formData.companyAddress.country}`]);
-      csvRows.push(['Tax Number', formData.companyTaxNumber]);
-      csvRows.push(['']);
+      // Get client details
+      const clientName = formData.clientName;
+      const clientCompany = formData.clientCompany || 'N/A';
+      const clientEmail = formData.clientEmail;
+      const clientPhone = formData.clientPhone;
+      const clientAddress = `${formData.clientAddress.street}, ${formData.clientAddress.city}, ${formData.clientAddress.state} ${formData.clientAddress.zipCode}, ${formData.clientAddress.country}`;
       
-      // Client information
-      csvRows.push(['Client Information']);
-      if (formData.clientCompany) {
-        csvRows.push(['Company', formData.clientCompany]);
-        csvRows.push(['Contact Person', formData.clientName]);
-      } else {
-        csvRows.push(['Client Name', formData.clientName]);
-      }
-      csvRows.push(['Email', formData.clientEmail]);
-      csvRows.push(['Phone', formData.clientPhone]);
-      csvRows.push(['Address', `${formData.clientAddress.street}, ${formData.clientAddress.city}, ${formData.clientAddress.state} ${formData.clientAddress.zipCode}, ${formData.clientAddress.country}`]);
-      csvRows.push(['']);
+      // Get payment details
+      const paymentMethodText = formData.paymentMethod === 'fiat' ? 
+        formData.fiatPaymentSubtype === 'mpesa_paybill' ? 'M-Pesa Paybill' :
+        formData.fiatPaymentSubtype === 'mpesa_till' ? 'M-Pesa Till' :
+        'Bank Transfer' : 'Cryptocurrency';
+      const bankName = formData.bankName || 'N/A';
+      const accountNumber = formData.accountNumber || 'N/A';
+      const routingNumber = formData.swiftCode || formData.bankCode || 'N/A';
+      const network = formData.paymentNetwork || 'N/A';
+      const paymentAddress = formData.paymentAddress || 'N/A';
       
-      // Items header
-      const itemHeaders = ['Description', 'Quantity', 'Unit Price', 'Tax %', 'Amount'];
-      if (hasAnyDiscounts) {
-        itemHeaders.splice(3, 0, 'Discount %');
-      }
-      csvRows.push(['Invoice Items']);
-      csvRows.push(itemHeaders.join(','));
+      // Get original currency (preserve the invoice's original currency)
+      const originalCurrency = formData.currency;
       
-      // Items data
-      formData.items.forEach(item => {
-        const itemRow = [
-          item.description || 'Item description',
-          item.quantity.toString(),
-          `${getCurrencySymbol()}${item.unitPrice.toFixed(2)}`,
-          item.tax > 0 ? item.tax.toString() + '%' : '',
-          `${getCurrencySymbol()}${item.amount.toFixed(2)}`
-        ];
-        if (hasAnyDiscounts) {
-          itemRow.splice(3, 0, item.discount > 0 ? item.discount.toString() + '%' : '');
-        }
-        csvRows.push(itemRow.join(','));
-      });
+      // Create one row per invoice (combine all items into a single description)
+      const itemsDescription = formData.items && formData.items.length > 0 
+        ? formData.items.map(item => `${item.description || 'Item'} (Qty: ${item.quantity}, Price: ${item.unitPrice.toFixed(2)})`).join('; ')
+        : 'No items';
       
-      csvRows.push(['']);
+      const totalQuantity = formData.items ? formData.items.reduce((sum, item) => sum + item.quantity, 0) : 0;
       
-      // Summary
-      csvRows.push(['Summary']);
-      csvRows.push(['Subtotal', `${getCurrencySymbol()}${formData.subtotal.toFixed(2)}`]);
-      csvRows.push(['Total Tax', `${getCurrencySymbol()}${formData.totalTax.toFixed(2)}`]);
-      csvRows.push(['Total Amount', `${getCurrencySymbol()}${formData.total.toFixed(2)}`]);
-      csvRows.push(['']);
-      
-      // Payment information
-      csvRows.push(['Payment Information']);
-      csvRows.push(['Payment Method', formData.paymentMethod === 'fiat' ? 'Bank Transfer' : 'Cryptocurrency']);
-      csvRows.push(['Currency', formData.currency]);
-      
-      if (formData.paymentMethod === 'fiat') {
-        if (formData.bankName) csvRows.push(['Bank Name', formData.bankName]);
-        if (formData.swiftCode) csvRows.push(['SWIFT Code', formData.swiftCode]);
-        if (formData.bankCode) csvRows.push(['Bank Code', formData.bankCode]);
-        if (formData.branchCode) csvRows.push(['Branch Code', formData.branchCode]);
-        if (formData.accountName) csvRows.push(['Account Name', formData.accountName]);
-        if (formData.accountNumber) csvRows.push(['Account Number', formData.accountNumber]);
-        if (formData.branchAddress) csvRows.push(['Branch Address', formData.branchAddress]);
-      } else {
-        if (formData.paymentNetwork) csvRows.push(['Network', formData.paymentNetwork]);
-        if (formData.paymentAddress) csvRows.push(['Payment Address', formData.paymentAddress]);
-      }
-      
-      csvRows.push(['']);
-      
-      // Memo
-      if (formData.memo) {
-        csvRows.push(['Memo']);
-        csvRows.push([formData.memo]);
-        csvRows.push(['']);
-      }
-      
-      // Footer
-      csvRows.push(['Generated by Chains-ERP']);
-      csvRows.push([`Invoice Number: ${formData.invoiceNumber || 'N/A'} | Date: ${formatDate(formData.issueDate)}`]);
+      const row = [
+        `"${formData.invoiceNumber || 'N/A'}"`,
+        `"${formData.invoiceName || 'Invoice'}"`,
+        `"${formatDate(formData.issueDate)}"`,
+        `"${formatDate(formData.dueDate)}"`,
+        `"Draft"`,
+        `"${companyName}"`,
+        `"${companyEmail}"`,
+        `"${companyPhone}"`,
+        `"${companyAddress}"`,
+        `"${companyTaxNumber}"`,
+        `"${clientName}"`,
+        `"${clientCompany}"`,
+        `"${clientEmail}"`,
+        `"${clientPhone}"`,
+        `"${clientAddress}"`,
+        `"${itemsDescription}"`,
+        `"${totalQuantity}"`,
+        `"${formData.subtotal.toFixed(2)}"`,
+        `"${formData.totalTax.toFixed(2)}"`,
+        `"${formData.total.toFixed(2)}"`,
+        `"${originalCurrency}"`,
+        `"${paymentMethodText}"`,
+        `"${bankName}"`,
+        `"${accountNumber}"`,
+        `"${routingNumber}"`,
+        `"${network}"`,
+        `"${paymentAddress}"`,
+        `"${formData.memo || ''}"`,
+        `"${formatDate(new Date().toISOString())}"`
+      ];
+      csvRows.push(row.join(','));
       
       // Convert to CSV string
       const csvContent = csvRows.join('\n');
@@ -1883,7 +2057,8 @@ export default function CreateInvoicePage() {
       
       console.log('✅ [Smart Invoicing] CSV downloaded successfully:', {
         invoiceNumber: formData.invoiceNumber,
-        filename: `${formData.invoiceNumber || 'invoice'}_${formatDate(formData.issueDate).replace(/,/g, '')}.csv`
+        filename: `${formData.invoiceNumber || 'invoice'}_${formatDate(formData.issueDate).replace(/,/g, '')}.csv`,
+        currency: originalCurrency
       });
       
     } catch (error) {
@@ -1898,7 +2073,7 @@ export default function CreateInvoicePage() {
   // No need to generate them on the frontend
 
   // Add watermark to PDF
-  const addWatermark = (pdf: jsPDF) => {
+  const addWatermark = (pdf: jsPDF, invoiceNumber?: string) => {
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
     
@@ -1916,373 +2091,21 @@ export default function CreateInvoicePage() {
     // Add watermark with transparency effect
     pdf.text(text, x, y);
     
+    // Add invoice number watermark if provided
+    if (invoiceNumber) {
+      pdf.setFontSize(16);
+      const invoiceText = `Invoice: ${invoiceNumber}`;
+      const invoiceTextWidth = pdf.getTextWidth(invoiceText);
+      const invoiceX = (pageWidth - invoiceTextWidth) / 2;
+      const invoiceY = y + 20; // Below the main watermark
+      
+      pdf.text(invoiceText, invoiceX, invoiceY);
+    }
+    
     // Reset text color for normal content
     pdf.setTextColor(0, 0, 0);
   };
 
-  const handleSendPdf = async () => {
-    const errors = validateInvoiceForPdf();
-    if (errors.length > 0) {
-      setValidationErrors(errors);
-      return;
-    }
-    setValidationErrors([]);
-
-    // Invoice number will be generated by the backend API
-    // No need to generate it here
-
-    setSendingInvoice(true);
-
-    try {
-      console.log('📤 [Smart Invoicing] Starting PDF generation and sharing...', {
-        invoiceNumber: formData.invoiceNumber,
-        clientEmail: formData.clientEmail,
-        total: formData.total
-      });
-
-      // Create a simplified version of the invoice for PDF generation (same as handleDownloadPdf)
-      const pdfContainer = document.createElement('div');
-      pdfContainer.style.cssText = `
-        position: absolute;
-        left: -9999px;
-        top: 0;
-        width: 800px;
-        background: white;
-        color: black;
-        font-family: Arial, sans-serif;
-        padding: 32px;
-        border: none;
-        outline: none;
-      `;
-
-      // Create the exact invoice structure
-      pdfContainer.innerHTML = `
-        <div style="border-bottom: 1px solid #e5e7eb; padding-bottom: 32px; margin-bottom: 32px;">
-          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-            <div style="flex: 1;">
-              <h1 style="font-size: 30px; font-weight: bold; color: #111827; margin: 0;">
-                ${formData.invoiceName || 'Invoice'}
-              </h1>
-            </div>
-            <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end;">
-              <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 16px;">
-                <div>
-                  <div style="font-size: 14px; color: #6b7280; margin-bottom: 4px;">
-                    Issued on ${formatDate(formData.issueDate)}
-                  </div>
-                  <div style="font-size: 14px; color: #6b7280;">
-                    Payment due by ${formatDate(formData.dueDate)}
-                  </div>
-                  ${formData.invoiceNumber ? `
-                    <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                      Invoice: ${formData.invoiceNumber}
-                    </div>
-                  ` : ''}
-                </div>
-                ${formData.companyLogo ? `
-                  <div style="width: 64px; height: 64px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
-                    <img src="${formData.companyLogo}" alt="Company Logo" style="width: 100%; height: 100%; object-fit: contain; background: white;" />
-                  </div>
-                ` : `
-                  <div style="width: 64px; height: 64px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-                    <svg style="width: 32px; height: 32px; color: #9ca3af;" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 2L2 7v10c0 5.55 3.84 9.74 9 11 5.16-1.26 9-5.45 9-11V7l-10-5zM12 22c-4.75-1.11-8-4.67-8-9V8l8-4v18z"/>
-                    </svg>
-                  </div>
-                `}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
-          <div style="display: flex; justify-content: space-between; gap: 48px;">
-            <div style="flex: 1;">
-              <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0; display: flex; align-items: center;">
-                <svg style="width: 20px; height: 20px; color: #6b7280; margin-right: 8px;" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 2L2 7v10c0 5.55 3.84 9.74 9 11 5.16-1.26 9-5.45 9-11V7l-10-5zM12 22c-4.75-1.11-8-4.67-8-9V8l8-4v18z"/>
-                </svg>
-                From
-              </h3>
-              <div style="font-weight: 500; margin-bottom: 8px;">
-                ${formData.companyName || 'Company Name'}
-              </div>
-              <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
-                <div>${formData.companyAddress.street || 'Street Address'}</div>
-                <div>${formData.companyAddress.city || 'City'}, ${formData.companyAddress.state || 'State'} ${formData.companyAddress.zipCode || 'ZIP'}</div>
-                <div>${formData.companyAddress.country ? countries.find(c => c.code === formData.companyAddress.country)?.name || formData.companyAddress.country : 'Country'}</div>
-                <div>Tax: ${formData.companyTaxNumber || 'Tax Number'}</div>
-                <div>${formData.companyEmail || 'Email'}</div>
-                <div>${formData.companyPhone || 'Phone'}</div>
-              </div>
-            </div>
-            <div style="flex: 1;">
-              <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0; display: flex; align-items: center;">
-                <svg style="width: 20px; height: 20px; color: #6b7280; margin-right: 8px;" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                </svg>
-                Bill To
-              </h3>
-              <div style="font-weight: 500; margin-bottom: 8px;">
-                ${formData.clientCompany ? formData.clientCompany : formData.clientName || 'Client Name'}
-              </div>
-              ${formData.clientCompany ? `
-              <div style="color: #6b7280; font-size: 14px; margin-bottom: 8px;">
-                Attn: ${formData.clientName || 'Client Name'}
-              </div>
-              ` : ''}
-              <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
-                <div>${formData.clientAddress.street || 'Street Address'}</div>
-                <div>${formData.clientAddress.city || 'City'}, ${formData.clientAddress.state || 'State'} ${formData.clientAddress.zipCode || 'ZIP'}</div>
-                <div>${formData.clientAddress.country ? countries.find(c => c.code === formData.clientAddress.country)?.name || formData.clientAddress.country : 'Country'}</div>
-                <div>${formData.clientEmail || 'Email'}</div>
-                <div>${formData.clientPhone || 'Phone'}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
-          <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 24px 0;">Invoice Items</h3>
-          
-          <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
-            <thead style="background: #f9fafb;">
-              <tr>
-                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Description</th>
-                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Qty</th>
-                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Unit Price</th>
-                ${hasAnyDiscounts ? '<th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Discount</th>' : ''}
-                ${hasAnyTaxes ? '<th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Tax</th>' : ''}
-                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${formData.items.map(item => `
-                <tr style="border-bottom: 1px solid #e5e7eb;">
-                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.description || 'Item description'}</td>
-                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.quantity}</td>
-                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${getCurrencySymbol()}${item.unitPrice.toFixed(2)}</td>
-                  ${hasAnyDiscounts ? `<td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.discount > 0 ? `${item.discount}%` : ''}</td>` : ''}
-                  ${hasAnyTaxes ? `<td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.tax > 0 ? `${item.tax}%` : ''}</td>` : ''}
-                  <td style="padding: 12px 16px; font-size: 14px; font-weight: 500; color: #111827;">${getCurrencySymbol()}${item.amount.toFixed(2)}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-
-          <div style="display: flex; justify-content: flex-end;">
-            <div style="width: 256px;">
-              <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 14px; margin-bottom: 8px;">
-                <span>Amount without tax</span>
-                <span>${getCurrencySymbol()}${formData.subtotal.toFixed(2)}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 14px; margin-bottom: 8px;">
-                <span>Total Tax amount</span>
-                <span>${getCurrencySymbol()}${formData.totalTax.toFixed(2)}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 600; border-top: 1px solid #e5e7eb; padding-top: 8px; margin-bottom: 8px;">
-                <span>Total amount</span>
-                <span>${getCurrencySymbol()}${formData.total.toFixed(2)}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 600; color: #2563eb;">
-                <span>Due</span>
-                <span>${getCurrencySymbol()}${formData.total.toFixed(2)}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
-          <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0;">Payment Information</h3>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
-            <div>
-              <h4 style="font-weight: 500; color: #111827; margin: 0 0 8px 0;">Payment Method</h4>
-              <div style="font-size: 14px; color: #6b7280;">
-                ${formData.paymentMethod === 'crypto' ? 'Cryptocurrency' : 'Bank Transfer'}
-              </div>
-              ${formData.paymentMethod === 'crypto' && formData.paymentNetwork ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Network: ${formData.paymentNetwork}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'crypto' && formData.paymentAddress ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Address: ${formData.paymentAddress}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.bankName ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Bank: ${formData.bankName}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.accountNumber ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Account: ${formData.accountNumber}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.swiftCode ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  SWIFT Code: ${formData.swiftCode}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.accountName ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Account Name: ${formData.accountName}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.branchAddress ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Branch Address: ${formData.branchAddress}
-                </div>
-              ` : ''}
-            </div>
-            <div>
-              <h4 style="font-weight: 500; color: #111827; margin: 0 0 8px 0;">Currency</h4>
-              <div style="font-size: 14px; color: #6b7280;">
-                ${formData.currency} (${getCurrencySymbol()})
-              </div>
-            </div>
-          </div>
-        </div>
-
-        ${formData.memo ? `
-          <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
-            <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0;">Memo</h3>
-            <div style="font-size: 14px; color: #374151; white-space: pre-wrap;">
-              ${formData.memo}
-            </div>
-          </div>
-        ` : ''}
-
-        ${formData.invoiceNumber ? `
-          <div style="padding: 32px 0; text-align: center;">
-            <div style="font-size: 14px; color: #6b7280;">
-              Invoice Number: ${formData.invoiceNumber}
-            </div>
-          </div>
-        ` : ''}
-
-        <!-- Footer with watermark and security info -->
-        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center;">
-          <div style="font-size: 12px; color: #9ca3af; line-height: 1.5;">
-            <div style="margin-bottom: 8px; font-weight: 500;">
-              Generated by Chains-ERP for ${formData.companyName || 'Company'}
-            </div>
-            <div style="margin-bottom: 8px; font-size: 11px;">
-              Invoice Number: ${formData.invoiceNumber || 'N/A'} | Date: ${formatDate(formData.issueDate)}
-            </div>
-            <div style="font-size: 10px; color: #d1d5db;">
-              Digital Invoice | Secure Payment Processing | Blockchain Verification
-            </div>
-          </div>
-        </div>
-      `;
-
-      // Append to body temporarily
-      document.body.appendChild(pdfContainer);
-
-      // Wait for images to load
-      const images = pdfContainer.querySelectorAll('img');
-      if (images.length > 0) {
-        await Promise.all(Array.from(images).map(img => {
-          return new Promise((resolve) => {
-            if (img.complete) {
-              resolve(null);
-            } else {
-              img.onload = () => resolve(null);
-              img.onerror = () => resolve(null);
-            }
-          });
-        }));
-      }
-
-      // Generate optimized PDF
-      const { pdf } = await generateOptimizedPdf(pdfContainer, formData.invoiceNumber || 'temp');
-
-      // Remove the temporary element
-      document.body.removeChild(pdfContainer);
-
-      // Add watermark
-      addWatermark(pdf);
-
-      // Save invoice to database
-      await saveInvoiceToDatabase(formData);
-
-      // Generate secure shareable link
-      const pdfBase64Full = pdf.output('datauristring');
-      
-      // Create a shareable link (you can implement your own file sharing service)
-      const shareableLink = `data:application/pdf;base64,${pdfBase64Full.split(',')[1]}`;
-      
-      // Copy to clipboard
-      navigator.clipboard.writeText(shareableLink).then(() => {
-        console.log('📤 [Smart Invoicing] PDF shared successfully:', {
-          invoiceNumber: formData.invoiceNumber,
-          shareableLink: shareableLink.substring(0, 100) + '...'
-        });
-        alert('PDF generated and link copied to clipboard! You can now share this secure link.');
-      }).catch(() => {
-        console.log('📤 [Smart Invoicing] PDF generated but clipboard access denied');
-        alert('PDF generated successfully! You can download and share the file.');
-      });
-
-      // Redirect to invoices page
-      router.push('/dashboard/services/smart-invoicing/invoices');
-
-    } catch (error) {
-      console.error('❌ [Smart Invoicing] Failed to share PDF:', error);
-      alert('Failed to share PDF. Please try again.');
-    } finally {
-      setSendingInvoice(false);
-    }
-  };
-
-  // Save invoice to database
-  const saveInvoiceToDatabase = async (invoiceData: InvoiceFormData) => {
-    try {
-            console.log('💾 [Smart Invoicing] Saving invoice to database');
-
-      // Convert File objects to metadata for database storage
-      const attachedFilesMetadata = (invoiceData.attachedFiles || []).map(file => ({
-        filename: file.name,
-        originalName: file.name,
-        size: file.size,
-        contentType: file.type,
-        uploadedAt: new Date()
-      }));
-
-      const response = await fetch('/api/invoices', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...invoiceData,
-          attachedFiles: attachedFilesMetadata,
-          status: 'pending', // Set as pending when sent
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        }),
-      });
-
-      const result = await response.json();
-      if (result.success) {
-        console.log('✅ [Smart Invoicing] Invoice saved to database:', {
-          id: result.invoice._id,
-          invoiceNumber: result.invoice.invoiceNumber
-        });
-        // Update the form data with the saved invoice ID
-        handleInputChange('_id', result.invoice._id);
-        return result.invoice;
-      } else {
-        console.error('❌ [Smart Invoicing] Failed to save invoice:', result.message);
-        return null;
-      }
-    } catch (error) {
-      console.error('❌ [Smart Invoicing] Error saving invoice:', error);
-      return null;
-    }
-  };
 
   // Handle payment method selection
   const handlePaymentMethodSelect = (methodId: string) => {
@@ -2295,13 +2118,18 @@ export default function CreateInvoicePage() {
           setFormData(prev => ({
             ...prev,
             paymentMethod: 'fiat',
+            fiatPaymentSubtype: selectedMethod.fiatDetails?.subtype || 'bank',
             bankName: selectedMethod.fiatDetails?.bankName || '',
             swiftCode: selectedMethod.fiatDetails?.swiftCode || '',
             bankCode: selectedMethod.fiatDetails?.bankCode || '',
             branchCode: selectedMethod.fiatDetails?.branchCode || '',
             accountName: selectedMethod.fiatDetails?.accountName || '',
             accountNumber: selectedMethod.fiatDetails?.accountNumber || '',
-            branchAddress: selectedMethod.fiatDetails?.branchAddress || ''
+            branchAddress: selectedMethod.fiatDetails?.branchAddress || '',
+            paybillNumber: selectedMethod.fiatDetails?.paybillNumber || '',
+            mpesaAccountNumber: selectedMethod.fiatDetails?.mpesaAccountNumber || '',
+            tillNumber: selectedMethod.fiatDetails?.tillNumber || '',
+            businessName: selectedMethod.fiatDetails?.businessName || ''
           }));
         } else if (selectedMethod.type === 'crypto') {
           setFormData(prev => ({
@@ -2348,7 +2176,7 @@ export default function CreateInvoicePage() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 space-y-4 sm:space-y-0">
           <button
             onClick={() => router.back()}
-            className="flex items-center space-x-2 px-4 py-2 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
+            className="flex items-center space-x-2 px-4 py-3 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm touch-manipulation active:scale-95 min-h-[44px]"
           >
             <ArrowLeft className="h-4 w-4" />
             <span>Back to Dashboard</span>
@@ -2364,18 +2192,6 @@ export default function CreateInvoicePage() {
               <span>{isEditing ? 'Update Draft' : 'Save Draft'}</span>
             </button>
             
-            <button
-              onClick={handleSendPdf}
-              disabled={sendingInvoice}
-              className="flex items-center justify-center space-x-2 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {sendingInvoice ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-              <span>{sendingInvoice ? 'Sending...' : 'Send PDF'}</span>
-            </button>
           </div>
         </div>
 
@@ -2396,6 +2212,40 @@ export default function CreateInvoicePage() {
           </div>
         )}
 
+        {/* Auto-save Status Indicator */}
+        {autoSaveStatus && (
+          <div className="mb-4 flex items-center justify-center">
+            <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm ${
+              autoSaveStatus === 'saving' ? 'bg-blue-50 text-blue-700' :
+              autoSaveStatus === 'saved' ? 'bg-green-50 text-green-700' :
+              'bg-red-50 text-red-700'
+            }`}>
+              {autoSaveStatus === 'saving' && (
+                <>
+                  <div className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                  <span>Auto-saving...</span>
+                </>
+              )}
+              {autoSaveStatus === 'saved' && (
+                <>
+                  <div className="h-4 w-4 bg-green-600 rounded-full flex items-center justify-center">
+                    <div className="h-2 w-2 bg-white rounded-full"></div>
+                  </div>
+                  <span>Draft saved</span>
+                </>
+              )}
+              {autoSaveStatus === 'error' && (
+                <>
+                  <div className="h-4 w-4 bg-red-600 rounded-full flex items-center justify-center">
+                    <span className="text-white text-xs">!</span>
+                  </div>
+                  <span>Save failed</span>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Invoice Document */}
         <div ref={printRef} className="bg-white rounded-lg shadow-lg border max-w-4xl mx-auto">
           {/* Document Header */}
@@ -2407,9 +2257,51 @@ export default function CreateInvoicePage() {
               </div>
 
               {/* Right Side - Dates and Logo */}
-              <div className="text-right space-y-2 w-full sm:w-auto">
-                <div className="flex flex-col sm:flex-row items-end sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
-                  <div className="text-sm text-gray-600">
+              <div className="w-full sm:w-auto">
+                {/* Mobile Layout - Stack vertically */}
+                <div className="flex flex-col space-y-3 sm:hidden">
+                  {/* Logo first on mobile */}
+                  <div 
+                    onClick={() => setShowCompanyEditModal(true)}
+                    className="w-16 h-16 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors cursor-pointer flex-shrink-0 group relative overflow-hidden self-end"
+                  >
+                    {formData.companyLogo ? (
+                      <>
+                        <Image 
+                          src={formData.companyLogo} 
+                          alt="Company Logo" 
+                          width={64}
+                          height={64}
+                          className="object-contain w-full h-full"
+                          unoptimized={formData.companyLogo.startsWith('data:')}
+                        />
+                        <div className="absolute inset-0 bg-white bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center">
+                          <Edit3 className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-center justify-center w-full h-full">
+                        <Plus className="h-6 w-6 text-gray-400" />
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Dates below logo on mobile */}
+                  <div className="text-sm text-gray-600 space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <Calendar className="h-4 w-4 flex-shrink-0" />
+                      {renderEditableDateField('issueDate', formData.issueDate, 'Issued on')}
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Clock className="h-4 w-4 flex-shrink-0" />
+                      {renderEditableDateField('dueDate', formData.dueDate, 'Payment due by')}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Desktop Layout - Side by side */}
+                <div className="hidden sm:flex items-end space-x-4">
+                  <div className="text-sm text-gray-700">
                     <div className="flex items-center space-x-2">
                       <Calendar className="h-4 w-4" />
                       {renderEditableDateField('issueDate', formData.issueDate, 'Issued on')}
@@ -2473,7 +2365,7 @@ export default function CreateInvoicePage() {
                     <div className="font-medium">
                       {formData.companyName || 'Company Name'}
                     </div>
-                    <div className="text-gray-600 space-y-1">
+                    <div className="text-gray-700 space-y-1">
                       <div>{formData.companyAddress.street || 'Street Address'}</div>
                       <div className="flex flex-wrap space-x-2">
                         <span>{formData.companyAddress.city || 'City'}</span>
@@ -2484,13 +2376,13 @@ export default function CreateInvoicePage() {
                         {formData.companyAddress.country ? countries.find(c => c.code === formData.companyAddress.country)?.name || formData.companyAddress.country : 'Country'}
                       </div>
                     </div>
-                    <div className="text-gray-600">
+                    <div className="text-gray-700">
                       Tax: {formData.companyTaxNumber || 'Tax Number'}
                     </div>
-                    <div className="text-gray-600">
+                    <div className="text-gray-700">
                       {formData.companyEmail || 'Email'}
                     </div>
-                    <div className="text-gray-600">
+                    <div className="text-gray-700">
                       {formData.companyPhone || 'Phone'}
                     </div>
                   </div>
@@ -2574,11 +2466,11 @@ export default function CreateInvoicePage() {
                     {formData.clientCompany ? formData.clientCompany : formData.clientName || 'Client Name'}
                   </div>
                   {formData.clientCompany && (
-                    <div className="text-gray-600">
+                    <div className="text-gray-700">
                       Attn: {formData.clientName || 'Client Name'}
                     </div>
                   )}
-                  <div className="text-gray-600 space-y-1">
+                  <div className="text-gray-700 space-y-1">
                     <div>{formData.clientAddress.street || 'Street Address'}</div>
                     <div className="flex space-x-2">
                       <span>{formData.clientAddress.city || 'City'}</span>
@@ -2587,10 +2479,10 @@ export default function CreateInvoicePage() {
                     </div>
                     <div>{formData.clientAddress.country ? countries.find(c => c.code === formData.clientAddress.country)?.name || formData.clientAddress.country : 'Country'}</div>
                   </div>
-                  <div className="text-gray-600">
+                  <div className="text-gray-7700">
                     {formData.clientEmail || 'Email'}
                   </div>
-                  <div className="text-gray-600">
+                  <div className="text-gray-700">
                     {formData.clientPhone || 'Phone'}
                   </div>
                 </div>
@@ -2861,7 +2753,14 @@ export default function CreateInvoicePage() {
                 <option value="">-- Select a saved payment method --</option>
                 {savedPaymentMethods.map((method) => (
                   <option key={method._id} value={method._id}>
-                    {method.name} ({method.type === 'fiat' ? 'Bank Transfer' : 'Crypto'})
+                    {method.name} ({
+                      method.type === 'fiat' ? 
+                        method.fiatDetails?.subtype === 'mpesa_paybill' ? 'M-Pesa Paybill' :
+                        method.fiatDetails?.subtype === 'mpesa_till' ? 'M-Pesa Till' :
+                        'Bank Transfer' : 
+                      method.type === 'crypto' ? 'Crypto' :
+                      'Payment Method'
+                    })
                   </option>
                 ))}
               </select>
@@ -2883,7 +2782,9 @@ export default function CreateInvoicePage() {
                       <CreditCard className="h-5 w-5 text-green-600 mr-2" />
                       <div>
                         <div className="font-medium">Fiat ({formData.currency})</div>
-                        <div className="text-sm text-gray-500">Bank transfer</div>
+                        <div className="text-sm text-gray-700">
+                          {formData.companyAddress.country === 'KE' ? ' Dynamic Selection' : 'Bank Transfer'}
+                        </div>
                       </div>
                     </div>
                   </label>
@@ -2899,7 +2800,7 @@ export default function CreateInvoicePage() {
                       <Wallet className="h-5 w-5 text-blue-600 mr-2" />
                       <div>
                         <div className="font-medium">Crypto</div>
-                        <div className="text-sm text-gray-500">Cryptocurrency payment</div>
+                        <div className="text-sm text-gray-700">Cryptocurrency payment</div>
                       </div>
                     </div>
                   </label>
@@ -2908,7 +2809,157 @@ export default function CreateInvoicePage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Payment Details</label>
-                {formData.paymentMethod === 'crypto' ? (
+                {formData.paymentMethod === 'fiat' ? (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Payment Type</label>
+                      <div className="space-y-2">
+                        <label className="flex items-center">
+                          <input
+                            type="radio"
+                            value="bank"
+                            checked={formData.fiatPaymentSubtype === 'bank'}
+                            onChange={(e) => handleFiatPaymentSubtypeChange(e.target.value)}
+                            className="mr-2"
+                          />
+                          <CreditCard className="h-4 w-4 text-green-600 mr-2" />
+                          Bank Transfer
+                        </label>
+                        {isKenyanUser() && (
+                          <>
+                            <label className="flex items-center">
+                              <input
+                                type="radio"
+                                value="mpesa_paybill"
+                                checked={formData.fiatPaymentSubtype === 'mpesa_paybill'}
+                                onChange={(e) => handleFiatPaymentSubtypeChange(e.target.value)}
+                                className="mr-2"
+                              />
+                              <Smartphone className="h-4 w-4 text-orange-600 mr-2" />
+                              M-Pesa Paybill
+                            </label>
+                            <label className="flex items-center">
+                              <input
+                                type="radio"
+                                value="mpesa_till"
+                                checked={formData.fiatPaymentSubtype === 'mpesa_till'}
+                                onChange={(e) => handleFiatPaymentSubtypeChange(e.target.value)}
+                                className="mr-2"
+                              />
+                              <Smartphone className="h-4 w-4 text-orange-600 mr-2" />
+                              M-Pesa Till Number
+                            </label>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {formData.fiatPaymentSubtype === 'bank' && (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm text-gray-700 mb-1">Bank Name</label>
+                          <BankSelector
+                            countryCode="KE"
+                            value={formData.bankName || ''}
+                            onBankSelectAction={handleBankSelect}
+                            onInputChangeAction={(value) => handleInputChange('bankName', value)}
+                            placeholder="Search for a bank..."
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-700 mb-1">SWIFT Code</label>
+                          <input
+                            type="text"
+                            value={formData.swiftCode || ''}
+                            onChange={(e) => handleInputChange('swiftCode', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="SWIFT/BIC code"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-700 mb-1">Account Number</label>
+                          <input
+                            type="text"
+                            value={formData.accountNumber || ''}
+                            onChange={(e) => handleInputChange('accountNumber', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="Account number"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-700 mb-1">Account Name</label>
+                          <input
+                            type="text"
+                            value={formData.accountName || ''}
+                            onChange={(e) => handleInputChange('accountName', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="Account holder name"
+                          />
+                        </div>
+                      </div>
+                    )}
+                    
+                    {formData.fiatPaymentSubtype === 'mpesa_paybill' && (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm text-gray-700 mb-1">Paybill Number</label>
+                          <input
+                            type="text"
+                            value={formData.paybillNumber || ''}
+                            onChange={(e) => handleInputChange('paybillNumber', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="e.g., 123456"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-600 mb-1">Account Number</label>
+                          <input
+                            type="text"
+                            value={formData.mpesaAccountNumber || ''}
+                            onChange={(e) => handleInputChange('mpesaAccountNumber', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="Account number for paybill"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-600 mb-1">Business Name (Optional)</label>
+                          <input
+                            type="text"
+                            value={formData.businessName || ''}
+                            onChange={(e) => handleInputChange('businessName', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="Your business name (optional)"
+                          />
+                        </div>
+                      </div>
+                    )}
+                    
+                    {formData.fiatPaymentSubtype === 'mpesa_till' && (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm text-gray-600 mb-1">Till Number</label>
+                          <input
+                            type="text"
+                            value={formData.tillNumber || ''}
+                            onChange={(e) => handleInputChange('tillNumber', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="e.g., 1234567"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-600 mb-1">Business Name (Optional)</label>
+                          <input
+                            type="text"
+                            value={formData.businessName || ''}
+                            onChange={(e) => handleInputChange('businessName', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="Your business name (optional)"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : formData.paymentMethod === 'crypto' ? (
                   <div className="space-y-4">
                     <div>
                       <label className="block text-sm text-gray-600 mb-1">Choose your payment network</label>
@@ -2982,82 +3033,8 @@ export default function CreateInvoicePage() {
                       />
                     </div>
                   </div>
-                ) : (
-                  <div className="max-h-48 overflow-y-auto space-y-4 pr-2">
-                    <div>
-                      <label className="block text-sm text-gray-600 mb-1">Bank Name</label>
-                      <BankSelector
-                        countryCode={formData.companyAddress.country}
-                        value={formData.bankName || ''}
-                        onBankSelectAction={handleBankSelect}
-                        onInputChangeAction={(value) => handleInputChange('bankName', value)}
-                        placeholder="Search for a bank..."
-                        disabled={!formData.companyAddress.country}
-                      />
+                ) : null}
                     </div>
-                    <div>
-                      <label className="block text-sm text-gray-600 mb-1">SWIFT Code</label>
-                      <input
-                        type="text"
-                        value={formData.swiftCode || ''}
-                        onChange={(e) => handleInputChange('swiftCode', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                        placeholder="SWIFT/BIC code"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-600 mb-1">Bank Code</label>
-                      <input
-                        type="text"
-                        value={formData.bankCode || ''}
-                        onChange={(e) => handleInputChange('bankCode', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                        placeholder="Bank code"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-600 mb-1">Branch Code</label>
-                      <input
-                        type="text"
-                        value={formData.branchCode || ''}
-                        onChange={(e) => handleInputChange('branchCode', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                        placeholder="Branch code"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-600 mb-1">Account Name</label>
-                      <input
-                        type="text"
-                        value={formData.accountName || ''}
-                        onChange={(e) => handleInputChange('accountName', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                        placeholder="Account holder name"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-600 mb-1">Account Number</label>
-                      <input
-                        type="text"
-                        value={formData.accountNumber || ''}
-                        onChange={(e) => handleInputChange('accountNumber', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                        placeholder="Account number"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-600 mb-1">Branch Address</label>
-                      <textarea
-                        value={formData.branchAddress || ''}
-                        onChange={(e) => handleInputChange('branchAddress', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                        placeholder="Branch address"
-                        rows={3}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
             </div>
           </div>
 
@@ -3375,12 +3352,12 @@ export default function CreateInvoicePage() {
         {/* Client Creation Modal */}
         {showNewClientModal && (
           <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative touch-manipulation">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">Create New Client</h3>
                 <button
                   onClick={() => setShowNewClientModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-gray-400 hover:text-gray-600 transition-colors touch-manipulation active:scale-95 p-2 -m-2"
                 >
                   ×
                 </button>
@@ -3445,12 +3422,12 @@ export default function CreateInvoicePage() {
         {/* Client Edit Modal */}
         {showClientEditModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative shadow-xl">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative shadow-xl touch-manipulation">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">Edit Client Information</h3>
                 <button
                   onClick={() => setShowClientEditModal(false)}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                  className="text-gray-400 hover:text-gray-600 transition-colors touch-manipulation active:scale-95 p-2 -m-2"
                 >
                   ×
                 </button>
@@ -3474,13 +3451,8 @@ export default function CreateInvoicePage() {
         <InvoicePdfView formData={formData} invoiceNumber={formData.invoiceNumber} />
       </div>
 
-      {/* Floating Dashboard Button */}
-      <Link
-        href="/dashboard"
-        className="fixed bottom-6 right-6 z-50 flex items-center justify-center w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-all duration-300 hover:scale-110"
-      >
-        <LayoutDashboard className="h-6 w-6" />
-      </Link>
+      {/* Floating Action Button */}
+      <FloatingActionButton />
     </div>
   );
 }

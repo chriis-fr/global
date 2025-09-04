@@ -3,17 +3,29 @@ import { ObjectId } from 'mongodb';
 // Payment Method Types
 export type PaymentMethodType = 'fiat' | 'crypto' | 'stellar';
 
+// Fiat Payment Subtypes
+export type FiatPaymentSubtype = 'bank' | 'mpesa_paybill' | 'mpesa_till';
+
 // Fiat Payment Method Details
 export interface FiatPaymentDetails {
-  bankName: string;
-  swiftCode: string;
-  bankCode: string;
-  branchCode: string;
-  accountName: string;
-  accountNumber: string;
-  branchAddress: string;
-  accountType: 'checking' | 'savings' | 'business';
-  currency: string; // e.g., "USD", "EUR", "GBP"
+  subtype: FiatPaymentSubtype;
+  // Bank details (for bank subtype)
+  bankName?: string;
+  swiftCode?: string;
+  bankCode?: string;
+  branchCode?: string;
+  accountName?: string;
+  accountNumber?: string;
+  branchAddress?: string;
+  accountType?: 'checking' | 'savings' | 'business';
+  // M-Pesa Paybill details (for mpesa_paybill subtype)
+  paybillNumber?: string;
+  mpesaAccountNumber?: string;
+  // M-Pesa Till details (for mpesa_till subtype)
+  tillNumber?: string;
+  // Common fields
+  businessName?: string;
+  currency: string; // e.g., "USD", "EUR", "GBP", "KES"
   country: string;
 }
 
@@ -65,14 +77,23 @@ export interface PaymentMethod {
 // Input interfaces for creating/updating payment methods
 export interface CreateFiatPaymentMethodInput {
   name: string;
-  bankName: string;
-  swiftCode: string;
-  bankCode: string;
-  branchCode: string;
-  accountName: string;
-  accountNumber: string;
-  branchAddress: string;
-  accountType: 'checking' | 'savings' | 'business';
+  subtype: FiatPaymentSubtype;
+  // Bank details (for bank subtype)
+  bankName?: string;
+  swiftCode?: string;
+  bankCode?: string;
+  branchCode?: string;
+  accountName?: string;
+  accountNumber?: string;
+  branchAddress?: string;
+  accountType?: 'checking' | 'savings' | 'business';
+  // M-Pesa Paybill details (for mpesa_paybill subtype)
+  paybillNumber?: string;
+  mpesaAccountNumber?: string;
+  // M-Pesa Till details (for mpesa_till subtype)
+  tillNumber?: string;
+  // Common fields
+  businessName?: string;
   currency: string;
   country: string;
   isDefault?: boolean;
@@ -90,6 +111,7 @@ export interface CreateCryptoPaymentMethodInput {
   description?: string;
   tags?: string[];
 }
+
 
 export interface CreatePaymentMethodInput {
   name: string;

@@ -420,6 +420,8 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
     const status = searchParams.get('status');
+    const dateFrom = searchParams.get('dateFrom');
+    const dateTo = searchParams.get('dateTo');
     const convertToPreferred = searchParams.get('convertToPreferred') === 'true';
 
     const db = await connectToDatabase();
@@ -444,8 +446,31 @@ export async function GET(request: NextRequest) {
       query = { ...query, status } as typeof query & { status: string };
     }
 
+    // Add date range filtering
+    if (dateFrom || dateTo) {
+      const dateFilter: { $gte?: Date; $lte?: Date } = {};
+      if (dateFrom) {
+        dateFilter.$gte = new Date(dateFrom);
+      }
+      if (dateTo) {
+        dateFilter.$lte = new Date(dateTo + 'T23:59:59.999Z'); // End of day
+      }
+      query = { ...query, createdAt: dateFilter } as typeof query & { createdAt: { $gte?: Date; $lte?: Date } };
+    }
+
     // Get total count
     const total = await invoicesCollection.countDocuments(query);
+
+    // Get status counts for all invoices (not just paginated ones)
+    const statusCounts = await Promise.all([
+      invoicesCollection.countDocuments({ ...query, status: 'draft' }),
+      invoicesCollection.countDocuments({ ...query, status: 'sent' }),
+      invoicesCollection.countDocuments({ ...query, status: 'pending' }),
+      invoicesCollection.countDocuments({ ...query, status: 'paid' }),
+      invoicesCollection.countDocuments({ ...query, status: 'overdue' })
+    ]);
+
+    const [draftCount, sentCount, pendingCount, paidCount, overdueCount] = statusCounts;
 
     // Get invoices with pagination
     const skip = (page - 1) * limit;
@@ -491,7 +516,14 @@ export async function GET(request: NextRequest) {
         stats: {
           totalRevenue,
           preferredCurrency,
-          totalInvoices: total
+          totalInvoices: total,
+          statusCounts: {
+            draft: draftCount,
+            sent: sentCount,
+            pending: pendingCount,
+            paid: paidCount,
+            overdue: overdueCount
+          }
         }
       }
     });

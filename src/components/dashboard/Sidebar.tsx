@@ -97,6 +97,10 @@ export default function Sidebar() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
+  
+  // Touch gesture state for mobile
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
 
   // Auto-hide functionality
   useEffect(() => {
@@ -155,6 +159,48 @@ export default function Sidebar() {
       }
     };
   }, [isCollapsed, isAutoHidden]);
+
+  // Listen for custom event to open mobile sidebar
+  useEffect(() => {
+    const handleOpenMobileSidebar = () => {
+      setIsMobileMenuOpen(true);
+    };
+
+    window.addEventListener('openMobileSidebar', handleOpenMobileSidebar);
+    return () => {
+      window.removeEventListener('openMobileSidebar', handleOpenMobileSidebar);
+    };
+  }, []);
+
+  // Touch gesture handlers for mobile
+  const minSwipeDistance = 50;
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+
+    if (isLeftSwipe && isMobileMenuOpen) {
+      // Swipe left to close sidebar
+      setIsMobileMenuOpen(false);
+    } else if (isRightSwipe && !isMobileMenuOpen) {
+      // Swipe right to open sidebar (only from left edge)
+      if (touchStart < 50) { // Only trigger if swipe starts from left edge
+        setIsMobileMenuOpen(true);
+      }
+    }
+  };
 
   const toggleMobileMenu = () => {
     setIsMobileMenuOpen(!isMobileMenuOpen);
@@ -234,7 +280,7 @@ export default function Sidebar() {
                   className={`flex items-center px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation ${
                     active 
                       ? 'bg-blue-800 text-white' 
-                      : 'text-white/70 hover:bg-blue-900/50 hover:text-white'
+                      : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
                   }`}
                   style={{ textDecoration: 'none' }}
                   title={isCollapsed && !isAutoHidden ? link.label : undefined}
@@ -271,7 +317,7 @@ export default function Sidebar() {
                     className={`flex items-center px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation ${
                       active 
                         ? 'bg-blue-800 text-white' 
-                        : 'text-white/70 hover:bg-blue-900/50 hover:text-white'
+                        : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
                     }`}
                     style={{ textDecoration: 'none' }}
                     title={isCollapsed && !isAutoHidden ? link.label : undefined}
@@ -303,7 +349,7 @@ export default function Sidebar() {
             className={`flex items-center justify-between w-full px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation ${
               pathname.startsWith('/dashboard/settings') 
                 ? 'bg-blue-800 text-white' 
-                : 'text-white/70 hover:bg-blue-900/50 hover:text-white'
+                : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
             }`}
             title={isCollapsed && !isAutoHidden ? 'Settings' : undefined}
           >
@@ -340,7 +386,7 @@ export default function Sidebar() {
                     className={`flex items-center px-3 py-3 rounded-lg transition-colors text-sm font-medium group relative touch-manipulation ${
                       active 
                         ? 'bg-blue-800 text-white' 
-                        : 'text-white/70 hover:bg-blue-900/50 hover:text-white'
+                        : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
                     }`}
                     style={{ textDecoration: 'none' }}
                     title={isCollapsed && !isAutoHidden ? link.label : undefined}
@@ -384,7 +430,7 @@ export default function Sidebar() {
               signOut({ callbackUrl: '/auth' });
               closeMobileMenu();
             }}
-            className="flex items-center w-full px-3 py-3 rounded-lg text-sm font-medium text-white/70 hover:bg-blue-900/50 hover:text-white transition-colors group touch-manipulation"
+            className="flex items-center w-full px-3 py-3 rounded-lg text-sm font-medium text-white/80 hover:bg-blue-900/50 hover:text-white transition-colors group touch-manipulation"
             title={isCollapsed && !isAutoHidden ? 'Sign Out' : undefined}
           >
             <LogOut className="h-4 w-4 mr-3 flex-shrink-0" />
@@ -403,7 +449,7 @@ export default function Sidebar() {
         <div className="hidden lg:block border-t border-white/10 p-2">
           <button
             onClick={toggleCollapse}
-            className="w-full flex items-center justify-center p-2 rounded-lg text-white/70 hover:bg-blue-900/50 hover:text-white transition-colors"
+            className="w-full flex items-center justify-center p-2 rounded-lg text-white/80 hover:bg-blue-900/50 hover:text-white transition-colors"
             title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
           >
             {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
@@ -421,7 +467,7 @@ export default function Sidebar() {
             className={`flex items-center justify-between w-full px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation ${
               pathname.startsWith('/dashboard/notifications') 
                 ? 'bg-blue-800 text-white' 
-                : 'text-white/70 hover:bg-blue-900/50 hover:text-white'
+                : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
             }`}
             style={{ textDecoration: 'none' }}
           >
@@ -440,7 +486,7 @@ export default function Sidebar() {
             className={`flex items-center justify-between w-full px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation ${
               pathname.startsWith('/dashboard/settings') 
                 ? 'bg-blue-800 text-white' 
-                : 'text-white/70 hover:bg-blue-900/50 hover:text-white'
+                : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
             }`}
           >
             <div className="flex items-center">
@@ -467,7 +513,7 @@ export default function Sidebar() {
                     className={`flex items-center px-3 py-3 rounded-lg transition-colors text-sm font-medium group relative touch-manipulation ${
                       active 
                         ? 'bg-blue-800 text-white' 
-                        : 'text-white/70 hover:bg-blue-900/50 hover:text-white'
+                        : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
                     }`}
                     style={{ textDecoration: 'none' }}
                   >
@@ -503,7 +549,7 @@ export default function Sidebar() {
               signOut({ callbackUrl: '/auth' });
               closeMobileMenu();
             }}
-            className="flex items-center w-full px-3 py-3 rounded-lg text-sm font-medium text-white/70 hover:bg-blue-900/50 hover:text-white transition-colors group touch-manipulation"
+            className="flex items-center w-full px-3 py-3 rounded-lg text-sm font-medium text-white/80 hover:bg-blue-900/50 hover:text-white transition-colors group touch-manipulation"
           >
             <LogOut className="h-4 w-4 mr-3 flex-shrink-0" />
             <span className="whitespace-nowrap">Sign Out</span>
@@ -530,7 +576,7 @@ export default function Sidebar() {
       {/* Mobile Menu Button */}
       <button
         onClick={toggleMobileMenu}
-        className="lg:hidden fixed top-4 left-4 z-50 p-3 bg-blue-900/80 backdrop-blur-sm rounded-lg text-white hover:bg-blue-800/90 transition-colors shadow-lg touch-manipulation"
+        className="lg:hidden fixed top-4 left-4 z-50 p-3 bg-blue-900/80 backdrop-blur-sm rounded-lg text-white hover:bg-blue-800/90 transition-colors shadow-lg touch-manipulation active:scale-95"
         aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
       >
         {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -545,9 +591,14 @@ export default function Sidebar() {
       )}
 
       {/* Mobile Sidebar */}
-      <aside className={`lg:hidden fixed left-0 top-0 h-full w-80 sm:w-80 bg-blue-950 border-r border-white/10 z-50 transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col ${
-        isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
-      }`}>
+      <aside 
+        className={`lg:hidden fixed left-0 top-0 h-full w-80 sm:w-80 bg-blue-950 border-r border-white/10 z-50 transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col ${
+          isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
         <SidebarContent />
       </aside>
     </>
