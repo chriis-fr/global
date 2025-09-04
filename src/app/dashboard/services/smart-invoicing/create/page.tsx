@@ -21,7 +21,6 @@ import {
   Edit3,
   Loader2,
   Download,
-  Send,
   AlertCircle,
   LayoutDashboard,
   ChevronDown,
@@ -1895,7 +1894,7 @@ export default function CreateInvoicePage() {
         `"${network}"`,
         `"${paymentAddress}"`,
         `"${formData.memo || ''}"`,
-        `"${formatDate(new Date())}"`
+        `"${formatDate(new Date().toISOString())}"`
       ];
       csvRows.push(row.join(','));
       
@@ -1964,53 +1963,6 @@ export default function CreateInvoicePage() {
     pdf.setTextColor(0, 0, 0);
   };
 
-
-  // Save invoice to database
-  const saveInvoiceToDatabase = async (invoiceData: InvoiceFormData) => {
-    try {
-            console.log('💾 [Smart Invoicing] Saving invoice to database');
-
-      // Convert File objects to metadata for database storage
-      const attachedFilesMetadata = (invoiceData.attachedFiles || []).map(file => ({
-        filename: file.name,
-        originalName: file.name,
-        size: file.size,
-        contentType: file.type,
-        uploadedAt: new Date()
-      }));
-
-      const response = await fetch('/api/invoices', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...invoiceData,
-          attachedFiles: attachedFilesMetadata,
-          status: 'pending', // Set as pending when sent
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        }),
-      });
-
-      const result = await response.json();
-      if (result.success) {
-        console.log('✅ [Smart Invoicing] Invoice saved to database:', {
-          id: result.invoice._id,
-          invoiceNumber: result.invoice.invoiceNumber
-        });
-        // Update the form data with the saved invoice ID
-        handleInputChange('_id', result.invoice._id);
-        return result.invoice;
-      } else {
-        console.error('❌ [Smart Invoicing] Failed to save invoice:', result.message);
-        return null;
-      }
-    } catch (error) {
-      console.error('❌ [Smart Invoicing] Error saving invoice:', error);
-      return null;
-    }
-  };
 
   // Handle payment method selection
   const handlePaymentMethodSelect = (methodId: string) => {

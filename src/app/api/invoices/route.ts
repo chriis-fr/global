@@ -448,14 +448,14 @@ export async function GET(request: NextRequest) {
 
     // Add date range filtering
     if (dateFrom || dateTo) {
-      const dateFilter: any = {};
+      const dateFilter: { $gte?: Date; $lte?: Date } = {};
       if (dateFrom) {
         dateFilter.$gte = new Date(dateFrom);
       }
       if (dateTo) {
         dateFilter.$lte = new Date(dateTo + 'T23:59:59.999Z'); // End of day
       }
-      query = { ...query, createdAt: dateFilter } as typeof query & { createdAt: any };
+      query = { ...query, createdAt: dateFilter } as typeof query & { createdAt: { $gte?: Date; $lte?: Date } };
     }
 
     // Get total count

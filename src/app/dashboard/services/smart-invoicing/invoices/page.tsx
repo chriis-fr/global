@@ -125,162 +125,6 @@ export default function InvoicesPage() {
     }
   };
 
-  // Handle bulk CSV download
-  const handleBulkDownloadCsv = () => {
-    if (statusFilteredInvoices.length === 0) {
-      alert('No invoices to download');
-      return;
-    }
-
-    try {
-      console.log('📤 [Smart Invoicing] Starting bulk CSV download for', statusFilteredInvoices.length, 'invoices');
-
-      // Create simple CSV structure for easy bulk processing
-      const csvRows = [];
-      
-      // CSV Headers - simple and clean (one row per invoice)
-      const headers = [
-        'Invoice Number',
-        'Invoice Name', 
-        'Issue Date',
-        'Due Date',
-        'Status',
-        'Company Name',
-        'Company Email',
-        'Company Phone',
-        'Company Address',
-        'Company Tax Number',
-        'Client Name',
-        'Client Company',
-        'Client Email',
-        'Client Phone',
-        'Client Address',
-        'Items Description',
-        'Total Quantity',
-        'Subtotal',
-        'Total Tax',
-        'Total Amount',
-        'Currency',
-        'Payment Method',
-        'Bank Name',
-        'Account Number',
-        'Routing Number',
-        'Network',
-        'Payment Address',
-        'Memo',
-        'Created Date'
-      ];
-      csvRows.push(headers.join(','));
-      
-      // Process each invoice
-      statusFilteredInvoices.forEach(invoice => {
-        // Get company details
-        const companyName = invoice.companyName || invoice.companyDetails?.name || 'N/A';
-        const companyEmail = invoice.companyEmail || 'N/A';
-        const companyPhone = invoice.companyPhone || 'N/A';
-        const companyTaxNumber = invoice.companyTaxNumber || invoice.companyDetails?.taxNumber || 'N/A';
-        
-        // Handle company address
-        let companyAddress = 'N/A';
-        if (invoice.companyAddress) {
-          companyAddress = `${invoice.companyAddress.street || ''}, ${invoice.companyAddress.city || ''}, ${invoice.companyAddress.state || ''} ${invoice.companyAddress.zipCode || ''}, ${invoice.companyAddress.country || ''}`;
-        } else if (invoice.companyDetails) {
-          companyAddress = `${invoice.companyDetails.addressLine1 || ''}, ${invoice.companyDetails.city || ''}, ${invoice.companyDetails.region || ''} ${invoice.companyDetails.postalCode || ''}, ${invoice.companyDetails.country || ''}`;
-        }
-        
-        // Get client details
-        const clientName = invoice.clientName || [invoice.clientDetails?.firstName, invoice.clientDetails?.lastName].filter(Boolean).join(' ') || 'N/A';
-        const clientCompany = invoice.clientDetails?.companyName || 'N/A';
-        const clientEmail = invoice.clientEmail || 'N/A';
-        const clientPhone = invoice.clientPhone || 'N/A';
-        
-        // Handle client address
-        let clientAddress = 'N/A';
-        if (invoice.clientAddress) {
-          clientAddress = `${invoice.clientAddress.street || ''}, ${invoice.clientAddress.city || ''}, ${invoice.clientAddress.state || ''} ${invoice.clientAddress.zipCode || ''}, ${invoice.clientAddress.country || ''}`;
-        } else if (invoice.clientDetails) {
-          clientAddress = `${invoice.clientDetails.addressLine1 || ''}, ${invoice.clientDetails.city || ''}, ${invoice.clientDetails.region || ''}, ${invoice.clientDetails.postalCode || ''}, ${invoice.clientDetails.country || ''}`;
-        }
-        
-        // Get payment details
-        const paymentMethod = invoice.paymentMethod || invoice.paymentSettings?.method;
-        const paymentMethodText = paymentMethod === 'fiat' ? 'Bank Transfer' : 'Cryptocurrency';
-        const bankAccount = invoice.paymentSettings?.bankAccount;
-        const bankName = bankAccount?.bankName || 'N/A';
-        const accountNumber = bankAccount?.accountNumber || 'N/A';
-        const routingNumber = bankAccount?.routingNumber || 'N/A';
-        const network = invoice.paymentNetwork || invoice.paymentSettings?.cryptoNetwork || 'N/A';
-        const paymentAddress = invoice.paymentAddress || invoice.paymentSettings?.walletAddress || 'N/A';
-        
-        // Get original currency (preserve the invoice's original currency)
-        const originalCurrency = invoice.currency || invoice.paymentSettings?.currency || 'USD';
-        
-        // Create one row per invoice (combine all items into a single description)
-        const itemsDescription = invoice.items && invoice.items.length > 0 
-          ? invoice.items.map(item => `${item.description || 'Item'} (Qty: ${item.quantity || 0}, Price: ${item.unitPrice?.toFixed(2) || '0.00'})`).join('; ')
-          : 'No items';
-        
-        const totalQuantity = invoice.items ? invoice.items.reduce((sum, item) => sum + (item.quantity || 0), 0) : 0;
-        
-        const row = [
-          `"${invoice.invoiceNumber || 'N/A'}"`,
-          `"${invoice.invoiceName || 'Invoice'}"`,
-          `"${formatDate(invoice.issueDate || '')}"`,
-          `"${formatDate(invoice.dueDate || '')}"`,
-          `"${invoice.status || 'Draft'}"`,
-          `"${companyName}"`,
-          `"${companyEmail}"`,
-          `"${companyPhone}"`,
-          `"${companyAddress}"`,
-          `"${companyTaxNumber}"`,
-          `"${clientName}"`,
-          `"${clientCompany}"`,
-          `"${clientEmail}"`,
-          `"${clientPhone}"`,
-          `"${clientAddress}"`,
-          `"${itemsDescription}"`,
-          `"${totalQuantity}"`,
-          `"${invoice.subtotal?.toFixed(2) || '0.00'}"`,
-          `"${invoice.totalTax?.toFixed(2) || '0.00'}"`,
-          `"${invoice.totalAmount?.toFixed(2) || '0.00'}"`,
-          `"${originalCurrency}"`,
-          `"${paymentMethodText}"`,
-          `"${bankName}"`,
-          `"${accountNumber}"`,
-          `"${routingNumber}"`,
-          `"${network}"`,
-          `"${paymentAddress}"`,
-          `"${invoice.memo || ''}"`,
-          `"${formatDate(invoice.createdAt || '')}"`
-        ];
-        csvRows.push(row.join(','));
-      });
-      
-      // Convert to CSV string
-      const csvContent = csvRows.join('\n');
-      
-      // Create and download file
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      const timestamp = new Date().toISOString().split('T')[0];
-      link.setAttribute('download', `invoices_bulk_${timestamp}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      console.log('✅ [Smart Invoicing] Bulk CSV downloaded successfully:', {
-        invoiceCount: statusFilteredInvoices.length,
-        filename: `invoices_bulk_${timestamp}.csv`
-      });
-      
-    } catch (error) {
-      console.error('❌ [Smart Invoicing] Failed to download bulk CSV:', error);
-      alert('Failed to download CSV. Please try again.');
-    }
-  };
 
   const handleDynamicDownloadCsv = async () => {
     try {
@@ -326,8 +170,8 @@ export default function InvoicesPage() {
 
       // Filter by selected invoices if needed
       if (downloadCriteria.type === 'selected' && selectedInvoices.length > 0) {
-        invoicesToDownload = invoicesToDownload.filter((invoice: any) => 
-          selectedInvoices.includes(invoice._id?.toString())
+        invoicesToDownload = invoicesToDownload.filter((invoice: Invoice) => 
+          invoice._id && selectedInvoices.includes(invoice._id.toString())
         );
       }
 
@@ -352,57 +196,53 @@ export default function InvoicesPage() {
       csvRows.push(headers.join(','));
       
       // Process each invoice
-      invoicesToDownload.forEach((invoice: any) => {
+      invoicesToDownload.forEach((invoice: Invoice) => {
         // Get company details
-        const companyName = invoice.companyName || invoice.companyDetails?.name || 'N/A';
-        const companyEmail = invoice.companyEmail || 'N/A';
-        const companyPhone = invoice.companyPhone || 'N/A';
-        const companyTaxNumber = invoice.companyTaxNumber || invoice.companyDetails?.taxNumber || 'N/A';
+        const companyName = invoice.companyDetails?.name || 'N/A';
+        const companyEmail = 'N/A';
+        const companyPhone = 'N/A';
+        const companyTaxNumber = invoice.companyDetails?.taxNumber || 'N/A';
         
         // Handle company address
         let companyAddress = 'N/A';
-        if (invoice.companyAddress) {
-          companyAddress = `${invoice.companyAddress.street || ''}, ${invoice.companyAddress.city || ''}, ${invoice.companyAddress.state || ''} ${invoice.companyAddress.zipCode || ''}, ${invoice.companyAddress.country || ''}`;
-        } else if (invoice.companyDetails) {
+        if (invoice.companyDetails) {
           companyAddress = `${invoice.companyDetails.addressLine1 || ''}, ${invoice.companyDetails.city || ''}, ${invoice.companyDetails.region || ''} ${invoice.companyDetails.postalCode || ''}, ${invoice.companyDetails.country || ''}`;
         }
         
         // Get client details
-        const clientName = invoice.clientName || [invoice.clientDetails?.firstName, invoice.clientDetails?.lastName].filter(Boolean).join(' ') || 'N/A';
+        const clientName = [invoice.clientDetails?.firstName, invoice.clientDetails?.lastName].filter(Boolean).join(' ') || 'N/A';
         const clientCompany = invoice.clientDetails?.companyName || 'N/A';
-        const clientEmail = invoice.clientEmail || 'N/A';
-        const clientPhone = invoice.clientPhone || 'N/A';
+        const clientEmail = invoice.clientDetails?.email || 'N/A';
+        const clientPhone = 'N/A';
         
         // Handle client address
         let clientAddress = 'N/A';
-        if (invoice.clientAddress) {
-          clientAddress = `${invoice.clientAddress.street || ''}, ${invoice.clientAddress.city || ''}, ${invoice.clientAddress.state || ''} ${invoice.clientAddress.zipCode || ''}, ${invoice.clientAddress.country || ''}`;
-        } else if (invoice.clientDetails) {
+        if (invoice.clientDetails) {
           clientAddress = `${invoice.clientDetails.addressLine1 || ''}, ${invoice.clientDetails.city || ''}, ${invoice.clientDetails.region || ''}, ${invoice.clientDetails.postalCode || ''}, ${invoice.clientDetails.country || ''}`;
         }
         
         // Get payment details
         const paymentMethod = invoice.paymentSettings?.method === 'fiat' ? 'Bank Transfer' : 
                              invoice.paymentSettings?.method === 'crypto' ? 'Cryptocurrency' : 'N/A';
-        const bankName = invoice.paymentSettings?.bankName || 'N/A';
-        const accountNumber = invoice.paymentSettings?.accountNumber || 'N/A';
-        const routingNumber = invoice.paymentSettings?.routingNumber || 'N/A';
-        const network = invoice.paymentSettings?.network || 'N/A';
-        const paymentAddress = invoice.paymentSettings?.paymentAddress || 'N/A';
+        const bankName = invoice.paymentSettings?.bankAccount?.bankName || 'N/A';
+        const accountNumber = invoice.paymentSettings?.bankAccount?.accountNumber || 'N/A';
+        const routingNumber = invoice.paymentSettings?.bankAccount?.routingNumber || 'N/A';
+        const network = invoice.paymentSettings?.cryptoNetwork || 'N/A';
+        const paymentAddress = invoice.paymentSettings?.walletAddress || 'N/A';
         
         // Combine all items into a single description
         const itemsDescription = invoice.items && invoice.items.length > 0
-          ? invoice.items.map((item: any) => `${item.description || 'Item'} (Qty: ${item.quantity || 0}, Price: ${item.unitPrice?.toFixed(2) || '0.00'})`).join('; ')
+          ? invoice.items.map((item) => `${item.description || 'Item'} (Qty: ${item.quantity || 0}, Price: ${item.unitPrice?.toFixed(2) || '0.00'})`).join('; ')
           : 'No items';
         
         // Calculate total quantity
-        const totalQuantity = invoice.items ? invoice.items.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0) : 0;
+        const totalQuantity = invoice.items ? invoice.items.reduce((sum: number, item) => sum + (item.quantity || 0), 0) : 0;
 
         const row = [
           `"${invoice.invoiceNumber || 'N/A'}"`,
-          `"${invoice.invoiceName || 'N/A'}"`,
-          `"${formatDate(invoice.issueDate || '')}"`,
-          `"${formatDate(invoice.dueDate || '')}"`,
+          `"${invoice.invoiceNumber || 'N/A'}"`,
+          `"${formatDate(invoice.issueDate?.toISOString() || '')}"`,
+          `"${formatDate(invoice.dueDate?.toISOString() || '')}"`,
           `"${invoice.status || 'N/A'}"`,
           `"${companyName}"`,
           `"${companyEmail}"`,
@@ -417,7 +257,7 @@ export default function InvoicesPage() {
           `"${itemsDescription}"`,
           `"${totalQuantity}"`,
           `"${invoice.subtotal?.toFixed(2) || '0.00'}"`,
-          `"${invoice.totalTax?.toFixed(2) || '0.00'}"`,
+          `"${invoice.taxes?.reduce((sum, tax) => sum + tax.amount, 0).toFixed(2) || '0.00'}"`,
           `"${invoice.totalAmount?.toFixed(2) || '0.00'}"`,
           `"${invoice.currency || 'N/A'}"`,
           `"${paymentMethod}"`,
@@ -426,8 +266,8 @@ export default function InvoicesPage() {
           `"${routingNumber}"`,
           `"${network}"`,
           `"${paymentAddress}"`,
-          `"${invoice.memo || ''}"`,
-          `"${formatDate(invoice.createdAt || '')}"`
+          `"${invoice.notes || ''}"`,
+          `"${formatDate(invoice.createdAt?.toISOString() || '')}"`
         ];
         csvRows.push(row.join(','));
       });
@@ -911,7 +751,7 @@ export default function InvoicesPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Download Type</label>
                   <select
                     value={downloadCriteria.type}
-                    onChange={(e) => setDownloadCriteria(prev => ({ ...prev, type: e.target.value as any }))}
+                    onChange={(e) => setDownloadCriteria(prev => ({ ...prev, type: e.target.value as 'current' | 'all' | 'dateRange' | 'selected' }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="current">Current View ({statusFilteredInvoices.length} invoices)</option>

@@ -305,7 +305,7 @@ The Chains ERP-Global Team
     const endTime = Date.now();
     const duration = endTime - startTime;
     
-    console.log('✅ Invoice notification email sent successfully');
+    console.log('✅ Invoice notification email sent successfully (took', duration, 'ms)');
     return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error('❌ Failed to send invoice notification email:', error);

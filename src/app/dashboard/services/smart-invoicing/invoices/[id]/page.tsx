@@ -89,6 +89,8 @@ interface Invoice {
   };
   clientDetails?: {
     companyName: string;
+    firstName?: string;
+    lastName?: string;
     addressLine1?: string;
     city?: string;
     region?: string;
@@ -145,7 +147,7 @@ export default function InvoiceViewPage() {
     return optimizedCanvas;
   };
 
-  const generateOptimizedPdf = async (pdfContainer: HTMLElement, cacheKey?: string): Promise<{ pdf: jsPDF; base64: string }> => {
+  const generateOptimizedPdf = async (pdfContainer: HTMLElement): Promise<{ pdf: jsPDF; base64: string }> => {
     // Generate PDF using html2canvas with optimized options
     const canvas = await html2canvas(pdfContainer, {
       logging: false,
@@ -467,7 +469,6 @@ export default function InvoiceViewPage() {
         ? invoice.items.map(item => `${item.description || 'Item'} (Qty: ${item.quantity || 0}, Price: ${item.unitPrice?.toFixed(2) || '0.00'})`).join('; ')
         : 'No items';
       
-      const totalItems = invoice.items ? invoice.items.length : 0;
       const totalQuantity = invoice.items ? invoice.items.reduce((sum, item) => sum + (item.quantity || 0), 0) : 0;
       
       const row = [
@@ -731,7 +732,7 @@ export default function InvoiceViewPage() {
       }
 
       // Generate optimized PDF
-      const { pdf, base64: pdfBase64 } = await generateOptimizedPdf(pdfContainer, invoice.invoiceNumber || 'temp');
+      const { pdf } = await generateOptimizedPdf(pdfContainer);
 
       // Remove the temporary element
       document.body.removeChild(pdfContainer);
