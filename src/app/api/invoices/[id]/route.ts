@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
+import { CurrencyService } from '@/lib/services/currencyService';
 
 export async function GET(
   request: NextRequest,
@@ -16,6 +17,10 @@ export async function GET(
 
     // Await params to get the id
     const { id } = await params;
+
+    // Get query parameters
+    const { searchParams } = new URL(request.url);
+    const convertToPreferred = searchParams.get('convertToPreferred') === 'true';
 
     // Determine if user is individual or organization
     const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
@@ -60,9 +65,32 @@ export async function GET(
       ownerId
     });
 
+    // Convert currencies if requested
+    let processedInvoice = invoice;
+    if (convertToPreferred) {
+      try {
+        // Get user's preferred currency
+        const userPreferences = await CurrencyService.getUserPreferredCurrency(session.user.email);
+        const preferredCurrency = userPreferences.preferredCurrency;
+
+        // Convert invoice amounts to preferred currency
+        processedInvoice = await CurrencyService.convertInvoiceForReporting(invoice as { [key: string]: unknown }, preferredCurrency) as typeof invoice;
+
+        console.log('✅ [API Invoice] Currency converted:', {
+          originalCurrency: invoice.currency,
+          preferredCurrency: preferredCurrency,
+          originalAmount: invoice.totalAmount,
+          convertedAmount: processedInvoice.totalAmount
+        });
+      } catch (error) {
+        console.error('❌ [API Invoice] Currency conversion failed:', error);
+        // Continue with original invoice if conversion fails
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      data: invoice
+      data: processedInvoice
     });
   } catch (error) {
     console.error('❌ [API Invoice] Error fetching invoice:', error);

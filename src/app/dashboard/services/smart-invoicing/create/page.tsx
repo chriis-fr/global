@@ -974,9 +974,9 @@ export default function CreateInvoicePage() {
                   <div style="font-size: 14px; color: #6b7280;">
                     Payment due by ${formatDate(formData.dueDate)}
                   </div>
-                  ${primaryInvoiceNumber ? `
+                  ${primaryInvoiceNumber || formData.invoiceNumber ? `
                     <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                      Invoice: ${primaryInvoiceNumber}
+                      Invoice: ${primaryInvoiceNumber || formData.invoiceNumber}
                     </div>
                   ` : ''}
                 </div>
@@ -1204,7 +1204,7 @@ export default function CreateInvoicePage() {
       document.body.removeChild(pdfContainer);
 
       // Add watermark
-      addWatermark(pdf);
+      addWatermark(pdf, primaryInvoiceNumber || formData.invoiceNumber);
 
       console.log('📄 [PDF Generation] Converting PDF to base64...');
       const base64StartTime = Date.now();
@@ -1685,7 +1685,7 @@ export default function CreateInvoicePage() {
       document.body.removeChild(pdfContainer);
 
       // Add watermark
-      addWatermark(pdf);
+      addWatermark(pdf, primaryInvoiceNumber || formData.invoiceNumber);
       
       console.log('📧 [Smart Invoicing] Sending invoice via email...', {
         recipientEmail: formData.clientEmail,
@@ -1899,7 +1899,7 @@ export default function CreateInvoicePage() {
   // No need to generate them on the frontend
 
   // Add watermark to PDF
-  const addWatermark = (pdf: jsPDF) => {
+  const addWatermark = (pdf: jsPDF, invoiceNumber?: string) => {
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
     
@@ -1916,6 +1916,17 @@ export default function CreateInvoicePage() {
     
     // Add watermark with transparency effect
     pdf.text(text, x, y);
+    
+    // Add invoice number watermark if provided
+    if (invoiceNumber) {
+      pdf.setFontSize(16);
+      const invoiceText = `Invoice: ${invoiceNumber}`;
+      const invoiceTextWidth = pdf.getTextWidth(invoiceText);
+      const invoiceX = (pageWidth - invoiceTextWidth) / 2;
+      const invoiceY = y + 20; // Below the main watermark
+      
+      pdf.text(invoiceText, invoiceX, invoiceY);
+    }
     
     // Reset text color for normal content
     pdf.setTextColor(0, 0, 0);
@@ -2204,7 +2215,7 @@ export default function CreateInvoicePage() {
       document.body.removeChild(pdfContainer);
 
       // Add watermark
-      addWatermark(pdf);
+      addWatermark(pdf, formData.invoiceNumber);
 
       // Save invoice to database
       await saveInvoiceToDatabase(formData);
