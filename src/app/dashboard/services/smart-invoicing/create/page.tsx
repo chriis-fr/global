@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 
@@ -27,7 +27,8 @@ import {
   Search,
   Mail,
   File,
-  ChevronDown as ChevronDownIcon
+  ChevronDown as ChevronDownIcon,
+  Smartphone
 } from 'lucide-react';
 import { fiatCurrencies, cryptoCurrencies, getCurrencyByCode } from '@/data/currencies';
 import { countries, getTaxRatesByCountry } from '@/data/countries';
@@ -82,6 +83,7 @@ interface InvoiceFormData {
   };
   currency: string;
   paymentMethod: 'fiat' | 'crypto';
+  fiatPaymentSubtype?: 'bank' | 'mpesa_paybill' | 'mpesa_till';
   paymentNetwork?: string;
   paymentAddress?: string;
   bankName?: string;
@@ -91,6 +93,12 @@ interface InvoiceFormData {
   accountName?: string;
   accountNumber?: string;
   branchAddress?: string;
+  // M-Pesa Paybill fields
+  paybillNumber?: string;
+  mpesaAccountNumber?: string;
+  // M-Pesa Till fields
+  tillNumber?: string;
+  businessName?: string;
   enableMultiCurrency: boolean;
   invoiceType: 'regular' | 'recurring';
   items: Array<{
@@ -147,6 +155,7 @@ const defaultInvoiceData: InvoiceFormData = {
   },
   currency: 'USD',
   paymentMethod: 'fiat',
+  fiatPaymentSubtype: 'bank',
   paymentNetwork: '',
   paymentAddress: '',
   bankName: '',
@@ -156,6 +165,10 @@ const defaultInvoiceData: InvoiceFormData = {
   accountName: '',
   accountNumber: '',
   branchAddress: '',
+  paybillNumber: '',
+  mpesaAccountNumber: '',
+  tillNumber: '',
+  businessName: '',
   enableMultiCurrency: false,
   invoiceType: 'regular',
   items: [
@@ -176,6 +189,56 @@ const defaultInvoiceData: InvoiceFormData = {
   attachedFiles: [],
   status: 'draft',
   ccClients: []
+};
+
+// Custom hook for form persistence
+const useFormPersistence = (key: string, initialData: InvoiceFormData, setAutoSaveStatus: (status: 'saved' | 'saving' | 'error' | null) => void) => {
+  const [formData, setFormData] = useState<InvoiceFormData>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem(key);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          // Merge with default data to handle new fields
+          return { ...initialData, ...parsed };
+        }
+      } catch (error) {
+        console.warn('Failed to load saved form data:', error);
+      }
+    }
+    return initialData;
+  });
+
+  const updateFormData = (newData: InvoiceFormData | ((prev: InvoiceFormData) => InvoiceFormData)) => {
+    setFormData(prev => {
+      const updated = typeof newData === 'function' ? newData(prev) : newData;
+      
+      // Auto-save to localStorage with status indication
+      if (typeof window !== 'undefined') {
+        setAutoSaveStatus('saving');
+        try {
+          localStorage.setItem(key, JSON.stringify(updated));
+          setAutoSaveStatus('saved');
+          // Clear status after 2 seconds
+          setTimeout(() => setAutoSaveStatus(null), 2000);
+        } catch (error) {
+          console.warn('Failed to save form data:', error);
+          setAutoSaveStatus('error');
+          setTimeout(() => setAutoSaveStatus(null), 3000);
+        }
+      }
+      
+      return updated;
+    });
+  };
+
+  const clearSavedData = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(key);
+    }
+  };
+
+  return { formData, setFormData: updateFormData, clearSavedData };
 };
 
 // Add this utility function at the top of the file, after imports
@@ -313,7 +376,16 @@ export default function CreateInvoicePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session } = useSession();
-  const [formData, setFormData] = useState<InvoiceFormData>(defaultInvoiceData);
+  
+  // Auto-save status state
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null);
+  
+  // Use form persistence hook
+  const { formData, setFormData, clearSavedData } = useFormPersistence(
+    `invoice-draft-${session?.user?.email || 'anonymous'}`, 
+    defaultInvoiceData,
+    setAutoSaveStatus
+  );
   const [loading, setLoading] = useState(false);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [showClientSelector, setShowClientSelector] = useState(false);
@@ -333,6 +405,13 @@ export default function CreateInvoicePage() {
   const pdfRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Helper function to check if user is from Kenya
+  const isKenyanUser = () => {
+    return session?.user?.address?.country === 'KE' || 
+           formData.companyAddress?.country === 'KE' ||
+           formData.currency === 'KES';
+  };
+
   // Currency dropdown state
   const [showCurrencyDropdown, setShowCurrencyDropdown] = useState(false);
   const [currencySearch, setCurrencySearch] = useState('');
@@ -345,13 +424,20 @@ export default function CreateInvoicePage() {
     name: string;
     type: 'fiat' | 'crypto';
     fiatDetails?: {
-      bankName: string;
-      swiftCode: string;
-      bankCode: string;
-      branchCode: string;
-      accountName: string;
-      accountNumber: string;
-      branchAddress: string;
+      subtype: 'bank' | 'mpesa_paybill' | 'mpesa_till';
+      // Bank details
+      bankName?: string;
+      swiftCode?: string;
+      bankCode?: string;
+      branchCode?: string;
+      accountName?: string;
+      accountNumber?: string;
+      branchAddress?: string;
+      // M-Pesa details
+      paybillNumber?: string;
+      mpesaAccountNumber?: string;
+      tillNumber?: string;
+      businessName?: string;
     };
     cryptoDetails?: {
       network: string;
@@ -370,53 +456,7 @@ export default function CreateInvoicePage() {
   // Download dropdown state
   const [showDownloadDropdown, setShowDownloadDropdown] = useState(false);
 
-
-
-  useEffect(() => {
-    // useEffect triggered
-    if (invoiceId) {
-      loadInvoice(invoiceId);
-    } else if (session?.user) {
-      // Loading data for user
-      loadServiceOnboardingData();
-      loadOrganizationData();
-      loadClients();
-      loadLogoFromSettings();
-      loadSavedPaymentMethods();
-    }
-  }, [invoiceId, session]);
-
-    // Monitor formData changes for debugging (disabled during sending)
-  useEffect(() => {
-    if (!sendingInvoice) {
-      // FormData updated with logo
-    }
-  }, [formData.companyLogo, sendingInvoice]);
-
-  // Handle click outside for dropdowns
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Element;
-      if (!target.closest('.currency-dropdown-container')) {
-        setShowCurrencyDropdown(false);
-        setCurrencySearch('');
-      }
-      if (!target.closest('.network-dropdown-container')) {
-        setShowNetworkDropdown(false);
-        setNetworkSearch('');
-      }
-      if (!target.closest('.download-dropdown-container')) {
-        setShowDownloadDropdown(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-
-  const loadInvoice = async (id: string) => {
+  const loadInvoice = useCallback(async (id: string) => {
     try {
       setLoading(true);
       const response = await fetch(`/api/invoices/${id}`);
@@ -438,9 +478,9 @@ export default function CreateInvoicePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const loadServiceOnboardingData = async () => {
+  const loadServiceOnboardingData = useCallback(async () => {
     try {
       const response = await fetch('/api/onboarding/service?service=smartInvoicing');
       const data = await response.json();
@@ -474,9 +514,9 @@ export default function CreateInvoicePage() {
     } catch (error) {
       console.error('Error loading service onboarding data:', error);
     }
-  };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const loadOrganizationData = async () => {
+  const loadOrganizationData = useCallback(async () => {
     try {
       const response = await fetch('/api/user/settings');
       const data = await response.json();
@@ -506,21 +546,9 @@ export default function CreateInvoicePage() {
     } catch (error) {
       console.error('Failed to load organization data:', error);
     }
-  };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const loadClients = async () => {
-    try {
-      const response = await fetch('/api/clients');
-      const data = await response.json();
-      if (data.success && data.data) {
-        setClients(data.data);
-      }
-    } catch (error) {
-      console.error('Failed to load clients:', error);
-    }
-  };
-
-  const loadLogoFromSettings = async () => {
+  const loadLogoFromSettings = useCallback(async () => {
     try {
       
       const response = await fetch('/api/user/logo');
@@ -552,10 +580,75 @@ export default function CreateInvoicePage() {
     } catch (error) {
       console.error('❌ [Invoice Create] Failed to load logo from settings:', error);
     }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    // useEffect triggered
+    if (invoiceId) {
+      loadInvoice(invoiceId);
+    } else if (session?.user) {
+      // Loading data for user
+      loadServiceOnboardingData();
+      loadOrganizationData();
+      loadClients();
+      loadLogoFromSettings();
+      loadSavedPaymentMethods();
+    }
+  }, [invoiceId, session, loadInvoice, loadLogoFromSettings, loadOrganizationData, loadServiceOnboardingData]);
+
+    // Monitor formData changes for debugging (disabled during sending)
+  useEffect(() => {
+    if (!sendingInvoice) {
+      // FormData updated with logo
+    }
+  }, [formData.companyLogo, sendingInvoice]);
+
+  // Handle click outside for dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (!target.closest('.currency-dropdown-container')) {
+        setShowCurrencyDropdown(false);
+        setCurrencySearch('');
+      }
+      if (!target.closest('.network-dropdown-container')) {
+        setShowNetworkDropdown(false);
+        setNetworkSearch('');
+      }
+      if (!target.closest('.download-dropdown-container')) {
+        setShowDownloadDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const loadClients = async () => {
+    try {
+      const response = await fetch('/api/clients');
+      const data = await response.json();
+      if (data.success && data.data) {
+        setClients(data.data);
+      }
+    } catch (error) {
+      console.error('Failed to load clients:', error);
+    }
   };
 
   const handleInputChange = (field: keyof InvoiceFormData, value: string | number | boolean) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleFiatPaymentSubtypeChange = (value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      fiatPaymentSubtype: value as 'bank' | 'mpesa_paybill' | 'mpesa_till',
+      // Automatically set currency to KES for M-Pesa payments
+      currency: (value === 'mpesa_paybill' || value === 'mpesa_till') ? 'KES' : prev.currency
+    }));
   };
 
   const handleBankSelect = (bank: Bank) => {
@@ -1098,7 +1191,10 @@ export default function CreateInvoicePage() {
             <div>
               <h4 style="font-weight: 500; color: #111827; margin: 0 0 8px 0;">Payment Method</h4>
               <div style="font-size: 14px; color: #6b7280;">
-                ${formData.paymentMethod === 'crypto' ? 'Cryptocurrency' : 'Bank Transfer'}
+                ${formData.paymentMethod === 'crypto' ? 'Cryptocurrency' : 
+                  formData.fiatPaymentSubtype === 'mpesa_paybill' ? 'M-Pesa Paybill' :
+                  formData.fiatPaymentSubtype === 'mpesa_till' ? 'M-Pesa Till' :
+                  'Bank Transfer'}
               </div>
               ${formData.paymentMethod === 'crypto' && formData.paymentNetwork ? `
                 <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
@@ -1133,6 +1229,26 @@ export default function CreateInvoicePage() {
               ${formData.paymentMethod === 'fiat' && formData.branchAddress ? `
                 <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
                   Branch Address: ${formData.branchAddress}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'mpesa_paybill' && formData.paybillNumber ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Paybill Number: ${formData.paybillNumber}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'mpesa_paybill' && formData.mpesaAccountNumber ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Account Number: ${formData.mpesaAccountNumber}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'mpesa_till' && formData.tillNumber ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Till Number: ${formData.tillNumber}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && (formData.fiatPaymentSubtype === 'mpesa_paybill' || formData.fiatPaymentSubtype === 'mpesa_till') && formData.businessName ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Business Name: ${formData.businessName}
                 </div>
               ` : ''}
             </div>
@@ -1278,6 +1394,8 @@ export default function CreateInvoicePage() {
           total: formData.total
         });
         alert('Invoice sent successfully! Check your email for confirmation.');
+        // Clear saved form data after successful send
+        clearSavedData();
         // Redirect to invoices page
         router.push('/dashboard/services/smart-invoicing/invoices');
       } else {
@@ -1643,7 +1761,10 @@ export default function CreateInvoicePage() {
             <div>
               <h4 style="font-weight: 500; color: #111827; margin: 0 0 8px 0;">Payment Method</h4>
               <div style="font-size: 14px; color: #6b7280;">
-                ${formData.paymentMethod === 'crypto' ? 'Cryptocurrency' : 'Bank Transfer'}
+                ${formData.paymentMethod === 'crypto' ? 'Cryptocurrency' : 
+                  formData.fiatPaymentSubtype === 'mpesa_paybill' ? 'M-Pesa Paybill' :
+                  formData.fiatPaymentSubtype === 'mpesa_till' ? 'M-Pesa Till' :
+                  'Bank Transfer'}
               </div>
               ${formData.paymentMethod === 'crypto' && formData.paymentNetwork ? `
                 <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
@@ -1678,6 +1799,26 @@ export default function CreateInvoicePage() {
               ${formData.paymentMethod === 'fiat' && formData.branchAddress ? `
                 <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
                   Branch Address: ${formData.branchAddress}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'mpesa_paybill' && formData.paybillNumber ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Paybill Number: ${formData.paybillNumber}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'mpesa_paybill' && formData.mpesaAccountNumber ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Account Number: ${formData.mpesaAccountNumber}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'mpesa_till' && formData.tillNumber ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Till Number: ${formData.tillNumber}
+                </div>
+              ` : ''}
+              ${formData.paymentMethod === 'fiat' && (formData.fiatPaymentSubtype === 'mpesa_paybill' || formData.fiatPaymentSubtype === 'mpesa_till') && formData.businessName ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Business Name: ${formData.businessName}
                 </div>
               ` : ''}
             </div>
@@ -1848,7 +1989,10 @@ export default function CreateInvoicePage() {
       const clientAddress = `${formData.clientAddress.street}, ${formData.clientAddress.city}, ${formData.clientAddress.state} ${formData.clientAddress.zipCode}, ${formData.clientAddress.country}`;
       
       // Get payment details
-      const paymentMethodText = formData.paymentMethod === 'fiat' ? 'Bank Transfer' : 'Cryptocurrency';
+      const paymentMethodText = formData.paymentMethod === 'fiat' ? 
+        formData.fiatPaymentSubtype === 'mpesa_paybill' ? 'M-Pesa Paybill' :
+        formData.fiatPaymentSubtype === 'mpesa_till' ? 'M-Pesa Till' :
+        'Bank Transfer' : 'Cryptocurrency';
       const bankName = formData.bankName || 'N/A';
       const accountNumber = formData.accountNumber || 'N/A';
       const routingNumber = formData.swiftCode || formData.bankCode || 'N/A';
@@ -1975,13 +2119,18 @@ export default function CreateInvoicePage() {
           setFormData(prev => ({
             ...prev,
             paymentMethod: 'fiat',
+            fiatPaymentSubtype: selectedMethod.fiatDetails?.subtype || 'bank',
             bankName: selectedMethod.fiatDetails?.bankName || '',
             swiftCode: selectedMethod.fiatDetails?.swiftCode || '',
             bankCode: selectedMethod.fiatDetails?.bankCode || '',
             branchCode: selectedMethod.fiatDetails?.branchCode || '',
             accountName: selectedMethod.fiatDetails?.accountName || '',
             accountNumber: selectedMethod.fiatDetails?.accountNumber || '',
-            branchAddress: selectedMethod.fiatDetails?.branchAddress || ''
+            branchAddress: selectedMethod.fiatDetails?.branchAddress || '',
+            paybillNumber: selectedMethod.fiatDetails?.paybillNumber || '',
+            mpesaAccountNumber: selectedMethod.fiatDetails?.mpesaAccountNumber || '',
+            tillNumber: selectedMethod.fiatDetails?.tillNumber || '',
+            businessName: selectedMethod.fiatDetails?.businessName || ''
           }));
         } else if (selectedMethod.type === 'crypto') {
           setFormData(prev => ({
@@ -2061,6 +2210,40 @@ export default function CreateInvoicePage() {
                 <li key={index}>{error}</li>
               ))}
             </ul>
+          </div>
+        )}
+
+        {/* Auto-save Status Indicator */}
+        {autoSaveStatus && (
+          <div className="mb-4 flex items-center justify-center">
+            <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm ${
+              autoSaveStatus === 'saving' ? 'bg-blue-50 text-blue-700' :
+              autoSaveStatus === 'saved' ? 'bg-green-50 text-green-700' :
+              'bg-red-50 text-red-700'
+            }`}>
+              {autoSaveStatus === 'saving' && (
+                <>
+                  <div className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                  <span>Auto-saving...</span>
+                </>
+              )}
+              {autoSaveStatus === 'saved' && (
+                <>
+                  <div className="h-4 w-4 bg-green-600 rounded-full flex items-center justify-center">
+                    <div className="h-2 w-2 bg-white rounded-full"></div>
+                  </div>
+                  <span>Draft saved</span>
+                </>
+              )}
+              {autoSaveStatus === 'error' && (
+                <>
+                  <div className="h-4 w-4 bg-red-600 rounded-full flex items-center justify-center">
+                    <span className="text-white text-xs">!</span>
+                  </div>
+                  <span>Save failed</span>
+                </>
+              )}
+            </div>
           </div>
         )}
 
@@ -2529,7 +2712,14 @@ export default function CreateInvoicePage() {
                 <option value="">-- Select a saved payment method --</option>
                 {savedPaymentMethods.map((method) => (
                   <option key={method._id} value={method._id}>
-                    {method.name} ({method.type === 'fiat' ? 'Bank Transfer' : 'Crypto'})
+                    {method.name} ({
+                      method.type === 'fiat' ? 
+                        method.fiatDetails?.subtype === 'mpesa_paybill' ? 'M-Pesa Paybill' :
+                        method.fiatDetails?.subtype === 'mpesa_till' ? 'M-Pesa Till' :
+                        'Bank Transfer' : 
+                      method.type === 'crypto' ? 'Crypto' :
+                      'Payment Method'
+                    })
                   </option>
                 ))}
               </select>
@@ -2551,7 +2741,9 @@ export default function CreateInvoicePage() {
                       <CreditCard className="h-5 w-5 text-green-600 mr-2" />
                       <div>
                         <div className="font-medium">Fiat ({formData.currency})</div>
-                        <div className="text-sm text-gray-500">Bank transfer</div>
+                        <div className="text-sm text-gray-500">
+                          {formData.companyAddress.country === 'KE' ? ' Dynamic Selection' : 'Bank Transfer'}
+                        </div>
                       </div>
                     </div>
                   </label>
@@ -2576,7 +2768,157 @@ export default function CreateInvoicePage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Payment Details</label>
-                {formData.paymentMethod === 'crypto' ? (
+                {formData.paymentMethod === 'fiat' ? (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Payment Type</label>
+                      <div className="space-y-2">
+                        <label className="flex items-center">
+                          <input
+                            type="radio"
+                            value="bank"
+                            checked={formData.fiatPaymentSubtype === 'bank'}
+                            onChange={(e) => handleFiatPaymentSubtypeChange(e.target.value)}
+                            className="mr-2"
+                          />
+                          <CreditCard className="h-4 w-4 text-green-600 mr-2" />
+                          Bank Transfer
+                        </label>
+                        {isKenyanUser() && (
+                          <>
+                            <label className="flex items-center">
+                              <input
+                                type="radio"
+                                value="mpesa_paybill"
+                                checked={formData.fiatPaymentSubtype === 'mpesa_paybill'}
+                                onChange={(e) => handleFiatPaymentSubtypeChange(e.target.value)}
+                                className="mr-2"
+                              />
+                              <Smartphone className="h-4 w-4 text-orange-600 mr-2" />
+                              M-Pesa Paybill
+                            </label>
+                            <label className="flex items-center">
+                              <input
+                                type="radio"
+                                value="mpesa_till"
+                                checked={formData.fiatPaymentSubtype === 'mpesa_till'}
+                                onChange={(e) => handleFiatPaymentSubtypeChange(e.target.value)}
+                                className="mr-2"
+                              />
+                              <Smartphone className="h-4 w-4 text-orange-600 mr-2" />
+                              M-Pesa Till Number
+                            </label>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {formData.fiatPaymentSubtype === 'bank' && (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm text-gray-600 mb-1">Bank Name</label>
+                          <BankSelector
+                            countryCode="KE"
+                            value={formData.bankName || ''}
+                            onBankSelectAction={handleBankSelect}
+                            onInputChangeAction={(value) => handleInputChange('bankName', value)}
+                            placeholder="Search for a bank..."
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-600 mb-1">SWIFT Code</label>
+                          <input
+                            type="text"
+                            value={formData.swiftCode || ''}
+                            onChange={(e) => handleInputChange('swiftCode', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="SWIFT/BIC code"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-600 mb-1">Account Number</label>
+                          <input
+                            type="text"
+                            value={formData.accountNumber || ''}
+                            onChange={(e) => handleInputChange('accountNumber', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="Account number"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-600 mb-1">Account Name</label>
+                          <input
+                            type="text"
+                            value={formData.accountName || ''}
+                            onChange={(e) => handleInputChange('accountName', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="Account holder name"
+                          />
+                        </div>
+                      </div>
+                    )}
+                    
+                    {formData.fiatPaymentSubtype === 'mpesa_paybill' && (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm text-gray-600 mb-1">Paybill Number</label>
+                          <input
+                            type="text"
+                            value={formData.paybillNumber || ''}
+                            onChange={(e) => handleInputChange('paybillNumber', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="e.g., 123456"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-600 mb-1">Account Number</label>
+                          <input
+                            type="text"
+                            value={formData.mpesaAccountNumber || ''}
+                            onChange={(e) => handleInputChange('mpesaAccountNumber', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="Account number for paybill"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-600 mb-1">Business Name (Optional)</label>
+                          <input
+                            type="text"
+                            value={formData.businessName || ''}
+                            onChange={(e) => handleInputChange('businessName', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="Your business name (optional)"
+                          />
+                        </div>
+                      </div>
+                    )}
+                    
+                    {formData.fiatPaymentSubtype === 'mpesa_till' && (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm text-gray-600 mb-1">Till Number</label>
+                          <input
+                            type="text"
+                            value={formData.tillNumber || ''}
+                            onChange={(e) => handleInputChange('tillNumber', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="e.g., 1234567"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-600 mb-1">Business Name (Optional)</label>
+                          <input
+                            type="text"
+                            value={formData.businessName || ''}
+                            onChange={(e) => handleInputChange('businessName', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="Your business name (optional)"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : formData.paymentMethod === 'crypto' ? (
                   <div className="space-y-4">
                     <div>
                       <label className="block text-sm text-gray-600 mb-1">Choose your payment network</label>
@@ -2650,82 +2992,8 @@ export default function CreateInvoicePage() {
                       />
                     </div>
                   </div>
-                ) : (
-                  <div className="max-h-48 overflow-y-auto space-y-4 pr-2">
-                    <div>
-                      <label className="block text-sm text-gray-600 mb-1">Bank Name</label>
-                      <BankSelector
-                        countryCode={formData.companyAddress.country}
-                        value={formData.bankName || ''}
-                        onBankSelectAction={handleBankSelect}
-                        onInputChangeAction={(value) => handleInputChange('bankName', value)}
-                        placeholder="Search for a bank..."
-                        disabled={!formData.companyAddress.country}
-                      />
+                ) : null}
                     </div>
-                    <div>
-                      <label className="block text-sm text-gray-600 mb-1">SWIFT Code</label>
-                      <input
-                        type="text"
-                        value={formData.swiftCode || ''}
-                        onChange={(e) => handleInputChange('swiftCode', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                        placeholder="SWIFT/BIC code"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-600 mb-1">Bank Code</label>
-                      <input
-                        type="text"
-                        value={formData.bankCode || ''}
-                        onChange={(e) => handleInputChange('bankCode', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                        placeholder="Bank code"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-600 mb-1">Branch Code</label>
-                      <input
-                        type="text"
-                        value={formData.branchCode || ''}
-                        onChange={(e) => handleInputChange('branchCode', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                        placeholder="Branch code"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-600 mb-1">Account Name</label>
-                      <input
-                        type="text"
-                        value={formData.accountName || ''}
-                        onChange={(e) => handleInputChange('accountName', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                        placeholder="Account holder name"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-600 mb-1">Account Number</label>
-                      <input
-                        type="text"
-                        value={formData.accountNumber || ''}
-                        onChange={(e) => handleInputChange('accountNumber', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                        placeholder="Account number"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-600 mb-1">Branch Address</label>
-                      <textarea
-                        value={formData.branchAddress || ''}
-                        onChange={(e) => handleInputChange('branchAddress', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                        placeholder="Branch address"
-                        rows={3}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
             </div>
           </div>
 
