@@ -2362,7 +2362,7 @@ export default function CreateInvoicePage() {
                   
                   {/* Company Details */}
                   <div className="flex-1 space-y-2">
-                    <div className="font-medium">
+                    <div className="font-medium text-gray-700">
                       {formData.companyName || 'Company Name'}
                     </div>
                     <div className="text-gray-700 space-y-1">
@@ -2462,7 +2462,7 @@ export default function CreateInvoicePage() {
                 )}
 
                 <div className="space-y-2">
-                  <div className="font-medium">
+                  <div className="font-medium text-gray-700">
                     {formData.clientCompany ? formData.clientCompany : formData.clientName || 'Client Name'}
                   </div>
                   {formData.clientCompany && (
@@ -2479,7 +2479,7 @@ export default function CreateInvoicePage() {
                     </div>
                     <div>{formData.clientAddress.country ? countries.find(c => c.code === formData.clientAddress.country)?.name || formData.clientAddress.country : 'Country'}</div>
                   </div>
-                  <div className="text-gray-7700">
+                  <div className="text-gray-700">
                     {formData.clientEmail || 'Email'}
                   </div>
                   <div className="text-gray-700">
@@ -2701,9 +2701,9 @@ export default function CreateInvoicePage() {
                       value="regular"
                       checked={formData.invoiceType === 'regular'}
                       onChange={(e) => handleInputChange('invoiceType', e.target.value)}
-                      className="mr-2"
+                      className="mr-2 "
                     />
-                    <span className="text-sm">Regular</span>
+                    <span className="text-sm text-gray-600">Regular</span>
                   </label>
                   <label className="flex items-center">
                     <input
@@ -2713,7 +2713,7 @@ export default function CreateInvoicePage() {
                       onChange={(e) => handleInputChange('invoiceType', e.target.value)}
                       className="mr-2"
                     />
-                    <span className="text-sm">Recurring</span>
+                    <span className="text-sm text-gray-600">Recurring</span>
                   </label>
                 </div>
               </div>
@@ -2729,7 +2729,7 @@ export default function CreateInvoicePage() {
                       onChange={(e) => handleInputChange('enableMultiCurrency', e.target.checked)}
                       className="mr-2"
                     />
-                    <span className="text-sm">Enable Multi-Currency</span>
+                    <span className="text-sm text-gray-600">Enable Multi-Currency</span>
                   </label>
                 </div>
               </div>
@@ -2769,7 +2769,7 @@ export default function CreateInvoicePage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Payment Type</label>
-                <div className="space-y-3">
+                <div className="space-y-3 text-gray-600">
                   <label className="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
                     <input
                       type="radio"
@@ -2781,7 +2781,7 @@ export default function CreateInvoicePage() {
                     <div className="flex items-center">
                       <CreditCard className="h-5 w-5 text-green-600 mr-2" />
                       <div>
-                        <div className="font-medium">Fiat ({formData.currency})</div>
+                        <div className="font-medium">Local currency ({formData.currency})</div>
                         <div className="text-sm text-gray-700">
                           {formData.companyAddress.country === 'KE' ? ' Dynamic Selection' : 'Bank Transfer'}
                         </div>
@@ -2799,7 +2799,7 @@ export default function CreateInvoicePage() {
                     <div className="flex items-center">
                       <Wallet className="h-5 w-5 text-blue-600 mr-2" />
                       <div>
-                        <div className="font-medium">Crypto</div>
+                        <div className="font-medium text-gray-700">Crypto</div>
                         <div className="text-sm text-gray-700">Cryptocurrency payment</div>
                       </div>
                     </div>
@@ -2814,37 +2814,37 @@ export default function CreateInvoicePage() {
                     <div>
                       <label className="block text-sm text-gray-600 mb-1">Payment Type</label>
                       <div className="space-y-2">
-                        <label className="flex items-center">
+                        <label className="flex items-center text-gray-600">
                           <input
                             type="radio"
                             value="bank"
                             checked={formData.fiatPaymentSubtype === 'bank'}
                             onChange={(e) => handleFiatPaymentSubtypeChange(e.target.value)}
-                            className="mr-2"
+                            className="mr-2 text-gray-600"
                           />
                           <CreditCard className="h-4 w-4 text-green-600 mr-2" />
                           Bank Transfer
                         </label>
                         {isKenyanUser() && (
                           <>
-                            <label className="flex items-center">
+                            <label className="flex items-center text-gray-600">
                               <input
                                 type="radio"
                                 value="mpesa_paybill"
                                 checked={formData.fiatPaymentSubtype === 'mpesa_paybill'}
                                 onChange={(e) => handleFiatPaymentSubtypeChange(e.target.value)}
-                                className="mr-2"
+                                className="mr-2 text-gray-600"
                               />
                               <Smartphone className="h-4 w-4 text-orange-600 mr-2" />
                               M-Pesa Paybill
                             </label>
-                            <label className="flex items-center">
+                            <label className="flex items-center text-gray-600">
                               <input
                                 type="radio"
                                 value="mpesa_till"
                                 checked={formData.fiatPaymentSubtype === 'mpesa_till'}
                                 onChange={(e) => handleFiatPaymentSubtypeChange(e.target.value)}
-                                className="mr-2"
+                                className="mr-2 text-gray-600"
                               />
                               <Smartphone className="h-4 w-4 text-orange-600 mr-2" />
                               M-Pesa Till Number
@@ -2864,6 +2864,7 @@ export default function CreateInvoicePage() {
                             onBankSelectAction={handleBankSelect}
                             onInputChangeAction={(value) => handleInputChange('bankName', value)}
                             placeholder="Search for a bank..."
+                            
                           />
                         </div>
                         <div>
@@ -3092,7 +3093,7 @@ export default function CreateInvoicePage() {
                           type="text"
                           value={item.description}
                           onChange={(e) => handleItemChange(index, 'description', e.target.value)}
-                          className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-2 py-1 border text-gray-600 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                           placeholder="Enter description"
                         />
                       </td>
@@ -3101,7 +3102,7 @@ export default function CreateInvoicePage() {
                           type="number"
                           value={item.quantity}
                           onChange={(e) => handleItemChange(index, 'quantity', parseFloat(e.target.value) || 0)}
-                          className="w-20 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-20 px-2 py-1 text-gray-600 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                           min="0"
                           step="1"
                         />
@@ -3111,7 +3112,7 @@ export default function CreateInvoicePage() {
                           type="number"
                           value={item.unitPrice}
                           onChange={(e) => handleItemChange(index, 'unitPrice', parseFloat(e.target.value) || 0)}
-                          className="w-24 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-24 px-2 py-1 border text-gray-600 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                           min="0"
                           step="0.01"
                         />
@@ -3124,7 +3125,7 @@ export default function CreateInvoicePage() {
                                 type="number"
                                 value={item.discount}
                                 onChange={(e) => handleItemChange(index, 'discount', parseFloat(e.target.value) || 0)}
-                                className="w-20 px-2 pr-6 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="w-20 px-2 pr-6 py-1 border text-gray-600 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 min="0"
                                 max="100"
                                 step="0.01"
@@ -3149,7 +3150,7 @@ export default function CreateInvoicePage() {
                             type="number"
                             value={item.tax}
                             onChange={(e) => handleItemChange(index, 'tax', parseFloat(e.target.value) || 0)}
-                            className="w-20 px-2 pr-6 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-20 px-2 pr-6 py-1 border text-gray-600 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                             min="0"
                             max="100"
                             step="0.01"
@@ -3169,7 +3170,7 @@ export default function CreateInvoicePage() {
                                 }
                               }
                             }}
-                            className="w-full text-xs px-1 py-0.5 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            className="w-full text-xs px-1 py-0.5 border text-gray-600 border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                             value=""
                           >
                             <option value="">Select tax type</option>
@@ -3233,7 +3234,7 @@ export default function CreateInvoicePage() {
                   <span>Total Tax amount</span>
                   <span>{getCurrencySymbol()}{formData.totalTax.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-lg font-semibold border-t pt-2">
+                <div className="flex justify-between text-gray-700 text-lg font-semibold border-t pt-2">
                   <span>Total amount</span>
                   <span>{getCurrencySymbol()}{formData.total.toFixed(2)}</span>
                 </div>
