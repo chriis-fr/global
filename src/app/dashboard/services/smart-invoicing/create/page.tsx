@@ -2781,7 +2781,7 @@ export default function CreateInvoicePage() {
                     <div className="flex items-center">
                       <CreditCard className="h-5 w-5 text-green-600 mr-2" />
                       <div>
-                        <div className="font-medium">Local currency ({formData.currency})</div>
+                        <div className="font-medium text-gray-700">Local currency ({formData.currency})</div>
                         <div className="text-sm text-gray-700">
                           {formData.companyAddress.country === 'KE' ? ' Dynamic Selection' : 'Bank Transfer'}
                         </div>
@@ -3203,7 +3203,7 @@ export default function CreateInvoicePage() {
                           </select>
                         </div>
                       </td>
-                      <td className="py-3 px-4 font-medium">
+                      <td className="py-3 px-4 font-medium text-gray-700">
                         {getCurrencySymbol()}{item.amount.toFixed(2)}
                       </td>
                       <td className="py-3 px-4">
