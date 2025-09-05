@@ -152,14 +152,14 @@ export default function PaymentMethodsPage() {
   };
 
   const toggleSensitiveData = (methodId: string) => {
-    setShowSensitiveData(prev => ({
+    setShowSensitiveData((prev: Record<string, boolean>) => ({
       ...prev,
       [methodId]: !prev[methodId]
     }));
   };
 
   const handleBankSelect = (bank: Bank) => {
-    setNewPaymentMethod(prev => ({
+    setNewPaymentMethod((prev: any) => ({
       ...prev,
       bankName: bank.name,
       swiftCode: bank.swift_code,
@@ -485,7 +485,7 @@ export default function PaymentMethodsPage() {
                   <input
                     type="text"
                     value={newPaymentMethod.name}
-                    onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, name: e.target.value }))}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewPaymentMethod((prev: any) => ({ ...prev, name: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
                     placeholder="e.g., Main Bank Account"
                     required
@@ -500,7 +500,7 @@ export default function PaymentMethodsPage() {
                         type="radio"
                         value="fiat"
                         checked={newPaymentMethod.type === 'fiat'}
-                        onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, type: e.target.value as 'fiat' | 'crypto' | 'stellar' }))}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewPaymentMethod((prev: any) => ({ ...prev, type: e.target.value as 'fiat' | 'crypto' | 'stellar' }))}
                         className="mr-2"
                       />
                       Fiat Payment
@@ -510,7 +510,7 @@ export default function PaymentMethodsPage() {
                         type="radio"
                         value="crypto"
                         checked={newPaymentMethod.type === 'crypto'}
-                        onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, type: e.target.value as 'fiat' | 'crypto' | 'stellar' }))}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewPaymentMethod((prev: any) => ({ ...prev, type: e.target.value as 'fiat' | 'crypto' | 'stellar' }))}
                         className="mr-2"
                       />
                       Cryptocurrency
@@ -520,7 +520,7 @@ export default function PaymentMethodsPage() {
                         type="radio"
                         value="stellar"
                         checked={newPaymentMethod.type === 'stellar'}
-                        onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, type: e.target.value as 'fiat' | 'crypto' | 'stellar' }))}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewPaymentMethod((prev: any) => ({ ...prev, type: e.target.value as 'fiat' | 'crypto' | 'stellar' }))}
                         className="mr-2"
                       />
                       Stellar Wallet
@@ -538,7 +538,7 @@ export default function PaymentMethodsPage() {
                             type="radio"
                             value="bank"
                             checked={newPaymentMethod.subtype === 'bank'}
-                            onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, subtype: e.target.value as 'bank' | 'mpesa_paybill' | 'mpesa_till' }))}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewPaymentMethod((prev: any) => ({ ...prev, subtype: e.target.value as 'bank' | 'mpesa_paybill' | 'mpesa_till' }))}
                             className="mr-2"
                           />
                           Bank Transfer
@@ -800,7 +800,7 @@ export default function PaymentMethodsPage() {
                     type="checkbox"
                     id="isDefault"
                     checked={newPaymentMethod.isDefault}
-                    onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, isDefault: e.target.checked }))}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewPaymentMethod((prev: any) => ({ ...prev, isDefault: e.target.checked }))}
                     className="mr-2"
                   />
                   <label htmlFor="isDefault" className="text-sm text-gray-700">Set as default payment method</label>
