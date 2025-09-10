@@ -16,7 +16,8 @@ import {
   ChevronRight,
   CreditCard,
   ImageIcon,
-  CheckCircle
+  CheckCircle,
+  Receipt
 } from 'lucide-react';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import NotificationBadge from './NotificationBadge';
@@ -28,6 +29,12 @@ const SERVICE_LINKS = [
     label: 'Smart Invoicing',
     icon: FileText,
     href: '/dashboard/services/smart-invoicing',
+  },
+  {
+    key: 'accountsPayable',
+    label: 'Accounts Payable',
+    icon: Receipt,
+    href: '/dashboard/services/payables',
   },
   // Add more services as they become ready
 ];

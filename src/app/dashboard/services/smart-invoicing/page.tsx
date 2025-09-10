@@ -127,11 +127,13 @@ export default function SmartInvoicingPage() {
         currentInvoices = invoicesData.data.invoices || [];
         const apiStats = invoicesData.data.stats;
         
+        
         setInvoices(currentInvoices);
         currentStats = {
           totalInvoices: apiStats.totalInvoices || 0,
-          pendingCount: currentInvoices.filter((inv: { status: string }) => inv.status === 'sent' || inv.status === 'pending').length,
-          paidCount: currentInvoices.filter((inv: { status: string }) => inv.status === 'paid').length,
+          // Use API stats counts (calculated from total database count, not paginated results)
+          pendingCount: (apiStats.statusCounts?.sent || 0) + (apiStats.statusCounts?.pending || 0),
+          paidCount: apiStats.statusCounts?.paid || 0,
           totalRevenue: apiStats.totalRevenue || 0
         };
         setStats(currentStats);
@@ -516,6 +518,7 @@ export default function SmartInvoicingPage() {
       <Link
         href="/dashboard"
         className="fixed bottom-6 right-6 z-50 flex items-center justify-center w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-all duration-300 hover:scale-110"
+        title="View Financial Overview"
       >
         <LayoutDashboard className="h-6 w-6" />
       </Link>

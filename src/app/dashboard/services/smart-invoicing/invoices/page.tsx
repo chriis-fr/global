@@ -623,18 +623,6 @@ export default function InvoicesPage() {
                               <Eye className="h-4 w-4" />
                             </button>
                           )}
-                          {invoice.status !== 'draft' && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                router.push(`/dashboard/services/smart-invoicing/create?id=${invoice._id?.toString()}`);
-                              }}
-                              className="text-green-400 hover:text-green-300 transition-colors p-1 sm:p-2 rounded-lg hover:bg-white/10"
-                              title="Edit Invoice"
-                            >
-                              <Edit3 className="h-4 w-4" />
-                            </button>
-                          )}
                           <button
                             onClick={(e) => {
                               e.stopPropagation();

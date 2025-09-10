@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId, Db } from 'mongodb';
 import { CurrencyService } from '@/lib/services/currencyService';
+import { LedgerSyncService } from '@/lib/services/ledgerSyncService';
 
 // Secure invoice number generation function
 const generateSecureInvoiceNumber = async (db: Db, organizationId: string, ownerId: string, excludeNumber?: string): Promise<string> => {
@@ -378,6 +379,16 @@ export async function POST(request: NextRequest) {
     }
     
     console.log('✅ [API Invoices] Invoice saved successfully');
+
+    // Sync to financial ledger
+    try {
+      const invoiceWithId = { _id: result.insertedId, ...invoiceData };
+      await LedgerSyncService.syncInvoiceToLedger(invoiceWithId);
+      console.log('✅ [API Invoices] Invoice synced to ledger');
+    } catch (syncError) {
+      console.error('⚠️ [API Invoices] Failed to sync invoice to ledger:', syncError);
+      // Don't fail the request if sync fails
+    }
 
     return NextResponse.json({
       success: true,

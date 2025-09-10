@@ -462,6 +462,13 @@ export default function CreateInvoicePage() {
       const data = await response.json();
       
       if (data.success && data.data) {
+        // Security check: Only allow editing draft invoices
+        if (data.data.status !== 'draft') {
+          console.warn('🚫 [Security] Attempted to edit non-draft invoice:', data.data.status);
+          router.push(`/dashboard/services/smart-invoicing/invoices/${id}`);
+          return;
+        }
+        
         // Ensure all required fields are present with defaults
         const loadedData = {
           ...defaultInvoiceData,

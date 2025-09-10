@@ -25,8 +25,8 @@ export const SERVICE_DEFINITIONS = {
     title: 'Accounts Payable',
     description: 'Manage your business payments and vendor relationships',
     category: 'Core Invoicing & Payments',
-    icon: 'ArrowLeft',
-    ready: false // Coming soon
+    icon: 'Receipt',
+    ready: true // Ready for production
   },
 
   // Business Operations
@@ -126,7 +126,7 @@ export function createDefaultServices(): UserServices {
     smartInvoicing: true, // Enable by default so users can see it in sidebar
     emailService: true, // Enable by default for email notifications
     accountsReceivable: false,
-    accountsPayable: false,
+    accountsPayable: true, // Enable by default so users can see it in sidebar
     
     // Business Operations
     expenses: false,

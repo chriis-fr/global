@@ -846,13 +846,15 @@ export default function InvoiceViewPage() {
               )}
             </div>
             
-            <button
-              onClick={() => router.push(`/dashboard/services/smart-invoicing/create?id=${invoice._id}`)}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Edit3 className="h-4 w-4" />
-              <span>Edit</span>
-            </button>
+            {invoice.status === 'draft' && (
+              <button
+                onClick={() => router.push(`/dashboard/services/smart-invoicing/create?id=${invoice._id}`)}
+                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Edit3 className="h-4 w-4" />
+                <span>Edit</span>
+              </button>
+            )}
             {canMarkInvoiceAsPaid() && (
               <button
                 onClick={handleMarkAsPaid}
