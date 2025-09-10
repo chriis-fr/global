@@ -26,7 +26,7 @@ import FormattedNumberDisplay from '@/components/FormattedNumber';
 
 // Cache key for localStorage
 const CACHE_KEY = 'smart-invoicing-cache';
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const CACHE_DURATION = 15 * 60 * 1000; // 15 minutes - longer cache for better performance
 
 interface CachedData {
   invoices: Invoice[];
@@ -49,7 +49,7 @@ export default function SmartInvoicingPage() {
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
-
+  
   // Load cached data from localStorage
   const loadCachedData = useCallback(() => {
     try {
@@ -165,10 +165,11 @@ export default function SmartInvoicingPage() {
 
   useEffect(() => {
     if (session?.user) {
-      // Force refresh on page load to ensure fresh data
-      loadAllData(true);
+      // Load data (will use cache if available and valid)
+      loadAllData(false);
     }
-  }, [session?.user, loadAllData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user]); // Intentionally exclude loadAllData to prevent infinite loops
 
   // Refresh completion status when returning from onboarding
   useEffect(() => {
@@ -180,7 +181,8 @@ export default function SmartInvoicingPage() {
       // Force refresh data
       loadAllData(true);
     }
-  }, [loadAllData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Intentionally exclude loadAllData to prevent infinite loops
 
   const handleCreateInvoice = () => {
     // Only check onboarding if we have the data, otherwise assume it's completed

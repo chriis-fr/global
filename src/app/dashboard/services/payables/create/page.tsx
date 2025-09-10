@@ -1,44 +1,23 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { motion } from 'framer-motion';
 import { 
   Plus, 
   X, 
   Save, 
   Send, 
-  Download, 
-  Upload,
-  Calendar,
-  DollarSign,
-  Building2,
-  User,
-  MapPin,
-  Phone,
-  Mail,
   FileText,
   Trash2,
-  Edit3,
-  Eye,
   CreditCard,
   Wallet,
-  Banknote,
-  Receipt,
   AlertCircle,
   CheckCircle,
-  Clock,
   ChevronDown,
-  ChevronUp,
-  Search,
   Loader2
 } from 'lucide-react';
-import { getCurrencies, getCurrencyByCode } from '@/data/currencies';
-import { getCountries } from '@/data/countries';
-import { getNetworks } from '@/data/networks';
-import FormattedNumberDisplay from '@/components/FormattedNumber';
-import { useCurrencyConversion } from '@/lib/hooks/useCurrencyConversion';
+import { getFiatCurrencies, getCurrencyByCode } from '@/data/currencies';
 
 interface Vendor {
   _id: string;
@@ -185,24 +164,15 @@ const useFormPersistence = (key: string, initialData: PayableFormData, setAutoSa
 
 export default function CreatePayablePage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { data: session } = useSession();
-  const { convertCurrency } = useCurrencyConversion();
 
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [showVendorDropdown, setShowVendorDropdown] = useState(false);
-  const [showCompanyEdit, setShowCompanyEdit] = useState(false);
-  const [showVendorEdit, setShowVendorEdit] = useState(false);
   const [showVendorCreation, setShowVendorCreation] = useState(false);
   const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showPaymentMethods, setShowPaymentMethods] = useState(false);
-  const [savedPaymentMethods, setSavedPaymentMethods] = useState<any[]>([]);
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<any>(null);
 
-  const currencies = getCurrencies();
-  const countries = getCountries();
-  const networks = getNetworks();
+  const currencies = getFiatCurrencies();
 
   const initialFormData: PayableFormData = {
     payableName: '',
@@ -260,9 +230,6 @@ export default function CreatePayablePage() {
     setAutoSaveStatus
   );
 
-  const isKenyanUser = () => {
-    return formData.companyAddress.country === 'KE';
-  };
 
   // Load vendors
   const loadVendors = async () => {
@@ -285,24 +252,6 @@ export default function CreatePayablePage() {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleFiatPaymentSubtypeChange = (value: string) => {
-    setFormData(prev => ({ 
-      ...prev, 
-      fiatPaymentSubtype: value as 'bank' | 'mpesa_paybill' | 'mpesa_till',
-      // Clear payment-specific fields when changing subtype
-      bankName: '',
-      swiftCode: '',
-      bankCode: '',
-      branchCode: '',
-      accountName: '',
-      accountNumber: '',
-      branchAddress: '',
-      paybillNumber: '',
-      mpesaAccountNumber: '',
-      tillNumber: '',
-      businessName: ''
-    }));
-  };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
@@ -475,16 +424,9 @@ export default function CreatePayablePage() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
 
   const getCurrencySymbol = () => {
-    return getCurrencyByCode(formData.currency)?.symbol || '$';
+    return getCurrencyByCode(formData.currency as string)?.symbol || '$';
   };
 
   return (
@@ -653,12 +595,9 @@ export default function CreatePayablePage() {
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-gray-900">Vendor Information</h2>
-                <button
-                  onClick={() => setShowVendorEdit(true)}
-                  className="text-blue-600 hover:text-blue-700 text-sm font-medium"
-                >
-                  Edit
-                </button>
+                <span className="text-gray-500 text-sm">
+                  Edit functionality coming soon
+                </span>
               </div>
               
               <div className="relative">
