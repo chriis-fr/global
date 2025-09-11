@@ -25,6 +25,7 @@ const CACHE_DURATION = 15 * 60 * 1000; // 15 minutes
 interface Payable {
   _id: string;
   payableNumber: string;
+  companyName?: string; // Sender's company name (who sent the invoice)
   vendorName: string;
   vendorCompany?: string;
   vendorEmail: string;
@@ -55,6 +56,9 @@ interface CachedData {
 export default function AccountsPayablePage() {
   const router = useRouter();
   const { data: session } = useSession();
+  
+  console.log('🔍 [Payables Page] Component loaded');
+  console.log('🔍 [Payables Page] Session:', session);
 
   const [payables, setPayables] = useState<Payable[]>([]);
   const [stats, setStats] = useState<PayableStats>({
@@ -110,12 +114,18 @@ export default function AccountsPayablePage() {
 
   // Load all data in parallel
   const loadAllData = useCallback(async (forceRefresh = false) => {
-    if (!session?.user) return;
+    console.log('🔍 [Payables Page] loadAllData called, forceRefresh:', forceRefresh);
+    if (!session?.user) {
+      console.log('🔍 [Payables Page] No session user, returning early');
+      return;
+    }
     
     // Try to load from cache first (unless force refresh)
     if (!forceRefresh && loadCachedData()) {
+      console.log('🔍 [Payables Page] Using cached data, skipping API call');
       return;
     }
+    console.log('🔍 [Payables Page] Cache miss or force refresh, calling API');
     
     // Don't reload if we already have data and not forcing refresh
     if (dataLoaded && !forceRefresh) return;
@@ -124,12 +134,15 @@ export default function AccountsPayablePage() {
       setLoading(true);
       
       // Load payables with stats and check onboarding status in parallel
+      console.log('🔍 [Frontend] Loading payables for user:', session.user.email);
       const [payablesResponse, onboardingResponse] = await Promise.all([
         fetch('/api/payables?convertToPreferred=true'),
         fetch('/api/onboarding/service?service=accountsPayable')
       ]);
       
+      console.log('🔍 [Frontend] Payables response status:', payablesResponse.status);
       const payablesData = await payablesResponse.json();
+      console.log('🔍 [Frontend] Payables data:', payablesData);
       
       let currentPayables: Payable[] = [];
       let currentStats: PayableStats = {
@@ -164,6 +177,10 @@ export default function AccountsPayablePage() {
       saveToCache(currentPayables, currentStats, onboardingCompleted);
     } catch (error) {
       console.error('❌ [Accounts Payable Dashboard] Error loading data:', error);
+      console.error('❌ [Accounts Payable Dashboard] Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
     } finally {
       setLoading(false);
       setDataLoaded(true);
@@ -171,9 +188,13 @@ export default function AccountsPayablePage() {
   }, [session?.user, dataLoaded, loadCachedData, saveToCache]);
 
   useEffect(() => {
+    console.log('🔍 [Payables Page] useEffect triggered, session:', session?.user?.email);
     if (session?.user) {
+      console.log('🔍 [Payables Page] Loading data for user:', session.user.email);
       // Load data (will use cache if available and valid)
       loadAllData(false);
+    } else {
+      console.log('🔍 [Payables Page] No session user, skipping data load');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user]); // Intentionally exclude loadAllData to prevent infinite loops
@@ -408,7 +429,7 @@ export default function AccountsPayablePage() {
                           <div className="flex items-center space-x-3">
                             <div>
                               <p className="text-sm font-medium text-white">
-                                {payable.vendorCompany || payable.vendorName}
+                                {payable.companyName || payable.vendorCompany || payable.vendorName}
                               </p>
                               <p className="text-sm text-blue-300">#{payable.payableNumber}</p>
                             </div>

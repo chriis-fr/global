@@ -59,7 +59,15 @@ export class CurrencyService {
 
     try {
       const rate = await this.getExchangeRate(fromCurrency, toCurrency);
-      return amount * rate;
+      const convertedAmount = amount * rate;
+      console.log('🔍 [CurrencyService] Conversion:', {
+        amount,
+        fromCurrency,
+        toCurrency,
+        rate,
+        convertedAmount
+      });
+      return convertedAmount;
     } catch (error) {
       console.error('Error converting currency:', error);
       return amount; // Return original amount if conversion fails
@@ -70,19 +78,24 @@ export class CurrencyService {
   static async getExchangeRate(fromCurrency: string, toCurrency: string): Promise<number> {
     const key = `${fromCurrency}_${toCurrency}`;
     
+    console.log('🔍 [CurrencyService] Getting exchange rate:', { fromCurrency, toCurrency, key });
+    
     // Check if we have a cached rate
     const cached = this.conversionRates.get(key);
     if (cached && (Date.now() - cached.lastUpdated.getTime()) < 3600000) { // 1 hour cache
+      console.log('🔍 [CurrencyService] Using cached rate:', cached.rate);
       return cached.rate;
     }
 
     try {
       // Fetch from API
+      console.log('🔍 [CurrencyService] Fetching from API:', `${this.BASE_URL}/${fromCurrency}`);
       const response = await fetch(`${this.BASE_URL}/${fromCurrency}`);
       const data = await response.json();
       
       if (data.rates && data.rates[toCurrency]) {
         const rate = data.rates[toCurrency];
+        console.log('🔍 [CurrencyService] API rate found:', rate);
         
         // Cache the rate
         this.conversionRates.set(key, {
@@ -135,9 +148,11 @@ export class CurrencyService {
 
       const fallbackRate = fallbackRates[fromCurrency]?.[toCurrency];
       if (fallbackRate) {
+        console.log('🔍 [CurrencyService] Using fallback rate:', fallbackRate);
         return fallbackRate;
       }
 
+      console.log('🔍 [CurrencyService] No rate found, returning 1:1');
       return 1; // Return 1:1 if no conversion available
     }
   }
@@ -190,6 +205,57 @@ export class CurrencyService {
     } catch (error) {
       console.error('Error converting invoice for reporting:', error);
       return invoice;
+    }
+  }
+
+  // Convert payable amounts to preferred currency for reporting
+  static async convertPayableForReporting(
+    payable: { [key: string]: unknown },
+    preferredCurrency: string
+  ): Promise<{ [key: string]: unknown }> {
+    // Type guard to check if payable has required properties
+    if (!payable || typeof payable !== 'object' || !('currency' in payable) || !('total' in payable)) {
+      return payable;
+    }
+
+    if (payable.currency === preferredCurrency) {
+      return payable;
+    }
+
+    try {
+      const convertedAmount = await this.convertCurrency(
+        payable.total as number,
+        payable.currency as string,
+        preferredCurrency
+      );
+
+      const convertedSubtotal = await this.convertCurrency(
+        payable.subtotal as number,
+        payable.currency as string,
+        preferredCurrency
+      );
+
+      const convertedTax = await this.convertCurrency(
+        payable.totalTax as number,
+        payable.currency as string,
+        preferredCurrency
+      );
+
+      return {
+        ...payable,
+        originalCurrency: payable.currency,
+        originalTotal: payable.total as number,
+        originalSubtotal: payable.subtotal as number,
+        originalTotalTax: payable.totalTax as number,
+        currency: preferredCurrency,
+        total: convertedAmount,
+        subtotal: convertedSubtotal,
+        totalTax: convertedTax,
+        conversionRate: convertedAmount / (payable.total as number)
+      };
+    } catch (error) {
+      console.error('Error converting payable for reporting:', error);
+      return payable;
     }
   }
 

@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
 import { LedgerSyncService } from '@/lib/services/ledgerSyncService';
+import { CurrencyService } from '@/lib/services/currencyService';
 
 // Secure payable number generation function
 const generateSecurePayableNumber = async (db: any, organizationId: string, ownerId: string, excludeNumber?: string): Promise<string> => {
@@ -365,9 +366,20 @@ export async function GET(request: NextRequest) {
     const priority = searchParams.get('priority');
     const dateFrom = searchParams.get('dateFrom');
     const dateTo = searchParams.get('dateTo');
+    const convertToPreferred = searchParams.get('convertToPreferred') === 'true';
 
     const db = await connectToDatabase();
     const payablesCollection = db.collection('payables');
+
+    // Get user's preferred currency
+    const userPreferences = await CurrencyService.getUserPreferredCurrency(session.user.email);
+    const preferredCurrency = userPreferences.preferredCurrency;
+    
+    console.log('🔍 [Payables API] Currency preferences:', {
+      userEmail: session.user.email,
+      preferredCurrency,
+      userPreferences
+    });
 
     // Build query
     const isOrganization = !!(session.user.organizationId && session.user.organizationId !== session.user.id);
@@ -377,6 +389,12 @@ export async function GET(request: NextRequest) {
     const issuerIdQuery = isObjectId 
       ? { issuerId: new ObjectId(session.user.id) }
       : { issuerId: session.user.id };
+    
+    console.log('🔍 [Payables API] IssuerId query details:', {
+      sessionUserId: session.user.id,
+      isObjectId,
+      issuerIdQuery: JSON.stringify(issuerIdQuery, null, 2)
+    });
     
     let query = isOrganization 
       ? { organizationId: session.user.organizationId }
@@ -390,6 +408,7 @@ export async function GET(request: NextRequest) {
     console.log('🔍 [Payables API] Debug info:', {
       userId: session.user.id,
       userEmail: session.user.email,
+      userIdType: typeof session.user.id,
       isOrganization,
       query
     });
@@ -434,13 +453,14 @@ export async function GET(request: NextRequest) {
 
     // Get payables with pagination
     const skip = (page - 1) * limit;
-    const payables = await payablesCollection
+    let payables = await payablesCollection
       .find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
       .toArray();
 
+    console.log('🔍 [Payables API] Query executed:', JSON.stringify(query, null, 2));
     console.log('🔍 [Payables API] Found payables:', {
       count: payables.length,
       payables: payables.map(p => ({
@@ -450,9 +470,54 @@ export async function GET(request: NextRequest) {
         status: p.status,
         total: p.total,
         payableNumber: p.payableNumber,
+        vendorName: p.vendorName,
+        companyName: p.companyName
+      }))
+    });
+
+    // Debug: Check if there are any payables in the database for this user
+    const allPayablesForUser = await payablesCollection.find({
+      $or: [
+        { issuerId: session.user.id },
+        { userId: session.user.email }
+      ]
+    }).toArray();
+    
+    console.log('🔍 [Payables API] All payables for user (debug):', {
+      userEmail: session.user.email,
+      userId: session.user.id,
+      totalFound: allPayablesForUser.length,
+      payables: allPayablesForUser.map(p => ({
+        id: p._id,
+        issuerId: p.issuerId,
+        userId: p.userId || 'not set',
+        payableNumber: p.payableNumber,
+        companyName: p.companyName,
         vendorName: p.vendorName
       }))
     });
+
+    // Convert currencies if requested
+    if (convertToPreferred) {
+      console.log('🔍 [Payables API] Converting currencies to preferred:', preferredCurrency);
+      const convertedPayables = await Promise.all(
+        payables.map(payable => {
+          console.log('🔍 [Payables API] Converting payable:', {
+            id: payable._id,
+            originalTotal: payable.total,
+            originalCurrency: payable.currency,
+            preferredCurrency
+          });
+          return CurrencyService.convertPayableForReporting(payable as { [key: string]: unknown }, preferredCurrency);
+        })
+      );
+      payables = convertedPayables as typeof payables;
+      console.log('🔍 [Payables API] Converted payables:', payables.map(p => ({
+        id: p._id,
+        convertedTotal: p.total,
+        convertedCurrency: p.currency
+      })));
+    }
 
     // Calculate total amount for all payables
     const totalQuery = isOrganization 
@@ -464,7 +529,18 @@ export async function GET(request: NextRequest) {
           ]
         };
     const allPayables = await payablesCollection.find(totalQuery).toArray();
-    const totalAmount = allPayables.reduce((sum, payable) => sum + (payable.total || 0), 0);
+    
+    let totalAmount = allPayables.reduce((sum, payable) => sum + (payable.total || 0), 0);
+    
+    // Convert total amount if currency conversion is requested
+    if (convertToPreferred && allPayables.length > 0) {
+      // Get the first payable's currency as reference (assuming all have same currency for now)
+      const referenceCurrency = allPayables[0]?.currency || 'USD';
+      if (referenceCurrency !== preferredCurrency) {
+        const convertedTotal = await CurrencyService.convertCurrency(totalAmount, referenceCurrency, preferredCurrency);
+        totalAmount = convertedTotal;
+      }
+    }
 
     return NextResponse.json({
       success: true,

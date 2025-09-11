@@ -245,6 +245,11 @@ async function createPayableForRecipient(recipientEmail: string, invoice: any) {
     }
 
     console.log('✅ [Auto Payable] Recipient is registered, creating payable immediately');
+    console.log('🔍 [Auto Payable] Recipient user details:', {
+      _id: recipientUser._id,
+      email: recipientUser.email,
+      _idType: typeof recipientUser._id
+    });
 
     const db = await connectToDatabase();
     const payablesCollection = db.collection('payables');

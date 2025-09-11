@@ -202,8 +202,10 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (session.user) {
+        console.log('🔍 [Auth] Session callback - token.mongoId:', token.mongoId, 'token.sub:', token.sub)
         // Use MongoDB ObjectId if available, otherwise fall back to JWT subject
         session.user.id = (token.mongoId as string) || token.sub!
+        console.log('🔍 [Auth] Session callback - final session.user.id:', session.user.id)
         session.user.name = token.name as string
         session.user.email = token.email as string
         session.user.image = token.picture as string
@@ -240,10 +242,14 @@ export const authOptions: NextAuthOptions = {
         
         // For OAuth users, we need to get the MongoDB ObjectId from the database
         if (user.email && !token.mongoId) {
+          console.log('🔍 [Auth] Fetching MongoDB ObjectId for OAuth user:', user.email)
           try {
             const dbUser = await UserService.getUserByEmail(user.email)
             if (dbUser?._id) {
               token.mongoId = dbUser._id.toString()
+              console.log('✅ [Auth] MongoDB ObjectId found:', token.mongoId)
+            } else {
+              console.log('❌ [Auth] No MongoDB ObjectId found for user:', user.email)
             }
           } catch (error) {
             console.error('❌ [Auth] Error fetching user for JWT:', error)
