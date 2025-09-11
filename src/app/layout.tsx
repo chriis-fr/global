@@ -18,8 +18,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Chains ERP-Global",
-  description: "Blockchain powered Global Business Solutions",
+  title: "Chains-Global Finance",
+  description: " Global Business Finance Solutions",
   icons: {
     icon: "./chains.PNG"
   }

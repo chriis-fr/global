@@ -10,7 +10,6 @@ import {
   Receipt,
   ArrowUpRight,
   ArrowDownLeft,
-  Eye,
   AlertTriangle
 } from 'lucide-react';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
@@ -120,7 +119,7 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Dashboard</h1>
+            <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Overview</h1>
             <p className="text-blue-200">Welcome back, {session?.user?.name || 'User'}!</p>
         </div>
         <div className="text-right">

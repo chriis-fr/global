@@ -231,7 +231,7 @@ export default function Sidebar() {
                 />
             </div>
             {(!isCollapsed || isAutoHidden) && (
-              <span className="text-white text-xl font-bold whitespace-nowrap">Global</span>
+              <span className="text-white text-lg font-bold whitespace-nowrap">Global Finance</span>
             )}
           </div>
           
