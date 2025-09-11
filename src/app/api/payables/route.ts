@@ -370,15 +370,29 @@ export async function GET(request: NextRequest) {
     const payablesCollection = db.collection('payables');
 
     // Build query
-    const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
+    const isOrganization = !!(session.user.organizationId && session.user.organizationId !== session.user.id);
+    
+    // Handle both MongoDB ObjectIds and OAuth IDs
+    const isObjectId = /^[0-9a-fA-F]{24}$/.test(session.user.id);
+    const issuerIdQuery = isObjectId 
+      ? { issuerId: new ObjectId(session.user.id) }
+      : { issuerId: session.user.id };
+    
     let query = isOrganization 
       ? { organizationId: session.user.organizationId }
       : { 
           $or: [
-            { issuerId: session.user.id },
+            issuerIdQuery,
             { userId: session.user.email }
           ]
         };
+
+    console.log('🔍 [Payables API] Debug info:', {
+      userId: session.user.id,
+      userEmail: session.user.email,
+      isOrganization,
+      query
+    });
 
     if (status) {
       query = { ...query, status } as typeof query & { status: string };
@@ -427,12 +441,25 @@ export async function GET(request: NextRequest) {
       .limit(limit)
       .toArray();
 
+    console.log('🔍 [Payables API] Found payables:', {
+      count: payables.length,
+      payables: payables.map(p => ({
+        id: p._id,
+        issuerId: p.issuerId,
+        userId: p.userId || 'not set',
+        status: p.status,
+        total: p.total,
+        payableNumber: p.payableNumber,
+        vendorName: p.vendorName
+      }))
+    });
+
     // Calculate total amount for all payables
     const totalQuery = isOrganization 
       ? { organizationId: session.user.organizationId }
       : { 
           $or: [
-            { issuerId: session.user.id },
+            issuerIdQuery,
             { userId: session.user.email }
           ]
         };

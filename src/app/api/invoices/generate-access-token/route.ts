@@ -65,7 +65,9 @@ export async function POST(request: NextRequest) {
     await accessTokensCollection.insertOne(tokenData);
 
     // Generate secure access URL
-    const accessUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/invoice-access?token=${token}`;
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const baseUrl = frontendUrl.startsWith('http') ? frontendUrl : `https://${frontendUrl}`;
+    const accessUrl = `${baseUrl}/invoice-access?token=${token}`;
 
     console.log('✅ [Access Token] Generated secure access token:', {
       invoiceId,

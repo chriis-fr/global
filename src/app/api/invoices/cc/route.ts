@@ -185,7 +185,7 @@ export async function POST(request: NextRequest) {
           invoiceData.dueDate ? new Date(invoiceData.dueDate).toLocaleDateString() : 'N/A',
           invoiceData.companyName || 'Chains ERP-Global',
           recipientName,
-          `${process.env.FRONTEND_URL || 'http://localhost:3000'}/invoice/${ccInvoiceNumber}`,
+          `${(process.env.FRONTEND_URL?.startsWith('http') ? process.env.FRONTEND_URL : `https://${process.env.FRONTEND_URL}`) || 'http://localhost:3000'}/invoice/${ccInvoiceNumber}`,
           [invoiceData.paymentMethod === 'crypto' ? 'Cryptocurrency' : 'Bank Transfer'],
           undefined, // No PDF attachment for CC emails
           [] // No additional attachments

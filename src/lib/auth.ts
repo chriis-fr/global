@@ -202,8 +202,8 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (session.user) {
-        // Use token data to avoid database calls
-        session.user.id = token.sub!
+        // Use MongoDB ObjectId if available, otherwise fall back to JWT subject
+        session.user.id = (token.mongoId as string) || token.sub!
         session.user.name = token.name as string
         session.user.email = token.email as string
         session.user.image = token.picture as string
@@ -237,6 +237,18 @@ export const authOptions: NextAuthOptions = {
         token.onboarding = user.onboarding
         token.services = user.services || createDefaultServices()
         token.organizationId = user.organizationId
+        
+        // For OAuth users, we need to get the MongoDB ObjectId from the database
+        if (user.email && !token.mongoId) {
+          try {
+            const dbUser = await UserService.getUserByEmail(user.email)
+            if (dbUser?._id) {
+              token.mongoId = dbUser._id.toString()
+            }
+          } catch (error) {
+            console.error('❌ [Auth] Error fetching user for JWT:', error)
+          }
+        }
       }
       return token
     }

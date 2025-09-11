@@ -5,6 +5,7 @@ import { sendInvoiceNotification } from '@/lib/services/emailService';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
 import { UserService } from '@/lib/services/userService';
+import crypto from 'crypto';
 
 export async function POST(request: NextRequest) {
   try {
@@ -109,27 +110,38 @@ export async function POST(request: NextRequest) {
 
     // Generate secure access token for the invoice
     console.log('🔐 [Send Invoice] Generating secure access token...');
-    const tokenResponse = await fetch(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/api/invoices/generate-access-token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.user.id}` // You might need to adjust this based on your auth setup
-      },
-      body: JSON.stringify({ invoiceId: invoice._id })
-    });
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const baseUrl = frontendUrl.startsWith('http') ? frontendUrl : `https://${frontendUrl}`;
+    
+    let accessUrl = `${baseUrl}/invoice/${invoice.invoiceNumber}`; // Fallback
+    
+    try {
+      // Generate token directly instead of making HTTP call
+      const accessTokensCollection = db.collection('invoice_access_tokens');
+      const token = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+      
+      // Handle both MongoDB ObjectIds and OAuth IDs for createdBy
+      const isObjectId = /^[0-9a-fA-F]{24}$/.test(session.user.id);
+      const createdBy = isObjectId ? new ObjectId(session.user.id) : session.user.id;
+      
+      const tokenData = {
+        token,
+        invoiceId: new ObjectId(invoice._id),
+        recipientEmail: recipientEmail,
+        createdBy: createdBy,
+        createdAt: new Date(),
+        expiresAt,
+        used: false,
+        usedAt: null,
+        usedBy: null
+      };
 
-    let accessUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/invoice/${invoice.invoiceNumber}`; // Fallback
-
-    if (tokenResponse.ok) {
-      const tokenData = await tokenResponse.json();
-      if (tokenData.success) {
-        accessUrl = tokenData.data.accessUrl;
-        console.log('✅ [Send Invoice] Secure access token generated');
-      } else {
-        console.error('❌ [Send Invoice] Failed to generate access token:', tokenData.message);
-      }
-    } else {
-      console.error('❌ [Send Invoice] Failed to generate access token - HTTP error');
+      await accessTokensCollection.insertOne(tokenData);
+      accessUrl = `${baseUrl}/invoice-access?token=${token}`;
+      console.log('✅ [Send Invoice] Secure access token generated');
+    } catch (tokenError) {
+      console.error('❌ [Send Invoice] Failed to generate access token:', tokenError);
     }
 
     // Send invoice email with timeout
@@ -238,9 +250,13 @@ async function createPayableForRecipient(recipientEmail: string, invoice: any) {
     const payablesCollection = db.collection('payables');
 
     // Check if payable already exists for this invoice and recipient
+    // Handle both MongoDB ObjectIds and OAuth IDs
+    const isRecipientObjectId = /^[0-9a-fA-F]{24}$/.test(recipientUser._id);
+    const recipientIssuerId = isRecipientObjectId ? new ObjectId(recipientUser._id) : recipientUser._id;
+    
     const existingPayable = await payablesCollection.findOne({
       relatedInvoiceId: new ObjectId(invoice._id),
-      issuerId: new ObjectId(recipientUser._id)
+      issuerId: recipientIssuerId
     });
 
     if (existingPayable) {
@@ -251,41 +267,98 @@ async function createPayableForRecipient(recipientEmail: string, invoice: any) {
     // Generate payable number
     const payableNumber = `PAY-${Date.now()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
 
-    // Create payable data
+    // Create comprehensive payable data with full tracking
     const payableData = {
+      // Basic payable info
       payableNumber,
       payableName: `Invoice Payment - ${invoice.invoiceNumber}`,
+      payableType: 'invoice_payment',
+      
+      // Dates and timing
       issueDate: new Date(),
       dueDate: new Date(invoice.dueDate),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      paymentDate: null, // Will be set when payment is made
+      
+      // Company information (sender)
       companyName: invoice.companyDetails?.name || invoice.companyName,
       companyEmail: invoice.companyDetails?.email || invoice.companyEmail,
       companyPhone: invoice.companyDetails?.phone || invoice.companyPhone,
       companyAddress: invoice.companyDetails?.address || invoice.companyAddress,
-      companyTaxNumber: '',
+      companyTaxNumber: invoice.companyDetails?.taxNumber || '',
+      
+      // Vendor information (recipient)
       vendorName: invoice.clientDetails?.name || invoice.clientName,
       vendorEmail: invoice.clientDetails?.email || invoice.clientEmail,
       vendorPhone: invoice.clientDetails?.phone || invoice.clientPhone,
       vendorAddress: invoice.clientDetails?.address || invoice.clientAddress,
+      
+      // Payment information
       currency: invoice.currency,
       paymentMethod: invoice.paymentMethod,
       paymentNetwork: invoice.paymentNetwork,
       paymentAddress: invoice.paymentAddress,
-      enableMultiCurrency: false,
-      payableType: 'regular',
+      enableMultiCurrency: invoice.enableMultiCurrency || false,
+      
+      // Financial details
       items: invoice.items || [],
       subtotal: invoice.subtotal || 0,
       totalTax: invoice.totalTax || 0,
       total: invoice.totalAmount || 0,
       memo: `Auto-generated payable from invoice ${invoice.invoiceNumber}`,
-      status: 'pending',
-      priority: 'medium',
+      
+      // Status and workflow
+      status: 'pending', // pending, approved, paid, overdue, cancelled
+      priority: 'medium', // low, medium, high, urgent
       category: 'Invoice Payment',
+      
+      // Approval workflow
+      approvalStatus: 'pending', // pending, approved, rejected
+      approvedBy: null,
+      approvedAt: null,
+      approvalNotes: '',
+      
+      // Payment tracking
+      paymentStatus: 'pending', // pending, processing, completed, failed
+      paymentMethodDetails: {
+        method: invoice.paymentMethod,
+        network: invoice.paymentNetwork,
+        address: invoice.paymentAddress,
+        bankDetails: invoice.bankAccount || null,
+        cryptoDetails: invoice.paymentMethod === 'crypto' ? {
+          network: invoice.paymentNetwork,
+          address: invoice.paymentAddress,
+          token: invoice.currency
+        } : null
+      },
+      
+      // System tracking
       attachedFiles: [],
-      issuerId: new ObjectId(recipientUser._id),
+      issuerId: recipientIssuerId,
+      userId: recipientUser.email, // Add userId field for query compatibility
       organizationId: recipientUser.organizationId ? new ObjectId(recipientUser.organizationId) : null,
       relatedInvoiceId: new ObjectId(invoice._id),
-      createdAt: new Date(),
-      updatedAt: new Date()
+      
+      // Ledger integration
+      ledgerEntryId: null, // Will be set by ledger sync
+      ledgerStatus: 'pending', // pending, synced, updated
+      
+      // Frequency and recurring (for future use)
+      frequency: 'one_time', // one_time, weekly, monthly, quarterly, yearly
+      recurringEndDate: null,
+      
+      // Audit trail
+      statusHistory: [{
+        status: 'pending',
+        changedBy: 'system',
+        changedAt: new Date(),
+        notes: 'Payable created from invoice'
+      }],
+      
+      // Notifications
+      lastNotificationSent: null,
+      notificationCount: 0
     };
 
     const result = await payablesCollection.insertOne(payableData);

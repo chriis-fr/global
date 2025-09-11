@@ -105,6 +105,14 @@ export default function InvoiceAccessPage() {
     }
   }, [token]);
 
+  // Handle authenticated user redirect - moved to top to avoid hooks order issue
+  useEffect(() => {
+    if (session?.user?.email === tokenData?.recipientEmail && tokenData) {
+      // Create payable for registered user and redirect to app
+      createPayableForRegisteredUser();
+    }
+  }, [session, tokenData]);
+
   const validateToken = async () => {
     try {
       setLoading(true);
@@ -217,14 +225,6 @@ export default function InvoiceAccessPage() {
   }
 
   const { invoice, recipientEmail, isRegistered, requiresSignup } = tokenData;
-
-  // Handle authenticated user redirect
-  useEffect(() => {
-    if (session?.user?.email === recipientEmail && tokenData) {
-      // Create payable for registered user and redirect to app
-      createPayableForRegisteredUser();
-    }
-  }, [session, recipientEmail, tokenData]);
 
   const createPayableForRegisteredUser = async () => {
     try {

@@ -19,7 +19,8 @@ const transporter = nodemailer.createTransport(emailConfig);
 // Get frontend URL based on environment
 const getFrontendUrl = () => {
   if (process.env.NODE_ENV === 'production') {
-    return process.env.APP_URL || process.env.FRONTEND_URL;
+    const url = process.env.APP_URL || process.env.FRONTEND_URL;
+    return url?.startsWith('http') ? url : `https://${url}`;
   }
   return 'http://localhost:3000';
 };
