@@ -120,67 +120,67 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
-            <p className="text-gray-600">Welcome back, {session?.user?.name || 'User'}!</p>
+            <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Dashboard</h1>
+            <p className="text-blue-200">Welcome back, {session?.user?.name || 'User'}!</p>
         </div>
         <div className="text-right">
-            <p className="text-sm text-gray-500">Last updated</p>
-            <p className="text-sm text-gray-900">{new Date().toLocaleDateString()}</p>
+            <p className="text-sm text-blue-300">Last updated</p>
+            <p className="text-sm text-white">{new Date().toLocaleDateString()}</p>
         </div>
       </div>
 
       {/* Financial Overview - Minimalistic Request Finance Style */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Net Balance - Primary metric */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-600 text-sm font-medium">Net Balance</p>
-              <p className={`text-3xl font-bold ${stats.netBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              <p className="text-blue-200 text-sm font-medium">Net Balance</p>
+              <p className={`text-3xl font-bold ${stats.netBalance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                 {stats.netBalance >= 0 ? '+' : ''}
                 <FormattedNumberDisplay value={Math.abs(stats.netBalance)} />
               </p>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-blue-300 mt-1">
                 {stats.netBalance >= 0 ? 'Positive cash flow' : 'Negative cash flow'}
               </p>
             </div>
-            <div className={`p-3 rounded-lg ${stats.netBalance >= 0 ? 'bg-green-100' : 'bg-red-100'}`}>
+            <div className={`p-3 rounded-lg ${stats.netBalance >= 0 ? 'bg-green-500/20' : 'bg-red-500/20'}`}>
               {stats.netBalance >= 0 ? 
-                <TrendingUp className="h-6 w-6 text-green-600" /> : 
-                <TrendingDown className="h-6 w-6 text-red-600" />
+                <TrendingUp className="h-6 w-6 text-green-400" /> : 
+                <TrendingDown className="h-6 w-6 text-red-400" />
               }
             </div>
           </div>
         </div>
 
         {/* Receivables (Invoices) */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-600 text-sm font-medium">Receivables</p>
-              <p className="text-2xl font-bold text-green-600">
+              <p className="text-blue-200 text-sm font-medium">Receivables</p>
+              <p className="text-2xl font-bold text-white">
                 <FormattedNumberDisplay value={stats.totalRevenue} />
               </p>
-              <p className="text-xs text-gray-500 mt-1">{stats.pendingInvoices} pending invoices</p>
+              <p className="text-xs text-blue-300 mt-1">{stats.pendingInvoices} pending invoices</p>
             </div>
-            <div className="p-3 bg-green-100 rounded-lg">
-              <ArrowUpRight className="h-6 w-6 text-green-600" />
+            <div className="p-3 bg-blue-500/20 rounded-lg">
+              <ArrowUpRight className="h-6 w-6 text-blue-400" />
             </div>
           </div>
         </div>
 
         {/* Payables (Bills) */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-600 text-sm font-medium">Payables</p>
-              <p className="text-2xl font-bold text-red-600">
+              <p className="text-blue-200 text-sm font-medium">Payables</p>
+              <p className="text-2xl font-bold text-white">
                 <FormattedNumberDisplay value={stats.totalPayables} />
               </p>
-              <p className="text-xs text-gray-500 mt-1">Bills to pay</p>
+              <p className="text-xs text-blue-300 mt-1">Bills to pay</p>
             </div>
-            <div className="p-3 bg-red-100 rounded-lg">
-              <ArrowDownLeft className="h-6 w-6 text-red-600" />
+            <div className="p-3 bg-red-500/20 rounded-lg">
+              <ArrowDownLeft className="h-6 w-6 text-red-400" />
             </div>
           </div>
         </div>
@@ -189,8 +189,8 @@ export default function DashboardPage() {
       {/* Quick Actions & Alerts */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Quick Actions */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Quick Actions</h3>
           <div className="flex flex-col space-y-3">
             <button
               onClick={() => router.push('/dashboard/services/smart-invoicing/create')}
@@ -210,33 +210,33 @@ export default function DashboardPage() {
         </div>
 
         {/* Alerts & Status */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Status</h3>
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Status</h3>
           <div className="space-y-3">
             {stats.overdueCount > 0 ? (
-              <div className="flex items-center space-x-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                <AlertTriangle className="h-5 w-5 text-orange-600" />
+              <div className="flex items-center space-x-3 p-3 bg-orange-500/20 border border-orange-500/30 rounded-lg">
+                <AlertTriangle className="h-5 w-5 text-orange-400" />
                 <div>
-                  <p className="text-orange-600 font-medium">{stats.overdueCount} overdue items</p>
-                  <p className="text-orange-500 text-sm">Need immediate attention</p>
+                  <p className="text-orange-400 font-medium">{stats.overdueCount} overdue items</p>
+                  <p className="text-orange-300 text-sm">Need immediate attention</p>
                 </div>
               </div>
             ) : (
-              <div className="flex items-center space-x-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-                <TrendingUp className="h-5 w-5 text-green-600" />
+              <div className="flex items-center space-x-3 p-3 bg-green-500/20 border border-green-500/30 rounded-lg">
+                <TrendingUp className="h-5 w-5 text-green-400" />
                 <div>
-                  <p className="text-green-600 font-medium">All up to date</p>
-                  <p className="text-green-500 text-sm">No overdue items</p>
+                  <p className="text-green-400 font-medium">All up to date</p>
+                  <p className="text-green-300 text-sm">No overdue items</p>
                 </div>
               </div>
             )}
             
-            <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center justify-between p-3 bg-blue-500/20 border border-blue-500/30 rounded-lg">
               <div className="flex items-center space-x-3">
-                <Users className="h-5 w-5 text-blue-600" />
+                <Users className="h-5 w-5 text-blue-400" />
                 <div>
-                  <p className="text-blue-600 font-medium">{stats.totalClients} clients</p>
-                  <p className="text-blue-500 text-sm">Active relationships</p>
+                  <p className="text-blue-400 font-medium">{stats.totalClients} clients</p>
+                  <p className="text-blue-300 text-sm">Active relationships</p>
                 </div>
               </div>
             </div>
@@ -245,35 +245,35 @@ export default function DashboardPage() {
       </div>
 
       {/* Recent Activity */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-gray-900">Recent Activity</h2>
-          <button className="text-blue-600 hover:text-blue-700 text-sm font-medium transition-colors">
+          <h2 className="text-xl font-semibold text-white">Recent Activity</h2>
+          <button className="text-blue-400 hover:text-blue-300 text-sm font-medium transition-colors">
             View all
           </button>
         </div>
         
         <div className="space-y-4">
-          <div className="flex items-center space-x-4 p-3 rounded-lg bg-gray-50">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <FileText className="h-4 w-4 text-green-600" />
+          <div className="flex items-center space-x-4 p-3 rounded-lg bg-white/5">
+            <div className="p-2 bg-green-500/20 rounded-lg">
+              <FileText className="h-4 w-4 text-green-400" />
             </div>
             <div className="flex-1">
-              <p className="text-gray-900 text-sm font-medium">Smart Invoicing service active</p>
-              <p className="text-gray-500 text-xs">Service • Just now</p>
+              <p className="text-white text-sm font-medium">Smart Invoicing service active</p>
+              <p className="text-blue-300 text-xs">Service • Just now</p>
             </div>
-            <span className="text-green-600 text-sm font-medium">Active</span>
+            <span className="text-green-400 text-sm font-medium">Active</span>
           </div>
           
-          <div className="flex items-center space-x-4 p-3 rounded-lg bg-gray-50">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <Users className="h-4 w-4 text-blue-600" />
+          <div className="flex items-center space-x-4 p-3 rounded-lg bg-white/5">
+            <div className="p-2 bg-blue-500/20 rounded-lg">
+              <Users className="h-4 w-4 text-blue-400" />
             </div>
             <div className="flex-1">
-              <p className="text-gray-900 text-sm font-medium">Account created</p>
-              <p className="text-gray-500 text-xs">System • {new Date().toLocaleDateString()}</p>
+              <p className="text-white text-sm font-medium">Account created</p>
+              <p className="text-blue-300 text-xs">System • {new Date().toLocaleDateString()}</p>
             </div>
-            <span className="text-blue-600 text-sm font-medium">Welcome!</span>
+            <span className="text-blue-400 text-sm font-medium">Welcome!</span>
           </div>
         </div>
       </div>

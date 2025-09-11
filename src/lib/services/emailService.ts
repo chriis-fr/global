@@ -204,8 +204,17 @@ export const sendInvoiceNotification = async (
           </p>
           
           <p style="color: #666; line-height: 1.6;">
-            This invoice is intended for <strong>${recipientName}</strong>.
+            This invoice is intended for <strong>${recipientName}</strong> and has been automatically added to your account.
           </p>
+          
+          <div style="background: #e8f5e8; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #28a745;">
+            <p style="color: #155724; margin: 0; font-weight: bold;">
+              ✅ Invoice automatically added to your account
+            </p>
+            <p style="color: #155724; margin: 5px 0 0 0; font-size: 14px;">
+              If you have an account, this invoice is now visible in your Bills section. If you don't have an account yet, it will appear when you sign up.
+            </p>
+          </div>
           
           <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #667eea;">
             <h3 style="color: #333; margin-top: 0;">Invoice Details</h3>
@@ -225,7 +234,7 @@ export const sendInvoiceNotification = async (
                       display: inline-block; 
                       font-weight: bold;
                       box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);">
-              View & Pay Invoice Online
+              View Invoice Online (Optional)
             </a>
           </div>
           
@@ -235,7 +244,11 @@ export const sendInvoiceNotification = async (
             </p>
             
             <p style="color: #666; font-size: 14px; margin: 10px 0 0 0;">
-              The invoice PDF is attached to this email for your records.
+              <strong>How to pay:</strong> You can pay this invoice directly in your app (if you have an account) or use the PDF attachment. The online link above is optional and provides additional payment options.
+            </p>
+            
+            <p style="color: #666; font-size: 14px; margin: 10px 0 0 0;">
+              <strong>PDF Attachment:</strong> A complete invoice PDF is attached to this email for your records and offline payment.
             </p>
             
             <p style="color: #666; font-size: 14px; margin: 10px 0 0 0;">

@@ -9,21 +9,12 @@ import {
   Plus, 
   Receipt, 
   DollarSign, 
-  Calendar, 
-  TrendingUp,
-  ArrowRight,
-  Settings,
   Users,
-  List,
-  Building2,
   LayoutDashboard,
-  AlertCircle,
   Clock,
   CheckCircle,
   Eye,
-  Edit3,
-  Trash2,
-  FileText
+  Edit3
 } from 'lucide-react';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
 
@@ -75,6 +66,7 @@ export default function AccountsPayablePage() {
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [activeTab, setActiveTab] = useState<'bills' | 'direct-payments' | 'vendors'>('bills');
 
   // Load cached data from localStorage
   const loadCachedData = useCallback(() => {
@@ -208,68 +200,41 @@ export default function AccountsPayablePage() {
     }
   };
 
-  const handleDeletePayable = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this payable?')) return;
-    
-    try {
-      const response = await fetch(`/api/payables/${id}`, {
-        method: 'DELETE',
-      });
-      
-      if (response.ok) {
-        // Refresh data
-        loadAllData(true);
-      } else {
-        alert('Failed to delete payable');
-      }
-    } catch (error) {
-      console.error('Error deleting payable:', error);
-      alert('Error deleting payable');
-    }
-  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'draft': return 'text-gray-600 bg-gray-100';
+      case 'draft': return 'text-blue-300 bg-blue-500/20';
       case 'pending': return 'text-yellow-600 bg-yellow-100';
       case 'approved': return 'text-blue-600 bg-blue-100';
       case 'paid': return 'text-green-600 bg-green-100';
       case 'overdue': return 'text-red-600 bg-red-100';
-      default: return 'text-gray-600 bg-gray-100';
+      default: return 'text-blue-300 bg-blue-500/20';
     }
   };
 
-  const getPriorityColor = (priority?: string) => {
-    switch (priority) {
-      case 'high': return 'text-red-600 bg-red-100';
-      case 'medium': return 'text-yellow-600 bg-yellow-100';
-      case 'low': return 'text-green-600 bg-green-100';
-      default: return 'text-gray-600 bg-gray-100';
-    }
-  };
 
   if (loading && !dataLoaded) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading payables...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-400 mx-auto mb-4"></div>
+          <p className="text-blue-200">Loading payables...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br ">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200">
+      <div className="bg-white/10 backdrop-blur-sm border-b rounded-lg border-white/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-4">
-              <Receipt className="h-8 w-8 text-blue-600" />
+              <Receipt className="h-8 w-8 text-blue-400" />
               <div>
-                <h1 className="text-xl font-semibold text-gray-900">Accounts Payable</h1>
-                <p className="text-sm text-gray-500">Manage your business payments and vendor relationships</p>
+                <h1 className="text-xl font-semibold text-white">Accounts Payable</h1>
+                <p className="text-sm text-blue-200">Manage your business payments and vendor relationships</p>
               </div>
             </div>
             <button
@@ -289,15 +254,15 @@ export default function AccountsPayablePage() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white rounded-lg shadow-sm border border-gray-200 p-6"
+            className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6"
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-600 text-sm font-medium">Total Payables</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalPayables}</p>
+                <p className="text-blue-200 text-sm font-medium">Total Payables</p>
+                <p className="text-2xl font-bold text-white">{stats.totalPayables}</p>
               </div>
-              <div className="p-3 bg-blue-100 rounded-lg">
-                <Receipt className="h-6 w-6 text-blue-600" />
+              <div className="p-3 bg-blue-500/20 rounded-lg">
+                <Receipt className="h-6 w-6 text-blue-400" />
               </div>
             </div>
           </motion.div>
@@ -306,15 +271,15 @@ export default function AccountsPayablePage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="bg-white rounded-lg shadow-sm border border-gray-200 p-6"
+            className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6"
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-600 text-sm font-medium">Pending</p>
-                <p className="text-2xl font-bold text-yellow-600">{stats.pendingCount}</p>
+                <p className="text-blue-200 text-sm font-medium">Pending</p>
+                <p className="text-2xl font-bold text-yellow-400">{stats.pendingCount}</p>
               </div>
-              <div className="p-3 bg-yellow-100 rounded-lg">
-                <Clock className="h-6 w-6 text-yellow-600" />
+              <div className="p-3 bg-yellow-500/20 rounded-lg">
+                <Clock className="h-6 w-6 text-yellow-400" />
               </div>
             </div>
           </motion.div>
@@ -323,15 +288,15 @@ export default function AccountsPayablePage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="bg-white rounded-lg shadow-sm border border-gray-200 p-6"
+            className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6"
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-600 text-sm font-medium">Paid</p>
-                <p className="text-2xl font-bold text-green-600">{stats.paidCount}</p>
+                <p className="text-blue-200 text-sm font-medium">Paid</p>
+                <p className="text-2xl font-bold text-green-400">{stats.paidCount}</p>
               </div>
-              <div className="p-3 bg-green-100 rounded-lg">
-                <CheckCircle className="h-6 w-6 text-green-600" />
+              <div className="p-3 bg-green-500/20 rounded-lg">
+                <CheckCircle className="h-6 w-6 text-green-400" />
               </div>
             </div>
           </motion.div>
@@ -340,169 +305,219 @@ export default function AccountsPayablePage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className="bg-white rounded-lg shadow-sm border border-gray-200 p-6"
+            className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6"
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-600 text-sm font-medium">Total Amount</p>
-                <p className="text-2xl font-bold text-gray-900">
+                <p className="text-blue-200 text-sm font-medium">Total Amount</p>
+                <p className="text-2xl font-bold text-white">
                   <FormattedNumberDisplay value={stats.totalAmount} />
                 </p>
               </div>
-              <div className="p-3 bg-gray-100 rounded-lg">
-                <DollarSign className="h-6 w-6 text-gray-600" />
+              <div className="p-3 bg-blue-500/20 rounded-lg">
+                <DollarSign className="h-6 w-6 text-blue-400" />
               </div>
             </div>
           </motion.div>
         </div>
 
-        {/* Recent Payables */}
+        {/* Tab Navigation */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
-          className="bg-white rounded-lg shadow-sm border border-gray-200"
+          className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20"
         >
-          <div className="px-6 py-4 border-b border-gray-200">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">Recent Payables</h2>
-              <Link
-                href="/dashboard/services/payables/payables"
-                className="text-blue-600 hover:text-blue-700 text-sm font-medium transition-colors"
+          <div className="border-b border-white/20">
+            <nav className="flex space-x-8 px-6" aria-label="Tabs">
+              <button
+                onClick={() => setActiveTab('bills')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                  activeTab === 'bills'
+                    ? 'border-blue-400 text-blue-400'
+                    : 'border-transparent text-blue-300 hover:text-white hover:border-blue-400'
+                }`}
               >
-                View all
-              </Link>
-            </div>
-          </div>
-          
-          <div className="divide-y divide-gray-200">
-            {payables.length === 0 ? (
-              <div className="px-6 py-12 text-center">
-                <Receipt className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No payables yet</h3>
-                <p className="text-gray-500 mb-6">Get started by creating your first payable.</p>
-                <button
-                  onClick={handleCreatePayable}
-                  className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  <Plus className="h-4 w-4" />
-                  <span>Create Payable</span>
-                </button>
-              </div>
-            ) : (
-              payables.slice(0, 5).map((payable) => (
-                <div key={payable._id} className="px-6 py-4 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-3">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">
-                            {payable.vendorCompany || payable.vendorName}
-                          </p>
-                          <p className="text-sm text-gray-500">#{payable.payableNumber}</p>
-                        </div>
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(payable.status)}`}>
-                          {payable.status}
-                        </span>
-                        {payable.priority && (
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(payable.priority)}`}>
-                            {payable.priority}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-4">
-                      <div className="text-right">
-                        <p className="text-sm font-medium text-gray-900">
-                          <FormattedNumberDisplay value={payable.total} />
-                        </p>
-                        <p className="text-sm text-gray-500">{payable.currency}</p>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => router.push(`/dashboard/services/payables/payables/${payable._id}`)}
-                          className="text-blue-400 hover:text-blue-300 transition-colors p-1 rounded-lg hover:bg-white/10"
-                          title="View Payable"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
-                        {payable.status === 'draft' && (
-                          <button
-                            onClick={() => router.push(`/dashboard/services/payables/create?id=${payable._id}`)}
-                            className="text-blue-400 hover:text-blue-300 transition-colors p-1 rounded-lg hover:bg-white/10"
-                            title="Edit Payable"
-                          >
-                            <Edit3 className="h-4 w-4" />
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleDeletePayable(payable._id)}
-                          className="text-red-400 hover:text-red-300 transition-colors p-1 rounded-lg hover:bg-white/10"
-                          title="Delete Payable"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                <div className="flex items-center space-x-2">
+                  <Receipt className="h-4 w-4" />
+                  <span>Bills</span>
                 </div>
-              ))
+              </button>
+              <button
+                onClick={() => setActiveTab('direct-payments')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                  activeTab === 'direct-payments'
+                    ? 'border-blue-400 text-blue-400'
+                    : 'border-transparent text-blue-300 hover:text-white hover:border-blue-400'
+                }`}
+              >
+                <div className="flex items-center space-x-2">
+                  <DollarSign className="h-4 w-4" />
+                  <span>Direct Payments</span>
+                </div>
+              </button>
+              <button
+                onClick={() => setActiveTab('vendors')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                  activeTab === 'vendors'
+                    ? 'border-blue-400 text-blue-400'
+                    : 'border-transparent text-blue-300 hover:text-white hover:border-blue-400'
+                }`}
+              >
+                <div className="flex items-center space-x-2">
+                  <Users className="h-4 w-4" />
+                  <span>Vendors</span>
+                </div>
+              </button>
+            </nav>
+          </div>
+
+          {/* Tab Content */}
+          <div className="p-6">
+            {activeTab === 'bills' && (
+              <div>
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-lg font-semibold text-white">Bills & Invoices</h3>
+                  <button
+                    onClick={handleCreatePayable}
+                    className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Add Bill</span>
+                  </button>
+                </div>
+                
+                {payables.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Receipt className="h-12 w-12 text-blue-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-white mb-2">No bills yet</h3>
+                    <p className="text-blue-200 mb-6">Get started by adding your first bill or invoice.</p>
+                    <button
+                      onClick={handleCreatePayable}
+                      className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      <Plus className="h-4 w-4" />
+                      <span>Add Bill</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {payables.slice(0, 10).map((payable) => (
+                      <div key={payable._id} className="flex items-center justify-between p-4 bg-white/5 rounded-lg hover:bg-white/10 transition-colors">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-3">
+                            <div>
+                              <p className="text-sm font-medium text-white">
+                                {payable.vendorCompany || payable.vendorName}
+                              </p>
+                              <p className="text-sm text-blue-300">#{payable.payableNumber}</p>
+                            </div>
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(payable.status)}`}>
+                              {payable.status}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-4">
+                          <div className="text-right">
+                            <p className="text-sm font-medium text-white">
+                              <FormattedNumberDisplay value={payable.total} />
+                            </p>
+                            <p className="text-sm text-blue-300">{payable.currency}</p>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() => router.push(`/dashboard/services/payables/payables/${payable._id}`)}
+                              className="text-blue-600 hover:text-blue-700 transition-colors p-1 rounded-lg hover:bg-blue-50"
+                              title="View Bill"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+                            {payable.status === 'draft' && (
+                              <button
+                                onClick={() => router.push(`/dashboard/services/payables/create?id=${payable._id}`)}
+                                className="text-blue-600 hover:text-blue-700 transition-colors p-1 rounded-lg hover:bg-blue-50"
+                                title="Edit Bill"
+                              >
+                                <Edit3 className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {payables.length > 10 && (
+                      <div className="text-center pt-4">
+                        <Link
+                          href="/dashboard/services/payables/payables"
+                          className="text-blue-600 hover:text-blue-700 text-sm font-medium transition-colors"
+                        >
+                          View all bills →
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'direct-payments' && (
+              <div>
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-lg font-semibold text-white">Direct Payments</h3>
+                  <button
+                    onClick={() => router.push('/dashboard/services/payables/create?type=direct')}
+                    className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Make Payment</span>
+                  </button>
+                </div>
+                
+                <div className="text-center py-12">
+                  <DollarSign className="h-12 w-12 text-blue-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-white mb-2">Direct Payments</h3>
+                  <p className="text-blue-200 mb-6">Make direct payments to vendors without creating bills first.</p>
+                  <button
+                    onClick={() => router.push('/dashboard/services/payables/create?type=direct')}
+                    className="inline-flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Make Payment</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'vendors' && (
+              <div>
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-lg font-semibold text-white">Vendors</h3>
+                  <button
+                    onClick={() => router.push('/dashboard/vendors')}
+                    className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Add Vendor</span>
+                  </button>
+                </div>
+                
+                <div className="text-center py-12">
+                  <Users className="h-12 w-12 text-blue-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-white mb-2">Manage Vendors</h3>
+                  <p className="text-blue-200 mb-6">Add and manage your vendor information for easy payments.</p>
+                  <button
+                    onClick={() => router.push('/dashboard/vendors')}
+                    className="inline-flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Manage Vendors</span>
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </motion.div>
 
-        {/* Quick Actions */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6"
-        >
-          <Link
-            href="/dashboard/services/payables/create"
-            className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow"
-          >
-            <div className="flex items-center space-x-4">
-              <div className="p-3 bg-blue-100 rounded-lg">
-                <Plus className="h-6 w-6 text-blue-600" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">Create Payable</h3>
-                <p className="text-gray-500">Add a new bill or expense</p>
-              </div>
-            </div>
-          </Link>
-
-          <Link
-            href="/dashboard/vendors"
-            className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow"
-          >
-            <div className="flex items-center space-x-4">
-              <div className="p-3 bg-green-100 rounded-lg">
-                <Users className="h-6 w-6 text-green-600" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">Manage Vendors</h3>
-                <p className="text-gray-500">View and edit vendor information</p>
-              </div>
-            </div>
-          </Link>
-
-          <Link
-            href="/dashboard/services/payables/payables"
-            className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow"
-          >
-            <div className="flex items-center space-x-4">
-              <div className="p-3 bg-purple-100 rounded-lg">
-                <FileText className="h-6 w-6 text-purple-600" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">All Payables</h3>
-                <p className="text-gray-500">View complete payable history</p>
-              </div>
-            </div>
-          </Link>
-        </motion.div>
       </div>
 
       {/* Floating Dashboard Button */}

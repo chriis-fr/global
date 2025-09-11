@@ -15,7 +15,8 @@ import {
   DollarSign,
   FileText,
   AlertCircle,
-  Loader2
+  Loader2,
+  X
 } from 'lucide-react';
 
 interface OnboardingStep {
@@ -87,6 +88,63 @@ export default function PayablesOnboardingPage() {
     categories: ['Office Supplies', 'Software & Services', 'Marketing & Advertising']
   });
 
+  // Load user profile data to pre-fill form
+  useEffect(() => {
+    const loadUserProfile = async () => {
+      if (session?.user) {
+        try {
+          // Fetch complete user profile from API
+          const response = await fetch('/api/users/profile');
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.data) {
+              const userProfile = data.data;
+              console.log('📋 [Payables Onboarding] Loading user profile:', userProfile);
+              
+              // Pre-fill with complete user data
+              setOnboardingData(prev => ({
+                ...prev,
+                businessInfo: {
+                  ...prev.businessInfo,
+                  companyName: userProfile.name || session.user.name || '',
+                  companyEmail: userProfile.email || session.user.email || '',
+                  companyPhone: userProfile.phone || '',
+                  companyAddress: {
+                    street: userProfile.address?.street || '',
+                    city: userProfile.address?.city || '',
+                    state: userProfile.address?.state || '',
+                    zipCode: userProfile.address?.postalCode || '',
+                    country: userProfile.address?.country || 'US'
+                  },
+                  companyTaxNumber: ''
+                }
+              }));
+            }
+          }
+        } catch (error) {
+          console.error('❌ [Payables Onboarding] Error loading user profile:', error);
+          // Fallback to session data only
+          setOnboardingData(prev => ({
+            ...prev,
+            businessInfo: {
+              ...prev.businessInfo,
+              companyName: session.user.name || '',
+              companyEmail: session.user.email || '',
+              companyPhone: '',
+              companyAddress: {
+                ...prev.businessInfo.companyAddress,
+                ...session.user.address
+              },
+              companyTaxNumber: ''
+            }
+          }));
+        }
+      }
+    };
+
+    loadUserProfile();
+  }, [session]);
+
   const steps: OnboardingStep[] = [
     {
       id: 'business-info',
@@ -137,8 +195,8 @@ export default function PayablesOnboardingPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          service: 'accountsPayable',
-          data: onboardingData
+          serviceKey: 'accountsPayable',
+          serviceData: onboardingData
         })
       });
       

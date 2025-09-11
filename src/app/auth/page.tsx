@@ -11,15 +11,19 @@ import {
   Building,
   UserCheck,
   Shield,
-  ChevronDown
+  ChevronDown,
+  Receipt
 } from 'lucide-react'
 import Image from 'next/image'
 import { signIn, useSession } from 'next-auth/react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { countries, defaultCountry } from '@/data/countries'
 import { getIndustriesByCategory, getIndustryCategories } from '@/data/industries'
 
 export default function AuthPage() {
   const { data: session, status } = useSession()
+  const searchParams = useSearchParams()
+  const router = useRouter()
   const [isLogin, setIsLogin] = useState(true)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -46,6 +50,23 @@ export default function AuthPage() {
   const [showIndustryDropdown, setShowIndustryDropdown] = useState(false)
   const [industryCategories] = useState(getIndustryCategories())
   const [countrySearch, setCountrySearch] = useState('')
+  const [isEmailLocked, setIsEmailLocked] = useState(false)
+
+  // Handle invoice token from URL
+  useEffect(() => {
+    const invoiceToken = searchParams.get('invoiceToken')
+    const email = searchParams.get('email')
+    
+    if (invoiceToken && email) {
+      // Pre-fill email and switch to signup mode
+      setFormData(prev => ({
+        ...prev,
+        email: decodeURIComponent(email)
+      }))
+      setIsLogin(false) // Switch to signup mode
+      setIsEmailLocked(true) // Lock the email field
+    }
+  }, [searchParams])
 
   // Helper function to format phone number
   const formatPhoneNumber = (phone: string, countryCode: string) => {
@@ -340,9 +361,44 @@ export default function AuthPage() {
                 localStorage.setItem('user', JSON.stringify(data.data))
                 window.location.href = '/onboarding'
               } else if (loginResult?.ok) {
-                console.log('✅ [Auth] Automatic login successful, checking onboarding status...')
-                // For new users, they should always go to onboarding
-                window.location.href = '/onboarding'
+                console.log('✅ [Auth] Automatic login successful, checking for invoice token...')
+                
+                // Check if this signup was triggered by an invoice token
+                const invoiceToken = searchParams.get('invoiceToken')
+                if (invoiceToken) {
+                  console.log('🔗 [Auth] Processing invoice token:', invoiceToken)
+                  try {
+                    // Process the invoice token to create payable
+                    const invoiceResponse = await fetch('/api/invoice-access/process-signup', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify({
+                        userId: data.data._id,
+                        token: invoiceToken
+                      }),
+                    })
+                    
+                    const invoiceData = await invoiceResponse.json()
+                    if (invoiceData.success) {
+                      console.log('✅ [Auth] Invoice payable created successfully')
+                      // Redirect to payables page to show the invoice
+                      window.location.href = '/dashboard/services/payables'
+                    } else {
+                      console.log('⚠️ [Auth] Failed to create invoice payable:', invoiceData.message)
+                      // Still redirect to onboarding
+                      window.location.href = '/onboarding'
+                    }
+                  } catch (invoiceError) {
+                    console.error('❌ [Auth] Error processing invoice token:', invoiceError)
+                    // Fallback to onboarding
+                    window.location.href = '/onboarding'
+                  }
+                } else {
+                  // No invoice token, proceed with normal onboarding
+                  window.location.href = '/onboarding'
+                }
               }
             } catch (loginError) {
               console.error('❌ [Auth] Error during automatic login:', loginError)
@@ -423,9 +479,23 @@ export default function AuthPage() {
                   : 'text-blue-200 hover:text-white'
               }`}
             >
-              Sign Up
+              {isEmailLocked ? 'Create Account & Access Invoice' : 'Sign Up'}
             </button>
           </div>
+
+          {/* Invoice Signup Notice */}
+          {isEmailLocked && (
+            <div className="mb-6 p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg">
+              <div className="flex items-center space-x-2 mb-2">
+                <Receipt className="h-5 w-5 text-blue-400" />
+                <h3 className="text-blue-200 font-medium">Invoice Access Required</h3>
+              </div>
+              <p className="text-blue-300 text-sm">
+                You're creating an account to access an invoice sent to <strong>{formData.email}</strong>. 
+                This email address cannot be changed as it's linked to the invoice.
+              </p>
+            </div>
+          )}
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -724,6 +794,11 @@ export default function AuthPage() {
             <div className="space-y-2">
               <label className="text-sm font-medium text-blue-100">
                 Email Address
+                {isEmailLocked && (
+                  <span className="ml-2 text-xs text-blue-300 bg-blue-900/30 px-2 py-1 rounded">
+                    Locked to invoice recipient
+                  </span>
+                )}
               </label>
               <div className="relative">
                 <input
@@ -731,12 +806,22 @@ export default function AuthPage() {
                   name="email"
                   value={formData.email}
                   onChange={handleInputChange}
-                  className="w-full pl-10 pr-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter your email"
+                  disabled={isEmailLocked}
+                  className={`w-full pl-10 pr-4 py-3 border rounded-lg text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    isEmailLocked 
+                      ? 'bg-white/5 border-white/10 text-blue-200 cursor-not-allowed' 
+                      : 'bg-white/10 border-white/20'
+                  }`}
+                  placeholder={isEmailLocked ? "Email locked to invoice recipient" : "Enter your email"}
                   required
                 />
                 <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-blue-300" />
               </div>
+              {isEmailLocked && (
+                <p className="text-xs text-blue-300 mt-1">
+                  This email address is locked because you're creating an account to access an invoice sent to this address.
+                </p>
+              )}
             </div>
 
             {/* Password */}

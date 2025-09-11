@@ -89,23 +89,60 @@ export default function SmartInvoicingOnboardingPage() {
   });
 
   useEffect(() => {
-    if (session?.user) {
-      // Pre-fill with user data
-      setFormData(prev => ({
-        ...prev,
-        businessInfo: {
-          ...prev.businessInfo,
-          name: session.user.name || '',
-          email: session.user.email || '',
-          phone: '',
-          address: {
-            ...prev.businessInfo.address,
-            ...session.user.address
-          },
-          taxId: session.user.taxId || ''
+    const loadUserProfile = async () => {
+      if (session?.user) {
+        try {
+          // Fetch complete user profile from API
+          const response = await fetch('/api/users/profile');
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.data) {
+              const userProfile = data.data;
+              console.log('📋 [Onboarding] Loading user profile:', userProfile);
+              
+              // Pre-fill with complete user data
+              setFormData(prev => ({
+                ...prev,
+                businessInfo: {
+                  ...prev.businessInfo,
+                  name: userProfile.name || session.user.name || '',
+                  email: userProfile.email || session.user.email || '',
+                  phone: userProfile.phone || '',
+                  website: '',
+                  address: {
+                    street: userProfile.address?.street || '',
+                    city: userProfile.address?.city || '',
+                    state: userProfile.address?.state || '',
+                    zipCode: userProfile.address?.postalCode || '',
+                    country: userProfile.address?.country || 'US'
+                  },
+                  taxId: ''
+                }
+              }));
+            }
+          }
+        } catch (error) {
+          console.error('❌ [Onboarding] Error loading user profile:', error);
+          // Fallback to session data only
+          setFormData(prev => ({
+            ...prev,
+            businessInfo: {
+              ...prev.businessInfo,
+              name: session.user.name || '',
+              email: session.user.email || '',
+              phone: '',
+              address: {
+                ...prev.businessInfo.address,
+                ...session.user.address
+              },
+              taxId: ''
+            }
+          }));
         }
-      }));
-    }
+      }
+    };
+
+    loadUserProfile();
   }, [session]);
 
   // Load existing onboarding data if available

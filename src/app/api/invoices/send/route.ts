@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { sendInvoiceNotification } from '@/lib/services/emailService';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
+import { UserService } from '@/lib/services/userService';
 
 export async function POST(request: NextRequest) {
   try {
@@ -106,6 +107,31 @@ export async function POST(request: NextRequest) {
       : (fullName || 'Client'); // If no company, use individual name or 'Client'
     
 
+    // Generate secure access token for the invoice
+    console.log('🔐 [Send Invoice] Generating secure access token...');
+    const tokenResponse = await fetch(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/api/invoices/generate-access-token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.user.id}` // You might need to adjust this based on your auth setup
+      },
+      body: JSON.stringify({ invoiceId: invoice._id })
+    });
+
+    let accessUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/invoice/${invoice.invoiceNumber}`; // Fallback
+
+    if (tokenResponse.ok) {
+      const tokenData = await tokenResponse.json();
+      if (tokenData.success) {
+        accessUrl = tokenData.data.accessUrl;
+        console.log('✅ [Send Invoice] Secure access token generated');
+      } else {
+        console.error('❌ [Send Invoice] Failed to generate access token:', tokenData.message);
+      }
+    } else {
+      console.error('❌ [Send Invoice] Failed to generate access token - HTTP error');
+    }
+
     // Send invoice email with timeout
     let result: { success: boolean; messageId?: string; error?: Error };
     try {
@@ -119,7 +145,7 @@ export async function POST(request: NextRequest) {
           invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : 'N/A',
           invoice.companyDetails?.name || (isOrganization ? 'Your Company' : ''), // Company name (empty for individuals)
           invoice.clientDetails?.companyName || fullName || 'Client', // Recipient name/company
-          `${process.env.FRONTEND_URL || 'http://localhost:3000'}/invoice/${invoice.invoiceNumber}`,
+          accessUrl, // Use secure access URL
           paymentMethods,
           pdfAttachment,
           additionalAttachments
@@ -153,6 +179,14 @@ export async function POST(request: NextRequest) {
         }
       );
 
+      // Automatically create payable for recipient if they have an account
+      try {
+        await createPayableForRecipient(recipientEmail, invoice);
+      } catch (payableError) {
+        console.error('⚠️ [Send Invoice] Failed to create payable for recipient:', payableError);
+        // Don't fail the email send if payable creation fails
+      }
+
       return NextResponse.json({
         success: true,
         message: 'Invoice sent successfully',
@@ -176,5 +210,151 @@ export async function POST(request: NextRequest) {
       { success: false, message: 'Failed to send invoice' },
       { status: 500 }
     );
+  }
+}
+
+/**
+ * Automatically create a payable for the recipient when an invoice is sent
+ * This ensures invoices appear in the recipient's app immediately
+ */
+async function createPayableForRecipient(recipientEmail: string, invoice: any) {
+  try {
+    console.log('💳 [Auto Payable] Checking if recipient is registered:', recipientEmail);
+
+    // Check if recipient has an account
+    const recipientUser = await UserService.getUserByEmail(recipientEmail);
+    
+    if (!recipientUser) {
+      console.log('📧 [Auto Payable] Recipient not registered, storing for future signup:', recipientEmail);
+      
+      // Store pending payable for when they sign up
+      await storePendingPayable(recipientEmail, invoice);
+      return;
+    }
+
+    console.log('✅ [Auto Payable] Recipient is registered, creating payable immediately');
+
+    const db = await connectToDatabase();
+    const payablesCollection = db.collection('payables');
+
+    // Check if payable already exists for this invoice and recipient
+    const existingPayable = await payablesCollection.findOne({
+      relatedInvoiceId: new ObjectId(invoice._id),
+      issuerId: new ObjectId(recipientUser._id)
+    });
+
+    if (existingPayable) {
+      console.log('✅ [Auto Payable] Payable already exists for this invoice');
+      return;
+    }
+
+    // Generate payable number
+    const payableNumber = `PAY-${Date.now()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+
+    // Create payable data
+    const payableData = {
+      payableNumber,
+      payableName: `Invoice Payment - ${invoice.invoiceNumber}`,
+      issueDate: new Date(),
+      dueDate: new Date(invoice.dueDate),
+      companyName: invoice.companyDetails?.name || invoice.companyName,
+      companyEmail: invoice.companyDetails?.email || invoice.companyEmail,
+      companyPhone: invoice.companyDetails?.phone || invoice.companyPhone,
+      companyAddress: invoice.companyDetails?.address || invoice.companyAddress,
+      companyTaxNumber: '',
+      vendorName: invoice.clientDetails?.name || invoice.clientName,
+      vendorEmail: invoice.clientDetails?.email || invoice.clientEmail,
+      vendorPhone: invoice.clientDetails?.phone || invoice.clientPhone,
+      vendorAddress: invoice.clientDetails?.address || invoice.clientAddress,
+      currency: invoice.currency,
+      paymentMethod: invoice.paymentMethod,
+      paymentNetwork: invoice.paymentNetwork,
+      paymentAddress: invoice.paymentAddress,
+      enableMultiCurrency: false,
+      payableType: 'regular',
+      items: invoice.items || [],
+      subtotal: invoice.subtotal || 0,
+      totalTax: invoice.totalTax || 0,
+      total: invoice.totalAmount || 0,
+      memo: `Auto-generated payable from invoice ${invoice.invoiceNumber}`,
+      status: 'pending',
+      priority: 'medium',
+      category: 'Invoice Payment',
+      attachedFiles: [],
+      issuerId: new ObjectId(recipientUser._id),
+      organizationId: recipientUser.organizationId ? new ObjectId(recipientUser.organizationId) : null,
+      relatedInvoiceId: new ObjectId(invoice._id),
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    const result = await payablesCollection.insertOne(payableData);
+    console.log('✅ [Auto Payable] Payable created with ID:', result.insertedId);
+
+    // Also sync to financial ledger
+    try {
+      const { LedgerSyncService } = await import('@/lib/services/ledgerSyncService');
+      const payableWithId = { _id: result.insertedId, ...payableData };
+      await LedgerSyncService.syncPayableToLedger(payableWithId);
+      console.log('✅ [Auto Payable] Payable synced to ledger');
+    } catch (syncError) {
+      console.error('⚠️ [Auto Payable] Failed to sync payable to ledger:', syncError);
+      // Don't fail if sync fails
+    }
+
+  } catch (error) {
+    console.error('❌ [Auto Payable] Error creating payable:', error);
+    throw error; // Re-throw to be caught by caller
+  }
+}
+
+/**
+ * Store pending payable for unregistered users
+ * This will be processed when they sign up
+ */
+async function storePendingPayable(recipientEmail: string, invoice: any) {
+  try {
+    const db = await connectToDatabase();
+    const pendingPayablesCollection = db.collection('pending_payables');
+
+    // Check if already stored
+    const existing = await pendingPayablesCollection.findOne({
+      recipientEmail,
+      invoiceId: new ObjectId(invoice._id)
+    });
+
+    if (existing) {
+      console.log('✅ [Pending Payable] Already stored for this email and invoice');
+      return;
+    }
+
+    // Store pending payable
+    const pendingPayable = {
+      recipientEmail,
+      invoiceId: new ObjectId(invoice._id),
+      invoiceData: {
+        invoiceNumber: invoice.invoiceNumber,
+        totalAmount: invoice.totalAmount,
+        currency: invoice.currency,
+        dueDate: invoice.dueDate,
+        companyDetails: invoice.companyDetails,
+        clientDetails: invoice.clientDetails,
+        items: invoice.items,
+        subtotal: invoice.subtotal,
+        totalTax: invoice.totalTax,
+        paymentMethod: invoice.paymentMethod,
+        paymentNetwork: invoice.paymentNetwork,
+        paymentAddress: invoice.paymentAddress
+      },
+      createdAt: new Date(),
+      processed: false
+    };
+
+    await pendingPayablesCollection.insertOne(pendingPayable);
+    console.log('✅ [Pending Payable] Stored for future signup:', recipientEmail);
+
+  } catch (error) {
+    console.error('❌ [Pending Payable] Error storing pending payable:', error);
+    throw error;
   }
 } 
