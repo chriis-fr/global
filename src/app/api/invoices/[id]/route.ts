@@ -163,6 +163,46 @@ export async function PUT(
       );
     }
 
+    // If invoice status is being updated to 'paid', also update the related payable
+    if (body.status === 'paid') {
+      try {
+        console.log('🔄 [Invoice Update] Updating related payable:', {
+          invoiceId: id,
+          status: 'paid'
+        });
+        
+        const payablesCollection = db.collection('payables');
+        const payableUpdateResult = await payablesCollection.updateOne(
+          { relatedInvoiceId: new ObjectId(id) },
+          { 
+            $set: { 
+              status: 'paid',
+              paymentStatus: 'completed',
+              paymentDate: new Date(),
+              updatedAt: new Date()
+            },
+            $push: {
+              statusHistory: {
+                status: 'paid',
+                timestamp: new Date(),
+                updatedBy: session.user.email,
+                notes: 'Status updated from related invoice'
+              }
+            }
+          }
+        );
+        
+        console.log('✅ [Invoice Update] Related payable update result:', {
+          matchedCount: payableUpdateResult.matchedCount,
+          modifiedCount: payableUpdateResult.modifiedCount,
+          invoiceId: id
+        });
+      } catch (payableUpdateError) {
+        console.error('⚠️ [Invoice Update] Failed to update related payable:', payableUpdateError);
+        // Don't fail the invoice update if payable update fails
+      }
+    }
+
     // Get the updated invoice to return full data
     const updatedInvoice = await collection.findOne({ _id: new ObjectId(id) });
 

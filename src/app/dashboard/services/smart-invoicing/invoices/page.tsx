@@ -14,7 +14,8 @@ import {
   DollarSign,
   Calendar,
   TrendingUp,
-  Download
+  Download,
+  ArrowLeft
 } from 'lucide-react';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
 import { InvoiceService } from '@/lib/services/invoiceService';
@@ -369,9 +370,17 @@ export default function InvoicesPage() {
     <div className="space-y-6 px-4 sm:px-6 lg:px-8">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex-1">
-          <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Invoices</h1>
-          <p className="text-blue-200">Manage your invoices and track payments</p>
+        <div className="flex items-center space-x-4">
+          <button
+            onClick={() => router.push('/dashboard/services/smart-invoicing?refresh=true')}
+            className="p-2 text-blue-200 hover:text-white transition-colors"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <div className="flex-1">
+            <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Invoices</h1>
+            <p className="text-blue-200">Manage your invoices and track payments</p>
+          </div>
         </div>
         <div className="flex flex-col sm:flex-row gap-3">
           <button

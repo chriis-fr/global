@@ -20,7 +20,7 @@ import FormattedNumberDisplay from '@/components/FormattedNumber';
 
 // Cache key for localStorage
 const CACHE_KEY = 'payables-cache';
-const CACHE_DURATION = 15 * 60 * 1000; // 15 minutes
+const CACHE_DURATION = 30 * 1000; // 30 seconds - short cache for real-time updates
 
 interface Payable {
   _id: string;
@@ -212,6 +212,32 @@ export default function AccountsPayablePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Intentionally exclude loadAllData to prevent infinite loops
 
+  // Refresh data when page becomes visible (e.g., returning from payable detail)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && dataLoaded) {
+        // Page became visible and we have data loaded, refresh it
+        loadAllData(true);
+      }
+    };
+
+    const handleFocus = () => {
+      if (dataLoaded) {
+        // Window gained focus, refresh data
+        loadAllData(true);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataLoaded]); // Only depend on dataLoaded to avoid infinite loops
+
   const handleCreatePayable = () => {
     // Only check onboarding if we have the data, otherwise assume it's completed
     if (dataLoaded && isOnboardingCompleted === false) {
@@ -220,6 +246,7 @@ export default function AccountsPayablePage() {
       router.push('/dashboard/services/payables/create');
     }
   };
+
 
 
   const getStatusColor = (status: string) => {

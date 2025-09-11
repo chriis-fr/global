@@ -265,7 +265,7 @@ export default function InvoiceViewPage() {
         setInvoice(data.data);
       } else {
         console.error('❌ [Invoice View] Failed to load invoice:', data.message);
-        router.push('/dashboard/services/smart-invoicing/invoices');
+        router.push('/dashboard/services/smart-invoicing/invoices?refresh=true');
       }
     } catch (error) {
       console.error('❌ [Invoice View] Error loading invoice:', error);
@@ -292,7 +292,7 @@ export default function InvoiceViewPage() {
       });
       
       if (response.ok) {
-        router.push('/dashboard/services/smart-invoicing/invoices');
+        router.push('/dashboard/services/smart-invoicing/invoices?refresh=true');
       }
     } catch (error) {
       console.error('Failed to delete invoice:', error);
@@ -775,7 +775,7 @@ export default function InvoiceViewPage() {
         <div className="text-center">
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Invoice not found</h2>
           <button
-            onClick={() => router.push('/dashboard/services/smart-invoicing/invoices')}
+            onClick={() => router.push('/dashboard/services/smart-invoicing/invoices?refresh=true')}
             className="text-blue-600 hover:text-blue-800"
           >
             Back to invoices

@@ -26,7 +26,7 @@ import FormattedNumberDisplay from '@/components/FormattedNumber';
 
 // Cache key for localStorage
 const CACHE_KEY = 'smart-invoicing-cache';
-const CACHE_DURATION = 15 * 60 * 1000; // 15 minutes - longer cache for better performance
+const CACHE_DURATION = 30 * 1000; // 30 seconds - short cache for real-time updates
 
 interface CachedData {
   invoices: Invoice[];
@@ -184,6 +184,32 @@ export default function SmartInvoicingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Intentionally exclude loadAllData to prevent infinite loops
 
+  // Refresh data when page becomes visible (e.g., returning from invoice detail)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && dataLoaded) {
+        // Page became visible and we have data loaded, refresh it
+        loadAllData(true);
+      }
+    };
+
+    const handleFocus = () => {
+      if (dataLoaded) {
+        // Window gained focus, refresh data
+        loadAllData(true);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataLoaded]); // Only depend on dataLoaded to avoid infinite loops
+
   const handleCreateInvoice = () => {
     // Only check onboarding if we have the data, otherwise assume it's completed
     if (dataLoaded && isOnboardingCompleted === false) {
@@ -200,6 +226,7 @@ export default function SmartInvoicingPage() {
   const handleSetupService = () => {
     router.push('/dashboard/services/smart-invoicing/onboarding');
   };
+
 
   const handleViewInvoices = () => {
     router.push('/dashboard/services/smart-invoicing/invoices');
@@ -219,29 +246,36 @@ export default function SmartInvoicingPage() {
             Create, manage, and get paid with both fiat and blockchain payments seamlessly
           </p>
         </div>
-        <div className="flex space-x-3">
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={handleViewInvoices}
-            className="flex items-center space-x-2 bg-white/10 backdrop-blur-sm text-white px-4 py-2 rounded-lg hover:bg-white/20 transition-colors border border-white/20"
-          >
-            <List className="h-5 w-5" />
-            <span>View Invoices</span>
-          </motion.button>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={handleCreateInvoice}
-            className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="h-5 w-5" />
-            <span>
-              {!dataLoaded && loading ? 'Loading...' : 
-               dataLoaded && isOnboardingCompleted === false ? 'Setup & Create Invoice' : 
-               'Create Invoice'}
-            </span>
-          </motion.button>
+        <div className="flex items-center space-x-3">
+          {loading && (
+            <div className="flex items-center space-x-1 text-blue-300">
+              <Settings className="h-3 w-3 animate-spin" />
+            </div>
+          )}
+          <div className="flex space-x-3">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleViewInvoices}
+              className="flex items-center space-x-2 bg-white/10 backdrop-blur-sm text-white px-4 py-2 rounded-lg hover:bg-white/20 transition-colors border border-white/20"
+            >
+              <List className="h-5 w-5" />
+              <span>View Invoices</span>
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleCreateInvoice}
+              className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="h-5 w-5" />
+              <span>
+                {!dataLoaded && loading ? 'Loading...' : 
+                 dataLoaded && isOnboardingCompleted === false ? 'Setup & Create Invoice' : 
+                 'Create Invoice'}
+              </span>
+            </motion.button>
+          </div>
         </div>
       </div>
 

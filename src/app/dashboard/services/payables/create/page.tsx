@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { 
   Plus, 
-  X, 
   Save, 
   Send, 
   FileText,
@@ -15,7 +14,8 @@ import {
   AlertCircle,
   CheckCircle,
   ChevronDown,
-  Loader2
+  Loader2,
+  ArrowLeft
 } from 'lucide-react';
 import { getFiatCurrencies, getCurrencyByCode } from '@/data/currencies';
 
@@ -437,10 +437,10 @@ export default function CreatePayablePage() {
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-4">
               <button
-                onClick={() => router.back()}
+                onClick={() => router.push('/dashboard/services/payables')}
                 className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
               >
-                <X className="h-5 w-5" />
+                <ArrowLeft className="h-5 w-5" />
               </button>
               <div>
                 <h1 className="text-xl font-semibold text-gray-900">Create Payable</h1>

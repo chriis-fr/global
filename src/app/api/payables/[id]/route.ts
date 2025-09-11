@@ -108,7 +108,9 @@ export async function PUT(
       approvalNotes,
       paymentStatus,
       paymentDate,
-      updatedAt
+      updatedAt,
+      // Payment action
+      markAsPaid
     } = body;
 
     const db = await connectToDatabase();
@@ -133,6 +135,82 @@ export async function PUT(
       return NextResponse.json({ success: false, message: 'Payable not found' }, { status: 404 });
     }
 
+    console.log('🔍 [Payable Update] Found payable:', {
+      id: existingPayable._id,
+      status: existingPayable.status,
+      relatedInvoiceId: existingPayable.relatedInvoiceId,
+      payableNumber: existingPayable.payableNumber
+    });
+
+    // Handle "Mark as Paid" action
+    if (markAsPaid) {
+      const statusHistoryUpdate = {
+        status: 'paid',
+        timestamp: new Date(),
+        updatedBy: session.user.email,
+        notes: 'Marked as paid by payer'
+      };
+
+      const updateData = {
+        status: 'paid',
+        paymentStatus: 'completed',
+        paymentDate: new Date(),
+        updatedAt: new Date()
+      };
+
+      const result = await collection.updateOne(
+        { _id: new ObjectId(id) },
+        { 
+          $set: updateData,
+          $push: { statusHistory: statusHistoryUpdate }
+        }
+      );
+
+      if (result.modifiedCount === 0) {
+        return NextResponse.json({ success: false, message: 'Failed to update payable' }, { status: 500 });
+      }
+
+      // Update the related invoice status to "paid" as well
+      try {
+        if (existingPayable.relatedInvoiceId) {
+          console.log('🔄 [Payable Update] Updating related invoice:', {
+            payableId: id,
+            relatedInvoiceId: existingPayable.relatedInvoiceId,
+            payableStatus: 'paid'
+          });
+          
+          const invoicesCollection = db.collection('invoices');
+          const invoiceUpdateResult = await invoicesCollection.updateOne(
+            { _id: existingPayable.relatedInvoiceId },
+            { 
+              $set: { 
+                status: 'paid',
+                paidAt: new Date(),
+                updatedAt: new Date()
+              }
+            }
+          );
+          
+          console.log('✅ [Payable Update] Related invoice update result:', {
+            matchedCount: invoiceUpdateResult.matchedCount,
+            modifiedCount: invoiceUpdateResult.modifiedCount,
+            invoiceId: existingPayable.relatedInvoiceId
+          });
+        } else {
+          console.log('⚠️ [Payable Update] No relatedInvoiceId found for payable:', id);
+        }
+      } catch (invoiceUpdateError) {
+        console.error('⚠️ [Payable Update] Failed to update related invoice:', invoiceUpdateError);
+        // Don't fail the payable update if invoice update fails
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: 'Payable marked as paid successfully',
+        data: { status: 'paid', paymentDate: new Date() }
+      });
+    }
+
     // Prepare update data
     // Get current payable to check for status changes
     const currentPayable = await collection.findOne({ _id: new ObjectId(id) });
@@ -154,6 +232,42 @@ export async function PUT(
         changedAt: currentTime,
         notes: `Status changed from ${currentPayable.status} to ${newStatus}`
       });
+
+      // If status is being changed to 'paid', also update the related invoice
+      if (newStatus === 'paid') {
+        try {
+          if (currentPayable.relatedInvoiceId) {
+            console.log('🔄 [Payable Update] Updating related invoice via status change:', {
+              payableId: id,
+              relatedInvoiceId: currentPayable.relatedInvoiceId,
+              newStatus: 'paid'
+            });
+            
+            const invoicesCollection = db.collection('invoices');
+            const invoiceUpdateResult = await invoicesCollection.updateOne(
+              { _id: currentPayable.relatedInvoiceId },
+              { 
+                $set: { 
+                  status: 'paid',
+                  paidAt: new Date(),
+                  updatedAt: new Date()
+                }
+              }
+            );
+            
+            console.log('✅ [Payable Update] Related invoice update result via status change:', {
+              matchedCount: invoiceUpdateResult.matchedCount,
+              modifiedCount: invoiceUpdateResult.modifiedCount,
+              invoiceId: currentPayable.relatedInvoiceId
+            });
+          } else {
+            console.log('⚠️ [Payable Update] No relatedInvoiceId found for payable via status change:', id);
+          }
+        } catch (invoiceUpdateError) {
+          console.error('⚠️ [Payable Update] Failed to update related invoice via status change:', invoiceUpdateError);
+          // Don't fail the payable update if invoice update fails
+        }
+      }
     }
 
     if (approvalStatus && approvalStatus !== currentPayable.approvalStatus) {
@@ -212,7 +326,7 @@ export async function PUT(
       payableType: payableType || 'regular',
       category: category || 'General',
       priority: priority || 'medium',
-      items: items.map((item: { id?: string; description: string; quantity: number; unitPrice: number; amount: number; tax: number; discount?: number }) => ({
+      items: items ? items.map((item: { id?: string; description: string; quantity: number; unitPrice: number; amount: number; tax: number; discount?: number }) => ({
         id: item.id || `item-${Date.now()}-${Math.random()}`,
         description: item.description,
         quantity: item.quantity,
@@ -220,7 +334,7 @@ export async function PUT(
         discount: item.discount || 0,
         tax: item.tax || 0,
         amount: item.amount
-      })),
+      })) : undefined,
       subtotal,
       totalTax,
       total,

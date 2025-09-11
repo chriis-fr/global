@@ -147,23 +147,48 @@ export default function PayableViewPage() {
     try {
       setUpdatingStatus(true);
 
+      // Use markAsPaid for payment status updates
+      const requestBody = newStatus === 'paid' 
+        ? { markAsPaid: true }
+        : { 
+            status: newStatus, 
+            updatedAt: new Date().toISOString() 
+          };
+
       const response = await fetch(`/api/payables/${payableId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          status: newStatus,
-          updatedAt: new Date().toISOString()
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await response.json();
 
       if (data.success) {
-        setPayable(prev => prev ? { ...prev, status: newStatus as any, updatedAt: new Date().toISOString() } : null);
+        const updatedPayable = newStatus === 'paid' 
+          ? { 
+              ...payable, 
+              status: 'paid' as any, 
+              paymentStatus: 'completed',
+              paymentDate: new Date().toISOString(),
+              updatedAt: new Date().toISOString() 
+            }
+          : { 
+              ...payable, 
+              status: newStatus as any, 
+              updatedAt: new Date().toISOString() 
+            };
+        
+        setPayable(updatedPayable);
+        
+        // Show success message
+        if (newStatus === 'paid') {
+          alert('Payable marked as paid successfully!');
+        }
       } else {
         console.error('Failed to update status:', data.message);
+        alert('Failed to update payable status. Please try again.');
       }
     } catch (err) {
       console.error('Error updating status:', err);
@@ -187,7 +212,7 @@ export default function PayableViewPage() {
       const data = await response.json();
 
       if (data.success) {
-        router.push('/dashboard/services/payables');
+        router.push('/dashboard/services/payables?refresh=true');
       } else {
         console.error('Failed to delete payable:', data.message);
       }
@@ -259,7 +284,7 @@ export default function PayableViewPage() {
           <h1 className="text-xl font-semibold text-white mb-2">Payable Not Found</h1>
           <p className="text-blue-200 mb-6">{error || 'The payable you are looking for does not exist or you do not have permission to view it.'}</p>
           <button
-            onClick={() => router.push('/dashboard/services/payables')}
+            onClick={() => router.push('/dashboard/services/payables?refresh=true')}
             className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
@@ -278,7 +303,7 @@ export default function PayableViewPage() {
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-4">
               <button
-                onClick={() => router.push('/dashboard/services/payables')}
+                onClick={() => router.push('/dashboard/services/payables?refresh=true')}
                 className="p-2 text-blue-200 hover:text-white transition-colors"
               >
                 <ArrowLeft className="h-5 w-5" />
@@ -523,7 +548,7 @@ export default function PayableViewPage() {
                   </button>
                 )}
                 
-                {payable.status === 'approved' && (
+                {(payable.status === 'approved' || payable.status === 'pending') && (
                   <button
                     onClick={() => handleStatusUpdate('paid')}
                     disabled={updatingStatus}

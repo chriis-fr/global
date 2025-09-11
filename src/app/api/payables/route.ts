@@ -375,11 +375,7 @@ export async function GET(request: NextRequest) {
     const userPreferences = await CurrencyService.getUserPreferredCurrency(session.user.email);
     const preferredCurrency = userPreferences.preferredCurrency;
     
-    console.log('🔍 [Payables API] Currency preferences:', {
-      userEmail: session.user.email,
-      preferredCurrency,
-      userPreferences
-    });
+    // Currency preferences loaded
 
     // Build query
     const isOrganization = !!(session.user.organizationId && session.user.organizationId !== session.user.id);
@@ -390,11 +386,7 @@ export async function GET(request: NextRequest) {
       ? { issuerId: new ObjectId(session.user.id) }
       : { issuerId: session.user.id };
     
-    console.log('🔍 [Payables API] IssuerId query details:', {
-      sessionUserId: session.user.id,
-      isObjectId,
-      issuerIdQuery: JSON.stringify(issuerIdQuery, null, 2)
-    });
+    // Query details prepared
     
     let query = isOrganization 
       ? { organizationId: session.user.organizationId }
@@ -405,13 +397,7 @@ export async function GET(request: NextRequest) {
           ]
         };
 
-    console.log('🔍 [Payables API] Debug info:', {
-      userId: session.user.id,
-      userEmail: session.user.email,
-      userIdType: typeof session.user.id,
-      isOrganization,
-      query
-    });
+    // Query built successfully
 
     if (status) {
       query = { ...query, status } as typeof query & { status: string };
@@ -460,63 +446,16 @@ export async function GET(request: NextRequest) {
       .limit(limit)
       .toArray();
 
-    console.log('🔍 [Payables API] Query executed:', JSON.stringify(query, null, 2));
-    console.log('🔍 [Payables API] Found payables:', {
-      count: payables.length,
-      payables: payables.map(p => ({
-        id: p._id,
-        issuerId: p.issuerId,
-        userId: p.userId || 'not set',
-        status: p.status,
-        total: p.total,
-        payableNumber: p.payableNumber,
-        vendorName: p.vendorName,
-        companyName: p.companyName
-      }))
-    });
-
-    // Debug: Check if there are any payables in the database for this user
-    const allPayablesForUser = await payablesCollection.find({
-      $or: [
-        { issuerId: session.user.id },
-        { userId: session.user.email }
-      ]
-    }).toArray();
-    
-    console.log('🔍 [Payables API] All payables for user (debug):', {
-      userEmail: session.user.email,
-      userId: session.user.id,
-      totalFound: allPayablesForUser.length,
-      payables: allPayablesForUser.map(p => ({
-        id: p._id,
-        issuerId: p.issuerId,
-        userId: p.userId || 'not set',
-        payableNumber: p.payableNumber,
-        companyName: p.companyName,
-        vendorName: p.vendorName
-      }))
-    });
+    // Payables fetched successfully
 
     // Convert currencies if requested
     if (convertToPreferred) {
-      console.log('🔍 [Payables API] Converting currencies to preferred:', preferredCurrency);
       const convertedPayables = await Promise.all(
-        payables.map(payable => {
-          console.log('🔍 [Payables API] Converting payable:', {
-            id: payable._id,
-            originalTotal: payable.total,
-            originalCurrency: payable.currency,
-            preferredCurrency
-          });
-          return CurrencyService.convertPayableForReporting(payable as { [key: string]: unknown }, preferredCurrency);
-        })
+        payables.map(payable => 
+          CurrencyService.convertPayableForReporting(payable as { [key: string]: unknown }, preferredCurrency)
+        )
       );
       payables = convertedPayables as typeof payables;
-      console.log('🔍 [Payables API] Converted payables:', payables.map(p => ({
-        id: p._id,
-        convertedTotal: p.total,
-        convertedCurrency: p.currency
-      })));
     }
 
     // Calculate total amount for all payables
