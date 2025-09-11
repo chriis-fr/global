@@ -182,9 +182,11 @@ export default function PayableViewPage() {
         
         setPayable(updatedPayable);
         
-        // Show success message
+        // Show success message and set payment action flag
         if (newStatus === 'paid') {
           alert('Payable marked as paid successfully!');
+          // Set flag for immediate refresh on other side
+          sessionStorage.setItem('lastPaymentAction', Date.now().toString());
         }
       } else {
         console.error('Failed to update status:', data.message);

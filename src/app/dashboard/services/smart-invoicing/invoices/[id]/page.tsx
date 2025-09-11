@@ -367,6 +367,8 @@ export default function InvoiceViewPage() {
         // Reload the invoice to get updated status
         await loadInvoice(invoice._id);
         alert('Invoice marked as paid successfully!');
+        // Set flag for immediate refresh on other side
+        sessionStorage.setItem('lastPaymentAction', Date.now().toString());
       } else {
         const errorData = await response.json();
         alert(`Failed to mark invoice as paid: ${errorData.message || 'Unknown error'}`);

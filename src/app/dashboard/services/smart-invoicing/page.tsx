@@ -26,7 +26,7 @@ import FormattedNumberDisplay from '@/components/FormattedNumber';
 
 // Cache key for localStorage
 const CACHE_KEY = 'smart-invoicing-cache';
-const CACHE_DURATION = 30 * 1000; // 30 seconds - short cache for real-time updates
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes - stable cache for good UX
 
 interface CachedData {
   invoices: Invoice[];
@@ -171,44 +171,56 @@ export default function SmartInvoicingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user]); // Intentionally exclude loadAllData to prevent infinite loops
 
-  // Refresh completion status when returning from onboarding
+  // Refresh completion status when returning from onboarding or payment actions
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('refresh') === 'true') {
       // Remove the refresh parameter from URL
       const newUrl = window.location.pathname;
       window.history.replaceState({}, '', newUrl);
-      // Force refresh data
+      // Force refresh data immediately (bypass cache)
       loadAllData(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Intentionally exclude loadAllData to prevent infinite loops
 
-  // Refresh data when page becomes visible (e.g., returning from invoice detail)
+  // Smart refresh when returning from specific actions
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (!document.hidden && dataLoaded) {
-        // Page became visible and we have data loaded, refresh it
-        loadAllData(true);
-      }
-    };
-
-    const handleFocus = () => {
-      if (dataLoaded) {
-        // Window gained focus, refresh data
-        loadAllData(true);
+        // Check if we're returning from a payment-related action
+        const lastAction = sessionStorage.getItem('lastPaymentAction');
+        const now = Date.now();
+        
+        if (lastAction) {
+          const actionTime = parseInt(lastAction);
+          // If last payment action was within last 2 minutes, force refresh
+          if (now - actionTime < 2 * 60 * 1000) {
+            console.log('🔄 [Smart Invoicing] Force refresh due to recent payment action');
+            loadAllData(true);
+            sessionStorage.removeItem('lastPaymentAction');
+            return;
+          }
+        }
+        
+        // Otherwise, only refresh if cache is expired (5+ minutes old)
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+          const data = JSON.parse(cached);
+          if (now - data.timestamp > CACHE_DURATION) {
+            loadAllData(true);
+          }
+        }
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleFocus);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleFocus);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataLoaded]); // Only depend on dataLoaded to avoid infinite loops
+  }, [dataLoaded]);
 
   const handleCreateInvoice = () => {
     // Only check onboarding if we have the data, otherwise assume it's completed
@@ -319,10 +331,10 @@ export default function SmartInvoicingPage() {
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-blue-200 text-sm">Total Invoices</p>
-              <p className="text-2xl font-bold text-white">
-                {loading ? '...' : stats.totalInvoices}
-              </p>
+               <p className="text-blue-200 text-sm">Total Invoices</p>
+               <p className="text-2xl font-bold text-white">
+                 {stats.totalInvoices}
+               </p>
             </div>
             <FileText className="h-8 w-8 text-blue-400" />
           </div>
@@ -336,10 +348,10 @@ export default function SmartInvoicingPage() {
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-blue-200 text-sm">Total Revenue</p>
-              <p className="text-2xl font-bold text-white">
-                {loading ? '...' : <FormattedNumberDisplay value={stats.totalRevenue} usePreferredCurrency={true} />}
-              </p>
+               <p className="text-blue-200 text-sm">Total Revenue</p>
+               <p className="text-2xl font-bold text-white">
+                 <FormattedNumberDisplay value={stats.totalRevenue} usePreferredCurrency={true} />
+               </p>
             </div>
             <DollarSign className="h-8 w-8 text-green-400" />
           </div>
@@ -353,10 +365,10 @@ export default function SmartInvoicingPage() {
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-blue-200 text-sm">Pending</p>
-              <p className="text-2xl font-bold text-white">
-                {loading ? '...' : stats.pendingCount}
-              </p>
+               <p className="text-blue-200 text-sm">Pending</p>
+               <p className="text-2xl font-bold text-white">
+                 {stats.pendingCount}
+               </p>
             </div>
             <Calendar className="h-8 w-8 text-yellow-400" />
           </div>
@@ -370,10 +382,10 @@ export default function SmartInvoicingPage() {
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-blue-200 text-sm">Paid</p>
-              <p className="text-2xl font-bold text-white">
-                {loading ? '...' : stats.paidCount}
-              </p>
+               <p className="text-blue-200 text-sm">Paid</p>
+               <p className="text-2xl font-bold text-white">
+                 {stats.paidCount}
+               </p>
             </div>
             <TrendingUp className="h-8 w-8 text-green-400" />
           </div>

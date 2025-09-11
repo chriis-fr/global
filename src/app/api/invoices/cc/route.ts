@@ -18,9 +18,10 @@ const generateCcInvoiceNumber = async (db: Db, primaryInvoiceNumber: string, ind
     secureId = organizationId.slice(-4);
   } else {
     // For individual users, create a unique identifier from email
+    // Take first 4 chars of username + first 2 chars of domain (more readable)
     const emailParts = ownerId.split('@');
     const username = emailParts[0].replace(/[^a-zA-Z0-9]/g, '').slice(0, 4);
-    const domain = emailParts[1]?.replace(/[^a-zA-Z0-9]/g, '').slice(-2) || 'XX';
+    const domain = emailParts[1]?.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2) || 'XX';
     secureId = `${username}${domain}`.toUpperCase();
   }
   

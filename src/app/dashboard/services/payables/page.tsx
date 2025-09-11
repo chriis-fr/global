@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   Clock,
   CheckCircle,
+  Settings,
   Eye,
   Edit3
 } from 'lucide-react';
@@ -20,7 +21,7 @@ import FormattedNumberDisplay from '@/components/FormattedNumber';
 
 // Cache key for localStorage
 const CACHE_KEY = 'payables-cache';
-const CACHE_DURATION = 30 * 1000; // 30 seconds - short cache for real-time updates
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes - stable cache for good UX
 
 interface Payable {
   _id: string;
@@ -191,8 +192,26 @@ export default function AccountsPayablePage() {
     console.log('🔍 [Payables Page] useEffect triggered, session:', session?.user?.email);
     if (session?.user) {
       console.log('🔍 [Payables Page] Loading data for user:', session.user.email);
-      // Load data (will use cache if available and valid)
-      loadAllData(false);
+      
+      // Check if there's a recent payment action that needs immediate refresh
+      const lastAction = sessionStorage.getItem('lastPaymentAction');
+      const now = Date.now();
+      
+      if (lastAction) {
+        const actionTime = parseInt(lastAction);
+        // If last payment action was within last 2 minutes, force refresh
+        if (now - actionTime < 2 * 60 * 1000) {
+          console.log('🔄 [Payables] Force refresh on mount due to recent payment action');
+          loadAllData(true);
+          sessionStorage.removeItem('lastPaymentAction');
+        } else {
+          // Load data (will use cache if available and valid)
+          loadAllData(false);
+        }
+      } else {
+        // Load data (will use cache if available and valid)
+        loadAllData(false);
+      }
     } else {
       console.log('🔍 [Payables Page] No session user, skipping data load');
     }
@@ -212,31 +231,63 @@ export default function AccountsPayablePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Intentionally exclude loadAllData to prevent infinite loops
 
-  // Refresh data when page becomes visible (e.g., returning from payable detail)
+  // Smart refresh when returning from specific actions
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (!document.hidden && dataLoaded) {
-        // Page became visible and we have data loaded, refresh it
-        loadAllData(true);
+        // Check if we're returning from a payment-related action
+        const lastAction = sessionStorage.getItem('lastPaymentAction');
+        const now = Date.now();
+        
+        if (lastAction) {
+          const actionTime = parseInt(lastAction);
+          // If last payment action was within last 2 minutes, force refresh
+          if (now - actionTime < 2 * 60 * 1000) {
+            console.log('🔄 [Payables] Force refresh due to recent payment action');
+            loadAllData(true);
+            sessionStorage.removeItem('lastPaymentAction');
+            return;
+          }
+        }
+        
+        // Otherwise, only refresh if cache is expired (5+ minutes old)
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+          const data = JSON.parse(cached);
+          if (now - data.timestamp > CACHE_DURATION) {
+            loadAllData(true);
+          }
+        }
       }
     };
 
-    const handleFocus = () => {
+    // Also check for payment actions when page becomes active (not just visibility change)
+    const handlePageFocus = () => {
       if (dataLoaded) {
-        // Window gained focus, refresh data
-        loadAllData(true);
+        const lastAction = sessionStorage.getItem('lastPaymentAction');
+        const now = Date.now();
+        
+        if (lastAction) {
+          const actionTime = parseInt(lastAction);
+          // If last payment action was within last 2 minutes, force refresh
+          if (now - actionTime < 2 * 60 * 1000) {
+            console.log('🔄 [Payables] Force refresh due to recent payment action (page focus)');
+            loadAllData(true);
+            sessionStorage.removeItem('lastPaymentAction');
+          }
+        }
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleFocus);
+    window.addEventListener('focus', handlePageFocus);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('focus', handlePageFocus);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataLoaded]); // Only depend on dataLoaded to avoid infinite loops
+  }, [dataLoaded]);
 
   const handleCreatePayable = () => {
     // Only check onboarding if we have the data, otherwise assume it's completed
@@ -285,13 +336,27 @@ export default function AccountsPayablePage() {
                 <p className="text-sm text-blue-200">Manage your business payments and vendor relationships</p>
               </div>
             </div>
-            <button
-              onClick={handleCreatePayable}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-              <span>Create Payable</span>
-            </button>
+            <div className="flex items-center space-x-3">
+              {loading && (
+                <div className="flex items-center space-x-1 text-blue-300">
+                  <Settings className="h-3 w-3 animate-spin" />
+                </div>
+              )}
+              <button
+                onClick={() => loadAllData(true)}
+                className="flex items-center space-x-2 px-3 py-2 bg-white/10 backdrop-blur-sm text-white rounded-lg hover:bg-white/20 transition-colors border border-white/20"
+              >
+                <Settings className="h-4 w-4" />
+                <span>Refresh</span>
+              </button>
+              <button
+                onClick={handleCreatePayable}
+                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Create Payable</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
