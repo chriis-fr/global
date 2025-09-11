@@ -22,6 +22,7 @@ import {
 import { InvoiceService, InvoiceStats } from '@/lib/services/invoiceService';
 import { Invoice } from '@/models/Invoice';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
+import InvoicingSkeleton from '@/components/ui/InvoicingSkeleton';
 
 
 // Cache key for localStorage
@@ -247,6 +248,11 @@ export default function SmartInvoicingPage() {
   const handleManageClients = () => {
     router.push('/dashboard/clients');
   };
+
+  // Show skeleton while loading initial data
+  if (loading && !dataLoaded) {
+    return <InvoicingSkeleton />;
+  }
 
   return (
     <div className="space-y-6">

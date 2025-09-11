@@ -14,18 +14,14 @@ export default function NotificationBadge() {
   const { data: session } = useSession();
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [previousCount, setPreviousCount] = useState(0);
   const lastFetchRef = useRef<number>(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const isVisibleRef = useRef<boolean>(true);
   const isFetchingRef = useRef<boolean>(false);
 
   const fetchUnreadCount = useCallback(async () => {
-    // DISABLED: Notification fetching to improve app performance
-    // TODO: Re-enable when notification system is fully implemented
-    setLoading(false);
-    setUnreadCount(0); // Set to 0 for now
-    return;
-    
     // Skip if critical operation is happening
     if (isCriticalOperation) {
       return;
@@ -33,7 +29,7 @@ export default function NotificationBadge() {
 
     // Prevent multiple simultaneous requests
     const now = Date.now();
-    if (now - lastFetchRef.current < 60000) { // 60 second cooldown (increased from 30)
+    if (now - lastFetchRef.current < 30000) { // 30 second cooldown
       return;
     }
     
@@ -56,7 +52,16 @@ export default function NotificationBadge() {
       
       const data = await response.json();
       if (data.success) {
-        setUnreadCount(data.data.stats.unread);
+        const newCount = data.data.stats.unread;
+        
+        // Trigger animation if count increased
+        if (newCount > previousCount && previousCount > 0) {
+          setIsAnimating(true);
+          setTimeout(() => setIsAnimating(false), 1000); // Animation duration
+        }
+        
+        setPreviousCount(newCount);
+        setUnreadCount(newCount);
       }
     } catch (error) {
       if (loading) {
@@ -71,33 +76,32 @@ export default function NotificationBadge() {
   useEffect(() => {
     if (!session?.user) return;
 
-    // DISABLED: Initial fetch and polling to improve app performance
-    // TODO: Re-enable when notification system is fully implemented
-    fetchUnreadCount(); // This will set loading to false and unreadCount to 0
+    // Initial fetch
+    fetchUnreadCount();
 
-    // DISABLED: Periodic polling
-    // intervalRef.current = setInterval(() => {
-    //   if (isVisibleRef.current && !isCriticalOperation) {
-    //     fetchUnreadCount();
-    //   }
-    // }, 300000); // 5 minutes
+    // Periodic polling every 2 minutes
+    intervalRef.current = setInterval(() => {
+      if (isVisibleRef.current && !isCriticalOperation) {
+        fetchUnreadCount();
+      }
+    }, 120000); // 2 minutes
 
-    // DISABLED: Page visibility change handling
-    // const handleVisibilityChange = () => {
-    //   isVisibleRef.current = !document.hidden;
-    //   if (isVisibleRef.current && !isCriticalOperation) {
-    //     // Fetch immediately when page becomes visible
-    //     fetchUnreadCount();
-    //   }
-    // };
+    // Page visibility change handling
+    const handleVisibilityChange = () => {
+      isVisibleRef.current = !document.hidden;
+      if (isVisibleRef.current && !isCriticalOperation) {
+        // Fetch immediately when page becomes visible
+        fetchUnreadCount();
+      }
+    };
 
-    // document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
-      // document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [session?.user, fetchUnreadCount]);
 
@@ -107,10 +111,23 @@ export default function NotificationBadge() {
 
   return (
     <>
+      {/* Blue dot indicator for unread notifications */}
       {unreadCount > 0 && (
-        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
-          {unreadCount > 99 ? '99+' : unreadCount}
-        </span>
+        <div className="absolute -top-1 -right-1">
+          {/* Blue dot */}
+          <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
+          {/* Red badge with count */}
+          <span className="relative bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </span>
+        </div>
+      )}
+      
+      {/* Bell animation overlay */}
+      {isAnimating && (
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute inset-0 bg-blue-500/20 rounded-full animate-ping"></div>
+        </div>
       )}
     </>
   );

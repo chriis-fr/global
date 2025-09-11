@@ -13,6 +13,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
+import DashboardSkeleton from '@/components/ui/DashboardSkeleton';
 
 interface DashboardStats {
   totalRevenue: number;
@@ -44,12 +45,18 @@ export default function DashboardPage() {
   useEffect(() => {
     const loadStats = async () => {
       try {
-        // Fetch real data from API - get stats from the invoices API
+        // Fetch real data from API - optimize by getting only stats, not full data
+        // Add timeout to prevent hanging
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
         const [invoicesResponse, clientsResponse, ledgerResponse] = await Promise.all([
-          fetch('/api/invoices?convertToPreferred=true'),
-          fetch('/api/clients'),
-          fetch('/api/ledger')
+          fetch('/api/invoices?limit=1&convertToPreferred=true', { signal: controller.signal }), // Only get stats, not full data
+          fetch('/api/clients', { signal: controller.signal }),
+          fetch('/api/ledger', { signal: controller.signal })
         ]);
+
+        clearTimeout(timeoutId);
 
         const invoicesData = await invoicesResponse.json();
         const clientsData = await clientsResponse.json();
@@ -84,6 +91,12 @@ export default function DashboardPage() {
         });
       } catch (error) {
         console.error('Error loading dashboard stats:', error);
+        
+        // If it's a timeout or network error, show cached/default data
+        if (error instanceof Error && (error.name === 'AbortError' || error.message.includes('fetch'))) {
+          console.log('⚠️ Dashboard: Using fallback data due to API timeout');
+          // Keep the default stats (all zeros) but still show the dashboard
+        }
       } finally {
         setLoading(false);
       }
@@ -93,25 +106,7 @@ export default function DashboardPage() {
   }, []);
 
   if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Dashboard</h1>
-            <p className="text-blue-200">Welcome back, {session?.user?.name || 'User'}!</p>
-          </div>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="bg-white/10 backdrop-blur-sm rounded-xl p-6 animate-pulse">
-              <div className="h-4 bg-white/20 rounded mb-4"></div>
-              <div className="h-8 bg-white/20 rounded"></div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   return (

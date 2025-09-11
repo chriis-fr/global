@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
+import { NotificationService } from '@/lib/services/notificationService';
 
 export async function GET(
   request: NextRequest,
@@ -202,6 +203,34 @@ export async function PUT(
       } catch (invoiceUpdateError) {
         console.error('⚠️ [Payable Update] Failed to update related invoice:', invoiceUpdateError);
         // Don't fail the payable update if invoice update fails
+      }
+
+      // Create notification for payment made
+      try {
+        const userId = isOrganization ? new ObjectId(session.user.organizationId) : new ObjectId(session.user.id);
+        
+        await NotificationService.createNotification({
+          userId,
+          organizationId: isOrganization ? new ObjectId(session.user.organizationId) : undefined,
+          type: 'payment_made',
+          title: 'Payment Made! 💳',
+          message: `Payable ${existingPayable.payableNumber || '#' + id.slice(-6)} has been marked as paid. Amount: ${existingPayable.currency || 'USD'} ${(existingPayable.total || 0).toFixed(2)}`,
+          priority: 'high',
+          actionUrl: `/dashboard/services/payables/${id}`,
+          actionText: 'View Payable',
+          relatedInvoiceId: existingPayable.relatedInvoiceId,
+          metadata: {
+            payableNumber: existingPayable.payableNumber,
+            amount: existingPayable.total,
+            currency: existingPayable.currency,
+            vendorName: existingPayable.vendorName
+          },
+          tags: ['payment', 'payable', 'expense']
+        });
+        
+        console.log('✅ [Payable Update] Payment notification created');
+      } catch (notificationError) {
+        console.error('⚠️ [Payable Update] Failed to create payment notification:', notificationError);
       }
 
       return NextResponse.json({

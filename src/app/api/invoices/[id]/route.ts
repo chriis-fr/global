@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
 import { CurrencyService } from '@/lib/services/currencyService';
+import { NotificationService } from '@/lib/services/notificationService';
 
 export async function GET(
   request: NextRequest,
@@ -200,6 +201,34 @@ export async function PUT(
       } catch (payableUpdateError) {
         console.error('⚠️ [Invoice Update] Failed to update related payable:', payableUpdateError);
         // Don't fail the invoice update if payable update fails
+      }
+
+      // Create notification for payment received
+      try {
+        const userId = isOrganization ? new ObjectId(session.user.organizationId) : new ObjectId(session.user.id);
+        
+        await NotificationService.createNotification({
+          userId,
+          organizationId: isOrganization ? new ObjectId(session.user.organizationId) : undefined,
+          type: 'payment_received',
+          title: 'Payment Received! 💰',
+          message: `Invoice ${invoice.invoiceNumber || '#' + id.slice(-6)} has been marked as paid. Amount: ${invoice.currency || 'USD'} ${(invoice.totalAmount || invoice.total || 0).toFixed(2)}`,
+          priority: 'high',
+          actionUrl: `/dashboard/services/smart-invoicing/invoices/${id}`,
+          actionText: 'View Invoice',
+          relatedInvoiceId: new ObjectId(id),
+          metadata: {
+            invoiceNumber: invoice.invoiceNumber,
+            amount: invoice.totalAmount || invoice.total,
+            currency: invoice.currency,
+            clientName: invoice.clientName
+          },
+          tags: ['payment', 'invoice', 'receivable']
+        });
+        
+        console.log('✅ [Invoice Update] Payment notification created');
+      } catch (notificationError) {
+        console.error('⚠️ [Invoice Update] Failed to create payment notification:', notificationError);
       }
     }
 

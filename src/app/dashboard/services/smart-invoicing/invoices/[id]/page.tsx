@@ -783,12 +783,12 @@ export default function InvoiceViewPage() {
 
       // Generate receipt HTML
       const receiptHTML = `
-        <div style="max-width: 600px; margin: 0 auto; background: white; padding: 20px; border: 1px solid #e5e7eb;">
+        <div style="max-width: 600px; margin: 0 auto; background: white; padding: 20px; border: 1px solid #e5e7eb; box-sizing: border-box; width: 100%;">
           <!-- Header -->
           <div style="text-align: center; margin-bottom: 20px; border-bottom: 2px solid #3b82f6; padding-bottom: 15px;">
-            ${invoice.companyLogo ? `<img src="${invoice.companyLogo}" alt="Company Logo" style="max-height: 50px; margin-bottom: 8px;">` : ''}
-            <h1 style="color: #1f2937; font-size: 24px; font-weight: bold; margin: 0;">PAYMENT RECEIPT</h1>
-            <p style="color: #6b7280; font-size: 12px; margin: 3px 0 0 0;">Receipt #${invoice.invoiceNumber || 'N/A'}</p>
+            ${invoice.companyLogo ? `<img src="${invoice.companyLogo}" alt="Company Logo" style="max-height: 50px; margin-bottom: 8px; max-width: 100%;">` : ''}
+            <h1 style="color: #1f2937; font-size: 24px; font-weight: bold; margin: 0; word-wrap: break-word;">PAYMENT RECEIPT</h1>
+            <p style="color: #6b7280; font-size: 12px; margin: 3px 0 0 0; word-wrap: break-word;">Receipt #${invoice.invoiceNumber || 'N/A'}</p>
           </div>
 
           <!-- Payment Details -->
@@ -796,13 +796,13 @@ export default function InvoiceViewPage() {
             <h2 style="color: #1f2937; font-size: 16px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px;">Payment Details</h2>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
               <div>
-                <p style="margin: 5px 0; color: #6b7280; font-size: 14px;"><strong>Payment Date:</strong> ${formatDate(invoice.paidAt || new Date().toISOString())}</p>
-                <p style="margin: 5px 0; color: #6b7280; font-size: 14px;"><strong>Invoice Date:</strong> ${formatDate(invoice.issueDate || '')}</p>
-                <p style="margin: 5px 0; color: #6b7280; font-size: 14px;"><strong>Due Date:</strong> ${formatDate(invoice.dueDate || '')}</p>
+                <p style="margin: 5px 0; color: #6b7280; font-size: 14px; word-wrap: break-word;"><strong>Payment Date:</strong> ${formatDate(invoice.updatedAt || new Date().toISOString())}</p>
+                <p style="margin: 5px 0; color: #6b7280; font-size: 14px; word-wrap: break-word;"><strong>Invoice Date:</strong> ${formatDate(invoice.issueDate || '')}</p>
+                <p style="margin: 5px 0; color: #6b7280; font-size: 14px; word-wrap: break-word;"><strong>Due Date:</strong> ${formatDate(invoice.dueDate || '')}</p>
               </div>
               <div>
-                <p style="margin: 5px 0; color: #6b7280; font-size: 14px;"><strong>Payment Method:</strong> ${invoice.paymentMethod === 'crypto' ? 'Cryptocurrency' : 'Bank Transfer'}</p>
-                <p style="margin: 5px 0; color: #6b7280; font-size: 14px;"><strong>Status:</strong> <span style="color: #059669; font-weight: bold;">PAID</span></p>
+                <p style="margin: 5px 0; color: #6b7280; font-size: 14px; word-wrap: break-word;"><strong>Payment Method:</strong> ${invoice.paymentMethod === 'crypto' ? 'Cryptocurrency' : 'Bank Transfer'}</p>
+                <p style="margin: 5px 0; color: #6b7280; font-size: 14px; word-wrap: break-word;"><strong>Status:</strong> <span style="color: #059669; font-weight: bold;">PAID</span></p>
               </div>
             </div>
           </div>
@@ -811,11 +811,11 @@ export default function InvoiceViewPage() {
           <div style="margin-bottom: 18px;">
             <h2 style="color: #1f2937; font-size: 16px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px;">From</h2>
             <div style="background: #f9fafb; padding: 12px; border-radius: 6px;">
-              <p style="margin: 0 0 3px 0; font-weight: bold; color: #1f2937; font-size: 14px;">${invoice.companyName || 'Company Name'}</p>
-              <p style="margin: 0 0 3px 0; color: #6b7280; font-size: 12px;">${invoice.companyEmail || ''}</p>
-              <p style="margin: 0 0 3px 0; color: #6b7280; font-size: 12px;">${invoice.companyPhone || ''}</p>
+              <p style="margin: 0 0 3px 0; font-weight: bold; color: #1f2937; font-size: 14px; word-wrap: break-word;">${invoice.companyName || 'Company Name'}</p>
+              <p style="margin: 0 0 3px 0; color: #6b7280; font-size: 12px; word-wrap: break-word;">${invoice.companyEmail || ''}</p>
+              <p style="margin: 0 0 3px 0; color: #6b7280; font-size: 12px; word-wrap: break-word;">${invoice.companyPhone || ''}</p>
               ${invoice.companyAddress ? `
-                <p style="margin: 0; color: #6b7280; font-size: 12px;">
+                <p style="margin: 0; color: #6b7280; font-size: 12px; word-wrap: break-word;">
                   ${invoice.companyAddress.street || ''}<br>
                   ${invoice.companyAddress.city || ''}, ${invoice.companyAddress.state || ''} ${invoice.companyAddress.zipCode || ''}<br>
                   ${invoice.companyAddress.country || ''}
@@ -828,11 +828,11 @@ export default function InvoiceViewPage() {
           <div style="margin-bottom: 18px;">
             <h2 style="color: #1f2937; font-size: 16px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px;">To</h2>
             <div style="background: #f9fafb; padding: 12px; border-radius: 6px;">
-              <p style="margin: 0 0 3px 0; font-weight: bold; color: #1f2937; font-size: 14px;">${invoice.clientName || 'Client Name'}</p>
-              <p style="margin: 0 0 3px 0; color: #6b7280; font-size: 12px;">${invoice.clientEmail || ''}</p>
-              <p style="margin: 0 0 3px 0; color: #6b7280; font-size: 12px;">${invoice.clientPhone || ''}</p>
+              <p style="margin: 0 0 3px 0; font-weight: bold; color: #1f2937; font-size: 14px; word-wrap: break-word;">${invoice.clientName || 'Client Name'}</p>
+              <p style="margin: 0 0 3px 0; color: #6b7280; font-size: 12px; word-wrap: break-word;">${invoice.clientEmail || ''}</p>
+              <p style="margin: 0 0 3px 0; color: #6b7280; font-size: 12px; word-wrap: break-word;">${invoice.clientPhone || ''}</p>
               ${invoice.clientAddress ? `
-                <p style="margin: 0; color: #6b7280; font-size: 12px;">
+                <p style="margin: 0; color: #6b7280; font-size: 12px; word-wrap: break-word;">
                   ${invoice.clientAddress.street || ''}<br>
                   ${invoice.clientAddress.city || ''}, ${invoice.clientAddress.state || ''} ${invoice.clientAddress.zipCode || ''}<br>
                   ${invoice.clientAddress.country || ''}
@@ -844,21 +844,21 @@ export default function InvoiceViewPage() {
           <!-- Items -->
           <div style="margin-bottom: 18px;">
             <h2 style="color: #1f2937; font-size: 16px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px;">Items Paid</h2>
-            <div style="border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
-              <table style="width: 100%; border-collapse: collapse;">
+            <div style="border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; overflow-x: auto;">
+              <table style="width: 100%; border-collapse: collapse; min-width: 300px;">
                 <thead style="background: #f9fafb;">
                   <tr>
-                    <th style="padding: 8px; text-align: left; font-weight: bold; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-size: 12px;">Description</th>
-                    <th style="padding: 8px; text-align: center; font-weight: bold; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-size: 12px;">Qty</th>
-                    <th style="padding: 8px; text-align: right; font-weight: bold; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-size: 12px;">Amount</th>
+                    <th style="padding: 8px; text-align: left; font-weight: bold; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-size: 12px; white-space: nowrap;">Description</th>
+                    <th style="padding: 8px; text-align: center; font-weight: bold; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-size: 12px; white-space: nowrap;">Qty</th>
+                    <th style="padding: 8px; text-align: right; font-weight: bold; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-size: 12px; white-space: nowrap;">Amount</th>
                   </tr>
                 </thead>
                 <tbody>
                   ${invoice.items?.map(item => `
                     <tr>
-                      <td style="padding: 8px; border-bottom: 1px solid #f3f4f6; color: #1f2937; font-size: 12px;">${item.description || ''}</td>
-                      <td style="padding: 8px; text-align: center; border-bottom: 1px solid #f3f4f6; color: #6b7280; font-size: 12px;">${item.quantity || 0}</td>
-                      <td style="padding: 8px; text-align: right; border-bottom: 1px solid #f3f4f6; color: #1f2937; font-weight: bold; font-size: 12px;">${getCurrencyByCode(invoice.currency || 'USD')?.symbol || '$'}${(item.amount || 0).toFixed(2)}</td>
+                      <td style="padding: 8px; border-bottom: 1px solid #f3f4f6; color: #1f2937; font-size: 12px; word-wrap: break-word; max-width: 200px;">${item.description || ''}</td>
+                      <td style="padding: 8px; text-align: center; border-bottom: 1px solid #f3f4f6; color: #6b7280; font-size: 12px; white-space: nowrap;">${item.quantity || 0}</td>
+                      <td style="padding: 8px; text-align: right; border-bottom: 1px solid #f3f4f6; color: #1f2937; font-weight: bold; font-size: 12px; white-space: nowrap;">${getCurrencyByCode(invoice.currency || 'USD')?.symbol || '$'}${(item.amount || 0).toFixed(2)}</td>
                     </tr>
                   `).join('') || ''}
                 </tbody>
@@ -868,17 +868,17 @@ export default function InvoiceViewPage() {
 
           <!-- Total -->
           <div style="margin-bottom: 15px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: #3b82f6; color: white; border-radius: 6px;">
-              <span style="font-size: 16px; font-weight: bold;">TOTAL PAID:</span>
-              <span style="font-size: 20px; font-weight: bold;">${getCurrencyByCode(invoice.currency || 'USD')?.symbol || '$'}${(invoice.totalAmount || invoice.total || 0).toFixed(2)}</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: #3b82f6; color: white; border-radius: 6px; flex-wrap: wrap; gap: 10px;">
+              <span style="font-size: 16px; font-weight: bold; word-wrap: break-word;">TOTAL PAID:</span>
+              <span style="font-size: 20px; font-weight: bold; word-wrap: break-word;">${getCurrencyByCode(invoice.currency || 'USD')?.symbol || '$'}${(invoice.totalAmount || invoice.total || 0).toFixed(2)}</span>
             </div>
           </div>
 
           <!-- Footer -->
           <div style="text-align: center; margin-top: 20px; padding-top: 15px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 11px;">
-            <p style="margin: 0;">Thank you for your payment!</p>
-            <p style="margin: 3px 0 0 0;">This receipt confirms that payment has been received and processed.</p>
-            <p style="margin: 8px 0 0 0; font-weight: bold;">Generated by <span style="color: #3b82f6;">Chains ERP</span> on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}</p>
+            <p style="margin: 0; word-wrap: break-word;">Thank you for your payment!</p>
+            <p style="margin: 3px 0 0 0; word-wrap: break-word;">This receipt confirms that payment has been received and processed.</p>
+            <p style="margin: 8px 0 0 0; font-weight: bold; word-wrap: break-word;">Generated by <span style="color: #3b82f6;">Chains ERP</span> on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}</p>
           </div>
         </div>
       `;
@@ -918,7 +918,7 @@ export default function InvoiceViewPage() {
       document.body.removeChild(receiptContainer);
 
       // Download the PDF
-      const filename = `Receipt_${invoice.invoiceNumber || 'invoice'}_${formatDate(invoice.paidAt || new Date().toISOString()).replace(/,/g, '')}.pdf`;
+      const filename = `Receipt_${invoice.invoiceNumber || 'invoice'}_${formatDate(invoice.updatedAt || new Date().toISOString()).replace(/,/g, '')}.pdf`;
       pdf.save(filename);
 
       console.log('✅ [Smart Invoicing] Receipt downloaded successfully');
