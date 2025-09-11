@@ -12,7 +12,7 @@ import {
   Calendar, 
   TrendingUp,
   ArrowRight,
-  Settings,
+  RotateCcw,
   Users,
   List,
   Building2,
@@ -259,11 +259,13 @@ export default function SmartInvoicingPage() {
           </p>
         </div>
         <div className="flex items-center space-x-3">
-          {loading && (
-            <div className="flex items-center space-x-1 text-blue-300">
-              <Settings className="h-3 w-3 animate-spin" />
-            </div>
-          )}
+          <button
+            onClick={() => loadAllData(true)}
+            className="flex items-center justify-center w-8 h-8 text-blue-300 hover:text-blue-200 hover:bg-white/10 rounded-lg transition-colors"
+            title="Refresh data"
+          >
+            <RotateCcw className={`h-3 w-3 ${loading ? 'animate-spin-reverse' : ''}`} />
+          </button>
           <div className="flex space-x-3">
             <motion.button
               whileHover={{ scale: 1.05 }}
@@ -314,7 +316,7 @@ export default function SmartInvoicingPage() {
                 onClick={handleSetupService}
                 className="flex items-center space-x-2 bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 transition-colors"
               >
-                <Settings className="h-4 w-4" />
+                <ArrowRight className="h-4 w-4" />
                 <span>Complete Setup</span>
               </motion.button>
             </div>
@@ -422,7 +424,7 @@ export default function SmartInvoicingPage() {
         >
           <div className="flex items-center space-x-4">
             <div className="w-12 h-12 bg-orange-600 rounded-lg flex items-center justify-center">
-              <Settings className="h-6 w-6 text-white" />
+              <Building2 className="h-6 w-6 text-white" />
             </div>
             <div>
               <h3 className="text-lg font-semibold text-white">Manage Invoice Info</h3>

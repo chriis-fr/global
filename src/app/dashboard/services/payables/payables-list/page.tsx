@@ -527,7 +527,7 @@ export default function PayablesListPage() {
                     <td className="px-6 py-4">
                       <div className="flex items-center space-x-2">
                         <button
-                          onClick={() => router.push(`/dashboard/services/payables/payables/${payable._id}`)}
+                          onClick={() => router.push(`/dashboard/services/payables/${payable._id}`)}
                           className="p-1 text-white/70 hover:text-white hover:bg-white/10 rounded transition-colors"
                           title="View"
                         >

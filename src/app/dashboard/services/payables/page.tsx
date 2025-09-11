@@ -13,7 +13,7 @@ import {
   LayoutDashboard,
   Clock,
   CheckCircle,
-  Settings,
+  RotateCcw,
   Eye,
   Edit3
 } from 'lucide-react';
@@ -337,17 +337,12 @@ export default function AccountsPayablePage() {
               </div>
             </div>
             <div className="flex items-center space-x-3">
-              {loading && (
-                <div className="flex items-center space-x-1 text-blue-300">
-                  <Settings className="h-3 w-3 animate-spin" />
-                </div>
-              )}
               <button
                 onClick={() => loadAllData(true)}
-                className="flex items-center space-x-2 px-3 py-2 bg-white/10 backdrop-blur-sm text-white rounded-lg hover:bg-white/20 transition-colors border border-white/20"
+                className="flex items-center justify-center w-8 h-8 text-blue-300 hover:text-blue-200 hover:bg-white/10 rounded-lg transition-colors"
+                title="Refresh data"
               >
-                <Settings className="h-4 w-4" />
-                <span>Refresh</span>
+                <RotateCcw className={`h-3 w-3 ${loading ? 'animate-spin-reverse' : ''}`} />
               </button>
               <button
                 onClick={handleCreatePayable}
@@ -539,7 +534,7 @@ export default function AccountsPayablePage() {
                           </div>
                           <div className="flex items-center space-x-2">
                             <button
-                              onClick={() => router.push(`/dashboard/services/payables/payables/${payable._id}`)}
+                              onClick={() => router.push(`/dashboard/services/payables/${payable._id}`)}
                               className="text-blue-600 hover:text-blue-700 transition-colors p-1 rounded-lg hover:bg-blue-50"
                               title="View Bill"
                             >
@@ -561,7 +556,7 @@ export default function AccountsPayablePage() {
                     {payables.length > 10 && (
                       <div className="text-center pt-4">
                         <Link
-                          href="/dashboard/services/payables/payables"
+                          href="/dashboard/services/payables/payables-list"
                           className="text-blue-600 hover:text-blue-700 text-sm font-medium transition-colors"
                         >
                           View all bills →

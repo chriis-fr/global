@@ -20,6 +20,12 @@ export default function NotificationBadge() {
   const isFetchingRef = useRef<boolean>(false);
 
   const fetchUnreadCount = useCallback(async () => {
+    // DISABLED: Notification fetching to improve app performance
+    // TODO: Re-enable when notification system is fully implemented
+    setLoading(false);
+    setUnreadCount(0); // Set to 0 for now
+    return;
+    
     // Skip if critical operation is happening
     if (isCriticalOperation) {
       return;
@@ -65,32 +71,33 @@ export default function NotificationBadge() {
   useEffect(() => {
     if (!session?.user) return;
 
-    // Initial fetch on login
-    fetchUnreadCount();
+    // DISABLED: Initial fetch and polling to improve app performance
+    // TODO: Re-enable when notification system is fully implemented
+    fetchUnreadCount(); // This will set loading to false and unreadCount to 0
 
-    // Set up periodic polling every 5 minutes (300 seconds) - increased from 2 minutes
-    intervalRef.current = setInterval(() => {
-      if (isVisibleRef.current && !isCriticalOperation) {
-        fetchUnreadCount();
-      }
-    }, 300000); // 5 minutes
+    // DISABLED: Periodic polling
+    // intervalRef.current = setInterval(() => {
+    //   if (isVisibleRef.current && !isCriticalOperation) {
+    //     fetchUnreadCount();
+    //   }
+    // }, 300000); // 5 minutes
 
-    // Handle page visibility changes
-    const handleVisibilityChange = () => {
-      isVisibleRef.current = !document.hidden;
-      if (isVisibleRef.current && !isCriticalOperation) {
-        // Fetch immediately when page becomes visible
-        fetchUnreadCount();
-      }
-    };
+    // DISABLED: Page visibility change handling
+    // const handleVisibilityChange = () => {
+    //   isVisibleRef.current = !document.hidden;
+    //   if (isVisibleRef.current && !isCriticalOperation) {
+    //     // Fetch immediately when page becomes visible
+    //     fetchUnreadCount();
+    //   }
+    // };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    // document.addEventListener('visibilitychange', handleVisibilityChange);
     
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      // document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [session?.user, fetchUnreadCount]);
 
