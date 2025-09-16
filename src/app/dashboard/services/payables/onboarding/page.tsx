@@ -3,18 +3,14 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { motion } from 'framer-motion';
 import { 
   CheckCircle,
   ArrowRight,
   ArrowLeft,
   Building2,
   CreditCard,
-  Settings,
   Users,
-  DollarSign,
   FileText,
-  AlertCircle,
   Loader2,
   X
 } from 'lucide-react';
@@ -23,8 +19,35 @@ interface OnboardingStep {
   id: string;
   title: string;
   description: string;
-  icon: React.ComponentType<any>;
+  icon: React.ComponentType<Record<string, unknown>>;
   completed: boolean;
+}
+
+interface BusinessInfoData {
+  companyName: string;
+  companyEmail: string;
+  companyPhone: string;
+  companyAddress: {
+    street: string;
+    city: string;
+    state: string;
+    zipCode: string;
+    country: string;
+  };
+  companyTaxNumber: string;
+}
+
+interface PaymentSettingsData {
+  defaultCurrency: string;
+  paymentMethods: string[];
+  approvalWorkflow: boolean;
+  approverEmail?: string;
+}
+
+interface VendorSettingsData {
+  autoCreateVendors: boolean;
+  requireVendorApproval: boolean;
+  defaultPaymentTerms: number;
 }
 
 interface OnboardingData {
@@ -210,7 +233,7 @@ export default function PayablesOnboardingPage() {
     }
   };
 
-  const updateOnboardingData = (section: keyof OnboardingData, data: any) => {
+  const updateOnboardingData = (section: keyof OnboardingData, data: Partial<BusinessInfoData | PaymentSettingsData | VendorSettingsData>) => {
     setOnboardingData(prev => ({
       ...prev,
       [section]: { ...prev[section], ...data }
@@ -226,7 +249,7 @@ export default function PayablesOnboardingPage() {
       case 2:
         return <VendorSettingsStep data={onboardingData.vendorSettings} onUpdate={(data) => updateOnboardingData('vendorSettings', data)} />;
       case 3:
-        return <CategoriesStep data={onboardingData.categories} onUpdate={(data) => updateOnboardingData('categories', data)} />;
+        return <CategoriesStep data={onboardingData.categories} onUpdate={(data) => setOnboardingData(prev => ({ ...prev, categories: data }))} />;
       default:
         return null;
     }
@@ -321,13 +344,14 @@ export default function PayablesOnboardingPage() {
   );
 }
 
-function BusinessInfoStep({ data, onUpdate }: { data: any; onUpdate: (data: any) => void }) {
+function BusinessInfoStep({ data, onUpdate }: { data: BusinessInfoData; onUpdate: (data: Partial<BusinessInfoData>) => void }) {
   const handleInputChange = (field: string, value: string) => {
     if (field.includes('.')) {
       const [parent, child] = field.split('.');
-      onUpdate({ [parent]: { ...data[parent], [child]: value } });
+      const parentData = data[parent as keyof BusinessInfoData] as Record<string, unknown>;
+      onUpdate({ [parent]: { ...parentData, [child]: value } } as Partial<BusinessInfoData>);
     } else {
-      onUpdate({ [field]: value });
+      onUpdate({ [field]: value } as Partial<BusinessInfoData>);
     }
   };
 
@@ -360,7 +384,7 @@ function BusinessInfoStep({ data, onUpdate }: { data: any; onUpdate: (data: any)
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-100 cursor-not-allowed opacity-75"
             required
           />
-          <p className="text-xs text-gray-500 mt-1">Email cannot be changed as it's tied to your account</p>
+          <p className="text-xs text-gray-500 mt-1">Email cannot be changed as it&apos;s tied to your account</p>
         </div>
 
         <div>
@@ -442,9 +466,9 @@ function BusinessInfoStep({ data, onUpdate }: { data: any; onUpdate: (data: any)
   );
 }
 
-function PaymentSettingsStep({ data, onUpdate }: { data: any; onUpdate: (data: any) => void }) {
-  const handleInputChange = (field: string, value: any) => {
-    onUpdate({ [field]: value });
+function PaymentSettingsStep({ data, onUpdate }: { data: PaymentSettingsData; onUpdate: (data: Partial<PaymentSettingsData>) => void }) {
+  const handleInputChange = (field: string, value: string | boolean) => {
+    onUpdate({ [field]: value } as Partial<PaymentSettingsData>);
   };
 
   const handlePaymentMethodToggle = (method: string) => {
@@ -541,9 +565,9 @@ function PaymentSettingsStep({ data, onUpdate }: { data: any; onUpdate: (data: a
   );
 }
 
-function VendorSettingsStep({ data, onUpdate }: { data: any; onUpdate: (data: any) => void }) {
-  const handleInputChange = (field: string, value: any) => {
-    onUpdate({ [field]: value });
+function VendorSettingsStep({ data, onUpdate }: { data: VendorSettingsData; onUpdate: (data: Partial<VendorSettingsData>) => void }) {
+  const handleInputChange = (field: string, value: string | boolean) => {
+    onUpdate({ [field]: value } as Partial<VendorSettingsData>);
   };
 
   return (
@@ -583,7 +607,7 @@ function VendorSettingsStep({ data, onUpdate }: { data: any; onUpdate: (data: an
           <label className="block text-sm font-medium text-gray-700 mb-2">Default Payment Terms (days)</label>
           <select
             value={data.defaultPaymentTerms}
-            onChange={(e) => handleInputChange('defaultPaymentTerms', parseInt(e.target.value))}
+            onChange={(e) => handleInputChange('defaultPaymentTerms', e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             <option value={15}>15 days</option>

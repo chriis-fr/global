@@ -377,7 +377,7 @@ export default function SmartInvoicingOnboardingPage() {
                     className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 cursor-not-allowed opacity-75"
                     placeholder="business@example.com"
                   />
-                  <p className="text-xs text-blue-300 mt-1">Email cannot be changed as it's tied to your account</p>
+                  <p className="text-xs text-blue-300 mt-1">Email cannot be changed as it&apos;s tied to your account</p>
                 </div>
 
                 <div>

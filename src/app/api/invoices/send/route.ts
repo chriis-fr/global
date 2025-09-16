@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
       
       const tokenData = {
         token,
-        invoiceId: new ObjectId(invoice._id),
+        invoiceId: new ObjectId(invoice._id as unknown as string),
         recipientEmail: recipientEmail,
         createdBy: createdBy,
         createdAt: new Date(),
@@ -229,7 +229,7 @@ export async function POST(request: NextRequest) {
  * Automatically create a payable for the recipient when an invoice is sent
  * This ensures invoices appear in the recipient's app immediately
  */
-async function createPayableForRecipient(recipientEmail: string, invoice: any) {
+async function createPayableForRecipient(recipientEmail: string, invoice: Record<string, unknown>) {
   try {
     console.log('💳 [Auto Payable] Checking if recipient is registered:', recipientEmail);
 
@@ -256,11 +256,11 @@ async function createPayableForRecipient(recipientEmail: string, invoice: any) {
 
     // Check if payable already exists for this invoice and recipient
     // Handle both MongoDB ObjectIds and OAuth IDs
-    const isRecipientObjectId = /^[0-9a-fA-F]{24}$/.test(recipientUser._id);
-    const recipientIssuerId = isRecipientObjectId ? new ObjectId(recipientUser._id) : recipientUser._id;
+    const isRecipientObjectId = /^[0-9a-fA-F]{24}$/.test(recipientUser._id as unknown as string);
+    const recipientIssuerId = isRecipientObjectId ? new ObjectId(recipientUser._id as unknown as string) : recipientUser._id;
     
     const existingPayable = await payablesCollection.findOne({
-      relatedInvoiceId: new ObjectId(invoice._id),
+      relatedInvoiceId: new ObjectId(invoice._id as unknown as string),
       issuerId: recipientIssuerId
     });
 
@@ -281,23 +281,23 @@ async function createPayableForRecipient(recipientEmail: string, invoice: any) {
       
       // Dates and timing
       issueDate: new Date(),
-      dueDate: new Date(invoice.dueDate),
+      dueDate: new Date(invoice.dueDate as string),
       createdAt: new Date(),
       updatedAt: new Date(),
       paymentDate: null, // Will be set when payment is made
       
       // Company information (sender)
-      companyName: invoice.companyDetails?.name || invoice.companyName,
-      companyEmail: invoice.companyDetails?.email || invoice.companyEmail,
-      companyPhone: invoice.companyDetails?.phone || invoice.companyPhone,
-      companyAddress: invoice.companyDetails?.address || invoice.companyAddress,
-      companyTaxNumber: invoice.companyDetails?.taxNumber || '',
+      companyName: (invoice.companyDetails as Record<string, unknown>)?.name || invoice.companyName,
+      companyEmail: (invoice.companyDetails as Record<string, unknown>)?.email || invoice.companyEmail,
+      companyPhone: (invoice.companyDetails as Record<string, unknown>)?.phone || invoice.companyPhone,
+      companyAddress: (invoice.companyDetails as Record<string, unknown>)?.address || invoice.companyAddress,
+      companyTaxNumber: (invoice.companyDetails as Record<string, unknown>)?.taxNumber || '',
       
       // Vendor information (recipient)
-      vendorName: invoice.clientDetails?.name || invoice.clientName,
-      vendorEmail: invoice.clientDetails?.email || invoice.clientEmail,
-      vendorPhone: invoice.clientDetails?.phone || invoice.clientPhone,
-      vendorAddress: invoice.clientDetails?.address || invoice.clientAddress,
+      vendorName: (invoice.clientDetails as Record<string, unknown>)?.name || invoice.clientName,
+      vendorEmail: (invoice.clientDetails as Record<string, unknown>)?.email || invoice.clientEmail,
+      vendorPhone: (invoice.clientDetails as Record<string, unknown>)?.phone || invoice.clientPhone,
+      vendorAddress: (invoice.clientDetails as Record<string, unknown>)?.address || invoice.clientAddress,
       
       // Payment information
       currency: invoice.currency,
@@ -343,7 +343,7 @@ async function createPayableForRecipient(recipientEmail: string, invoice: any) {
       issuerId: recipientIssuerId,
       userId: recipientUser.email, // Add userId field for query compatibility
       organizationId: recipientUser.organizationId ? new ObjectId(recipientUser.organizationId) : null,
-      relatedInvoiceId: new ObjectId(invoice._id),
+      relatedInvoiceId: new ObjectId(invoice._id as unknown as string),
       
       // Ledger integration
       ledgerEntryId: null, // Will be set by ledger sync
@@ -390,7 +390,7 @@ async function createPayableForRecipient(recipientEmail: string, invoice: any) {
  * Store pending payable for unregistered users
  * This will be processed when they sign up
  */
-async function storePendingPayable(recipientEmail: string, invoice: any) {
+async function storePendingPayable(recipientEmail: string, invoice: Record<string, unknown>) {
   try {
     const db = await connectToDatabase();
     const pendingPayablesCollection = db.collection('pending_payables');
@@ -398,7 +398,7 @@ async function storePendingPayable(recipientEmail: string, invoice: any) {
     // Check if already stored
     const existing = await pendingPayablesCollection.findOne({
       recipientEmail,
-      invoiceId: new ObjectId(invoice._id)
+      invoiceId: new ObjectId(invoice._id as unknown as string)
     });
 
     if (existing) {
@@ -409,7 +409,7 @@ async function storePendingPayable(recipientEmail: string, invoice: any) {
     // Store pending payable
     const pendingPayable = {
       recipientEmail,
-      invoiceId: new ObjectId(invoice._id),
+      invoiceId: new ObjectId(invoice._id as unknown as string),
       invoiceData: {
         invoiceNumber: invoice.invoiceNumber,
         totalAmount: invoice.totalAmount,

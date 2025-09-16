@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   User, 
@@ -16,14 +16,13 @@ import {
 } from 'lucide-react'
 import Image from 'next/image'
 import { signIn, useSession } from 'next-auth/react'
-import { useSearchParams, useRouter } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { countries, defaultCountry } from '@/data/countries'
 import { getIndustriesByCategory, getIndustryCategories } from '@/data/industries'
 
-export default function AuthPage() {
+function AuthContent() {
   const { data: session, status } = useSession()
   const searchParams = useSearchParams()
-  const router = useRouter()
   const [isLogin, setIsLogin] = useState(true)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -491,8 +490,8 @@ export default function AuthPage() {
                 <h3 className="text-blue-200 font-medium">Invoice Access Required</h3>
               </div>
               <p className="text-blue-300 text-sm">
-                You're creating an account to access an invoice sent to <strong>{formData.email}</strong>. 
-                This email address cannot be changed as it's linked to the invoice.
+                You&apos;re creating an account to access an invoice sent to <strong>{formData.email}</strong>. 
+                This email address cannot be changed as it&apos;s linked to the invoice.
               </p>
             </div>
           )}
@@ -819,7 +818,7 @@ export default function AuthPage() {
               </div>
               {isEmailLocked && (
                 <p className="text-xs text-blue-300 mt-1">
-                  This email address is locked because you're creating an account to access an invoice sent to this address.
+                  This email address is locked because you&apos;re creating an account to access an invoice sent to this address.
                 </p>
               )}
             </div>
@@ -1038,4 +1037,19 @@ export default function AuthPage() {
       </div>
     </div>
   )
+}
+
+export default function AuthPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-700 to-purple-800 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+          <p className="text-white">Loading...</p>
+        </div>
+      </div>
+    }>
+      <AuthContent />
+    </Suspense>
+  );
 } 

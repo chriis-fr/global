@@ -3,10 +3,10 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
-import { FinancialLedgerEntry, LedgerEntryType, LedgerEntryStatus, LedgerStats, LedgerFilters, LedgerPagination } from '@/models/FinancialLedger';
+import { FinancialLedgerEntry, LedgerEntryType, LedgerEntryStatus, LedgerStats, LedgerPagination } from '@/models/FinancialLedger';
 
 // Generate unique entry ID
-const generateEntryId = async (db: any, type: LedgerEntryType, organizationId: string, ownerId: string): Promise<string> => {
+const generateEntryId = async (db: Record<string, unknown>, type: LedgerEntryType, organizationId: string, ownerId: string): Promise<string> => {
   const currentYear = new Date().getFullYear();
   const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
   
@@ -22,14 +22,14 @@ const generateEntryId = async (db: any, type: LedgerEntryType, organizationId: s
   }
   
   // Query for the last entry number
-  let query: { organizationId?: string } | { ownerId: string };
+  let query: Record<string, unknown>;
   if (organizationId) {
     query = { organizationId: organizationId, type };
   } else {
     query = { ownerId: ownerId, type };
   }
   
-  const lastEntry = await db.collection('financial_ledger').findOne(
+  const lastEntry = await (db as { collection: (name: string) => { findOne: (query: Record<string, unknown>, options?: Record<string, unknown>) => Promise<Record<string, unknown> | null> } }).collection('financial_ledger').findOne(
     query,
     { 
       sort: { entryId: -1 },
@@ -39,7 +39,7 @@ const generateEntryId = async (db: any, type: LedgerEntryType, organizationId: s
 
   let sequence = 1;
   
-  if (lastEntry?.entryId) {
+  if (lastEntry?.entryId && typeof lastEntry.entryId === 'string') {
     const match = lastEntry.entryId.match(/-(\d{4})$/);
     if (match) {
       sequence = parseInt(match[1]) + 1;
@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
 
     // Build query
     const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
-    let query: any = isOrganization 
+    const query: Record<string, unknown> = isOrganization 
       ? { organizationId: session.user.organizationId }
       : { 
           $or: [
@@ -258,9 +258,9 @@ export async function POST(request: NextRequest) {
 
     // Generate unique entry ID
     const entryId = await generateEntryId(
-      db, 
-      type, 
-      session.user.organizationId || '', 
+      db as unknown as Record<string, unknown>,
+      type,
+      session.user.organizationId || '',
       ownerId || ''
     );
 
@@ -278,7 +278,7 @@ export async function POST(request: NextRequest) {
     const ledgerEntry: FinancialLedgerEntry = {
       entryId,
       type,
-      ownerId,
+      ownerId: ownerId || '',
       ownerType,
       userId: session.user.email,
       organizationId: session.user.organizationId || undefined,

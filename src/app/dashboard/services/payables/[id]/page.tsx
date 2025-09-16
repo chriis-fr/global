@@ -1,30 +1,19 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { useSession } from 'next-auth/react';
-import { motion } from 'framer-motion';
 import { 
   Receipt, 
-  Calendar, 
-  DollarSign, 
   Clock, 
   CheckCircle, 
   AlertCircle,
   Loader2,
   ArrowLeft,
   CreditCard,
-  Wallet,
   Building2,
   User,
   FileText,
-  Download,
-  Edit3,
   Trash2,
-  Eye,
-  EyeOff,
-  Shield,
-  TrendingUp,
   AlertTriangle,
   CheckCircle2,
   XCircle,
@@ -32,7 +21,6 @@ import {
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import FormattedNumberDisplay from '@/components/FormattedNumber';
 import { getCurrencyByCode } from '@/data/currencies';
 
 interface Payable {
@@ -46,12 +34,12 @@ interface Payable {
   companyName: string;
   companyEmail: string;
   companyPhone?: string;
-  companyAddress?: any;
+  companyAddress?: Record<string, unknown>;
   companyTaxNumber?: string;
   vendorName: string;
   vendorEmail: string;
   vendorPhone?: string;
-  vendorAddress?: any;
+  vendorAddress?: Record<string, unknown>;
   currency: string;
   paymentMethod: string;
   paymentNetwork?: string;
@@ -82,10 +70,10 @@ interface Payable {
     method: string;
     network?: string;
     address?: string;
-    bankDetails?: any;
-    cryptoDetails?: any;
+    bankDetails?: Record<string, unknown>;
+    cryptoDetails?: Record<string, unknown>;
   };
-  attachedFiles: any[];
+  attachedFiles: Record<string, unknown>[];
   relatedInvoiceId?: string;
   ledgerEntryId?: string;
   ledgerStatus: string;
@@ -106,24 +94,16 @@ interface Payable {
 export default function PayableViewPage() {
   const router = useRouter();
   const params = useParams();
-  const { data: session } = useSession();
   const [payable, setPayable] = useState<Payable | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
-  const [showPaymentDetails, setShowPaymentDetails] = useState(false);
   const [showStatusHistory, setShowStatusHistory] = useState(false);
   const [downloadingReceipt, setDownloadingReceipt] = useState(false);
 
   const payableId = params.id as string;
 
-  useEffect(() => {
-    if (payableId) {
-      loadPayable();
-    }
-  }, [payableId]);
-
-  const loadPayable = async () => {
+  const loadPayable = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -142,7 +122,13 @@ export default function PayableViewPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [payableId]);
+
+  useEffect(() => {
+    if (payableId) {
+      loadPayable();
+    }
+  }, [payableId, loadPayable]);
 
   const handleStatusUpdate = async (newStatus: string) => {
     if (!payable) return;
@@ -172,14 +158,14 @@ export default function PayableViewPage() {
         const updatedPayable = newStatus === 'paid' 
           ? { 
               ...payable, 
-              status: 'paid' as any, 
-              paymentStatus: 'completed',
+              status: 'paid' as const, 
+              paymentStatus: 'completed' as const,
               paymentDate: new Date().toISOString(),
               updatedAt: new Date().toISOString() 
             }
           : { 
               ...payable, 
-              status: newStatus as any, 
+              status: newStatus as 'pending' | 'paid' | 'overdue' | 'cancelled' | 'approved', 
               updatedAt: new Date().toISOString() 
             };
         
@@ -556,9 +542,9 @@ export default function PayableViewPage() {
                       )}
                       {payable.companyAddress && (
                         <div className="text-gray-600">
-                          <p>{payable.companyAddress.street}</p>
-                          <p>{payable.companyAddress.city}, {payable.companyAddress.state} {payable.companyAddress.zipCode}</p>
-                          <p>{payable.companyAddress.country}</p>
+                          <p>{payable.companyAddress.street as string}</p>
+                          <p>{payable.companyAddress.city as string}, {payable.companyAddress.state as string} {payable.companyAddress.zipCode as string}</p>
+                          <p>{payable.companyAddress.country as string}</p>
                         </div>
                       )}
                     </div>
@@ -578,9 +564,9 @@ export default function PayableViewPage() {
                       )}
                       {payable.vendorAddress && (
                         <div className="text-gray-600">
-                          <p>{payable.vendorAddress.street}</p>
-                          <p>{payable.vendorAddress.city}, {payable.vendorAddress.state} {payable.vendorAddress.zipCode}</p>
-                          <p>{payable.vendorAddress.country}</p>
+                          <p>{payable.vendorAddress.street as string}</p>
+                          <p>{payable.vendorAddress.city as string}, {payable.vendorAddress.state as string} {payable.vendorAddress.zipCode as string}</p>
+                          <p>{payable.vendorAddress.country as string}</p>
                         </div>
                       )}
                     </div>

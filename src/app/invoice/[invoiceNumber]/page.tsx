@@ -1,17 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useSession, signIn } from 'next-auth/react';
 import { motion } from 'framer-motion';
 import { 
   Receipt, 
-  User, 
-  Building2, 
-  Calendar, 
-  DollarSign, 
-  Clock, 
-  CheckCircle, 
   AlertCircle,
   Loader2,
   ArrowRight,
@@ -20,7 +14,6 @@ import {
   Eye,
   EyeOff
 } from 'lucide-react';
-import FormattedNumberDisplay from '@/components/FormattedNumber';
 import { getCurrencyByCode } from '@/data/currencies';
 
 interface Invoice {
@@ -85,7 +78,7 @@ interface InvoiceLinkData {
 export default function InvoiceLinkPage() {
   const router = useRouter();
   const params = useParams();
-  const { data: session, status } = useSession();
+  const { data: session } = useSession();
   
   const [invoiceData, setInvoiceData] = useState<InvoiceLinkData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -94,13 +87,7 @@ export default function InvoiceLinkPage() {
 
   const invoiceNumber = params.invoiceNumber as string;
 
-  useEffect(() => {
-    if (invoiceNumber) {
-      loadInvoiceData();
-    }
-  }, [invoiceNumber]);
-
-  const loadInvoiceData = async () => {
+  const loadInvoiceData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -125,7 +112,13 @@ export default function InvoiceLinkPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [invoiceNumber]);
+
+  useEffect(() => {
+    if (invoiceNumber) {
+      loadInvoiceData();
+    }
+  }, [invoiceNumber, loadInvoiceData]);
 
   const handleSignIn = async () => {
     if (!invoiceData?.recipientEmail) return;
@@ -146,25 +139,6 @@ export default function InvoiceLinkPage() {
     router.push(signupUrl);
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'sent': return 'text-blue-600 bg-blue-100';
-      case 'pending': return 'text-yellow-600 bg-yellow-100';
-      case 'paid': return 'text-green-600 bg-green-100';
-      case 'overdue': return 'text-red-600 bg-red-100';
-      default: return 'text-gray-600 bg-gray-100';
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'sent': return <Clock className="h-4 w-4" />;
-      case 'pending': return <Clock className="h-4 w-4" />;
-      case 'paid': return <CheckCircle className="h-4 w-4" />;
-      case 'overdue': return <AlertCircle className="h-4 w-4" />;
-      default: return <Clock className="h-4 w-4" />;
-    }
-  };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -209,7 +183,7 @@ export default function InvoiceLinkPage() {
     );
   }
 
-  const { invoice, recipientEmail, isRegistered, requiresAccountCreation } = invoiceData;
+  const { invoice, recipientEmail, isRegistered } = invoiceData;
 
   // If user is authenticated and this is their invoice, show the payable view
   if (session?.user?.email === recipientEmail) {
@@ -222,14 +196,13 @@ export default function InvoiceLinkPage() {
               <div className="flex items-center space-x-4">
                 <Receipt className="h-8 w-8 text-blue-600" />
                 <div>
-                  <h1 className="text-2xl font-bold text-gray-900">Invoice #{invoice.invoiceNumber}</h1>
-                  <p className="text-gray-600">From {invoice.companyDetails.name}</p>
+                  <h1 className="text-2xl font-bold text-gray-900">Invoice #{invoiceData?.invoice?.invoiceNumber}</h1>
+                  <p className="text-gray-600">From {invoiceData?.invoice?.companyDetails?.name}</p>
                 </div>
               </div>
               <div className="flex items-center space-x-3">
-                <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(invoice.status)}`}>
-                  {getStatusIcon(invoice.status)}
-                  <span className="ml-2 capitalize">{invoice.status}</span>
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                  <span className="ml-2 capitalize">{invoiceData?.invoice?.status || 'pending'}</span>
                 </span>
               </div>
             </div>

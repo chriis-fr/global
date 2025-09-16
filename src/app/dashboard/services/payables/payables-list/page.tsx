@@ -4,27 +4,20 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { motion } from 'framer-motion';
-import Link from 'next/link';
 import { 
   Plus, 
   Receipt, 
   Search,
   Filter,
-  Download,
   Eye,
   Edit,
   ArrowLeft,
   Trash2,
-  Calendar,
-  DollarSign,
   AlertCircle,
   CheckCircle,
   Clock,
-  X,
-  ChevronDown,
-  ChevronUp,
-  MoreVertical,
-  FileText
+  FileText,
+  DollarSign
 } from 'lucide-react';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
 

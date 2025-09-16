@@ -71,7 +71,7 @@ export default function NotificationBadge() {
       setLoading(false);
       isFetchingRef.current = false;
     }
-  }, [loading]);
+  }, [loading, previousCount]);
 
   useEffect(() => {
     if (!session?.user) return;

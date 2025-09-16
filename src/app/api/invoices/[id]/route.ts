@@ -175,8 +175,8 @@ export async function PUT(
         const payablesCollection = db.collection('payables');
         const payableUpdateResult = await payablesCollection.updateOne(
           { relatedInvoiceId: new ObjectId(id) },
-          { 
-            $set: { 
+          {
+            $set: {
               status: 'paid',
               paymentStatus: 'completed',
               paymentDate: new Date(),
@@ -190,7 +190,7 @@ export async function PUT(
                 notes: 'Status updated from related invoice'
               }
             }
-          }
+          } as Record<string, unknown>
         );
         
         console.log('✅ [Invoice Update] Related payable update result:', {
@@ -212,16 +212,16 @@ export async function PUT(
           organizationId: isOrganization ? new ObjectId(session.user.organizationId) : undefined,
           type: 'payment_received',
           title: 'Payment Received! 💰',
-          message: `Invoice ${invoice.invoiceNumber || '#' + id.slice(-6)} has been marked as paid. Amount: ${invoice.currency || 'USD'} ${(invoice.totalAmount || invoice.total || 0).toFixed(2)}`,
+          message: `Invoice ${existingInvoice.invoiceNumber || '#' + id.slice(-6)} has been marked as paid. Amount: ${existingInvoice.currency || 'USD'} ${(existingInvoice.totalAmount || existingInvoice.total || 0).toFixed(2)}`,
           priority: 'high',
           actionUrl: `/dashboard/services/smart-invoicing/invoices/${id}`,
           actionText: 'View Invoice',
           relatedInvoiceId: new ObjectId(id),
           metadata: {
-            invoiceNumber: invoice.invoiceNumber,
-            amount: invoice.totalAmount || invoice.total,
-            currency: invoice.currency,
-            clientName: invoice.clientName
+            invoiceNumber: existingInvoice.invoiceNumber,
+            amount: existingInvoice.totalAmount || existingInvoice.total,
+            currency: existingInvoice.currency,
+            clientName: existingInvoice.clientName
           },
           tags: ['payment', 'invoice', 'receivable']
         });

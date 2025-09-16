@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function createPayableFromInvoice(userId: string, invoice: any) {
+async function createPayableFromInvoice(userId: string, invoice: Record<string, unknown>) {
   try {
     console.log('💳 [Invoice Signup] Creating payable from invoice for user:', userId);
 
@@ -88,7 +88,7 @@ async function createPayableFromInvoice(userId: string, invoice: any) {
 
     // Check if payable already exists for this invoice and user
     const existingPayable = await payablesCollection.findOne({
-      relatedInvoiceId: new ObjectId(invoice._id),
+      relatedInvoiceId: new ObjectId(invoice._id as string),
       issuerId: new ObjectId(userId)
     });
 
@@ -105,16 +105,16 @@ async function createPayableFromInvoice(userId: string, invoice: any) {
       payableNumber,
       payableName: `Invoice Payment - ${invoice.invoiceNumber}`,
       issueDate: new Date(),
-      dueDate: new Date(invoice.dueDate),
-      companyName: invoice.companyDetails?.name || invoice.companyName,
-      companyEmail: invoice.companyDetails?.email || invoice.companyEmail,
-      companyPhone: invoice.companyDetails?.phone || invoice.companyPhone,
-      companyAddress: invoice.companyDetails?.address || invoice.companyAddress,
+      dueDate: new Date(invoice.dueDate as string),
+      companyName: (invoice.companyDetails as Record<string, unknown>)?.name || invoice.companyName,
+      companyEmail: (invoice.companyDetails as Record<string, unknown>)?.email || invoice.companyEmail,
+      companyPhone: (invoice.companyDetails as Record<string, unknown>)?.phone || invoice.companyPhone,
+      companyAddress: (invoice.companyDetails as Record<string, unknown>)?.address || invoice.companyAddress,
       companyTaxNumber: '',
-      vendorName: invoice.clientDetails?.name || invoice.clientName,
-      vendorEmail: invoice.clientDetails?.email || invoice.clientEmail,
-      vendorPhone: invoice.clientDetails?.phone || invoice.clientPhone,
-      vendorAddress: invoice.clientDetails?.address || invoice.clientAddress,
+      vendorName: (invoice.clientDetails as Record<string, unknown>)?.name || invoice.clientName,
+      vendorEmail: (invoice.clientDetails as Record<string, unknown>)?.email || invoice.clientEmail,
+      vendorPhone: (invoice.clientDetails as Record<string, unknown>)?.phone || invoice.clientPhone,
+      vendorAddress: (invoice.clientDetails as Record<string, unknown>)?.address || invoice.clientAddress,
       currency: invoice.currency,
       paymentMethod: invoice.paymentMethod,
       paymentNetwork: invoice.paymentNetwork,
@@ -132,7 +132,7 @@ async function createPayableFromInvoice(userId: string, invoice: any) {
       attachedFiles: [],
       issuerId: new ObjectId(userId),
       organizationId: null, // Individual user
-      relatedInvoiceId: new ObjectId(invoice._id),
+      relatedInvoiceId: new ObjectId(invoice._id as string),
       createdAt: new Date(),
       updatedAt: new Date()
     };

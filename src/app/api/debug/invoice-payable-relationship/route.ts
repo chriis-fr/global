@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     const invoicesCollection = db.collection('invoices');
     const payablesCollection = db.collection('payables');
 
-    let result: any = {};
+    const result: Record<string, unknown> = {};
 
     if (invoiceId) {
       // Find invoice and related payables

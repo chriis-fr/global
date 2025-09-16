@@ -1,19 +1,19 @@
 import { connectToDatabase } from '@/lib/database';
-import { FinancialLedgerEntry, LedgerEntryType } from '@/models/FinancialLedger';
+import { FinancialLedgerEntry, PaymentMethodType, LedgerEntryStatus } from '@/models/FinancialLedger';
 import { ObjectId } from 'mongodb';
 
 export class LedgerSyncService {
   /**
    * Sync an invoice to the financial ledger
    */
-  static async syncInvoiceToLedger(invoice: any): Promise<FinancialLedgerEntry | null> {
+  static async syncInvoiceToLedger(invoice: Record<string, unknown>): Promise<FinancialLedgerEntry | null> {
     try {
       const db = await connectToDatabase();
       const ledgerCollection = db.collection('financial_ledger');
 
       // Check if this invoice is already synced
       const existingEntry = await ledgerCollection.findOne({
-        relatedInvoiceId: new ObjectId(invoice._id)
+        relatedInvoiceId: new ObjectId(invoice._id as string)
       });
 
       if (existingEntry) {
@@ -23,62 +23,62 @@ export class LedgerSyncService {
 
       // Create new ledger entry from invoice
       const ledgerEntry: FinancialLedgerEntry = {
-        entryId: invoice.invoiceNumber || `INV-${invoice._id}`,
+        entryId: (invoice.invoiceNumber as string) || `INV-${invoice._id}`,
         type: 'receivable',
-        ownerId: invoice.ownerId || invoice.userId,
-        ownerType: invoice.ownerType || 'individual',
-        userId: invoice.userId,
-        organizationId: invoice.organizationId,
-        issuerId: invoice.issuerId || invoice.userId,
-        relatedInvoiceId: new ObjectId(invoice._id),
+        ownerId: (invoice.ownerId as string) || (invoice.userId as string),
+        ownerType: (invoice.ownerType as 'individual' | 'organization') || 'individual',
+        userId: invoice.userId as string,
+        organizationId: invoice.organizationId as string,
+        issuerId: (invoice.issuerId as string) || (invoice.userId as string),
+        relatedInvoiceId: new ObjectId(invoice._id as string),
         counterparty: {
-          name: invoice.clientName || invoice.clientDetails?.firstName || 'Unknown Client',
-          email: invoice.clientEmail || invoice.clientDetails?.email || '',
-          phone: invoice.clientPhone || invoice.clientDetails?.phone,
-          company: invoice.clientCompany || invoice.clientDetails?.companyName,
+          name: (invoice.clientName as string) || ((invoice.clientDetails as Record<string, unknown>)?.firstName as string) || 'Unknown Client',
+          email: (invoice.clientEmail as string) || ((invoice.clientDetails as Record<string, unknown>)?.email as string) || '',
+          phone: (invoice.clientPhone as string) || ((invoice.clientDetails as Record<string, unknown>)?.phone as string),
+          company: (invoice.clientCompany as string) || ((invoice.clientDetails as Record<string, unknown>)?.companyName as string),
           address: {
-            street: invoice.clientAddress?.street || invoice.clientDetails?.addressLine1,
-            city: invoice.clientAddress?.city || invoice.clientDetails?.city,
-            state: invoice.clientAddress?.state || invoice.clientDetails?.region,
-            zipCode: invoice.clientAddress?.zipCode || invoice.clientDetails?.postalCode,
-            country: invoice.clientAddress?.country || invoice.clientDetails?.country
+            street: ((invoice.clientAddress as Record<string, unknown>)?.street as string) || ((invoice.clientDetails as Record<string, unknown>)?.addressLine1 as string),
+            city: ((invoice.clientAddress as Record<string, unknown>)?.city as string) || ((invoice.clientDetails as Record<string, unknown>)?.city as string),
+            state: ((invoice.clientAddress as Record<string, unknown>)?.state as string) || ((invoice.clientDetails as Record<string, unknown>)?.region as string),
+            zipCode: ((invoice.clientAddress as Record<string, unknown>)?.zipCode as string) || ((invoice.clientDetails as Record<string, unknown>)?.postalCode as string),
+            country: ((invoice.clientAddress as Record<string, unknown>)?.country as string) || ((invoice.clientDetails as Record<string, unknown>)?.country as string)
           }
         },
-        amount: invoice.total || invoice.totalAmount || 0,
-        currency: invoice.currency || 'USD',
-        subtotal: invoice.subtotal || 0,
-        totalTax: invoice.totalTax || 0,
-        items: (invoice.items || []).map((item: any) => ({
-          id: item.id || `item-${Date.now()}`,
-          description: item.description || '',
-          quantity: item.quantity || 0,
-          unitPrice: item.unitPrice || 0,
-          discount: item.discount || 0,
-          tax: item.tax || 0,
-          amount: item.amount || 0
+        amount: (invoice.total as number) || (invoice.totalAmount as number) || 0,
+        currency: (invoice.currency as string) || 'USD',
+        subtotal: (invoice.subtotal as number) || 0,
+        totalTax: (invoice.totalTax as number) || 0,
+        items: ((invoice.items as Record<string, unknown>[]) || []).map((item: Record<string, unknown>) => ({
+          id: (item.id as string) || `item-${Date.now()}`,
+          description: (item.description as string) || '',
+          quantity: (item.quantity as number) || 0,
+          unitPrice: (item.unitPrice as number) || 0,
+          discount: (item.discount as number) || 0,
+          tax: (item.tax as number) || 0,
+          amount: (item.amount as number) || 0
         })),
         paymentDetails: {
-          method: invoice.paymentMethod || 'fiat',
-          network: invoice.paymentNetwork,
-          address: invoice.paymentAddress,
-          bankName: invoice.bankName,
-          accountNumber: invoice.accountNumber,
-          routingNumber: invoice.routingNumber,
-          swiftCode: invoice.swiftCode,
-          paybillNumber: invoice.paybillNumber,
-          tillNumber: invoice.tillNumber,
-          mpesaAccountNumber: invoice.mpesaAccountNumber
+          method: (invoice.paymentMethod as PaymentMethodType) || 'fiat',
+          network: invoice.paymentNetwork as string,
+          address: invoice.paymentAddress as string,
+          bankName: invoice.bankName as string,
+          accountNumber: invoice.accountNumber as string,
+          routingNumber: invoice.routingNumber as string,
+          swiftCode: invoice.swiftCode as string,
+          paybillNumber: invoice.paybillNumber as string,
+          tillNumber: invoice.tillNumber as string,
+          mpesaAccountNumber: invoice.mpesaAccountNumber as string
         },
-        issueDate: new Date(invoice.issueDate),
-        dueDate: new Date(invoice.dueDate),
-        status: this.mapInvoiceStatusToLedgerStatus(invoice.status),
+        issueDate: new Date(invoice.issueDate as string | number | Date),
+        dueDate: new Date(invoice.dueDate as string | number | Date),
+        status: this.mapInvoiceStatusToLedgerStatus(invoice.status as string),
         priority: 'medium',
         category: 'Invoice',
-        notes: invoice.memo || invoice.notes,
-        memo: invoice.memo,
-        approvalWorkflow: invoice.approvalWorkflow,
-        createdAt: new Date(invoice.createdAt),
-        updatedAt: new Date(invoice.updatedAt),
+        notes: (invoice.memo as string) || (invoice.notes as string),
+        memo: invoice.memo as string,
+        approvalWorkflow: undefined,
+        createdAt: new Date(invoice.createdAt as string | number | Date),
+        updatedAt: new Date(invoice.updatedAt as string | number | Date),
         lastSyncedAt: new Date(),
         syncStatus: 'synced'
       };
@@ -101,14 +101,14 @@ export class LedgerSyncService {
   /**
    * Sync a payable to the financial ledger
    */
-  static async syncPayableToLedger(payable: any): Promise<FinancialLedgerEntry | null> {
+  static async syncPayableToLedger(payable: Record<string, unknown>): Promise<FinancialLedgerEntry | null> {
     try {
       const db = await connectToDatabase();
       const ledgerCollection = db.collection('financial_ledger');
 
       // Check if this payable is already synced
       const existingEntry = await ledgerCollection.findOne({
-        relatedPayableId: new ObjectId(payable._id)
+        relatedPayableId: new ObjectId(payable._id as string)
       });
 
       if (existingEntry) {
@@ -118,58 +118,58 @@ export class LedgerSyncService {
 
       // Create new ledger entry from payable
       const ledgerEntry: FinancialLedgerEntry = {
-        entryId: payable.payableNumber || `PAY-${payable._id}`,
+        entryId: (payable.payableNumber as string) || `PAY-${payable._id}`,
         type: 'payable',
-        ownerId: payable.ownerId || payable.userId,
-        ownerType: payable.ownerType || 'individual',
-        userId: payable.userId,
-        organizationId: payable.organizationId,
-        issuerId: payable.issuerId || payable.userId,
-        relatedPayableId: new ObjectId(payable._id),
+        ownerId: (payable.ownerId as string) || (payable.userId as string),
+        ownerType: (payable.ownerType as 'individual' | 'organization') || 'individual',
+        userId: payable.userId as string,
+        organizationId: payable.organizationId as string,
+        issuerId: (payable.issuerId as string) || (payable.userId as string),
+        relatedPayableId: new ObjectId(payable._id as string),
         counterparty: {
-          name: payable.vendorName || 'Unknown Vendor',
-          email: payable.vendorEmail || '',
-          phone: payable.vendorPhone,
-          company: payable.vendorCompany,
+          name: (payable.vendorName as string) || 'Unknown Vendor',
+          email: (payable.vendorEmail as string) || '',
+          phone: payable.vendorPhone as string,
+          company: payable.vendorCompany as string,
           address: {
-            street: payable.vendorAddress?.street,
-            city: payable.vendorAddress?.city,
-            state: payable.vendorAddress?.state,
-            zipCode: payable.vendorAddress?.zipCode,
-            country: payable.vendorAddress?.country
+            street: ((payable.vendorAddress as Record<string, unknown>)?.street as string),
+            city: ((payable.vendorAddress as Record<string, unknown>)?.city as string),
+            state: ((payable.vendorAddress as Record<string, unknown>)?.state as string),
+            zipCode: ((payable.vendorAddress as Record<string, unknown>)?.zipCode as string),
+            country: ((payable.vendorAddress as Record<string, unknown>)?.country as string)
           }
         },
-        amount: payable.total || 0,
-        currency: payable.currency || 'USD',
-        subtotal: payable.subtotal || 0,
-        totalTax: payable.totalTax || 0,
-        items: (payable.items || []).map((item: any) => ({
-          id: item.id || `item-${Date.now()}`,
-          description: item.description || '',
-          quantity: item.quantity || 0,
-          unitPrice: item.unitPrice || 0,
-          discount: item.discount || 0,
-          tax: item.tax || 0,
-          amount: item.amount || 0
+        amount: (payable.total as number) || 0,
+        currency: (payable.currency as string) || 'USD',
+        subtotal: (payable.subtotal as number) || 0,
+        totalTax: (payable.totalTax as number) || 0,
+        items: ((payable.items as Record<string, unknown>[]) || []).map((item: Record<string, unknown>) => ({
+          id: (item.id as string) || `item-${Date.now()}`,
+          description: (item.description as string) || '',
+          quantity: (item.quantity as number) || 0,
+          unitPrice: (item.unitPrice as number) || 0,
+          discount: (item.discount as number) || 0,
+          tax: (item.tax as number) || 0,
+          amount: (item.amount as number) || 0
         })),
         paymentDetails: {
-          method: payable.paymentMethod || 'fiat',
-          network: payable.paymentNetwork,
-          address: payable.paymentAddress,
-          bankName: payable.bankName,
-          accountNumber: payable.accountNumber,
-          routingNumber: payable.routingNumber
+          method: (payable.paymentMethod as PaymentMethodType) || 'fiat',
+          network: payable.paymentNetwork as string,
+          address: payable.paymentAddress as string,
+          bankName: payable.bankName as string,
+          accountNumber: payable.accountNumber as string,
+          routingNumber: payable.routingNumber as string
         },
-        issueDate: new Date(payable.issueDate),
-        dueDate: new Date(payable.dueDate),
-        status: this.mapPayableStatusToLedgerStatus(payable.status),
-        priority: payable.priority || 'medium',
-        category: payable.category || 'General',
-        notes: payable.memo || payable.notes,
-        memo: payable.memo,
-        approvalWorkflow: payable.approvalWorkflow,
-        createdAt: new Date(payable.createdAt),
-        updatedAt: new Date(payable.updatedAt),
+        issueDate: new Date(payable.issueDate as string | number | Date),
+        dueDate: new Date(payable.dueDate as string | number | Date),
+        status: this.mapPayableStatusToLedgerStatus(payable.status as string),
+        priority: (payable.priority as 'low' | 'medium' | 'high') || 'medium',
+        category: (payable.category as string) || 'General',
+        notes: (payable.memo as string) || (payable.notes as string),
+        memo: payable.memo as string,
+        approvalWorkflow: undefined,
+        createdAt: new Date(payable.createdAt as string | number | Date),
+        updatedAt: new Date(payable.updatedAt as string | number | Date),
         lastSyncedAt: new Date(),
         syncStatus: 'synced'
       };
@@ -192,28 +192,28 @@ export class LedgerSyncService {
   /**
    * Update existing ledger entry from invoice changes
    */
-  private static async updateLedgerEntryFromInvoice(ledgerEntryId: ObjectId, invoice: any): Promise<FinancialLedgerEntry | null> {
+  private static async updateLedgerEntryFromInvoice(ledgerEntryId: ObjectId, invoice: Record<string, unknown>): Promise<FinancialLedgerEntry | null> {
     try {
       const db = await connectToDatabase();
       const ledgerCollection = db.collection('financial_ledger');
 
       const updateData = {
-        amount: invoice.total || invoice.totalAmount || 0,
-        currency: invoice.currency || 'USD',
-        subtotal: invoice.subtotal || 0,
-        totalTax: invoice.totalTax || 0,
-        items: (invoice.items || []).map((item: any) => ({
-          id: item.id || `item-${Date.now()}`,
-          description: item.description || '',
-          quantity: item.quantity || 0,
-          unitPrice: item.unitPrice || 0,
-          discount: item.discount || 0,
-          tax: item.tax || 0,
-          amount: item.amount || 0
+        amount: (invoice.total as number) || (invoice.totalAmount as number) || 0,
+        currency: (invoice.currency as string) || 'USD',
+        subtotal: (invoice.subtotal as number) || 0,
+        totalTax: (invoice.totalTax as number) || 0,
+        items: ((invoice.items as Record<string, unknown>[]) || []).map((item: Record<string, unknown>) => ({
+          id: (item.id as string) || `item-${Date.now()}`,
+          description: (item.description as string) || '',
+          quantity: (item.quantity as number) || 0,
+          unitPrice: (item.unitPrice as number) || 0,
+          discount: (item.discount as number) || 0,
+          tax: (item.tax as number) || 0,
+          amount: (item.amount as number) || 0
         })),
-        status: this.mapInvoiceStatusToLedgerStatus(invoice.status),
-        notes: invoice.memo || invoice.notes,
-        memo: invoice.memo,
+        status: this.mapInvoiceStatusToLedgerStatus(invoice.status as string),
+        notes: (invoice.memo as string) || (invoice.notes as string),
+        memo: invoice.memo as string,
         updatedAt: new Date(),
         lastSyncedAt: new Date(),
         syncStatus: 'synced'
@@ -225,7 +225,7 @@ export class LedgerSyncService {
       );
 
       const updatedEntry = await ledgerCollection.findOne({ _id: ledgerEntryId });
-      return updatedEntry;
+      return updatedEntry as FinancialLedgerEntry;
     } catch (error) {
       console.error('❌ [LedgerSync] Error updating ledger entry from invoice:', error);
       return null;
@@ -235,30 +235,30 @@ export class LedgerSyncService {
   /**
    * Update existing ledger entry from payable changes
    */
-  private static async updateLedgerEntryFromPayable(ledgerEntryId: ObjectId, payable: any): Promise<FinancialLedgerEntry | null> {
+  private static async updateLedgerEntryFromPayable(ledgerEntryId: ObjectId, payable: Record<string, unknown>): Promise<FinancialLedgerEntry | null> {
     try {
       const db = await connectToDatabase();
       const ledgerCollection = db.collection('financial_ledger');
 
       const updateData = {
-        amount: payable.total || 0,
-        currency: payable.currency || 'USD',
-        subtotal: payable.subtotal || 0,
-        totalTax: payable.totalTax || 0,
-        items: (payable.items || []).map((item: any) => ({
-          id: item.id || `item-${Date.now()}`,
-          description: item.description || '',
-          quantity: item.quantity || 0,
-          unitPrice: item.unitPrice || 0,
-          discount: item.discount || 0,
-          tax: item.tax || 0,
-          amount: item.amount || 0
+        amount: (payable.total as number) || 0,
+        currency: (payable.currency as string) || 'USD',
+        subtotal: (payable.subtotal as number) || 0,
+        totalTax: (payable.totalTax as number) || 0,
+        items: ((payable.items as Record<string, unknown>[]) || []).map((item: Record<string, unknown>) => ({
+          id: (item.id as string) || `item-${Date.now()}`,
+          description: (item.description as string) || '',
+          quantity: (item.quantity as number) || 0,
+          unitPrice: (item.unitPrice as number) || 0,
+          discount: (item.discount as number) || 0,
+          tax: (item.tax as number) || 0,
+          amount: (item.amount as number) || 0
         })),
-        status: this.mapPayableStatusToLedgerStatus(payable.status),
-        priority: payable.priority || 'medium',
-        category: payable.category || 'General',
-        notes: payable.memo || payable.notes,
-        memo: payable.memo,
+        status: this.mapPayableStatusToLedgerStatus(payable.status as string),
+        priority: (payable.priority as 'low' | 'medium' | 'high') || 'medium',
+        category: (payable.category as string) || 'General',
+        notes: (payable.memo as string) || (payable.notes as string),
+        memo: payable.memo as string,
         updatedAt: new Date(),
         lastSyncedAt: new Date(),
         syncStatus: 'synced'
@@ -270,7 +270,7 @@ export class LedgerSyncService {
       );
 
       const updatedEntry = await ledgerCollection.findOne({ _id: ledgerEntryId });
-      return updatedEntry;
+      return updatedEntry as FinancialLedgerEntry;
     } catch (error) {
       console.error('❌ [LedgerSync] Error updating ledger entry from payable:', error);
       return null;
@@ -280,8 +280,8 @@ export class LedgerSyncService {
   /**
    * Map invoice status to ledger status
    */
-  private static mapInvoiceStatusToLedgerStatus(invoiceStatus: string): string {
-    const statusMap: { [key: string]: string } = {
+  private static mapInvoiceStatusToLedgerStatus(invoiceStatus: string): LedgerEntryStatus {
+    const statusMap: { [key: string]: LedgerEntryStatus } = {
       'draft': 'draft',
       'sent': 'pending',
       'pending': 'pending',
@@ -295,8 +295,8 @@ export class LedgerSyncService {
   /**
    * Map payable status to ledger status
    */
-  private static mapPayableStatusToLedgerStatus(payableStatus: string): string {
-    const statusMap: { [key: string]: string } = {
+  private static mapPayableStatusToLedgerStatus(payableStatus: string): LedgerEntryStatus {
+    const statusMap: { [key: string]: LedgerEntryStatus } = {
       'draft': 'draft',
       'pending': 'pending',
       'approved': 'pending',

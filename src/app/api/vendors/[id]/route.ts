@@ -6,7 +6,7 @@ import { ObjectId } from 'mongodb';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -14,7 +14,7 @@ export async function GET(
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await params;
     if (!ObjectId.isValid(id)) {
       return NextResponse.json({ success: false, message: 'Invalid vendor ID' }, { status: 400 });
     }
@@ -22,7 +22,7 @@ export async function GET(
     const db = await connectToDatabase();
     const collection = db.collection('vendors');
 
-    let query = { _id: new ObjectId(id) };
+    let query: Record<string, unknown> = { _id: new ObjectId(id) };
     
     // For business users, filter by organizationId
     if (session.user.userType === 'business' && session.user.organizationId) {
@@ -53,7 +53,7 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -61,7 +61,7 @@ export async function PUT(
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await params;
     if (!ObjectId.isValid(id)) {
       return NextResponse.json({ success: false, message: 'Invalid vendor ID' }, { status: 400 });
     }
@@ -87,7 +87,7 @@ export async function PUT(
     const db = await connectToDatabase();
     const collection = db.collection('vendors');
 
-    let query = { _id: new ObjectId(id) };
+    let query: Record<string, unknown> = { _id: new ObjectId(id) };
     
     // For business users, filter by organizationId
     if (session.user.userType === 'business' && session.user.organizationId) {
@@ -104,11 +104,11 @@ export async function PUT(
     }
 
     // Check if another vendor with the same email exists (excluding current vendor)
-    let emailQuery = { email, _id: { $ne: new ObjectId(id) } };
+    let emailQuery: Record<string, unknown> = { email, _id: { $ne: new ObjectId(id) } };
     if (session.user.userType === 'business' && session.user.organizationId) {
       emailQuery = { email, organizationId: session.user.organizationId, _id: { $ne: new ObjectId(id) } };
     } else {
-      emailQuery = { email, userId: session.user.email, _id: { $ne: new ObjectId(id) } };
+      emailQuery = { email, userId: session.user.email, _id: { $ne: new ObjectId(id) } };    
     }
 
     const duplicateVendor = await collection.findOne(emailQuery);
@@ -155,7 +155,7 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -163,7 +163,7 @@ export async function DELETE(
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await params;
     if (!ObjectId.isValid(id)) {
       return NextResponse.json({ success: false, message: 'Invalid vendor ID' }, { status: 400 });
     }
@@ -171,7 +171,7 @@ export async function DELETE(
     const db = await connectToDatabase();
     const collection = db.collection('vendors');
 
-    let query = { _id: new ObjectId(id) };
+    let query: Record<string, unknown> = { _id: new ObjectId(id) };
     
     // For business users, filter by organizationId
     if (session.user.userType === 'business' && session.user.organizationId) {

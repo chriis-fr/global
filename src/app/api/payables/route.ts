@@ -7,7 +7,7 @@ import { LedgerSyncService } from '@/lib/services/ledgerSyncService';
 import { CurrencyService } from '@/lib/services/currencyService';
 
 // Secure payable number generation function
-const generateSecurePayableNumber = async (db: any, organizationId: string, ownerId: string, excludeNumber?: string): Promise<string> => {
+const generateSecurePayableNumber = async (db: Record<string, unknown>, organizationId: string, ownerId: string, excludeNumber?: string): Promise<string> => {
   const currentYear = new Date().getFullYear();
   const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
   
@@ -32,7 +32,7 @@ const generateSecurePayableNumber = async (db: any, organizationId: string, owne
     query = { ownerId: ownerId };
   }
   
-  const lastPayable = await db.collection('payables').findOne(
+  const lastPayable = await (db as { collection: (name: string) => { findOne: (query: Record<string, unknown>, options?: Record<string, unknown>) => Promise<Record<string, unknown> | null> } }).collection('payables').findOne(
     query,
     { 
       sort: { payableNumber: -1 },
@@ -44,7 +44,7 @@ const generateSecurePayableNumber = async (db: any, organizationId: string, owne
   
   if (lastPayable?.payableNumber) {
     // Extract sequence from existing payable number
-    const match = lastPayable.payableNumber.match(/-(\d{4})$/);
+    const match = (lastPayable.payableNumber as string).match(/-(\d{4})$/);
     if (match) {
       sequence = parseInt(match[1]) + 1;
     }
@@ -60,25 +60,21 @@ const generateSecurePayableNumber = async (db: any, organizationId: string, owne
   }
   
   // Double-check that the generated number doesn't exist
-  const existingPayable = await db.collection('payables').findOne(
+  const existingPayable = await (db as { collection: (name: string) => { findOne: (query: Record<string, unknown>) => Promise<Record<string, unknown> | null> } }).collection('payables').findOne(
     { payableNumber: payableNumber }
   );
   
   if (existingPayable) {
     // If it exists, find all payables for this month and get the highest sequence
-    const allPayables = await db.collection('payables').find(
+    const allPayables = await (db as { collection: (name: string) => { find: (query: Record<string, unknown>) => { toArray: () => Promise<Record<string, unknown>[]> } } }).collection('payables').find(
       { 
         payableNumber: { $regex: `^PAY-${secureId}-${currentYear}${currentMonth}-` }
-      },
-      { 
-        sort: { payableNumber: -1 },
-        projection: { payableNumber: 1 }
       }
     ).toArray();
     
     // Get all sequences and find the highest one
     const usedSequences = allPayables.map(pay => {
-      const match = pay.payableNumber.match(/-(\d{4})$/);
+      const match = (pay.payableNumber as string).match(/-(\d{4})$/);
       return match ? parseInt(match[1]) : 0;
     });
     
@@ -158,14 +154,14 @@ export async function POST(request: NextRequest) {
     
     if (finalPayableNumber) {
       // Check if the provided payable number already exists
-      const existingPayable = await db.collection('payables').findOne(
+      const existingPayable = await (db as { collection: (name: string) => { findOne: (query: Record<string, unknown>) => Promise<Record<string, unknown> | null> } }).collection('payables').findOne(
         { payableNumber: finalPayableNumber }
       );
       
       if (existingPayable) {
         console.log('⚠️ [API Payables] Provided payable number already exists, generating new one:', finalPayableNumber);
         finalPayableNumber = await generateSecurePayableNumber(
-          db, 
+          db as unknown as Record<string, unknown>, 
           session.user.organizationId || '', 
           ownerId || ''
         );
@@ -173,7 +169,7 @@ export async function POST(request: NextRequest) {
     } else {
       // No payable number provided, generate a new one
       finalPayableNumber = await generateSecurePayableNumber(
-        db, 
+        db as unknown as Record<string, unknown>, 
         session.user.organizationId || '', 
         ownerId || ''
       );
@@ -287,7 +283,7 @@ export async function POST(request: NextRequest) {
         if (error && typeof error === 'object' && 'code' in error && error.code === 11000) {
           // Duplicate key error - generate a new payable number and try again
           const newPayableNumber = await generateSecurePayableNumber(
-            db, 
+            db as unknown as Record<string, unknown>, 
             session.user.organizationId || '', 
             ownerId || '',
             currentPayableNumber

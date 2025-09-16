@@ -7,7 +7,7 @@ import { NotificationService } from '@/lib/services/notificationService';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -25,7 +25,7 @@ export async function GET(
 
     // Build query based on user type
     const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
-    let query: any = { _id: new ObjectId(id) };
+    const query: Record<string, unknown> = { _id: new ObjectId(id) };
     
     if (isOrganization) {
       query.organizationId = session.user.organizationId;
@@ -57,7 +57,7 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -119,7 +119,7 @@ export async function PUT(
 
     // Build query based on user type
     const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
-    let query: any = { _id: new ObjectId(id) };
+    const query: Record<string, unknown> = { _id: new ObjectId(id) };
     
     if (isOrganization) {
       query.organizationId = session.user.organizationId;
@@ -161,10 +161,10 @@ export async function PUT(
 
       const result = await collection.updateOne(
         { _id: new ObjectId(id) },
-        { 
+        {
           $set: updateData,
           $push: { statusHistory: statusHistoryUpdate }
-        }
+        } as Record<string, unknown>
       );
 
       if (result.modifiedCount === 0) {
@@ -212,7 +212,7 @@ export async function PUT(
         await NotificationService.createNotification({
           userId,
           organizationId: isOrganization ? new ObjectId(session.user.organizationId) : undefined,
-          type: 'payment_made',
+          type: 'payment_received',
           title: 'Payment Made! 💳',
           message: `Payable ${existingPayable.payableNumber || '#' + id.slice(-6)} has been marked as paid. Amount: ${existingPayable.currency || 'USD'} ${(existingPayable.total || 0).toFixed(2)}`,
           priority: 'high',
@@ -250,7 +250,6 @@ export async function PUT(
     // Prepare status history update
     const statusHistoryUpdate = [];
     const currentTime = new Date();
-    const userId = session.user.id;
     const userEmail = session.user.email;
 
     // Check for status changes and add to history
@@ -383,7 +382,7 @@ export async function PUT(
     };
 
     // Update the payable with status history
-    const updateOperation: any = { $set: updateData };
+    const updateOperation: Record<string, unknown> = { $set: updateData };
     
     if (statusHistoryUpdate.length > 0) {
       updateOperation.$push = {
@@ -416,7 +415,7 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -434,7 +433,7 @@ export async function DELETE(
 
     // Build query based on user type
     const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
-    let query: any = { _id: new ObjectId(id) };
+    const query: Record<string, unknown> = { _id: new ObjectId(id) };
     
     if (isOrganization) {
       query.organizationId = session.user.organizationId;

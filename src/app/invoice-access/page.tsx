@@ -1,28 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession, signIn } from 'next-auth/react';
 import { motion } from 'framer-motion';
 import { 
   Receipt, 
-  User, 
-  Building2, 
-  Calendar, 
-  DollarSign, 
-  Clock, 
-  CheckCircle, 
   AlertCircle,
   Loader2,
   ArrowRight,
-  CreditCard,
-  Wallet,
-  Eye,
-  EyeOff,
   Shield
 } from 'lucide-react';
-import FormattedNumberDisplay from '@/components/FormattedNumber';
-import { getCurrencyByCode } from '@/data/currencies';
 
 interface Invoice {
   _id: string;
@@ -84,36 +72,69 @@ interface TokenValidationData {
   requiresSignup: boolean;
 }
 
-export default function InvoiceAccessPage() {
+function InvoiceAccessContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { data: session, status } = useSession();
+  const { data: session } = useSession();
   
   const [tokenData, setTokenData] = useState<TokenValidationData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showPaymentDetails, setShowPaymentDetails] = useState(false);
 
   const token = searchParams.get('token');
 
-  useEffect(() => {
-    if (token) {
-      validateToken();
-    } else {
-      setError('Invalid access link');
-      setLoading(false);
+  const markTokenAsUsed = useCallback(async () => {
+    try {
+      await fetch('/api/invoice-access/mark-used', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          token,
+          userId: session?.user?.id 
+        }),
+      });
+    } catch (error) {
+      console.error('Error marking token as used:', error);
     }
-  }, [token]);
+  }, [token, session?.user?.id]);
 
-  // Handle authenticated user redirect - moved to top to avoid hooks order issue
-  useEffect(() => {
-    if (session?.user?.email === tokenData?.recipientEmail && tokenData) {
-      // Create payable for registered user and redirect to app
-      createPayableForRegisteredUser();
+  const createPayableForRegisteredUser = useCallback(async () => {
+    if (!tokenData) return;
+    
+    try {
+      // Create payable for the registered user
+      const response = await fetch('/api/invoice-access/process-signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: session?.user?.id,
+          token: token
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        console.log('✅ [Invoice Access] Payable created for registered user');
+        // Mark token as used and redirect to app
+        await markTokenAsUsed();
+        router.push('/dashboard/services/payables');
+      } else {
+        console.error('❌ [Invoice Access] Failed to create payable:', data.message);
+        // Still redirect to payables page
+        router.push('/dashboard/services/payables');
+      }
+    } catch (error) {
+      console.error('❌ [Invoice Access] Error creating payable:', error);
+      // Fallback: redirect to payables page
+      router.push('/dashboard/services/payables');
     }
-  }, [session, tokenData]);
+  }, [tokenData, session, router, markTokenAsUsed, token]);
 
-  const validateToken = async () => {
+  const validateToken = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -139,7 +160,24 @@ export default function InvoiceAccessPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    if (token) {
+      validateToken();
+    } else {
+      setError('Invalid access link');
+      setLoading(false);
+    }
+  }, [token, validateToken]);
+
+  // Handle authenticated user redirect - moved to top to avoid hooks order issue
+  useEffect(() => {
+    if (session?.user?.email === tokenData?.recipientEmail && tokenData) {
+      // Create payable for registered user and redirect to app
+      createPayableForRegisteredUser();
+    }
+  }, [session, tokenData, createPayableForRegisteredUser]);
 
   const handleSignIn = async () => {
     if (!tokenData?.recipientEmail) return;
@@ -159,38 +197,6 @@ export default function InvoiceAccessPage() {
     // Redirect to signup page with token
     const signupUrl = `/auth?invoiceToken=${token}&email=${encodeURIComponent(tokenData?.recipientEmail || '')}`;
     router.push(signupUrl);
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'sent': return 'text-blue-600 bg-blue-100';
-      case 'pending': return 'text-yellow-600 bg-yellow-100';
-      case 'paid': return 'text-green-600 bg-green-100';
-      case 'overdue': return 'text-red-600 bg-red-100';
-      default: return 'text-gray-600 bg-gray-100';
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'sent': return <Clock className="h-4 w-4" />;
-      case 'pending': return <Clock className="h-4 w-4" />;
-      case 'paid': return <CheckCircle className="h-4 w-4" />;
-      case 'overdue': return <AlertCircle className="h-4 w-4" />;
-      default: return <Clock className="h-4 w-4" />;
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
-
-  const getCurrencySymbol = () => {
-    return getCurrencyByCode(tokenData?.invoice.currency || 'USD')?.symbol || '$';
   };
 
   if (loading) {
@@ -224,42 +230,9 @@ export default function InvoiceAccessPage() {
     );
   }
 
-  const { invoice, recipientEmail, isRegistered, requiresSignup } = tokenData;
-
-  const createPayableForRegisteredUser = async () => {
-    try {
-      // Create payable for the registered user
-      const response = await fetch('/api/invoice-access/process-signup', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userId: session?.user?.id,
-          token: token
-        }),
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        console.log('✅ [Invoice Access] Payable created for registered user');
-        // Mark token as used and redirect to app
-        await markTokenAsUsed();
-        router.push('/dashboard/services/payables');
-      } else {
-        console.error('❌ [Invoice Access] Failed to create payable:', data.message);
-        // Still redirect to payables page
-        router.push('/dashboard/services/payables');
-      }
-    } catch (error) {
-      console.error('❌ [Invoice Access] Error creating payable:', error);
-      // Fallback: redirect to payables page
-      router.push('/dashboard/services/payables');
-    }
-  };
 
   // If user is authenticated and this is their invoice, show redirect message
-  if (session?.user?.email === recipientEmail) {
+  if (session?.user?.email === tokenData?.recipientEmail) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -280,7 +253,7 @@ export default function InvoiceAccessPage() {
             <Shield className="h-8 w-8 text-blue-600" />
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Secure Invoice Access</h1>
-              <p className="text-gray-600">Invoice #{invoice.invoiceNumber} from {invoice.companyDetails.name}</p>
+              <p className="text-gray-600">Invoice #{tokenData?.invoice?.invoiceNumber} from {tokenData?.invoice?.companyDetails?.name}</p>
             </div>
           </div>
         </div>
@@ -297,12 +270,12 @@ export default function InvoiceAccessPage() {
             <Receipt className="h-16 w-16 text-blue-600 mx-auto mb-4" />
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Access Your Invoice</h2>
             <p className="text-gray-600">
-              This secure link was sent to <strong>{recipientEmail}</strong>
+              This secure link was sent to <strong>{tokenData?.recipientEmail}</strong>
             </p>
           </div>
 
           <div className="space-y-6">
-            {isRegistered ? (
+            {tokenData?.isRegistered ? (
               <div>
                 <p className="text-gray-600 mb-4">
                   You already have an account with this email address. Please sign in to access your invoice.
@@ -340,21 +313,19 @@ export default function InvoiceAccessPage() {
       </div>
     </div>
   );
+}
 
-  async function markTokenAsUsed() {
-    try {
-      await fetch('/api/invoice-access/mark-used', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          token,
-          userId: session?.user?.id 
-        }),
-      });
-    } catch (error) {
-      console.error('Error marking token as used:', error);
-    }
-  }
+export default function InvoiceAccessPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 text-blue-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    }>
+      <InvoiceAccessContent />
+    </Suspense>
+  );
 }

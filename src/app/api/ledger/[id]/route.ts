@@ -3,11 +3,10 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
-import { FinancialLedgerEntry, LedgerEntryStatus } from '@/models/FinancialLedger';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -15,7 +14,7 @@ export async function GET(
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await params;
     if (!ObjectId.isValid(id)) {
       return NextResponse.json({ success: false, message: 'Invalid ledger entry ID' }, { status: 400 });
     }
@@ -25,7 +24,7 @@ export async function GET(
 
     // Build query based on user type
     const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
-    let query: any = { _id: new ObjectId(id) };
+    const query: Record<string, unknown> = { _id: new ObjectId(id) };
     
     if (isOrganization) {
       query.organizationId = session.user.organizationId;
@@ -57,7 +56,7 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -65,7 +64,7 @@ export async function PUT(
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await params;
     if (!ObjectId.isValid(id)) {
       return NextResponse.json({ success: false, message: 'Invalid ledger entry ID' }, { status: 400 });
     }
@@ -97,7 +96,7 @@ export async function PUT(
 
     // Build query based on user type
     const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
-    let query: any = { _id: new ObjectId(id) };
+    const query: Record<string, unknown> = { _id: new ObjectId(id) };
     
     if (isOrganization) {
       query.organizationId = session.user.organizationId;
@@ -115,7 +114,7 @@ export async function PUT(
     }
 
     // Prepare update data
-    const updateData: any = {
+    const updateData: Record<string, unknown> = {
       updatedAt: new Date()
     };
 
@@ -168,7 +167,7 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -176,7 +175,7 @@ export async function DELETE(
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await params;
     if (!ObjectId.isValid(id)) {
       return NextResponse.json({ success: false, message: 'Invalid ledger entry ID' }, { status: 400 });
     }
@@ -186,7 +185,7 @@ export async function DELETE(
 
     // Build query based on user type
     const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
-    let query: any = { _id: new ObjectId(id) };
+    const query: Record<string, unknown> = { _id: new ObjectId(id) };
     
     if (isOrganization) {
       query.organizationId = session.user.organizationId;
