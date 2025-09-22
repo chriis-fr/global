@@ -32,7 +32,7 @@ const SERVICE_LINKS = [
   },
   {
     key: 'accountsPayable',
-    label: 'Accounts Payable',
+    label: 'Pay',
     icon: Receipt,
     href: '/dashboard/services/payables',
   },

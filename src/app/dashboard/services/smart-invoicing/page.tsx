@@ -23,8 +23,6 @@ import { InvoiceService, InvoiceStats } from '@/lib/services/invoiceService';
 import { Invoice } from '@/models/Invoice';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
 import InvoicingSkeleton from '@/components/ui/InvoicingSkeleton';
-
-
 // Cache key for localStorage
 const CACHE_KEY = 'smart-invoicing-cache';
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes - stable cache for good UX
@@ -50,6 +48,7 @@ export default function SmartInvoicingPage() {
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   
   // Load cached data from localStorage
   const loadCachedData = useCallback(() => {
@@ -98,6 +97,20 @@ export default function SmartInvoicingPage() {
     
     // Try to load from cache first (unless force refresh)
     if (!forceRefresh && loadCachedData()) {
+      // If we have cached data, check if it's stale and refresh in background
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (cached) {
+        const data: CachedData = JSON.parse(cached);
+        const age = Date.now() - data.timestamp;
+        const staleThreshold = 2 * 60 * 1000; // 2 minutes
+        
+        if (age > staleThreshold) {
+          console.log('🔄 [Smart Invoicing] Background refresh - cache is stale');
+          setRefreshing(true);
+          // Don't await - let it refresh in background
+          loadAllData(true).finally(() => setRefreshing(false));
+        }
+      }
       return;
     }
     
@@ -262,15 +275,21 @@ export default function SmartInvoicingPage() {
           <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Smart Invoicing</h1>
           <p className="text-blue-200">
             Create, manage, and get paid with both fiat and blockchain payments seamlessly
+            {refreshing && (
+              <span className="ml-2 text-xs text-blue-300">
+                🔄 Updating...
+              </span>
+            )}
           </p>
         </div>
         <div className="flex items-center space-x-3">
           <button
             onClick={() => loadAllData(true)}
-            className="flex items-center justify-center w-8 h-8 text-blue-300 hover:text-blue-200 hover:bg-white/10 rounded-lg transition-colors"
-            title="Refresh data"
+            disabled={refreshing}
+            className="flex items-center justify-center w-8 h-8 text-blue-300 hover:text-blue-200 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-50"
+            title={refreshing ? "Refreshing..." : "Refresh data"}
           >
-            <RotateCcw className={`h-3 w-3 ${loading ? 'animate-spin-reverse' : ''}`} />
+            <RotateCcw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
           </button>
           <div className="flex space-x-3">
             <motion.button

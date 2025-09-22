@@ -41,26 +41,39 @@ export default function DashboardPage() {
     overdueCount: 0
   });
   const [loading, setLoading] = useState(true);
+  const [usingFallbackData, setUsingFallbackData] = useState(false);
 
   useEffect(() => {
     const loadStats = async () => {
+      // Don't load data if no session
+      if (!session?.user) {
+        console.log('Dashboard: No session user, skipping data load');
+        return;
+      }
+
       try {
-        // Fetch real data from API - optimize by getting only stats, not full data
-        // Add timeout to prevent hanging
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-
+        console.log('Dashboard: Loading stats for user:', session.user.email);
+        setLoading(true);
+        
+        // Fetch data in parallel like the services pages do - without timeout
         const [invoicesResponse, clientsResponse, ledgerResponse] = await Promise.all([
-          fetch('/api/invoices?limit=1&convertToPreferred=true', { signal: controller.signal }), // Only get stats, not full data
-          fetch('/api/clients', { signal: controller.signal }),
-          fetch('/api/ledger', { signal: controller.signal })
+          fetch('/api/invoices?limit=1&convertToPreferred=true'),
+          fetch('/api/clients'),
+          fetch('/api/ledger')
         ]);
-
-        clearTimeout(timeoutId);
 
         const invoicesData = await invoicesResponse.json();
         const clientsData = await clientsResponse.json();
         const ledgerData = await ledgerResponse.json();
+
+        console.log('Dashboard: API responses:', {
+          invoices: invoicesData.success,
+          clients: clientsData.success,
+          ledger: ledgerData.success,
+          invoicesStatus: invoicesResponse.status,
+          clientsStatus: clientsResponse.status,
+          ledgerStatus: ledgerResponse.status
+        });
 
         const clients = clientsData.success ? clientsData.data : [];
         
@@ -72,7 +85,6 @@ export default function DashboardPage() {
         const pendingInvoices = (statusCounts.sent || 0) + (statusCounts.pending || 0);
         const paidInvoices = statusCounts.paid || 0;
         
-
         const totalExpenses = 0; // Will be implemented when expenses service is ready
 
         // Get unified financial stats from ledger
@@ -89,21 +101,43 @@ export default function DashboardPage() {
           totalPayables: ledgerStats?.totalPayablesAmount || 0,
           overdueCount: (ledgerStats?.overdueReceivables || 0) + (ledgerStats?.overduePayables || 0)
         });
+
+        console.log('✅ Dashboard: Stats loaded successfully', {
+          totalRevenue,
+          pendingInvoices,
+          paidInvoices,
+          totalClients: clients.length,
+          netBalance: totalRevenue - (ledgerStats?.totalPayablesAmount || 0)
+        });
+
+        // Reset fallback data flag if we successfully loaded data
+        setUsingFallbackData(false);
+
       } catch (error) {
         console.error('Error loading dashboard stats:', error);
         
-        // If it's a timeout or network error, show cached/default data
-        if (error instanceof Error && (error.name === 'AbortError' || error.message.includes('fetch'))) {
-          console.log('⚠️ Dashboard: Using fallback data due to API timeout');
-          // Keep the default stats (all zeros) but still show the dashboard
-        }
+        // For any error, show fallback data
+        console.log('⚠️ Dashboard: Using fallback data due to API error');
+        
+        setStats({
+          totalRevenue: 0,
+          totalExpenses: 0,
+          pendingInvoices: 0,
+          paidInvoices: 0,
+          totalClients: 0,
+          netBalance: 0,
+          totalPayables: 0,
+          overdueCount: 0
+        });
+        
+        setUsingFallbackData(true);
       } finally {
         setLoading(false);
       }
     };
 
     loadStats();
-  }, []);
+  }, [session?.user]);
 
   if (loading) {
     return <DashboardSkeleton />;
@@ -116,6 +150,12 @@ export default function DashboardPage() {
         <div>
             <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Overview</h1>
             <p className="text-blue-200">Welcome back, {session?.user?.name || 'User'}!</p>
+            {usingFallbackData && (
+              <div className="mt-2 flex items-center space-x-2">
+                <AlertTriangle className="h-4 w-4 text-orange-400" />
+                <p className="text-orange-400 text-sm">Using offline data - some features may be limited</p>
+              </div>
+            )}
         </div>
         <div className="text-right">
             <p className="text-sm text-blue-300">Last updated</p>
