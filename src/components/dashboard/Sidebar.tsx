@@ -576,10 +576,12 @@ export default function Sidebar() {
       {/* Mobile Menu Button */}
       <button
         onClick={toggleMobileMenu}
-        className="lg:hidden fixed top-4 left-4 z-50 p-3 bg-blue-900/80 backdrop-blur-sm rounded-lg text-white hover:bg-blue-800/90 transition-colors shadow-lg touch-manipulation active:scale-95"
+        className={`lg:hidden fixed top-4 right-4 z-50 p-3 bg-blue-900/80 backdrop-blur-sm rounded-lg text-white hover:bg-blue-800/90 transition-colors shadow-lg touch-manipulation active:scale-95 ${
+          isMobileMenuOpen ? 'hidden' : 'block'
+        }`}
         aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
       >
-        {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        <Menu className="h-5 w-5" />
       </button>
 
       {/* Mobile Sidebar Overlay */}

@@ -125,7 +125,6 @@ export default function InvoicesPage() {
     }
   };
 
-
   const handleDynamicDownloadCsv = async () => {
     try {
       console.log('📤 [Smart Invoicing] Starting dynamic CSV download with criteria:', downloadCriteria);
@@ -344,8 +343,6 @@ export default function InvoicesPage() {
     });
   };
 
-
-
   const filteredInvoices = invoices.filter(invoice =>
     (invoice.invoiceNumber?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
     (invoice.clientDetails?.companyName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
@@ -367,109 +364,56 @@ export default function InvoicesPage() {
   };
 
   return (
-    <div className="space-y-6 px-4 sm:px-6 lg:px-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center space-x-4">
+    <div className="space-y-4 sm:space-y-6 px-4 sm:px-6 lg:px-8">
+      {/* Header - Mobile Optimized */}
+      <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+        <div className="flex items-center space-x-3 sm:space-x-4">
           <button
             onClick={() => router.push('/dashboard/services/smart-invoicing?refresh=true')}
-            className="p-2 text-blue-200 hover:text-white transition-colors"
+            className="p-2 text-blue-200 hover:text-white transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
           <div className="flex-1">
-            <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Invoices</h1>
-            <p className="text-blue-200">Manage your invoices and track payments</p>
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-1 sm:mb-2">Invoices</h1>
+            <p className="text-blue-200 text-sm sm:text-base">Manage your invoices and track payments</p>
           </div>
         </div>
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-3">
           <button
             onClick={() => setShowDownloadModal(true)}
-            className="flex items-center justify-center sm:justify-start space-x-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-lg w-full sm:w-auto"
+            className="flex items-center justify-center space-x-2 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-lg min-h-[44px] w-full sm:w-auto"
           >
-            <Download className="h-5 w-5" />
-            <span className="font-medium">Download CSV</span>
+            <Download className="h-4 w-4 sm:h-5 sm:w-5" />
+            <span className="font-medium text-sm sm:text-base">Download CSV</span>
           </button>
           <button
             onClick={() => router.push('/dashboard/services/smart-invoicing/create')}
-            className="flex items-center justify-center sm:justify-start space-x-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-lg w-full sm:w-auto"
+            className="flex items-center justify-center space-x-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-lg min-h-[44px] w-full sm:w-auto"
           >
-            <Plus className="h-5 w-5" />
-            <span className="font-medium">Create Invoice</span>
+            <Plus className="h-4 w-4 sm:h-5 sm:w-5" />
+            <span className="font-medium text-sm sm:text-base">Create Invoice</span>
           </button>
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-blue-200 text-sm font-medium">Total Invoices</p>
-              <p className="text-xl sm:text-2xl font-bold text-white">{stats.totalInvoices}</p>
-            </div>
-            <div className="p-2 sm:p-3 bg-blue-500/20 rounded-lg">
-              <FileText className="h-5 w-5 sm:h-6 sm:w-6 text-blue-400" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-blue-200 text-sm font-medium">Total Revenue</p>
-              <p className="text-xl sm:text-2xl font-bold text-white">
-                <FormattedNumberDisplay value={stats.totalRevenue} />
-              </p>
-            </div>
-            <div className="p-2 sm:p-3 bg-green-500/20 rounded-lg">
-              <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-green-400" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-blue-200 text-sm font-medium">Pending</p>
-              <p className="text-xl sm:text-2xl font-bold text-white">{stats.pendingCount}</p>
-            </div>
-            <div className="p-2 sm:p-3 bg-yellow-500/20 rounded-lg">
-              <Calendar className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-400" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-blue-200 text-sm font-medium">Paid</p>
-              <p className="text-xl sm:text-2xl font-bold text-white">{stats.paidCount}</p>
-            </div>
-            <div className="p-2 sm:p-3 bg-green-500/20 rounded-lg">
-              <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-green-400" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Filters and Search */}
+      {/* Search and Filters - Moved to top for better UX */}
       <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20">
-        <div className="flex flex-col sm:flex-row gap-4">
+        <div className="flex flex-col space-y-3 sm:flex-row sm:space-y-0 sm:space-x-4">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4 sm:h-5 sm:w-5" />
             <input
               type="text"
               placeholder="Search invoices by number or client..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-black placeholder-gray-600 font-medium"
+              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-black placeholder-gray-600 font-medium text-sm sm:text-base min-h-[44px]"
             />
           </div>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as 'all' | 'draft' | 'sent' | 'pending' | 'paid' | 'overdue')}
-            className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-900"
+            className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-900 text-sm sm:text-base min-h-[44px] w-full sm:w-auto"
           >
             <option value="all">All Status</option>
             <option value="draft">Draft</option>
@@ -480,7 +424,60 @@ export default function InvoicesPage() {
         </div>
       </div>
 
-      {/* Invoices Table */}
+      {/* Stats Cards - Mobile Optimized */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20">
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <p className="text-blue-200 text-xs sm:text-sm font-medium">Total Invoices</p>
+              <p className="text-lg sm:text-2xl font-bold text-white">{stats.totalInvoices}</p>
+            </div>
+            <div className="p-2 sm:p-3 bg-blue-500/20 rounded-lg flex-shrink-0">
+              <FileText className="h-4 w-4 sm:h-6 sm:w-6 text-blue-400" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20">
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <p className="text-blue-200 text-xs sm:text-sm font-medium">Total Revenue</p>
+              <p className="text-lg sm:text-2xl font-bold text-white">
+                <FormattedNumberDisplay value={stats.totalRevenue} />
+              </p>
+            </div>
+            <div className="p-2 sm:p-3 bg-green-500/20 rounded-lg flex-shrink-0">
+              <DollarSign className="h-4 w-4 sm:h-6 sm:w-6 text-green-400" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20">
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <p className="text-blue-200 text-xs sm:text-sm font-medium">Pending</p>
+              <p className="text-lg sm:text-2xl font-bold text-white">{stats.pendingCount}</p>
+            </div>
+            <div className="p-2 sm:p-3 bg-yellow-500/20 rounded-lg flex-shrink-0">
+              <Calendar className="h-4 w-4 sm:h-6 sm:w-6 text-yellow-400" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20">
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <p className="text-blue-200 text-xs sm:text-sm font-medium">Paid</p>
+              <p className="text-lg sm:text-2xl font-bold text-white">{stats.paidCount}</p>
+            </div>
+            <div className="p-2 sm:p-3 bg-green-500/20 rounded-lg flex-shrink-0">
+              <TrendingUp className="h-4 w-4 sm:h-6 sm:w-6 text-green-400" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Invoices Table - Mobile Optimized */}
       <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-16">
@@ -502,7 +499,7 @@ export default function InvoicesPage() {
             {!searchTerm && statusFilter === 'all' && (
               <button
                 onClick={() => router.push('/dashboard/services/smart-invoicing/create')}
-                className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors min-h-[44px]"
               >
                 <Plus className="h-5 w-5 mr-2" />
                 Create Your First Invoice
@@ -511,11 +508,99 @@ export default function InvoicesPage() {
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto">
+            {/* Mobile Card View */}
+            <div className="block sm:hidden">
+              <div className="p-4 space-y-3">
+                {statusFilteredInvoices.map((invoice) => (
+                  <div
+                    key={invoice._id?.toString() || 'unknown'}
+                    className="bg-white/5 rounded-lg p-4 border border-white/10 hover:bg-white/10 transition-colors"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <input
+                            type="checkbox"
+                            checked={selectedInvoices.includes(invoice._id?.toString() || '')}
+                            onChange={(e) => {
+                              const invoiceId = invoice._id?.toString();
+                              if (!invoiceId) return;
+                              
+                              if (e.target.checked) {
+                                setSelectedInvoices(prev => [...prev, invoiceId]);
+                              } else {
+                                setSelectedInvoices(prev => prev.filter(id => id !== invoiceId));
+                              }
+                            }}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <h3 className="text-white font-semibold text-sm truncate">
+                            {invoice.invoiceNumber || 'Invoice'}
+                          </h3>
+                        </div>
+                        <p className="text-blue-200 text-xs">
+                          {invoice.clientDetails?.companyName || 
+                           [invoice.clientDetails?.firstName, invoice.clientDetails?.lastName].filter(Boolean).join(' ') || 
+                           'Client'}
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0 ml-3">
+                        <p className="text-white font-semibold text-sm">
+                          <FormattedNumberDisplay 
+                            value={invoice.totalAmount || 0} 
+                            currency={invoice.currency === 'USD' ? '$' : invoice.currency === 'EUR' ? '€' : invoice.currency === 'GBP' ? '£' : '$'}
+                          />
+                        </p>
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(invoice.status)}`}>
+                          {invoice.status === 'sent' ? 'Pending' : 
+                           invoice.status ? (invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)) : 'Draft'}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center justify-between text-xs text-blue-200 mb-3">
+                      <span>{invoice.issueDate ? formatDate(invoice.issueDate.toString()) : 'N/A'}</span>
+                      <span>{invoice.createdAt ? formatDate(invoice.createdAt.toString()) : 'N/A'}</span>
+                    </div>
+                    
+                    <div className="flex items-center justify-end space-x-2">
+                      {invoice.status === 'draft' ? (
+                        <button
+                          onClick={() => router.push(`/dashboard/services/smart-invoicing/create?id=${invoice._id?.toString()}`)}
+                          className="flex items-center space-x-1 text-blue-400 hover:text-blue-300 transition-colors px-3 py-2 rounded-lg hover:bg-white/10 min-h-[36px]"
+                        >
+                          <Edit3 className="h-4 w-4" />
+                          <span className="text-xs">Edit</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => router.push(`/dashboard/services/smart-invoicing/invoices/${invoice._id?.toString()}`)}
+                          className="flex items-center space-x-1 text-blue-400 hover:text-blue-300 transition-colors px-3 py-2 rounded-lg hover:bg-white/10 min-h-[36px]"
+                        >
+                          <Eye className="h-4 w-4" />
+                          <span className="text-xs">View</span>
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDeleteInvoice(invoice._id?.toString() || '')}
+                        className="flex items-center space-x-1 text-red-400 hover:text-red-300 transition-colors px-3 py-2 rounded-lg hover:bg-white/10 min-h-[36px]"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span className="text-xs">Delete</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="min-w-full divide-y divide-white/10">
                 <thead className="bg-white/5">
                   <tr>
-                    <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
                       <input
                         type="checkbox"
                         checked={selectedInvoices.length === statusFilteredInvoices.length && statusFilteredInvoices.length > 0}
@@ -529,22 +614,22 @@ export default function InvoicesPage() {
                         className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                       />
                     </th>
-                    <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
                       Invoice
                     </th>
-                    <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
                       Client
                     </th>
-                    <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
                       Amount
                     </th>
-                    <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
                       Status
                     </th>
-                    <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
                       Date
                     </th>
-                    <th className="px-3 sm:px-6 py-4 text-right text-xs font-semibold text-blue-200 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-right text-xs font-semibold text-blue-200 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
@@ -556,7 +641,7 @@ export default function InvoicesPage() {
                       className={`hover:bg-white/5 transition-colors ${invoice.status === 'draft' ? 'cursor-pointer' : ''}`}
                       onClick={invoice.status === 'draft' ? () => router.push(`/dashboard/services/smart-invoicing/create?id=${invoice._id?.toString()}`) : undefined}
                     >
-                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           checked={selectedInvoices.includes(invoice._id?.toString() || '')}
@@ -573,7 +658,7 @@ export default function InvoicesPage() {
                           className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                         />
                       </td>
-                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
+                      <td className="px-6 py-4 whitespace-nowrap">
                         <div>
                           <div className="text-sm font-semibold text-white">
                             {invoice.invoiceNumber || 'Invoice'}
@@ -583,14 +668,14 @@ export default function InvoicesPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
+                      <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-white">
                           {invoice.clientDetails?.companyName || 
                            [invoice.clientDetails?.firstName, invoice.clientDetails?.lastName].filter(Boolean).join(' ') || 
                            'Client'}
                         </div>
                       </td>
-                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
+                      <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-semibold text-white">
                           <FormattedNumberDisplay 
                             value={invoice.totalAmount || 0} 
@@ -598,24 +683,24 @@ export default function InvoicesPage() {
                           />
                         </div>
                       </td>
-                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
+                      <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${getStatusColor(invoice.status)}`}>
                           {invoice.status === 'sent' ? 'Pending' : 
                            invoice.status ? (invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)) : 'Draft'}
                         </span>
                       </td>
-                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-blue-200">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-200">
                         {invoice.createdAt ? formatDate(invoice.createdAt.toString()) : 'N/A'}
                       </td>
-                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex items-center justify-end space-x-2 sm:space-x-3">
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div className="flex items-center justify-end space-x-3">
                           {invoice.status === 'draft' ? (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 router.push(`/dashboard/services/smart-invoicing/create?id=${invoice._id?.toString()}`);
                               }}
-                              className="text-blue-400 hover:text-blue-300 transition-colors p-1 sm:p-2 rounded-lg hover:bg-white/10"
+                              className="text-blue-400 hover:text-blue-300 transition-colors p-2 rounded-lg hover:bg-white/10"
                               title="Continue Editing Draft"
                             >
                               <Edit3 className="h-4 w-4" />
@@ -626,7 +711,7 @@ export default function InvoicesPage() {
                                 e.stopPropagation();
                                 router.push(`/dashboard/services/smart-invoicing/invoices/${invoice._id?.toString()}`);
                               }}
-                              className="text-blue-400 hover:text-blue-300 transition-colors p-1 sm:p-2 rounded-lg hover:bg-white/10"
+                              className="text-blue-400 hover:text-blue-300 transition-colors p-2 rounded-lg hover:bg-white/10"
                               title="View Invoice"
                             >
                               <Eye className="h-4 w-4" />
@@ -637,7 +722,7 @@ export default function InvoicesPage() {
                               e.stopPropagation();
                               handleDeleteInvoice(invoice._id?.toString() || '');
                             }}
-                            className="text-red-400 hover:text-red-300 transition-colors p-1 sm:p-2 rounded-lg hover:bg-white/10"
+                            className="text-red-400 hover:text-red-300 transition-colors p-2 rounded-lg hover:bg-white/10"
                             title="Delete Invoice"
                           >
                             <Trash2 className="h-4 w-4" />

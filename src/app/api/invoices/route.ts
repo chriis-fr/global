@@ -5,6 +5,7 @@ import { connectToDatabase } from '@/lib/database';
 import { ObjectId, Db } from 'mongodb';
 import { CurrencyService } from '@/lib/services/currencyService';
 import { LedgerSyncService } from '@/lib/services/ledgerSyncService';
+import { SubscriptionService } from '@/lib/services/subscriptionService';
 
 // Secure invoice number generation function
 const generateSecureInvoiceNumber = async (db: Db, organizationId: string, ownerId: string, excludeNumber?: string): Promise<string> => {
@@ -98,6 +99,22 @@ const generateSecureInvoiceNumber = async (db: Db, organizationId: string, owner
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
+    
+    if (!session?.user?.id) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Check if user can create invoice
+    const canCreate = await SubscriptionService.canCreateInvoice(new ObjectId(session.user.id));
+    
+    if (!canCreate.allowed) {
+      return NextResponse.json({
+        success: false,
+        error: canCreate.reason,
+        requiresUpgrade: canCreate.requiresUpgrade
+      }, { status: 403 });
+    }
+
     if (!session?.user?.email) {
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
@@ -140,12 +157,6 @@ export async function POST(request: NextRequest) {
 
     await connectToDatabase();
 
-    // Get user details for approval workflow
-    // const user = await UserService.getUserByEmail(session.user.email); // This line was removed as per the new_code
-    // if (!user) {
-    //   return NextResponse.json({ success: false, message: 'User not found' }, { status: 404 });
-    // }
-
     // Determine if user is individual or organization
     const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
     const ownerId = isOrganization ? session.user.organizationId : session.user.email;
@@ -155,18 +166,10 @@ export async function POST(request: NextRequest) {
     let requiresApproval = false;
     let initialStatus = status || 'pending';
 
-    if (isOrganization && ownerId) { // ownerId is now available
-      // Check if user is admin/owner
-      // const isAdmin = await OrganizationService.isUserAdmin( // This line was removed as per the new_code
-      //   user.organizationId.toString(), 
-      //   user._id!.toString()
-      // );
-      
-      // if (!isAdmin) {
-        // Non-admin users need approval
-        requiresApproval = true;
-        initialStatus = 'pending_approval';
-      // }
+    if (isOrganization && ownerId) {
+      // Non-admin users need approval
+      requiresApproval = true;
+      initialStatus = 'pending_approval';
     }
 
     // Generate secure invoice number if not provided or if provided number already exists
@@ -282,7 +285,7 @@ export async function POST(request: NextRequest) {
       // Approval workflow
       approvalWorkflow: requiresApproval ? {
         requiresApproval: true,
-        submittedBy: session.user.id, // Changed to session.user.id
+        submittedBy: session.user.id,
         submittedAt: new Date()
       } : undefined,
       
@@ -389,6 +392,12 @@ export async function POST(request: NextRequest) {
       console.error('⚠️ [API Invoices] Failed to sync invoice to ledger:', syncError);
       // Don't fail the request if sync fails
     }
+
+    // After successful invoice creation, increment usage:
+    await SubscriptionService.incrementInvoiceUsage(
+      new ObjectId(session.user.id),
+      invoiceData.totalAmount
+    );
 
     return NextResponse.json({
       success: true,
@@ -502,15 +511,18 @@ export async function GET(request: NextRequest) {
       invoices = convertedInvoices as typeof invoices;
     }
 
-    // Calculate total revenue in preferred currency (always include all invoices regardless of status filter)
-    const revenueQuery = isOrganization 
-      ? { organizationId: session.user.organizationId }
-      : { 
-          $or: [
-            { issuerId: session.user.id },
-            { userId: session.user.email }
-          ]
-        };
+    // Calculate total revenue in preferred currency
+    // If status filter is applied, calculate revenue only from filtered invoices
+    const revenueQuery = status 
+      ? query // Use the filtered query if status is specified
+      : (isOrganization 
+          ? { organizationId: session.user.organizationId }
+          : { 
+              $or: [
+                { issuerId: session.user.id },
+                { userId: session.user.email }
+              ]
+            });
     const allInvoices = await invoicesCollection.find(revenueQuery).toArray();
     const totalRevenue = await CurrencyService.calculateTotalRevenue(allInvoices as { [key: string]: unknown }[], preferredCurrency);
 

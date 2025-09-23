@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { SessionProvider } from "@/components/providers/SessionProvider";
 import { CurrencyProvider } from "@/lib/contexts/CurrencyContext";
+import { SubscriptionProvider } from "@/lib/contexts/SubscriptionContext";
 
 // Initialize database connection on app start
 import '../lib/db-init';
@@ -19,7 +20,6 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Chains-Global Finance",
-  description: " Global Business Finance Solutions",
   icons: {
     icon: "./chains.PNG"
   }
@@ -32,13 +32,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-              <link rel="icon" href="/chains.PNG" />
+      <link rel="icon" href="/chains.PNG" />
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <SessionProvider>
           <CurrencyProvider>
-            {children}
+            <SubscriptionProvider>
+              {children}
+            </SubscriptionProvider>
           </CurrencyProvider>
         </SessionProvider>
       </body>

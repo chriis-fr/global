@@ -2,18 +2,17 @@
 interface CacheEntry<T> {
   data: T;
   timestamp: number;
-  expiresIn: number; // milliseconds
+  ttl: number;
 }
 
-class ServiceCache {
-  private cache = new Map<string, CacheEntry<any>>();
-  private readonly DEFAULT_TTL = 5 * 60 * 1000; // 5 minutes
+class Cache {
+  private cache = new Map<string, CacheEntry<unknown>>();
 
-  set<T>(key: string, data: T, ttl: number = this.DEFAULT_TTL): void {
+  set<T>(key: string, data: T, ttl: number = 300000): void { // 5 minutes default
     this.cache.set(key, {
       data,
       timestamp: Date.now(),
-      expiresIn: ttl
+      ttl
     });
   }
 
@@ -21,26 +20,12 @@ class ServiceCache {
     const entry = this.cache.get(key);
     if (!entry) return null;
 
-    // Check if expired
-    if (Date.now() - entry.timestamp > entry.expiresIn) {
+    if (Date.now() - entry.timestamp > entry.ttl) {
       this.cache.delete(key);
       return null;
     }
 
-    return entry.data;
-  }
-
-  has(key: string): boolean {
-    const entry = this.cache.get(key);
-    if (!entry) return false;
-
-    // Check if expired
-    if (Date.now() - entry.timestamp > entry.expiresIn) {
-      this.cache.delete(key);
-      return false;
-    }
-
-    return true;
+    return entry.data as T;
   }
 
   delete(key: string): void {
@@ -50,23 +35,9 @@ class ServiceCache {
   clear(): void {
     this.cache.clear();
   }
-
-  // Get cache age in milliseconds
-  getAge(key: string): number | null {
-    const entry = this.cache.get(key);
-    if (!entry) return null;
-    return Date.now() - entry.timestamp;
-  }
-
-  // Check if cache is stale (older than specified time)
-  isStale(key: string, staleThreshold: number = 2 * 60 * 1000): boolean {
-    const age = this.getAge(key);
-    return age !== null && age > staleThreshold;
-  }
 }
 
-// Global cache instance
-export const serviceCache = new ServiceCache();
+export const cache = new Cache();
 
 // Cache keys
 export const CACHE_KEYS = {

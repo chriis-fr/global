@@ -86,75 +86,81 @@ export interface ServiceOnboarding {
 }
 
 export interface User {
-  _id?: ObjectId;
+  _id: ObjectId;
   email: string;
-  password?: string; // hashed, optional for OAuth users
   name: string;
-  role: string; // e.g., "admin", "user", "accountant"
-  userType: 'individual' | 'business';
-  
-  // Profile
-  phone?: string;
-  profilePicture?: string; // URL to image
-  avatar?: string; // Alternative avatar field
-  googleId?: string; // Google OAuth ID
-  googleEmail?: string; // Google email
-  
-  // Business Context
-  industry?: string;
-  organizationId?: ObjectId; // Reference to Organizations
-  
-  // Address
-  address: Address;
-  taxId?: string;
-  
-  // Crypto
-  walletAddresses: WalletAddress[];
-  
-  // Settings & Services
-  settings: UserSettings;
-  services: UserServices;
-  
-  // Payment Methods (for individual users)
-  paymentMethodSettings?: {
-    defaultFiatMethod?: ObjectId;
-    defaultCryptoMethod?: ObjectId;
-    autoSelectPaymentMethod: boolean;
-    allowMultipleMethods: boolean;
-    supportedCurrencies: string[];
-    supportedNetworks: string[];
-  };
-  
-  // Onboarding
-  onboarding: {
-    completed: boolean;
-    currentStep: number;
-    completedSteps: string[];
-    serviceOnboarding: ServiceOnboarding;
-  };
-  
-  // Status
-  status: 'pending' | 'active' | 'suspended';
-  emailVerified: boolean;
-  
-  // Timestamps
+  password?: string; // Optional for OAuth users
+  avatar?: string;
+  role: 'user' | 'admin';
+  organizationId?: ObjectId;
+  isEmailVerified: boolean;
+  emailVerificationToken?: string;
+  passwordResetToken?: string;
+  passwordResetExpires?: Date;
+  lastLogin?: Date;
   createdAt: Date;
   updatedAt: Date;
-  lastLoginAt?: Date;
   
-  // Legal Agreements
-  termsAgreement?: {
-    agreed: boolean;
-    agreedAt: Date;
-    termsVersion: string;
-  };
-  logos?: Array<{
-    id: string;
-    name: string;
-    url: string;
-    isDefault: boolean;
+  // OAuth fields
+  accounts?: {
+    provider: string;
+    providerAccountId: string;
+    type: string;
+    accessToken?: string;
+    refreshToken?: string;
+    expiresAt?: number;
+  }[];
+
+  // Stripe fields
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+
+  // Subscription & Billing Fields
+  subscription: {
+    planId: string; // e.g., 'receivables-free', 'payables-pro'
+    status: 'trial' | 'active' | 'cancelled' | 'expired';
+    trialStartDate?: Date;
+    trialEndDate?: Date;
+    currentPeriodStart?: Date;
+    currentPeriodEnd?: Date;
+    billingPeriod: 'monthly' | 'yearly';
+    stripePriceId?: string;
     createdAt: Date;
-  }>;
+    updatedAt: Date;
+  };
+
+  // Usage tracking
+  usage: {
+    invoicesThisMonth: number;
+    monthlyVolume: number;
+    lastResetDate: Date;
+  };
+
+  // Onboarding
+  onboarding: {
+    isCompleted: boolean;
+    currentStep: number;
+    completedSteps: string[];
+    data?: Record<string, unknown>;
+  };
+
+  // Services
+  services: {
+    smartInvoicing: boolean;
+    payables: boolean;
+  };
+
+  // Preferences
+  preferences: {
+    currency: string;
+    timezone: string;
+    notifications: {
+      email: boolean;
+      push: boolean;
+      invoiceReminders: boolean;
+      paymentNotifications: boolean;
+    };
+  };
 }
 
 export interface CreateUserInput {

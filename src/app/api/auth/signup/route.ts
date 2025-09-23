@@ -5,6 +5,7 @@ import { CreateUserInput, CreateOrganizationInput } from '@/models';
 import { createDefaultServices } from '@/lib/services/serviceManager';
 import bcrypt from 'bcryptjs';
 import { ObjectId } from 'mongodb';
+import { SubscriptionService } from '@/lib/services/subscriptionService';
 
 export async function POST(request: NextRequest) {
   console.log('🚀 [SIGNUP] Starting signup process...');
@@ -193,6 +194,9 @@ export async function POST(request: NextRequest) {
         newUser.organizationId = new ObjectId(organization._id);
       }
     }
+
+    // Initialize trial for new users
+    await SubscriptionService.initializeTrial(new ObjectId(newUser._id));
     
     // Remove password from response - extract password to exclude it from response
     // eslint-disable-next-line @typescript-eslint/no-unused-vars

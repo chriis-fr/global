@@ -268,12 +268,12 @@ export default function SmartInvoicingPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Smart Invoicing</h1>
-          <p className="text-blue-200">
+    <div className="space-y-4 sm:space-y-6 px-4 sm:px-0">
+      {/* Header - Mobile Optimized */}
+      <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+        <div className="flex-1">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-2">Smart Invoicing</h1>
+          <p className="text-blue-200 text-sm sm:text-base">
             Create, manage, and get paid with both fiat and blockchain payments seamlessly
             {refreshing && (
               <span className="ml-2 text-xs text-blue-300">
@@ -282,35 +282,38 @@ export default function SmartInvoicingPage() {
             )}
           </p>
         </div>
-        <div className="flex items-center space-x-3">
+        
+        {/* Mobile Action Buttons */}
+        <div className="flex flex-col space-y-3 sm:flex-row sm:items-center sm:space-y-0 sm:space-x-3">
           <button
             onClick={() => loadAllData(true)}
             disabled={refreshing}
-            className="flex items-center justify-center w-8 h-8 text-blue-300 hover:text-blue-200 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-50"
+            className="flex items-center justify-center w-10 h-10 sm:w-8 sm:h-8 text-blue-300 hover:text-blue-200 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-50 self-end sm:self-auto"
             title={refreshing ? "Refreshing..." : "Refresh data"}
           >
-            <RotateCcw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
+            <RotateCcw className={`h-4 w-4 sm:h-3 sm:w-3 ${refreshing ? 'animate-spin' : ''}`} />
           </button>
-          <div className="flex space-x-3">
+          
+          <div className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-3">
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={handleViewInvoices}
-              className="flex items-center space-x-2 bg-white/10 backdrop-blur-sm text-white px-4 py-2 rounded-lg hover:bg-white/20 transition-colors border border-white/20"
+              className="flex items-center justify-center space-x-2 bg-white/10 backdrop-blur-sm text-white px-4 py-3 sm:px-4 sm:py-2 rounded-lg hover:bg-white/20 transition-colors border border-white/20 text-sm sm:text-base min-h-[44px] sm:min-h-auto"
             >
-              <List className="h-5 w-5" />
+              <List className="h-4 w-4 sm:h-5 sm:w-5" />
               <span>View Invoices</span>
             </motion.button>
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={handleCreateInvoice}
-              className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+              className="flex items-center justify-center space-x-2 bg-blue-600 text-white px-4 py-3 sm:px-4 sm:py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm sm:text-base min-h-[44px] sm:min-h-auto"
             >
-              <Plus className="h-5 w-5" />
-              <span>
+              <Plus className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span className="text-center">
                 {!dataLoaded && loading ? 'Loading...' : 
-                 dataLoaded && isOnboardingCompleted === false ? 'Setup & Create Invoice' : 
+                 dataLoaded && isOnboardingCompleted === false ? 'Setup & Create' : 
                  'Create Invoice'}
               </span>
             </motion.button>
@@ -323,15 +326,15 @@ export default function SmartInvoicingPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-yellow-600/20 border border-yellow-500/50 rounded-xl p-6"
+          className="bg-yellow-600/20 border border-yellow-500/50 rounded-xl p-4 sm:p-6"
         >
-          <div className="flex items-start space-x-4">
-            <AlertCircle className="h-6 w-6 text-yellow-400 mt-1 flex-shrink-0" />
+          <div className="flex items-start space-x-3 sm:space-x-4">
+            <AlertCircle className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-400 mt-1 flex-shrink-0" />
             <div className="flex-1">
-              <h3 className="text-lg font-semibold text-yellow-100 mb-2">
+              <h3 className="text-base sm:text-lg font-semibold text-yellow-100 mb-2">
                 Service Setup Required
               </h3>
-              <p className="text-yellow-200 mb-4">
+              <p className="text-yellow-200 mb-4 text-sm sm:text-base">
                 Before you can create invoices, you need to configure your business information and invoice settings. 
                 Click &quot;Manage Invoice Info&quot; above or &quot;Complete Setup&quot; below to get started.
               </p>
@@ -339,7 +342,7 @@ export default function SmartInvoicingPage() {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={handleSetupService}
-                className="flex items-center space-x-2 bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 transition-colors"
+                className="flex items-center justify-center space-x-2 bg-yellow-600 text-white px-4 py-3 rounded-lg hover:bg-yellow-700 transition-colors min-h-[44px] w-full sm:w-auto"
               >
                 <ArrowRight className="h-4 w-4" />
                 <span>Complete Setup</span>
@@ -349,21 +352,21 @@ export default function SmartInvoicingPage() {
         </motion.div>
       )}
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      {/* Stats Cards - Mobile Optimized */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20"
+          className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20"
         >
           <div className="flex items-center justify-between">
-            <div>
-               <p className="text-blue-200 text-sm">Total Invoices</p>
-               <p className="text-2xl font-bold text-white">
+            <div className="flex-1">
+               <p className="text-blue-200 text-xs sm:text-sm">Total Invoices</p>
+               <p className="text-lg sm:text-2xl font-bold text-white">
                  {stats.totalInvoices}
                </p>
             </div>
-            <FileText className="h-8 w-8 text-blue-400" />
+            <FileText className="h-6 w-6 sm:h-8 sm:w-8 text-blue-400 flex-shrink-0" />
           </div>
         </motion.div>
 
@@ -371,16 +374,16 @@ export default function SmartInvoicingPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20"
+          className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20"
         >
           <div className="flex items-center justify-between">
-            <div>
-               <p className="text-blue-200 text-sm">Total Revenue</p>
-               <p className="text-2xl font-bold text-white">
+            <div className="flex-1">
+               <p className="text-blue-200 text-xs sm:text-sm">Total Revenue</p>
+               <p className="text-lg sm:text-2xl font-bold text-white">
                  <FormattedNumberDisplay value={stats.totalRevenue} usePreferredCurrency={true} />
                </p>
             </div>
-            <DollarSign className="h-8 w-8 text-green-400" />
+            <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-green-400 flex-shrink-0" />
           </div>
         </motion.div>
 
@@ -388,16 +391,16 @@ export default function SmartInvoicingPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20"
+          className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20"
         >
           <div className="flex items-center justify-between">
-            <div>
-               <p className="text-blue-200 text-sm">Pending</p>
-               <p className="text-2xl font-bold text-white">
+            <div className="flex-1">
+               <p className="text-blue-200 text-xs sm:text-sm">Pending</p>
+               <p className="text-lg sm:text-2xl font-bold text-white">
                  {stats.pendingCount}
                </p>
             </div>
-            <Calendar className="h-8 w-8 text-yellow-400" />
+            <Calendar className="h-6 w-6 sm:h-8 sm:w-8 text-yellow-400 flex-shrink-0" />
           </div>
         </motion.div>
 
@@ -405,57 +408,60 @@ export default function SmartInvoicingPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20"
+          className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20"
         >
           <div className="flex items-center justify-between">
-            <div>
-               <p className="text-blue-200 text-sm">Paid</p>
-               <p className="text-2xl font-bold text-white">
+            <div className="flex-1">
+               <p className="text-blue-200 text-xs sm:text-sm">Paid</p>
+               <p className="text-lg sm:text-2xl font-bold text-white">
                  {stats.paidCount}
                </p>
             </div>
-            <TrendingUp className="h-8 w-8 text-green-400" />
+            <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-green-400 flex-shrink-0" />
           </div>
         </motion.div>
       </div>
 
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20 hover:bg-white/20 transition-colors cursor-pointer"
-          onClick={handleCreateInvoice}
-        >
-          <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
-              <Plus className="h-6 w-6 text-white" />
+      {/* Quick Actions - Mobile Optimized */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+        {/* Only show Create New Invoice card when onboarding is not completed */}
+        {(!dataLoaded || isOnboardingCompleted === false) && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20 hover:bg-white/20 transition-colors cursor-pointer min-h-[120px] sm:min-h-auto"
+            onClick={handleCreateInvoice}
+          >
+            <div className="flex items-center space-x-3 sm:space-x-4">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                <Plus className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base sm:text-lg font-semibold text-white">Create New Invoice</h3>
+                <p className="text-blue-200 text-xs sm:text-sm">Start with our guided walkthrough</p>
+              </div>
+              <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 text-blue-400 flex-shrink-0" />
             </div>
-            <div>
-              <h3 className="text-lg font-semibold text-white">Create New Invoice</h3>
-              <p className="text-blue-200 text-sm">Start with our guided walkthrough</p>
-            </div>
-            <ArrowRight className="h-5 w-5 text-blue-400 ml-auto" />
-          </div>
-        </motion.div>
+          </motion.div>
+        )}
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
-          className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20 hover:bg-white/20 transition-colors cursor-pointer"
+          className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20 hover:bg-white/20 transition-colors cursor-pointer min-h-[120px] sm:min-h-auto"
           onClick={handleManageInvoiceInfo}
         >
-          <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-orange-600 rounded-lg flex items-center justify-center">
-              <Building2 className="h-6 w-6 text-white" />
+          <div className="flex items-center space-x-3 sm:space-x-4">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-orange-600 rounded-lg flex items-center justify-center flex-shrink-0">
+              <Building2 className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
             </div>
-            <div>
-              <h3 className="text-lg font-semibold text-white">Manage Invoice Info</h3>
-              <p className="text-blue-200 text-sm">Configure business information and settings</p>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-base sm:text-lg font-semibold text-white">Manage Invoice Info</h3>
+              <p className="text-blue-200 text-xs sm:text-sm">Configure business information and settings</p>
             </div>
-            <ArrowRight className="h-5 w-5 text-blue-400 ml-auto" />
+            <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 text-blue-400 flex-shrink-0" />
           </div>
         </motion.div>
 
@@ -463,18 +469,18 @@ export default function SmartInvoicingPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.6 }}
-          className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20 hover:bg-white/20 transition-colors cursor-pointer"
+          className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20 hover:bg-white/20 transition-colors cursor-pointer min-h-[120px] sm:min-h-auto sm:col-span-2 lg:col-span-1"
           onClick={handleManageClients}
         >
-          <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-green-600 rounded-lg flex items-center justify-center">
-              <Building2 className="h-6 w-6 text-white" />
+          <div className="flex items-center space-x-3 sm:space-x-4">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-600 rounded-lg flex items-center justify-center flex-shrink-0">
+              <Building2 className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
             </div>
-            <div>
-              <h3 className="text-lg font-semibold text-white">Manage Clients</h3>
-              <p className="text-blue-200 text-sm">Add and organize your clients</p>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-base sm:text-lg font-semibold text-white">Manage Clients</h3>
+              <p className="text-blue-200 text-xs sm:text-sm">Add and organize your clients</p>
             </div>
-            <ArrowRight className="h-5 w-5 text-blue-400 ml-auto" />
+            <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 text-blue-400 flex-shrink-0" />
           </div>
         </motion.div>
 
@@ -484,36 +490,36 @@ export default function SmartInvoicingPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.7 }}
-            className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20 hover:bg-white/20 transition-colors cursor-pointer"
+            className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20 hover:bg-white/20 transition-colors cursor-pointer min-h-[120px] sm:min-h-auto sm:col-span-2 lg:col-span-1"
             onClick={() => router.push('/dashboard/settings/organization')}
           >
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center">
-                <Users className="h-6 w-6 text-white" />
+            <div className="flex items-center space-x-3 sm:space-x-4">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                <Users className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
               </div>
-              <div>
-                <h3 className="text-lg font-semibold text-white">Team Settings</h3>
-                <p className="text-blue-200 text-sm">Configure team permissions</p>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base sm:text-lg font-semibold text-white">Team Settings</h3>
+                <p className="text-blue-200 text-xs sm:text-sm">Configure team permissions</p>
               </div>
-              <ArrowRight className="h-5 w-5 text-blue-400 ml-auto" />
+              <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 text-blue-400 flex-shrink-0" />
             </div>
           </motion.div>
         )}
       </div>
 
-      {/* Recent Activity */}
+      {/* Recent Activity - Mobile Optimized */}
       {invoices.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.7 }}
-          className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20"
+          className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20"
         >
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white">Recent Invoices</h3>
+            <h3 className="text-base sm:text-lg font-semibold text-white">Recent Invoices</h3>
             <button
               onClick={handleViewInvoices}
-              className="text-blue-400 hover:text-blue-300 text-sm"
+              className="text-blue-400 hover:text-blue-300 text-sm font-medium"
             >
               View All
             </button>
@@ -525,7 +531,7 @@ export default function SmartInvoicingPage() {
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.8 + index * 0.1 }}
-                className="flex items-center justify-between p-3 bg-white/5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                className="flex items-center justify-between p-3 bg-white/5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer min-h-[60px]"
                 onClick={() => {
                   if (invoice.status === 'draft') {
                     router.push(`/dashboard/services/smart-invoicing/create?id=${invoice._id}`);
@@ -534,24 +540,24 @@ export default function SmartInvoicingPage() {
                   }
                 }}
               >
-                <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+                <div className="flex items-center space-x-3 flex-1 min-w-0">
+                  <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
                     <FileText className="h-4 w-4 text-white" />
                   </div>
-                  <div>
-                    <p className="text-white font-medium">{invoice.invoiceNumber || 'Invoice'}</p>
-                    <p className="text-blue-200 text-sm">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white font-medium text-sm sm:text-base truncate">{invoice.invoiceNumber || 'Invoice'}</p>
+                    <p className="text-blue-200 text-xs sm:text-sm truncate">
                       {invoice.clientDetails?.companyName || 
                        [invoice.clientDetails?.firstName, invoice.clientDetails?.lastName].filter(Boolean).join(' ') || 
                        invoice.clientDetails?.email || 'Client'}
                     </p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-white font-semibold">
+                <div className="text-right flex-shrink-0 ml-3">
+                  <p className="text-white font-semibold text-sm sm:text-base">
                     <FormattedNumberDisplay value={invoice.totalAmount || 0} />
                   </p>
-                  <span className={`text-xs px-2 py-1 rounded-full ${
+                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                     invoice.status === 'paid' ? 'bg-green-100 text-green-800' :
                     invoice.status === 'sent' || invoice.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
                     invoice.status === 'draft' ? 'bg-gray-100 text-gray-800' :
@@ -566,22 +572,22 @@ export default function SmartInvoicingPage() {
         </motion.div>
       )}
 
-      {/* Empty State */}
+      {/* Empty State - Mobile Optimized */}
       {invoices.length === 0 && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.8 }}
-          className="bg-white/10 backdrop-blur-sm rounded-xl p-12 border border-white/20 text-center"
+          className="bg-white/10 backdrop-blur-sm rounded-xl p-8 sm:p-12 border border-white/20 text-center"
         >
-          <FileText className="h-16 w-16 text-blue-400 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold text-white mb-2">No invoices yet</h3>
-          <p className="text-blue-200 mb-6">
+          <FileText className="h-12 w-12 sm:h-16 sm:w-16 text-blue-400 mx-auto mb-4" />
+          <h3 className="text-lg sm:text-xl font-semibold text-white mb-2">No invoices yet</h3>
+          <p className="text-blue-200 mb-6 text-sm sm:text-base">
             Create your first invoice to get started with our comprehensive invoicing system.
           </p>
           <button
             onClick={handleCreateInvoice}
-            className="flex items-center space-x-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors mx-auto"
+            className="flex items-center justify-center space-x-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors mx-auto min-h-[44px]"
           >
             <Plus className="h-5 w-5" />
             <span>Create Your First Invoice</span>
@@ -592,10 +598,10 @@ export default function SmartInvoicingPage() {
       {/* Floating Dashboard Button */}
       <Link
         href="/dashboard"
-        className="fixed bottom-6 right-6 z-50 flex items-center justify-center w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-all duration-300 hover:scale-110"
+        className="fixed bottom-6 right-6 z-50 flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-all duration-300 hover:scale-110"
         title="View Financial Overview"
       >
-        <LayoutDashboard className="h-6 w-6" />
+        <LayoutDashboard className="h-5 w-5 sm:h-6 sm:w-6" />
       </Link>
     </div>
   );

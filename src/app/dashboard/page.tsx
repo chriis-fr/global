@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
 import DashboardSkeleton from '@/components/ui/DashboardSkeleton';
+import SubscriptionStatus from '@/components/dashboard/SubscriptionStatus';
 
 interface DashboardStats {
   totalRevenue: number;
@@ -56,21 +57,25 @@ export default function DashboardPage() {
         setLoading(true);
         
         // Fetch data in parallel like the services pages do - without timeout
-        const [invoicesResponse, clientsResponse, ledgerResponse] = await Promise.all([
+        const [invoicesResponse, paidInvoicesResponse, clientsResponse, ledgerResponse] = await Promise.all([
           fetch('/api/invoices?limit=1&convertToPreferred=true'),
+          fetch('/api/invoices?status=paid&convertToPreferred=true'), // Get only paid invoices
           fetch('/api/clients'),
           fetch('/api/ledger')
         ]);
 
         const invoicesData = await invoicesResponse.json();
+        const paidInvoicesData = await paidInvoicesResponse.json();
         const clientsData = await clientsResponse.json();
         const ledgerData = await ledgerResponse.json();
 
         console.log('Dashboard: API responses:', {
           invoices: invoicesData.success,
+          paidInvoices: paidInvoicesData.success,
           clients: clientsData.success,
           ledger: ledgerData.success,
           invoicesStatus: invoicesResponse.status,
+          paidInvoicesStatus: paidInvoicesResponse.status,
           clientsStatus: clientsResponse.status,
           ledgerStatus: ledgerResponse.status
         });
@@ -80,7 +85,9 @@ export default function DashboardPage() {
         // Use total revenue from API stats (includes all invoices, not just paginated ones)
         const totalRevenue = invoicesData.success ? invoicesData.data.stats?.totalRevenue || 0 : 0;
         
-        // Get correct counts from the API stats (these are calculated from total count, not paginated results)
+        // Calculate paid revenue from paid invoices only
+        const paidRevenue = paidInvoicesData.success ? paidInvoicesData.data.stats?.totalRevenue || 0 : 0;
+
         const statusCounts = invoicesData.success ? invoicesData.data.stats?.statusCounts || {} : {};
         const pendingInvoices = (statusCounts.sent || 0) + (statusCounts.pending || 0);
         const paidInvoices = statusCounts.paid || 0;
@@ -90,24 +97,28 @@ export default function DashboardPage() {
         // Get unified financial stats from ledger
         const ledgerStats = ledgerData.success ? ledgerData.data.stats : null;
 
+        // Calculate net balance from paid revenue only
+        const netBalance = paidRevenue - totalExpenses;
+
         setStats({
           totalRevenue,
           totalExpenses,
           pendingInvoices,
           paidInvoices,
           totalClients: clients.length,
-          // Net balance = receivables (invoices) - payables (bills)
-          netBalance: totalRevenue - (ledgerStats?.totalPayablesAmount || 0),
+          // Net balance = received payments (paid invoices) - payables (bills)
+          netBalance: netBalance,
           totalPayables: ledgerStats?.totalPayablesAmount || 0,
           overdueCount: (ledgerStats?.overdueReceivables || 0) + (ledgerStats?.overduePayables || 0)
         });
 
         console.log('✅ Dashboard: Stats loaded successfully', {
           totalRevenue,
+          paidRevenue,
           pendingInvoices,
           paidInvoices,
           totalClients: clients.length,
-          netBalance: totalRevenue - (ledgerStats?.totalPayablesAmount || 0)
+          netBalance: netBalance
         });
 
         // Reset fallback data flag if we successfully loaded data
@@ -311,6 +322,7 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+      <SubscriptionStatus />
     </div>
   );
 } 

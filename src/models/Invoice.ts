@@ -56,6 +56,7 @@ export interface PaymentSettings {
   cryptoNetwork?: string;
   cryptoCurrency?: string;
   walletAddress?: string;
+  tokenAddress?: string; // Contract address for the crypto token
   bankAccount?: {
     accountNumber: string;
     routingNumber: string;
