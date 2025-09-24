@@ -175,6 +175,9 @@ export default function DashboardPage() {
     return Math.max(0, limit - subscription.usage.invoicesThisMonth);
   };
 
+  // Check if user has access to receivables (paid plans only)
+  const hasReceivablesAccess = subscription?.plan?.planId !== 'receivables-free';
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -233,7 +236,7 @@ export default function DashboardPage() {
       )}
 
       {/* Financial Overview - Minimalistic Request Finance Style */}
-      <div className={`grid gap-6 ${subscription?.canAccessPayables ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'}`}>
+      <div className={`grid gap-6 ${hasReceivablesAccess && subscription?.canAccessPayables ? 'grid-cols-1 md:grid-cols-3' : hasReceivablesAccess || subscription?.canAccessPayables ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
         {/* Net Balance - Primary metric */}
         <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
           <div className="flex items-center justify-between">
@@ -256,21 +259,23 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Receivables (Invoices) */}
-        <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-blue-200 text-sm font-medium">Receivables</p>
-              <p className="text-2xl font-bold text-white">
-                <FormattedNumberDisplay value={stats.totalRevenue} />
-              </p>
-              <p className="text-xs text-blue-300 mt-1">{stats.pendingInvoices} pending invoices</p>
-            </div>
-            <div className="p-3 bg-blue-500/20 rounded-lg">
-              <ArrowUpRight className="h-6 w-6 text-blue-400" />
+        {/* Receivables (Invoices) - Only show for paid plans */}
+        {hasReceivablesAccess && (
+          <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-blue-200 text-sm font-medium">Receivables</p>
+                <p className="text-2xl font-bold text-white">
+                  <FormattedNumberDisplay value={stats.totalRevenue} />
+                </p>
+                <p className="text-xs text-blue-300 mt-1">{stats.pendingInvoices} pending invoices</p>
+              </div>
+              <div className="p-3 bg-blue-500/20 rounded-lg">
+                <ArrowUpRight className="h-6 w-6 text-blue-400" />
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Payables (Bills) - Only show if user has access */}
         {subscription?.canAccessPayables && (
