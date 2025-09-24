@@ -32,8 +32,8 @@ export const BILLING_PLANS: BillingPlan[] = [
     description: 'Ideal for growing businesses',
     monthlyPrice: 11.99,
     yearlyPrice: 119.99,
-    monthlyPriceId: 'price_1SAV6sAGa3OwCLplFnkyUqrm', // Monthly
-    yearlyPriceId: 'price_1SAV6rAGa3OwCLplontxFK5u', // Yearly
+    monthlyPriceId: 'price_1SAV6rAGa3OwCLplontxFK5u', // Monthly
+    yearlyPriceId: 'price_1SAV6sAGa3OwCLplFnkyUqrm', // Yearly
     currency: 'USD',
     features: [
       { id: 'unlimited-invoices', name: 'Unlimited invoices', description: 'Create as many invoices as you need', included: true },

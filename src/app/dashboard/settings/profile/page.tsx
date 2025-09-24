@@ -1,11 +1,13 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { LogoManager } from '@/components/LogoManager';
-import { Image, ChevronDown } from 'lucide-react';
+import { Image, ChevronDown, Crown, ArrowRight } from 'lucide-react';
 import NextImage from 'next/image';
 import DashboardFloatingButton from '@/components/DashboardFloatingButton';
 import { fiatCurrencies } from '@/data/currencies';
 import { useCurrency } from '@/lib/contexts/CurrencyContext';
+import { useSubscription } from '@/lib/contexts/SubscriptionContext';
+import { useRouter } from 'next/navigation';
 
 interface ProfileData {
   name: string;
@@ -33,6 +35,8 @@ interface Logo {
 }
 
 export default function ProfileSettingsPage() {
+  const router = useRouter();
+  const { subscription } = useSubscription();
   const [formData, setFormData] = useState<ProfileData>({
     name: '',
     email: '',
@@ -129,6 +133,27 @@ export default function ProfileSettingsPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  // Get plan display name
+  const getPlanDisplayName = () => {
+    if (!subscription?.plan) return 'Free Plan';
+    
+    const planId = subscription.plan.planId;
+    if (planId === 'receivables-free') return 'Receivables Free';
+    if (planId === 'receivables-basic') return 'Receivables Basic';
+    if (planId === 'receivables-pro') return 'Receivables Pro';
+    if (planId === 'payables-basic') return 'Payables Basic';
+    if (planId === 'payables-pro') return 'Payables Pro';
+    if (planId === 'combined-basic') return 'Combined Basic';
+    if (planId === 'combined-pro') return 'Combined Pro';
+    
+    return 'Pro Plan';
+  };
+
+  // Handle upgrade
+  const handleUpgrade = () => {
+    router.push('/pricing');
   };
 
   if (loading) {
@@ -367,6 +392,43 @@ export default function ProfileSettingsPage() {
           </div>
         </div>
       </form>
+
+      {/* Subscription Plan Section */}
+      <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 mb-8">
+        <div className="flex items-center space-x-3 mb-6">
+          <Crown className="h-6 w-6 text-blue-400" />
+          <h2 className="text-xl font-semibold text-white">Subscription Plan</h2>
+        </div>
+        
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-blue-500/20 rounded-lg">
+              <Crown className="h-5 w-5 text-blue-400" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-white text-sm sm:text-base">Current Plan</h3>
+              <p className="text-blue-200 text-xs sm:text-sm">{getPlanDisplayName()}</p>
+              {subscription?.plan?.planId === 'receivables-free' && (
+                <p className="text-blue-300 text-xs mt-1">
+                  {subscription.isTrialActive 
+                    ? `${subscription.trialDaysRemaining} days left in trial`
+                    : 'Trial expired'
+                  }
+                </p>
+              )}
+            </div>
+          </div>
+          
+          <button
+            onClick={handleUpgrade}
+            className="flex items-center space-x-2 px-4 py-2 sm:px-6 sm:py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all shadow-sm font-medium"
+          >
+            <Crown className="h-4 w-4" />
+            <span>Upgrade Plan</span>
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
 
       {/* Logo Management Section */}
       <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">

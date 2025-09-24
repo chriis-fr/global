@@ -14,6 +14,8 @@ export async function POST(request: NextRequest) {
 
     const { planId, billingPeriod } = await request.json();
 
+    console.log('🔍 [CheckoutSession] Request received:', { planId, billingPeriod });
+
     if (!planId || !billingPeriod) {
       return NextResponse.json(
         { success: false, error: 'Plan ID and billing period are required' },
@@ -32,6 +34,16 @@ export async function POST(request: NextRequest) {
 
     // Get price ID from the plan
     const priceId = billingPeriod === 'yearly' ? plan.yearlyPriceId : plan.monthlyPriceId;
+    
+    console.log('🔍 [CheckoutSession] Price selection:', {
+      billingPeriod,
+      monthlyPriceId: plan.monthlyPriceId,
+      yearlyPriceId: plan.yearlyPriceId,
+      selectedPriceId: priceId,
+      monthlyPrice: plan.monthlyPrice,
+      yearlyPrice: plan.yearlyPrice
+    });
+
     if (!priceId) {
       return NextResponse.json(
         { success: false, error: 'Price ID not found for this plan' },
