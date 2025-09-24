@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
 
   if (endpointWebhookSecret) {
     console.log(" [Webhook] Verifying webhook signature");
-    const signature = request.headers.get('stripe-signature');
+        const signature = request.headers.get('stripe-signature');
     console.log("📝 [Webhook] Signature:", signature);
     
     try {

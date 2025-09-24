@@ -11,15 +11,18 @@ import {
   Zap,
   Building2,
   CreditCard,
-  Loader2
+  Loader2,
+  CheckCircle
 } from 'lucide-react'
 import Image from 'next/image'
 import { Header } from '@/components/landing/header'
 import { BILLING_PLANS } from '@/data/billingPlans'
 import { BillingPlan, PlanType, BillingPeriod } from '@/models/Billing'
+import { useSubscription } from '@/lib/contexts/SubscriptionContext'
 
 export default function PricingPage() {
   const { data: session } = useSession()
+  const { subscription } = useSubscription()
   const router = useRouter()
   const [selectedType, setSelectedType] = useState<PlanType>('receivables')
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly')
@@ -208,6 +211,7 @@ export default function PricingPage() {
                 billingPeriod={billingPeriod}
                 onSubscribe={handleSubscribe}
                 loading={loading === plan.planId}
+                isCurrentPlan={session && subscription?.plan?.planId === plan.planId ? true : undefined}
               />
             ))}
           </div>
@@ -251,12 +255,14 @@ function PlanCard({
   plan, 
   billingPeriod, 
   onSubscribe, 
-  loading 
+  loading,
+  isCurrentPlan
 }: { 
   plan: BillingPlan
   billingPeriod: BillingPeriod
   onSubscribe: (plan: BillingPlan) => void
   loading: boolean
+  isCurrentPlan?: boolean
 }) {
   const price = billingPeriod === 'yearly' ? plan.yearlyPrice : plan.monthlyPrice
   const monthlyEquivalent = billingPeriod === 'yearly' ? plan.yearlyPrice / 12 : plan.monthlyPrice
@@ -264,12 +270,21 @@ function PlanCard({
   return (
     <div className={`relative bg-white rounded-2xl p-8 border-2 transition-all hover:scale-105 ${
       plan.popular ? 'border-blue-500 shadow-2xl shadow-blue-500/20' : 'border-gray-200'
-    }`}>
+    } ${isCurrentPlan ? 'ring-2 ring-green-500 ring-opacity-50' : ''}`}>
       {plan.popular && (
         <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
           <div className="bg-blue-500 text-white px-4 py-1 rounded-full text-sm font-semibold flex items-center gap-1">
             <Star className="h-4 w-4" />
             Most Popular
+          </div>
+        </div>
+      )}
+
+      {isCurrentPlan && (
+        <div className="absolute -top-4 right-4">
+          <div className="bg-green-500 text-white px-3 py-1 rounded-full text-sm font-semibold flex items-center gap-1">
+            <CheckCircle className="h-4 w-4" />
+            Current
           </div>
         </div>
       )}
@@ -313,9 +328,11 @@ function PlanCard({
 
       <button
         onClick={() => onSubscribe(plan)}
-        disabled={loading}
+        disabled={loading || isCurrentPlan}
         className={`w-full py-3 px-6 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
-          plan.ctaVariant === 'primary'
+          isCurrentPlan
+            ? 'bg-green-100 text-green-700 cursor-not-allowed'
+            : plan.ctaVariant === 'primary'
             ? 'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-400'
             : plan.ctaVariant === 'secondary'
             ? 'bg-gray-600 text-white hover:bg-gray-700 disabled:bg-gray-400'
@@ -326,6 +343,11 @@ function PlanCard({
           <>
             <Loader2 className="h-4 w-4 animate-spin" />
             <span>Processing...</span>
+          </>
+        ) : isCurrentPlan ? (
+          <>
+            <CheckCircle className="h-4 w-4" />
+            <span>Current Plan</span>
           </>
         ) : (
           plan.ctaText

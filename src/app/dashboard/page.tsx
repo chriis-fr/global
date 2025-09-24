@@ -12,7 +12,8 @@ import {
   ArrowDownLeft,
   AlertTriangle,
   Clock,
-  Crown
+  Crown,
+  Lock
 } from 'lucide-react';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
 import DashboardSkeleton from '@/components/ui/DashboardSkeleton';
@@ -170,20 +171,36 @@ export default function DashboardPage() {
 
   const getRemainingInvoices = () => {
     if (!subscription) return 0;
-    const limit = subscription.limits.invoicesPerMonth;
-    if (limit === -1) return 'Unlimited';
-    return Math.max(0, limit - subscription.usage.invoicesThisMonth);
+    
+    if (subscription.limits.invoicesPerMonth === -1) return '∞';
+    return Math.max(0, subscription.limits.invoicesPerMonth - subscription.usage.invoicesThisMonth);
+  };
+
+  const getUsageText = () => {
+    if (!subscription) return '';
+    
+    return `${subscription.usage.invoicesThisMonth} / ${subscription.limits.invoicesPerMonth === -1 ? '∞' : subscription.limits.invoicesPerMonth}`;
   };
 
   // Check if user has access to receivables (paid plans only)
   const hasReceivablesAccess = subscription?.plan?.planId !== 'receivables-free';
+
+  // Check if user is on a paid plan
+  const isPaidUser = subscription?.plan?.planId && subscription.plan.planId !== 'receivables-free';
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Overview</h1>
+            <h1 className="text-2xl md:text-3xl font-bold text-white mb-2 flex items-center gap-2">
+              Overview
+              {isPaidUser && (
+                <span className="bg-gradient-to-r from-yellow-400 to-orange-500 text-black text-xs font-bold px-2 py-1 rounded-full">
+                  PRO
+                </span>
+              )}
+            </h1>
             <p className="text-blue-200">Welcome back, {session?.user?.name || 'User'}!</p>
             {usingFallbackData && (
               <div className="mt-2 flex items-center space-x-2">
@@ -198,19 +215,19 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Plan Status Banner */}
-      {subscription && (
-        <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4">
+      {/* Plan Status Banner - Only show for free users */}
+      {subscription && subscription.plan?.planId === 'receivables-free' && (
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-3 md:p-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2 md:space-x-3">
               {subscription.isTrialActive ? (
-                <Clock className="h-5 w-5 text-yellow-400" />
+                <Clock className="h-4 w-4 md:h-5 md:w-5 text-yellow-400" />
               ) : (
-                <Crown className="h-5 w-5 text-blue-400" />
+                <Crown className="h-4 w-4 md:h-5 md:w-5 text-blue-400" />
               )}
               <div>
-                <h3 className="font-semibold text-white">{getPlanDisplayName()}</h3>
-                <p className="text-sm text-blue-200">
+                <h3 className="font-semibold text-white text-sm md:text-base">{getPlanDisplayName()}</h3>
+                <p className="text-xs md:text-sm text-blue-200">
                   {subscription.isTrialActive 
                     ? `${subscription.trialDaysRemaining} days left in trial`
                     : subscription.status === 'active' 
@@ -221,9 +238,9 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="text-right">
-              <p className="text-sm text-blue-200">Invoices this month</p>
-              <p className="text-lg font-semibold text-white">
-                {subscription.usage.invoicesThisMonth} / {subscription.limits.invoicesPerMonth === -1 ? '∞' : subscription.limits.invoicesPerMonth}
+              <p className="text-xs md:text-sm text-blue-200">Invoices this month</p>
+              <p className="text-sm md:text-lg font-semibold text-white">
+                {getUsageText()}
               </p>
               {subscription.limits.invoicesPerMonth !== -1 && (
                 <p className="text-xs text-blue-300">
@@ -302,15 +319,24 @@ export default function DashboardPage() {
         <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
           <h3 className="text-lg font-semibold text-white mb-4">Quick Actions</h3>
           <div className="flex flex-col space-y-3">
-            {subscription?.canCreateInvoice && (
-              <button
-                onClick={() => router.push('/dashboard/services/smart-invoicing/create')}
-                className="flex items-center space-x-3 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <FileText className="h-5 w-5" />
-                <span>Create Invoice</span>
-              </button>
-            )}
+            <button
+              onClick={() => router.push('/dashboard/services/smart-invoicing/create')}
+              disabled={!subscription?.canCreateInvoice}
+              className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+                subscription?.canCreateInvoice
+                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'bg-gray-500 text-gray-300 cursor-not-allowed'
+              }`}
+            >
+              <FileText className="h-5 w-5" />
+              <span>Create Invoice</span>
+              {!subscription?.canCreateInvoice && (
+                <>
+                  <span className="text-xs ml-auto">Limit Reached</span>
+                  <Lock className="h-4 w-4" />
+                </>
+              )}
+            </button>
             
             {subscription?.canAccessPayables && (
               <button

@@ -20,7 +20,6 @@ import {
   Receipt
 } from 'lucide-react';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
-import NotificationBadge from './NotificationBadge';
 import Image from 'next/image';
 import { useSubscription } from '@/lib/contexts/SubscriptionContext';
 
@@ -241,12 +240,10 @@ export default function Sidebar() {
           <div className="flex items-center space-x-2">
             <Link
               href="/dashboard/notifications"
-              onClick={closeMobileMenu}
               className="relative p-2 text-white/70 hover:text-white hover:bg-blue-900/50 rounded-lg transition-colors"
               title="Notifications"
             >
               <Bell className="h-5 w-5" />
-              <NotificationBadge />
             </Link>
             
             {/* Mobile Close Button */}

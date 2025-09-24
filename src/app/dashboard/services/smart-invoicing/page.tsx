@@ -17,12 +17,15 @@ import {
   List,
   Building2,
   LayoutDashboard,
-  AlertCircle
+  AlertCircle,
+  Lock
 } from 'lucide-react';
 import { InvoiceService, InvoiceStats } from '@/lib/services/invoiceService';
 import { Invoice } from '@/models/Invoice';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
 import InvoicingSkeleton from '@/components/ui/InvoicingSkeleton';
+import { useSubscription } from '@/lib/contexts/SubscriptionContext';
+
 // Cache key for localStorage
 const CACHE_KEY = 'smart-invoicing-cache';
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes - stable cache for good UX
@@ -37,6 +40,7 @@ interface CachedData {
 export default function SmartInvoicingPage() {
   const router = useRouter();
   const { data: session } = useSession();
+  const { subscription } = useSubscription();
 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [stats, setStats] = useState<InvoiceStats>({
@@ -237,6 +241,12 @@ export default function SmartInvoicingPage() {
   }, [dataLoaded]);
 
   const handleCreateInvoice = () => {
+    // Check if user can create invoice (limit reached)
+    if (!subscription?.canCreateInvoice) {
+      // Don't navigate if limit is reached
+      return;
+    }
+    
     // Only check onboarding if we have the data, otherwise assume it's completed
     if (dataLoaded && isOnboardingCompleted === false) {
       router.push('/dashboard/services/smart-invoicing/onboarding');
@@ -305,17 +315,26 @@ export default function SmartInvoicingPage() {
               <span>View Invoices</span>
             </motion.button>
             <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              whileHover={{ scale: subscription?.canCreateInvoice ? 1.05 : 1 }}
+              whileTap={{ scale: subscription?.canCreateInvoice ? 0.95 : 1 }}
               onClick={handleCreateInvoice}
-              className="flex items-center justify-center space-x-2 bg-blue-600 text-white px-4 py-3 sm:px-4 sm:py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm sm:text-base min-h-[44px] sm:min-h-auto"
+              disabled={!subscription?.canCreateInvoice}
+              className={`flex items-center justify-center space-x-2 px-4 py-3 sm:px-4 sm:py-2 rounded-lg transition-colors text-sm sm:text-base min-h-[44px] sm:min-h-auto ${
+                subscription?.canCreateInvoice
+                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'bg-gray-500 text-gray-300 cursor-not-allowed'
+              }`}
             >
               <Plus className="h-4 w-4 sm:h-5 sm:w-5" />
               <span className="text-center">
-                {!dataLoaded && loading ? 'Loading...' : 
+                {!subscription?.canCreateInvoice ? 'Limit Reached' :
+                 !dataLoaded && loading ? 'Loading...' : 
                  dataLoaded && isOnboardingCompleted === false ? 'Setup & Create' : 
                  'Create Invoice'}
               </span>
+              {!subscription?.canCreateInvoice && (
+                <Lock className="h-4 w-4 sm:h-5 sm:w-5" />
+              )}
             </motion.button>
           </div>
         </div>
@@ -430,18 +449,37 @@ export default function SmartInvoicingPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
-            className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20 hover:bg-white/20 transition-colors cursor-pointer min-h-[120px] sm:min-h-auto"
-            onClick={handleCreateInvoice}
+            className={`backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20 transition-colors cursor-pointer min-h-[120px] sm:min-h-auto ${
+              subscription?.canCreateInvoice 
+                ? 'bg-white/10 hover:bg-white/20' 
+                : 'bg-gray-500/20 cursor-not-allowed'
+            }`}
+            onClick={subscription?.canCreateInvoice ? handleCreateInvoice : undefined}
           >
             <div className="flex items-center space-x-3 sm:space-x-4">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                <Plus className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+              <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                subscription?.canCreateInvoice ? 'bg-blue-600' : 'bg-gray-500'
+              }`}>
+                {subscription?.canCreateInvoice ? (
+                  <Plus className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+                ) : (
+                  <Lock className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+                )}
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="text-base sm:text-lg font-semibold text-white">Create New Invoice</h3>
-                <p className="text-blue-200 text-xs sm:text-sm">Start with our guided walkthrough</p>
+                <h3 className="text-base sm:text-lg font-semibold text-white">
+                  {subscription?.canCreateInvoice ? 'Create New Invoice' : 'Invoice Limit Reached'}
+                </h3>
+                <p className="text-blue-200 text-xs sm:text-sm">
+                  {subscription?.canCreateInvoice 
+                    ? 'Start with our guided walkthrough' 
+                    : 'Upgrade to create more invoices'
+                  }
+                </p>
               </div>
-              <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 text-blue-400 flex-shrink-0" />
+              {subscription?.canCreateInvoice && (
+                <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 text-blue-400 flex-shrink-0" />
+              )}
             </div>
           </motion.div>
         )}
@@ -587,10 +625,24 @@ export default function SmartInvoicingPage() {
           </p>
           <button
             onClick={handleCreateInvoice}
-            className="flex items-center justify-center space-x-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors mx-auto min-h-[44px]"
+            disabled={!subscription?.canCreateInvoice}
+            className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-lg transition-colors mx-auto min-h-[44px] ${
+              subscription?.canCreateInvoice
+                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                : 'bg-gray-500 text-gray-300 cursor-not-allowed'
+            }`}
           >
-            <Plus className="h-5 w-5" />
-            <span>Create Your First Invoice</span>
+            {subscription?.canCreateInvoice ? (
+              <>
+                <Plus className="h-5 w-5" />
+                <span>Create Your First Invoice</span>
+              </>
+            ) : (
+              <>
+                <Lock className="h-5 w-5" />
+                <span>Limit Reached</span>
+              </>
+            )}
           </button>
         </motion.div>
       )}

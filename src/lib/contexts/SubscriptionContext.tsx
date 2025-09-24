@@ -2,30 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
-
-interface SubscriptionData {
-  plan: {
-    planId: string;
-    type: string;
-    tier: string;
-  } | null;
-  status: string;
-  isTrialActive: boolean;
-  trialDaysRemaining: number;
-  usage: {
-    invoicesThisMonth: number;
-    monthlyVolume: number;
-  };
-  canCreateOrganization: boolean;
-  canAccessPayables: boolean;
-  canCreateInvoice: boolean;
-  canUseAdvancedFeatures: boolean;
-  limits: {
-    invoicesPerMonth: number;
-    monthlyVolume: number;
-    cryptoToCryptoFee: number;
-  };
-}
+import { getUserSubscription, SubscriptionData } from '@/lib/actions/subscription';
 
 interface SubscriptionContextType {
   subscription: SubscriptionData | null;
@@ -47,90 +24,104 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
 
   const fetchSubscription = useCallback(async () => {
     if (!session?.user?.id) {
+      setSubscription(null);
       setLoading(false);
       return;
     }
 
+    // Check if we have recent cached data
     const now = Date.now();
-    
-    // Check cache first
-    if (subscription && (now - lastFetch) < CACHE_DURATION) {
+    if (now - lastFetch < CACHE_DURATION) {
+      console.log('📦 [SubscriptionContext] Using cached subscription data');
       setLoading(false);
       return;
     }
+
+    console.log('🔄 [SubscriptionContext] Fetching subscription data via server action...');
+    setLoading(true);
+    setError(null);
 
     try {
-      setLoading(true);
-      setError(null);
-
-      const response = await fetch('/api/billing/current', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: Failed to fetch subscription data`);
-      }
-
-      const data = await response.json();
+      const subscriptionData = await getUserSubscription();
       
-      if (data.success) {
-        setSubscription(data.data);
+      if (subscriptionData) {
+        setSubscription(subscriptionData);
         setLastFetch(now);
-        setError(null);
+        console.log('✅ [SubscriptionContext] Subscription data received:', subscriptionData);
       } else {
-        throw new Error(data.error || 'Failed to fetch subscription');
+        throw new Error('Failed to fetch subscription data');
       }
     } catch (err) {
-      console.error('Error fetching subscription:', err);
-      setError(err instanceof Error ? err.message : 'Unknown error occurred');
+      console.error('❌ [SubscriptionContext] Error fetching subscription:', err);
+      setError(err instanceof Error ? err.message : 'Failed to fetch subscription');
+      
+      // Provide fallback subscription for free plan users
+      if (session?.user?.id) {
+        console.log('🔄 [SubscriptionContext] Providing fallback free plan subscription');
+        setSubscription({
+          plan: {
+            planId: 'receivables-free',
+            type: 'receivables',
+            tier: 'free'
+          },
+          status: 'active',
+          isTrialActive: false,
+          trialDaysRemaining: 0,
+          usage: {
+            invoicesThisMonth: 0,
+            monthlyVolume: 0,
+            recentInvoiceCount: 0
+          },
+          canCreateOrganization: false,
+          canAccessPayables: false,
+          canCreateInvoice: true,
+          canUseAdvancedFeatures: false,
+          limits: {
+            invoicesPerMonth: 5,
+            monthlyVolume: 0,
+            cryptoToCryptoFee: 0.9
+          }
+        });
+      }
     } finally {
       setLoading(false);
     }
-  }, [session?.user?.id, subscription, lastFetch]);
+  }, [session?.user?.id, lastFetch]);
 
-  // Initial fetch
   useEffect(() => {
     fetchSubscription();
   }, [fetchSubscription]);
 
-  // Refetch on window focus if cache is old
+  // Refetch on window focus if cache is older than 30 minutes
   useEffect(() => {
     const handleFocus = () => {
       const now = Date.now();
-      if (session?.user?.id && (now - lastFetch) > 30 * 60 * 1000) { // 30 minutes
+      if (now - lastFetch > 30 * 60 * 1000) { // 30 minutes
+        console.log('🔄 [SubscriptionContext] Window focused, refetching subscription data');
         fetchSubscription();
       }
     };
 
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
-  }, [session?.user?.id, lastFetch, fetchSubscription]);
+  }, [fetchSubscription, lastFetch]);
 
   const refetch = useCallback(() => {
+    setLastFetch(0); // Reset cache to force refetch
     fetchSubscription();
   }, [fetchSubscription]);
 
-  const value = {
-    subscription,
-    loading,
-    error,
-    refetch
-  };
-
   return (
-    <SubscriptionContext.Provider value={value}>
+    <SubscriptionContext.Provider value={{ subscription, loading, error, refetch }}>
       {children}
     </SubscriptionContext.Provider>
-  );
+  )
 }
 
 export function useSubscription() {
-  const context = useContext(SubscriptionContext);
+  const context = useContext(SubscriptionContext)
   if (context === undefined) {
-    throw new Error('useSubscription must be used within a SubscriptionProvider');
+    throw new Error('useSubscription must be used within a SubscriptionProvider')
   }
-  return context;
+  return context
 }

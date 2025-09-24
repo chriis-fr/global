@@ -117,7 +117,7 @@ export class SubscriptionService {
       };
     }
 
-    // Check usage limits
+    // Check usage limits - all plans use monthly limits
     if (subscription.limits.invoicesPerMonth > 0 && 
         subscription.usage.invoicesThisMonth >= subscription.limits.invoicesPerMonth) {
       console.log('❌ [SubscriptionService] Monthly limit reached for user:', userId);
@@ -130,6 +130,151 @@ export class SubscriptionService {
 
     console.log('✅ [SubscriptionService] Invoice creation allowed for user:', userId);
     return { allowed: true };
+  }
+
+  // Get count of invoices for current month
+  static async getCurrentMonthInvoiceCount(userId: ObjectId): Promise<number> {
+    console.log('🔍 [SubscriptionService] Getting current month invoice count for user:', userId);
+    const db = await getDatabase();
+    
+    // Get user email for query
+    const user = await db.collection('users').findOne({ _id: userId });
+    if (!user) {
+      console.log('❌ [SubscriptionService] User not found for invoice count');
+      return 0;
+    }
+    
+    console.log(' [SubscriptionService] User details:', {
+      userId: userId.toString(),
+      userEmail: user.email,
+      userObjectId: user._id.toString()
+    });
+    
+    // Get start and end of current month
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    
+    console.log('📅 [SubscriptionService] Date range for current month:', {
+      startOfMonth: startOfMonth.toISOString(),
+      endOfMonth: endOfMonth.toISOString(),
+      currentMonth: now.getMonth() + 1,
+      currentYear: now.getFullYear(),
+      currentDate: now.toISOString()
+    });
+    
+    // Try multiple query approaches to find invoices
+    console.log('🔍 [SubscriptionService] Attempting to find invoices with multiple queries...');
+    
+    // Query 1: Try with ObjectId
+    const query1 = await db.collection('invoices').find({
+      issuerId: userId,
+      createdAt: { 
+        $gte: startOfMonth,
+        $lte: endOfMonth
+      }
+    }).toArray();
+    
+    console.log('📋 [SubscriptionService] Query 1 (issuerId: ObjectId):', {
+      count: query1.length,
+      invoices: query1.map(inv => ({
+        id: inv._id,
+        invoiceNumber: inv.invoiceNumber,
+        issuerId: inv.issuerId,
+        createdAt: inv.createdAt
+      }))
+    });
+    
+    // Query 2: Try with ObjectId as string
+    const query2 = await db.collection('invoices').find({
+      issuerId: userId.toString(),
+      createdAt: { 
+        $gte: startOfMonth,
+        $lte: endOfMonth
+      }
+    }).toArray();
+    
+    console.log('📋 [SubscriptionService] Query 2 (issuerId: string):', {
+      count: query2.length,
+      invoices: query2.map(inv => ({
+        id: inv._id,
+        invoiceNumber: inv.invoiceNumber,
+        issuerId: inv.issuerId,
+        createdAt: inv.createdAt
+      }))
+    });
+    
+    // Query 3: Try with user email
+    const query3 = await db.collection('invoices').find({
+      userId: user.email,
+      createdAt: { 
+        $gte: startOfMonth,
+        $lte: endOfMonth
+      }
+    }).toArray();
+    
+    console.log('📋 [SubscriptionService] Query 3 (userId: email):', {
+      count: query3.length,
+      invoices: query3.map(inv => ({
+        id: inv._id,
+        invoiceNumber: inv.invoiceNumber,
+        userId: inv.userId,
+        createdAt: inv.createdAt
+      }))
+    });
+    
+    // Query 4: Try without date filter first to see all user invoices
+    const allInvoices = await db.collection('invoices').find({
+      $or: [
+        { issuerId: userId },
+        { issuerId: userId.toString() },
+        { userId: user.email },
+        { userId: userId.toString() }
+      ]
+    }).toArray();
+    
+    console.log('📋 [SubscriptionService] All user invoices (no date filter):', {
+      count: allInvoices.length,
+      invoices: allInvoices.map(inv => ({
+        id: inv._id,
+        invoiceNumber: inv.invoiceNumber,
+        issuerId: inv.issuerId,
+        userId: inv.userId,
+        createdAt: inv.createdAt,
+        createdAtType: typeof inv.createdAt,
+        createdAtString: inv.createdAt?.toString()
+      }))
+    });
+    
+    // Now filter by current month manually
+    const currentMonthInvoices = allInvoices.filter(invoice => {
+      if (!invoice.createdAt) return false;
+      
+      const invoiceDate = new Date(invoice.createdAt);
+      const isInCurrentMonth = invoiceDate >= startOfMonth && invoiceDate <= endOfMonth;
+      
+      console.log('📅 [SubscriptionService] Checking invoice date:', {
+        invoiceId: invoice._id,
+        invoiceNumber: invoice.invoiceNumber,
+        invoiceDate: invoiceDate.toISOString(),
+        startOfMonth: startOfMonth.toISOString(),
+        endOfMonth: endOfMonth.toISOString(),
+        isInCurrentMonth
+      });
+      
+      return isInCurrentMonth;
+    });
+    
+    console.log('📊 [SubscriptionService] Final current month invoices:', {
+      count: currentMonthInvoices.length,
+      invoices: currentMonthInvoices.map(inv => ({
+        id: inv._id,
+        invoiceNumber: inv.invoiceNumber,
+        createdAt: inv.createdAt
+      }))
+    });
+    
+    return currentMonthInvoices.length;
   }
 
   // Subscribe user to a plan (called by webhook)
@@ -188,6 +333,7 @@ export class SubscriptionService {
     usage: {
       invoicesThisMonth: number;
       monthlyVolume: number;
+      recentInvoiceCount: number;
     };
     canCreateOrganization: boolean;
     canAccessPayables: boolean;
@@ -228,7 +374,7 @@ export class SubscriptionService {
   }
 
   // Process subscription data (extracted for reusability)
-  private static processSubscriptionData(user: UserData): {
+  private static async processSubscriptionData(user: UserData): Promise<{
     plan: BillingPlan | null;
     status: string;
     isTrialActive: boolean;
@@ -236,6 +382,7 @@ export class SubscriptionService {
     usage: {
       invoicesThisMonth: number;
       monthlyVolume: number;
+      recentInvoiceCount: number;
     };
     canCreateOrganization: boolean;
     canAccessPayables: boolean;
@@ -246,7 +393,7 @@ export class SubscriptionService {
       monthlyVolume: number;
       cryptoToCryptoFee: number;
     };
-  } {
+  }> {
     const subscription = user.subscription || {};
     const usage = user.usage || {};
     const planId = subscription.planId || 'receivables-free';
@@ -291,14 +438,18 @@ export class SubscriptionService {
       cryptoToCryptoFee: plan?.limits?.cryptoToCryptoFee || 0.9,
     };
 
+    // Get current month invoice count for all users (to show accurate count)
+    const currentMonthInvoiceCount = await this.getCurrentMonthInvoiceCount(user._id);
+
     const result = {
       plan,
       status: subscription.status || 'active', // Default to active for free plan
       isTrialActive,
       trialDaysRemaining,
       usage: {
-        invoicesThisMonth: usage.invoicesThisMonth || 0,
+        invoicesThisMonth: currentMonthInvoiceCount, // Use actual count from database
         monthlyVolume: usage.monthlyVolume || 0,
+        recentInvoiceCount: currentMonthInvoiceCount, // For free users, this is the same as monthly
       },
       canCreateOrganization,
       canAccessPayables,
@@ -314,7 +465,8 @@ export class SubscriptionService {
       canCreateInvoice: result.canCreateInvoice,
       canAccessPayables: result.canAccessPayables,
       isTrialActive: result.isTrialActive,
-      trialDaysRemaining: result.trialDaysRemaining
+      trialDaysRemaining: result.trialDaysRemaining,
+      currentMonthInvoiceCount: result.usage.invoicesThisMonth
     });
 
     return result;

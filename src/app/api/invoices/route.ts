@@ -6,6 +6,7 @@ import { ObjectId, Db } from 'mongodb';
 import { CurrencyService } from '@/lib/services/currencyService';
 import { LedgerSyncService } from '@/lib/services/ledgerSyncService';
 import { SubscriptionService } from '@/lib/services/subscriptionService';
+import { canCreateInvoice } from '@/lib/actions/subscription';
 
 // Secure invoice number generation function
 const generateSecureInvoiceNumber = async (db: Db, organizationId: string, ownerId: string, excludeNumber?: string): Promise<string> => {
@@ -104,10 +105,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check if user can create invoice
-    const canCreate = await SubscriptionService.canCreateInvoice(new ObjectId(session.user.id));
+    // Check if user can create invoice using server action
+    const canCreate = await canCreateInvoice();
     
     if (!canCreate.allowed) {
+      console.log('❌ [API Invoices] Invoice creation blocked:', canCreate.reason);
       return NextResponse.json({
         success: false,
         error: canCreate.reason,
