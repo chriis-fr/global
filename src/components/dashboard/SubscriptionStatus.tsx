@@ -1,57 +1,19 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
-import { Crown, Clock, AlertTriangle, CheckCircle } from 'lucide-react';
-import Link from 'next/link';
-
-interface SubscriptionData {
-  plan: {
-    name: string;
-    type: string;
-    tier: string;
-  } | null;
-  status: string;
-  isTrialActive: boolean;
-  trialDaysRemaining: number;
-  usage: {
-    invoicesThisMonth: number;
-    monthlyVolume: number;
-  };
-}
+import { useSubscription } from '@/lib/contexts/SubscriptionContext';
+import { useRouter } from 'next/navigation';
+import { Crown, Clock, CheckCircle, AlertTriangle } from 'lucide-react';
 
 export default function SubscriptionStatus() {
-  const { data: session } = useSession();
-  const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (session?.user?.id) {
-      fetchSubscription();
-    }
-  }, [session]);
-
-  const fetchSubscription = async () => {
-    try {
-      const response = await fetch('/api/billing/current');
-      const data = await response.json();
-      
-      if (data.success) {
-        setSubscription(data.data);
-      }
-    } catch (error) {
-      console.error('Error fetching subscription:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { subscription, loading } = useSubscription();
+  const router = useRouter();
 
   if (loading) {
     return (
-      <div className="bg-white rounded-lg shadow-sm border p-4">
+      <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
         <div className="animate-pulse">
-          <div className="h-4 bg-gray-200 rounded w-1/3 mb-2"></div>
-          <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+          <div className="h-4 bg-white/20 rounded w-1/3 mb-2"></div>
+          <div className="h-3 bg-white/20 rounded w-1/2"></div>
         </div>
       </div>
     );
@@ -63,12 +25,12 @@ export default function SubscriptionStatus() {
 
   const getStatusIcon = () => {
     if (subscription.isTrialActive) {
-      return <Clock className="h-5 w-5 text-blue-500" />;
+      return <Clock className="h-5 w-5 text-blue-400" />;
     }
     if (subscription.status === 'active') {
-      return <CheckCircle className="h-5 w-5 text-green-500" />;
+      return <CheckCircle className="h-5 w-5 text-green-400" />;
     }
-    return <AlertTriangle className="h-5 w-5 text-yellow-500" />;
+    return <AlertTriangle className="h-5 w-5 text-yellow-400" />;
   };
 
   const getStatusText = () => {
@@ -83,55 +45,129 @@ export default function SubscriptionStatus() {
 
   const getStatusColor = () => {
     if (subscription.isTrialActive) {
-      return 'text-blue-600 bg-blue-50 border-blue-200';
+      return 'text-blue-400 bg-blue-500/20 border-blue-500/30';
     }
     if (subscription.status === 'active') {
-      return 'text-green-600 bg-green-50 border-green-200';
+      return 'text-green-400 bg-green-500/20 border-green-500/30';
     }
-    return 'text-yellow-600 bg-yellow-50 border-yellow-200';
+    return 'text-yellow-400 bg-yellow-500/20 border-yellow-500/30';
+  };
+
+  const getPlanDisplayName = () => {
+    if (!subscription.plan) return 'No Plan';
+    
+    const { type, tier } = subscription.plan;
+    const typeName = type.charAt(0).toUpperCase() + type.slice(1);
+    const tierName = tier.charAt(0).toUpperCase() + tier.slice(1);
+    
+    return `${typeName} ${tierName}`;
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border p-4">
-      <div className="flex items-center justify-between mb-3">
+    <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <Crown className="h-5 w-5 text-gray-600" />
-          <h3 className="font-semibold text-gray-900">Subscription</h3>
+          <Crown className="h-5 w-5 text-white" />
+          <h3 className="font-semibold text-white">Subscription Status</h3>
         </div>
         {getStatusIcon()}
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-sm text-gray-600">Plan:</span>
-          <span className="font-medium text-gray-900">
-            {subscription.plan?.name || 'No Plan'}
+          <span className="text-sm text-blue-200">Plan:</span>
+          <span className="font-medium text-white">
+            {getPlanDisplayName()}
           </span>
         </div>
 
         <div className="flex items-center justify-between">
-          <span className="text-sm text-gray-600">Status:</span>
-          <span className={`text-sm px-2 py-1 rounded-full border ${getStatusColor()}`}>
+          <span className="text-sm text-blue-200">Status:</span>
+          <span className={`text-sm px-3 py-1 rounded-full border ${getStatusColor()}`}>
             {getStatusText()}
           </span>
         </div>
 
         {subscription.plan && (
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Invoices this month:</span>
-            <span className="font-medium text-gray-900">
+            <span className="text-sm text-blue-200">Invoices this month:</span>
+            <span className="font-medium text-white">
               {subscription.usage.invoicesThisMonth}
+              {subscription.limits.invoicesPerMonth > 0 && (
+                <span className="text-blue-300 text-xs ml-1">
+                  / {subscription.limits.invoicesPerMonth === -1 ? '∞' : subscription.limits.invoicesPerMonth}
+                </span>
+              )}
             </span>
           </div>
         )}
 
+        {subscription.plan && subscription.limits.monthlyVolume > 0 && (
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-blue-200">Monthly volume:</span>
+            <span className="font-medium text-white">
+              ${subscription.usage.monthlyVolume.toLocaleString()}
+              <span className="text-blue-300 text-xs ml-1">
+                / ${subscription.limits.monthlyVolume.toLocaleString()}
+              </span>
+            </span>
+          </div>
+        )}
+
+        {/* Feature Access Indicators */}
+        <div className="pt-3 border-t border-white/20">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex items-center space-x-2">
+              {subscription.canCreateOrganization ? (
+                <CheckCircle className="h-4 w-4 text-green-400" />
+              ) : (
+                <AlertTriangle className="h-4 w-4 text-yellow-400" />
+              )}
+              <span className="text-xs text-blue-200">Organizations</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              {subscription.canAccessPayables ? (
+                <CheckCircle className="h-4 w-4 text-green-400" />
+              ) : (
+                <AlertTriangle className="h-4 w-4 text-yellow-400" />
+              )}
+              <span className="text-xs text-blue-200">Payables</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              {subscription.canCreateInvoice ? (
+                <CheckCircle className="h-4 w-4 text-green-400" />
+              ) : (
+                <AlertTriangle className="h-4 w-4 text-yellow-400" />
+              )}
+              <span className="text-xs text-blue-200">Invoicing</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              {subscription.canUseAdvancedFeatures ? (
+                <CheckCircle className="h-4 w-4 text-green-400" />
+              ) : (
+                <AlertTriangle className="h-4 w-4 text-yellow-400" />
+              )}
+              <span className="text-xs text-blue-200">Advanced</span>
+            </div>
+          </div>
+        </div>
+
         {(!subscription.isTrialActive && subscription.status === 'trial') && (
-          <Link
-            href="/pricing"
-            className="block w-full mt-3 bg-blue-600 text-white text-center py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+          <button
+            onClick={() => router.push('/pricing')}
+            className="w-full mt-4 bg-blue-600 text-white text-center py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
           >
             Choose a Plan
-          </Link>
+          </button>
+        )}
+
+        {subscription.isTrialActive && (
+          <button
+            onClick={() => router.push('/pricing')}
+            className="w-full mt-4 bg-gradient-to-r from-yellow-500 to-orange-500 text-white text-center py-2 px-4 rounded-lg hover:from-yellow-600 hover:to-orange-600 transition-colors text-sm font-medium"
+          >
+            Upgrade Now
+          </button>
         )}
       </div>
     </div>

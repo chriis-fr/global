@@ -3,9 +3,37 @@ import { getDatabase } from '@/lib/database';
 import { BILLING_PLANS } from '@/data/billingPlans';
 import { BillingPlan } from '@/models/Billing';
 
+// Define proper types for user data
+interface UserData {
+  _id: ObjectId;
+  email: string;
+  subscription?: {
+    planId?: string;
+    status?: string;
+    trialStartDate?: Date;
+    trialEndDate?: Date;
+    billingPeriod?: string;
+    currentPeriodStart?: Date;
+    currentPeriodEnd?: Date;
+    stripeSubscriptionId?: string;
+    stripePriceId?: string;
+    createdAt?: Date;
+    updatedAt?: Date;
+  };
+  usage?: {
+    invoicesThisMonth?: number;
+    monthlyVolume?: number;
+    lastResetDate?: Date;
+  };
+  services?: {
+    smartInvoicing?: boolean;
+  };
+}
+
 export class SubscriptionService {
   // Initialize trial for new users (10 days)
   static async initializeTrial(userId: ObjectId): Promise<void> {
+    console.log('🔄 [SubscriptionService] Initializing trial for user:', userId);
     const db = await getDatabase();
     const trialEndDate = new Date();
     trialEndDate.setDate(trialEndDate.getDate() + 10); // 10-day trial
@@ -27,6 +55,30 @@ export class SubscriptionService {
         }
       }
     );
+    console.log('✅ [SubscriptionService] Trial initialized successfully');
+  }
+
+  // Initialize free plan for existing users without subscription data
+  static async initializeFreePlan(userId: ObjectId): Promise<void> {
+    console.log('🔄 [SubscriptionService] Initializing free plan for user:', userId);
+    const db = await getDatabase();
+    
+    await db.collection('users').updateOne(
+      { _id: userId },
+      {
+        $set: {
+          'subscription.planId': 'receivables-free',
+          'subscription.status': 'active', // Free plan is always active
+          'subscription.billingPeriod': 'monthly',
+          'subscription.createdAt': new Date(),
+          'subscription.updatedAt': new Date(),
+          'usage.invoicesThisMonth': 0,
+          'usage.monthlyVolume': 0,
+          'usage.lastResetDate': new Date()
+        }
+      }
+    );
+    console.log('✅ [SubscriptionService] Free plan initialized successfully');
   }
 
   // Check if user can create invoice with detailed response
@@ -35,10 +87,12 @@ export class SubscriptionService {
     reason?: string;
     requiresUpgrade?: boolean;
   }> {
+    console.log('🔍 [SubscriptionService] Checking invoice creation permission for user:', userId);
     const subscription = await this.getUserSubscription(userId);
     
     if (!subscription.canCreateInvoice) {
       if (subscription.status === 'trial' && subscription.trialDaysRemaining <= 0) {
+        console.log('❌ [SubscriptionService] Trial expired for user:', userId);
         return {
           allowed: false,
           reason: 'Your trial has expired. Please upgrade to continue creating invoices.',
@@ -47,6 +101,7 @@ export class SubscriptionService {
       }
       
       if (subscription.status === 'cancelled' || subscription.status === 'expired') {
+        console.log('❌ [SubscriptionService] Subscription cancelled/expired for user:', userId);
         return {
           allowed: false,
           reason: 'Your subscription has been cancelled or expired. Please reactivate your subscription.',
@@ -54,43 +109,77 @@ export class SubscriptionService {
         };
       }
       
+      console.log('❌ [SubscriptionService] No permission to create invoices for user:', userId);
       return {
         allowed: false,
         reason: 'You do not have permission to create invoices with your current plan.',
         requiresUpgrade: true
       };
     }
-    
+
     // Check usage limits
     if (subscription.limits.invoicesPerMonth > 0 && 
         subscription.usage.invoicesThisMonth >= subscription.limits.invoicesPerMonth) {
+      console.log('❌ [SubscriptionService] Monthly limit reached for user:', userId);
       return {
         allowed: false,
-        reason: `You have reached your monthly limit of ${subscription.limits.invoicesPerMonth} invoices. Please upgrade your plan.`,
+        reason: `You have reached your monthly limit of ${subscription.limits.invoicesPerMonth} invoices. Upgrade to create more invoices.`,
         requiresUpgrade: true
       };
     }
-    
+
+    console.log('✅ [SubscriptionService] Invoice creation allowed for user:', userId);
     return { allowed: true };
   }
 
-  // Increment invoice usage
-  static async incrementInvoiceUsage(userId: ObjectId, amount: number = 1): Promise<void> {
+  // Subscribe user to a plan (called by webhook)
+  static async subscribeToPlan(
+    userId: ObjectId, 
+    planId: string, 
+    billingPeriod: 'monthly' | 'yearly',
+    stripeSubscriptionId: string,
+    stripePriceId: string
+  ): Promise<void> {
+    console.log('🔄 [SubscriptionService] Subscribing user to plan:', {
+      userId: userId.toString(),
+      planId,
+      billingPeriod,
+      stripeSubscriptionId,
+      stripePriceId
+    });
+
     const db = await getDatabase();
-    
-    await db.collection('users').updateOne(
+    const currentPeriodStart = new Date();
+    const currentPeriodEnd = new Date();
+    currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + (billingPeriod === 'yearly' ? 12 : 1));
+
+    const updateData = {
+      'subscription.planId': planId,
+      'subscription.status': 'active',
+      'subscription.currentPeriodStart': currentPeriodStart,
+      'subscription.currentPeriodEnd': currentPeriodEnd,
+      'subscription.billingPeriod': billingPeriod,
+      'subscription.stripeSubscriptionId': stripeSubscriptionId,
+      'subscription.stripePriceId': stripePriceId,
+      'subscription.updatedAt': new Date()
+    };
+
+    console.log('💾 [SubscriptionService] Updating database with:', updateData);
+
+    const result = await db.collection('users').updateOne(
       { _id: userId },
-      {
-        $inc: { 
-          'usage.invoicesThisMonth': 1,
-          'usage.monthlyVolume': amount 
-        },
-        $set: { 'subscription.updatedAt': new Date() }
-      }
+      { $set: updateData }
     );
+
+    if (result.modifiedCount === 1) {
+      console.log('✅ [SubscriptionService] User subscription updated successfully:', userId.toString());
+    } else {
+      console.log('❌ [SubscriptionService] Failed to update user subscription:', userId.toString());
+      throw new Error('Failed to update user subscription');
+    }
   }
 
-  // Get comprehensive user subscription info
+  // Get user subscription details
   static async getUserSubscription(userId: ObjectId): Promise<{
     plan: BillingPlan | null;
     status: string;
@@ -110,16 +199,65 @@ export class SubscriptionService {
       cryptoToCryptoFee: number;
     };
   }> {
+    console.log('🔍 [SubscriptionService] Getting subscription for user:', userId);
     const db = await getDatabase();
-    const user = await db.collection('users').findOne({ _id: userId });
+    const user = await db.collection('users').findOne({ _id: userId }) as UserData | null;
 
     if (!user) {
+      console.log('❌ [SubscriptionService] User not found:', userId);
       throw new Error('User not found');
     }
 
+    // If user has no subscription data, initialize them with free plan
+    if (!user.subscription) {
+      console.log(' [SubscriptionService] User has no subscription data, initializing free plan for:', user.email);
+      await this.initializeFreePlan(userId);
+      
+      // Refetch user data after initialization
+      const updatedUser = await db.collection('users').findOne({ _id: userId }) as UserData | null;
+      if (!updatedUser) {
+        console.log('❌ [SubscriptionService] Failed to initialize user subscription');
+        throw new Error('Failed to initialize user subscription');
+      }
+      console.log('✅ [SubscriptionService] Free plan initialized, processing subscription data');
+      return this.processSubscriptionData(updatedUser);
+    }
+
+    console.log('✅ [SubscriptionService] Processing existing subscription data for user:', user.email);
+    return this.processSubscriptionData(user);
+  }
+
+  // Process subscription data (extracted for reusability)
+  private static processSubscriptionData(user: UserData): {
+    plan: BillingPlan | null;
+    status: string;
+    isTrialActive: boolean;
+    trialDaysRemaining: number;
+    usage: {
+      invoicesThisMonth: number;
+      monthlyVolume: number;
+    };
+    canCreateOrganization: boolean;
+    canAccessPayables: boolean;
+    canCreateInvoice: boolean;
+    canUseAdvancedFeatures: boolean;
+    limits: {
+      invoicesPerMonth: number;
+      monthlyVolume: number;
+      cryptoToCryptoFee: number;
+    };
+  } {
     const subscription = user.subscription || {};
     const usage = user.usage || {};
     const planId = subscription.planId || 'receivables-free';
+    
+    console.log('🔄 [SubscriptionService] Processing subscription data:', {
+      userId: user._id.toString(),
+      email: user.email,
+      planId,
+      status: subscription.status,
+      trialEndDate: subscription.trialEndDate
+    });
     
     // Find the plan
     const plan = BILLING_PLANS.find(p => p.planId === planId) || null;
@@ -133,7 +271,17 @@ export class SubscriptionService {
     // Feature access based on plan and status
     const canCreateOrganization = Boolean(planId !== 'receivables-free' && subscription.status === 'active');
     const canAccessPayables = Boolean((planId.includes('payables') || planId.includes('combined')) && subscription.status === 'active');
-    const canCreateInvoice = Boolean(subscription.status === 'active' || isTrialActive);
+    
+    // FIXED: Free plan users should always be able to create invoices (up to their limit)
+    const canCreateInvoice = Boolean(
+      // Active subscription
+      subscription.status === 'active' || 
+      // Trial is active
+      isTrialActive ||
+      // Free plan (even if trial expired, they can still use free features)
+      planId === 'receivables-free'
+    );
+    
     const canUseAdvancedFeatures = Boolean(planId.includes('pro') && subscription.status === 'active');
 
     // Usage limits
@@ -143,9 +291,9 @@ export class SubscriptionService {
       cryptoToCryptoFee: plan?.limits?.cryptoToCryptoFee || 0.9,
     };
 
-    return {
+    const result = {
       plan,
-      status: subscription.status || 'trial',
+      status: subscription.status || 'active', // Default to active for free plan
       isTrialActive,
       trialDaysRemaining,
       usage: {
@@ -158,6 +306,18 @@ export class SubscriptionService {
       canUseAdvancedFeatures,
       limits,
     };
+
+    console.log('✅ [SubscriptionService] Subscription data processed:', {
+      userId: user._id.toString(),
+      planId,
+      status: result.status,
+      canCreateInvoice: result.canCreateInvoice,
+      canAccessPayables: result.canAccessPayables,
+      isTrialActive: result.isTrialActive,
+      trialDaysRemaining: result.trialDaysRemaining
+    });
+
+    return result;
   }
 
   // Check if user can perform specific action
@@ -165,42 +325,56 @@ export class SubscriptionService {
     userId: ObjectId, 
     action: 'createInvoice' | 'createOrganization' | 'accessPayables' | 'useAdvancedFeatures'
   ): Promise<boolean> {
+    console.log(' [SubscriptionService] Checking action permission:', { userId: userId.toString(), action });
     const subscription = await this.getUserSubscription(userId);
     
+    let result = false;
     switch (action) {
       case 'createInvoice':
-        return subscription.canCreateInvoice;
+        result = subscription.canCreateInvoice;
+        break;
       case 'createOrganization':
-        return subscription.canCreateOrganization;
+        result = subscription.canCreateOrganization;
+        break;
       case 'accessPayables':
-        return subscription.canAccessPayables;
+        result = subscription.canAccessPayables;
+        break;
       case 'useAdvancedFeatures':
-        return subscription.canUseAdvancedFeatures;
+        result = subscription.canUseAdvancedFeatures;
+        break;
       default:
-        return false;
+        result = false;
     }
+
+    console.log('✅ [SubscriptionService] Action permission result:', { userId: userId.toString(), action, result });
+    return result;
   }
 
   // Update usage tracking
   static async updateUsage(userId: ObjectId, type: 'invoice' | 'volume', amount: number = 1): Promise<void> {
+    console.log('🔄 [SubscriptionService] Updating usage:', { userId: userId.toString(), type, amount });
     const db = await getDatabase();
     
     const updateField = type === 'invoice' ? 'usage.invoicesThisMonth' : 'usage.monthlyVolume';
     
-    await db.collection('users').updateOne(
+    const result = await db.collection('users').updateOne(
       { _id: userId },
-      {
-        $inc: { [updateField]: amount },
-        $set: { 'subscription.updatedAt': new Date() }
-      }
+      { $inc: { [updateField]: amount } }
     );
+
+    if (result.modifiedCount === 1) {
+      console.log('✅ [SubscriptionService] Usage updated successfully:', { userId: userId.toString(), type, amount });
+    } else {
+      console.log('❌ [SubscriptionService] Failed to update usage:', { userId: userId.toString(), type, amount });
+    }
   }
 
-  // Reset monthly usage
+  // Reset monthly usage (should be called monthly)
   static async resetMonthlyUsage(userId: ObjectId): Promise<void> {
+    console.log('🔄 [SubscriptionService] Resetting monthly usage for user:', userId);
     const db = await getDatabase();
     
-    await db.collection('users').updateOne(
+    const result = await db.collection('users').updateOne(
       { _id: userId },
       {
         $set: {
@@ -210,43 +384,20 @@ export class SubscriptionService {
         }
       }
     );
-  }
 
-  // Subscribe user to a plan
-  static async subscribeToPlan(
-    userId: ObjectId, 
-    planId: string, 
-    billingPeriod: 'monthly' | 'yearly',
-    stripeSubscriptionId?: string,
-    stripePriceId?: string
-  ): Promise<void> {
-    const db = await getDatabase();
-    const currentPeriodStart = new Date();
-    const currentPeriodEnd = new Date();
-    currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + (billingPeriod === 'yearly' ? 12 : 1));
-
-    await db.collection('users').updateOne(
-      { _id: userId },
-      {
-        $set: {
-          'subscription.planId': planId,
-          'subscription.status': 'active',
-          'subscription.currentPeriodStart': currentPeriodStart,
-          'subscription.currentPeriodEnd': currentPeriodEnd,
-          'subscription.billingPeriod': billingPeriod,
-          'subscription.stripeSubscriptionId': stripeSubscriptionId,
-          'subscription.stripePriceId': stripePriceId,
-          'subscription.updatedAt': new Date()
-        }
-      }
-    );
+    if (result.modifiedCount === 1) {
+      console.log('✅ [SubscriptionService] Monthly usage reset successfully for user:', userId);
+    } else {
+      console.log('❌ [SubscriptionService] Failed to reset monthly usage for user:', userId);
+    }
   }
 
   // Cancel subscription
   static async cancelSubscription(userId: ObjectId): Promise<void> {
+    console.log('🔄 [SubscriptionService] Cancelling subscription for user:', userId);
     const db = await getDatabase();
     
-    await db.collection('users').updateOne(
+    const result = await db.collection('users').updateOne(
       { _id: userId },
       {
         $set: {
@@ -255,5 +406,17 @@ export class SubscriptionService {
         }
       }
     );
+
+    if (result.modifiedCount === 1) {
+      console.log('✅ [SubscriptionService] Subscription cancelled successfully for user:', userId);
+    } else {
+      console.log('❌ [SubscriptionService] Failed to cancel subscription for user:', userId);
+    }
+  }
+
+  // Increment invoice usage
+  static async incrementInvoiceUsage(userId: ObjectId): Promise<void> {
+    console.log(' [SubscriptionService] Incrementing invoice usage for user:', userId);
+    await this.updateUsage(userId, 'invoice', 1);
   }
 }

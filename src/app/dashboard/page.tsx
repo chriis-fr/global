@@ -10,11 +10,13 @@ import {
   Receipt,
   ArrowUpRight,
   ArrowDownLeft,
-  AlertTriangle
+  AlertTriangle,
+  Clock,
+  Crown
 } from 'lucide-react';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
 import DashboardSkeleton from '@/components/ui/DashboardSkeleton';
-import SubscriptionStatus from '@/components/dashboard/SubscriptionStatus';
+import { useSubscription } from '@/lib/contexts/SubscriptionContext';
 
 interface DashboardStats {
   totalRevenue: number;
@@ -30,6 +32,7 @@ interface DashboardStats {
 
 export default function DashboardPage() {
   const { data: session } = useSession();
+  const { subscription, loading: subscriptionLoading } = useSubscription();
   const router = useRouter();
   const [stats, setStats] = useState<DashboardStats>({
     totalRevenue: 0,
@@ -150,9 +153,27 @@ export default function DashboardPage() {
     loadStats();
   }, [session?.user]);
 
-  if (loading) {
+  // Show loading only if both dashboard and subscription are loading
+  if (loading || subscriptionLoading) {
     return <DashboardSkeleton />;
   }
+
+  const getPlanDisplayName = () => {
+    if (!subscription?.plan) return 'Free Plan';
+    
+    const { type, tier } = subscription.plan;
+    const typeName = type.charAt(0).toUpperCase() + type.slice(1);
+    const tierName = tier.charAt(0).toUpperCase() + tier.slice(1);
+    
+    return `${typeName} ${tierName}`;
+  };
+
+  const getRemainingInvoices = () => {
+    if (!subscription) return 0;
+    const limit = subscription.limits.invoicesPerMonth;
+    if (limit === -1) return 'Unlimited';
+    return Math.max(0, limit - subscription.usage.invoicesThisMonth);
+  };
 
   return (
     <div className="space-y-6">
@@ -174,8 +195,45 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Plan Status Banner */}
+      {subscription && (
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              {subscription.isTrialActive ? (
+                <Clock className="h-5 w-5 text-yellow-400" />
+              ) : (
+                <Crown className="h-5 w-5 text-blue-400" />
+              )}
+              <div>
+                <h3 className="font-semibold text-white">{getPlanDisplayName()}</h3>
+                <p className="text-sm text-blue-200">
+                  {subscription.isTrialActive 
+                    ? `${subscription.trialDaysRemaining} days left in trial`
+                    : subscription.status === 'active' 
+                      ? 'Active subscription'
+                      : 'Trial expired'
+                  }
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-sm text-blue-200">Invoices this month</p>
+              <p className="text-lg font-semibold text-white">
+                {subscription.usage.invoicesThisMonth} / {subscription.limits.invoicesPerMonth === -1 ? '∞' : subscription.limits.invoicesPerMonth}
+              </p>
+              {subscription.limits.invoicesPerMonth !== -1 && (
+                <p className="text-xs text-blue-300">
+                  {getRemainingInvoices()} remaining
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Financial Overview - Minimalistic Request Finance Style */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className={`grid gap-6 ${subscription?.canAccessPayables ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'}`}>
         {/* Net Balance - Primary metric */}
         <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
           <div className="flex items-center justify-between">
@@ -214,21 +272,23 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Payables (Bills) */}
-        <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-blue-200 text-sm font-medium">Payables</p>
-              <p className="text-2xl font-bold text-white">
-                <FormattedNumberDisplay value={stats.totalPayables} />
-              </p>
-              <p className="text-xs text-blue-300 mt-1">Bills to pay</p>
-            </div>
-            <div className="p-3 bg-red-500/20 rounded-lg">
-              <ArrowDownLeft className="h-6 w-6 text-red-400" />
+        {/* Payables (Bills) - Only show if user has access */}
+        {subscription?.canAccessPayables && (
+          <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-blue-200 text-sm font-medium">Payables</p>
+                <p className="text-2xl font-bold text-white">
+                  <FormattedNumberDisplay value={stats.totalPayables} />
+                </p>
+                <p className="text-xs text-blue-300 mt-1">Bills to pay</p>
+              </div>
+              <div className="p-3 bg-red-500/20 rounded-lg">
+                <ArrowDownLeft className="h-6 w-6 text-red-400" />
+              </div>
             </div>
           </div>
-        </div>
+        )}
         </div>
 
       {/* Quick Actions & Alerts */}
@@ -237,20 +297,25 @@ export default function DashboardPage() {
         <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
           <h3 className="text-lg font-semibold text-white mb-4">Quick Actions</h3>
           <div className="flex flex-col space-y-3">
-            <button
-              onClick={() => router.push('/dashboard/services/smart-invoicing/create')}
-              className="flex items-center space-x-3 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <FileText className="h-5 w-5" />
-              <span>Create Invoice</span>
-            </button>
-            <button
-              onClick={() => router.push('/dashboard/services/payables/create')}
-              className="flex items-center space-x-3 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Receipt className="h-5 w-5" />
-              <span>Create Payable</span>
-            </button>
+            {subscription?.canCreateInvoice && (
+              <button
+                onClick={() => router.push('/dashboard/services/smart-invoicing/create')}
+                className="flex items-center space-x-3 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <FileText className="h-5 w-5" />
+                <span>Create Invoice</span>
+              </button>
+            )}
+            
+            {subscription?.canAccessPayables && (
+              <button
+                onClick={() => router.push('/dashboard/services/payables/create')}
+                className="flex items-center space-x-3 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Receipt className="h-5 w-5" />
+                <span>Create Payable</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -322,7 +387,6 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
-      <SubscriptionStatus />
     </div>
   );
 } 

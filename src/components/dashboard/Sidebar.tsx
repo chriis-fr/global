@@ -22,6 +22,7 @@ import {
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import NotificationBadge from './NotificationBadge';
 import Image from 'next/image';
+import { useSubscription } from '@/lib/contexts/SubscriptionContext';
 
 const SERVICE_LINKS = [
   {
@@ -89,6 +90,7 @@ const SETTINGS_LINKS = [
 
 export default function Sidebar() {
   const { data: session } = useSession();
+  const { subscription } = useSubscription();
   const pathname = usePathname();
   // const enabledServices = session?.user?.services || {}; // Temporarily disabled to show all services
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -270,29 +272,28 @@ export default function Sidebar() {
                 Services
               </h3>
             )}
-            {SERVICE_LINKS.map(link => {
-           const active = pathname.startsWith(link.href);
+            {SERVICE_LINKS.filter(link => {
+              // Hide Payables service if user doesn't have access to payables
+              if (link.key === 'accountsPayable') {
+                return subscription?.canAccessPayables || false;
+              }
+              return true;
+            }).map(link => {
+              const active = pathname.startsWith(link.href);
               return (
                 <Link
                   key={link.key}
                   href={link.href}
                   onClick={closeMobileMenu}
                   className={`flex items-center px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation ${
-                    active 
-                      ? 'bg-blue-800 text-white' 
-                      : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
+                    active
+                      ? 'bg-blue-600 text-white'
+                      : 'text-white/70 hover:text-white hover:bg-white/10'
                   }`}
-                  style={{ textDecoration: 'none' }}
-                  title={isCollapsed && !isAutoHidden ? link.label : undefined}
                 >
-                  <link.icon className="h-4 w-4 mr-3 flex-shrink-0" />
+                  <link.icon className={`h-5 w-5 ${isCollapsed && !isAutoHidden ? 'mx-auto' : 'mr-3'} flex-shrink-0`} />
                   {(!isCollapsed || isAutoHidden) && (
-                    <span className="whitespace-nowrap">{link.label}</span>
-                  )}
-                  {isCollapsed && !isAutoHidden && (
-                    <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
-                      {link.label}
-                    </div>
+                    <span className="truncate">{link.label}</span>
                   )}
                 </Link>
               );

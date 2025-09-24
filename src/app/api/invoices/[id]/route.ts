@@ -32,16 +32,23 @@ export async function GET(
       id,
       ownerType,
       ownerId,
-      userEmail: session.user.email
+      userEmail: session.user.email,
+      userId: session.user.id
     });
 
     const db = await connectToDatabase();
     const collection = db.collection('invoices');
 
-    // Query based on owner type
+    // Query based on owner type - use same logic as main invoices route
     const query = isOrganization 
       ? { _id: new ObjectId(id), organizationId: session.user.organizationId }
-      : { _id: new ObjectId(id), issuerId: session.user.id };
+      : { 
+          _id: new ObjectId(id),
+          $or: [
+            { issuerId: session.user.id },
+            { userId: session.user.email }
+          ]
+        };
 
     const invoice = await collection.findOne(query);
 
@@ -50,7 +57,9 @@ export async function GET(
         id,
         ownerType,
         ownerId,
-        userEmail: session.user.email
+        userEmail: session.user.email,
+        userId: session.user.id,
+        query
       });
       return NextResponse.json(
         { success: false, message: 'Invoice not found' },
@@ -58,6 +67,12 @@ export async function GET(
       );
     }
 
+    console.log('✅ [API Invoice] Invoice found:', {
+      id,
+      invoiceNumber: invoice.invoiceNumber,
+      issuerId: invoice.issuerId,
+      userId: invoice.userId
+    });
 
     // Convert currencies if requested
     let processedInvoice = invoice;
@@ -107,14 +122,19 @@ export async function PUT(
     const ownerId = isOrganization ? session.user.organizationId : session.user.email;
     const ownerType = isOrganization ? 'organization' : 'individual';
 
-
     const db = await connectToDatabase();
     const collection = db.collection('invoices');
 
-    // Check if invoice exists and belongs to user/organization
+    // Check if invoice exists and belongs to user/organization - use same logic as GET
     const query = isOrganization 
       ? { _id: new ObjectId(id), organizationId: session.user.organizationId }
-      : { _id: new ObjectId(id), issuerId: session.user.id };
+      : { 
+          _id: new ObjectId(id),
+          $or: [
+            { issuerId: session.user.id },
+            { userId: session.user.email }
+          ]
+        };
 
     const existingInvoice = await collection.findOne(query);
 
@@ -235,7 +255,6 @@ export async function PUT(
     // Get the updated invoice to return full data
     const updatedInvoice = await collection.findOne({ _id: new ObjectId(id) });
 
-
     return NextResponse.json({
       success: true,
       message: 'Invoice updated successfully',
@@ -277,10 +296,16 @@ export async function DELETE(
     const db = await connectToDatabase();
     const collection = db.collection('invoices');
 
-    // Query based on owner type
+    // Query based on owner type - use same logic as GET
     const query = isOrganization 
       ? { _id: new ObjectId(id), organizationId: session.user.organizationId }
-      : { _id: new ObjectId(id), issuerId: session.user.id };
+      : { 
+          _id: new ObjectId(id),
+          $or: [
+            { issuerId: session.user.id },
+            { userId: session.user.email }
+          ]
+        };
 
     const result = await collection.deleteOne(query);
 
@@ -295,7 +320,6 @@ export async function DELETE(
         { status: 404 }
       );
     }
-
 
     return NextResponse.json({
       success: true,

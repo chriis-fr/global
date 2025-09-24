@@ -395,8 +395,7 @@ export async function POST(request: NextRequest) {
 
     // After successful invoice creation, increment usage:
     await SubscriptionService.incrementInvoiceUsage(
-      new ObjectId(session.user.id),
-      invoiceData.totalAmount
+      new ObjectId(session.user.id)
     );
 
     return NextResponse.json({

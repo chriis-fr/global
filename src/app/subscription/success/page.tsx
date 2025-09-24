@@ -8,7 +8,7 @@ import { useSubscription } from '@/lib/contexts/SubscriptionContext'
 export default function SubscriptionSuccessPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
-  const { refreshSubscription } = useSubscription()
+  const { refetch } = useSubscription()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -19,7 +19,7 @@ export default function SubscriptionSuccessPage() {
       try {
         if (sessionId) {
           // Refresh subscription data
-          await refreshSubscription()
+          await refetch()
           
           // Redirect to dashboard after a short delay
           setTimeout(() => {
@@ -37,7 +37,7 @@ export default function SubscriptionSuccessPage() {
     }
 
     handleSuccess()
-  }, [sessionId, refreshSubscription, router])
+  }, [sessionId, refetch, router])
 
   if (loading) {
     return (
