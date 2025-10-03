@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user is active
-    if (user.status !== 'active') {
+    if (user.subscription?.status !== 'active' && user.subscription?.status !== 'trial') {
       return NextResponse.json(
         { 
           success: false, 

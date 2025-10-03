@@ -9,32 +9,82 @@ interface SubscriptionContextType {
   loading: boolean;
   error: string | null;
   refetch: () => void;
+  clearCache: () => void;
 }
 
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined);
 
-const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
+const CACHE_KEY = 'subscription_cache';
 
 export function SubscriptionProvider({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [lastFetch, setLastFetch] = useState<number>(0);
 
-  const fetchSubscription = useCallback(async () => {
+  const getCachedData = useCallback(() => {
+    if (typeof window === 'undefined') return null;
+    
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (cached) {
+        const { data, timestamp } = JSON.parse(cached);
+        const now = Date.now();
+        
+        // Check if cache is still valid
+        if (now - timestamp < CACHE_DURATION) {
+          console.log('📦 [SubscriptionContext] Using cached subscription data');
+          return data;
+        } else {
+          console.log('⏰ [SubscriptionContext] Cache expired, removing');
+          localStorage.removeItem(CACHE_KEY);
+        }
+      }
+    } catch (error) {
+      console.error('❌ [SubscriptionContext] Error reading cache:', error);
+      localStorage.removeItem(CACHE_KEY);
+    }
+    
+    return null;
+  }, []);
+
+  const setCachedData = useCallback((data: SubscriptionData) => {
+    if (typeof window === 'undefined') return;
+    
+    try {
+      const cacheData = {
+        data,
+        timestamp: Date.now()
+      };
+      localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
+      console.log('💾 [SubscriptionContext] Subscription data cached');
+    } catch (error) {
+      console.error('❌ [SubscriptionContext] Error caching data:', error);
+    }
+  }, []);
+
+  const clearCache = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem(CACHE_KEY);
+    console.log('🗑️ [SubscriptionContext] Cache cleared');
+  }, []);
+
+  const fetchSubscription = useCallback(async (forceRefresh = false) => {
     if (!session?.user?.id) {
       setSubscription(null);
       setLoading(false);
       return;
     }
 
-    // Check if we have recent cached data
-    const now = Date.now();
-    if (now - lastFetch < CACHE_DURATION) {
-      console.log('📦 [SubscriptionContext] Using cached subscription data');
-      setLoading(false);
-      return;
+    // Check cache first (unless force refresh)
+    if (!forceRefresh) {
+      const cachedData = getCachedData();
+      if (cachedData) {
+        setSubscription(cachedData);
+        setLoading(false);
+        return;
+      }
     }
 
     console.log('🔄 [SubscriptionContext] Fetching subscription data via server action...');
@@ -46,8 +96,13 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
       
       if (subscriptionData) {
         setSubscription(subscriptionData);
-        setLastFetch(now);
-        console.log('✅ [SubscriptionContext] Subscription data received:', subscriptionData);
+        setCachedData(subscriptionData);
+        console.log('✅ [SubscriptionContext] Subscription data received and cached:', {
+          planId: subscriptionData.plan?.planId,
+          status: subscriptionData.status,
+          canCreateInvoice: subscriptionData.canCreateInvoice,
+          canAccessPayables: subscriptionData.canAccessPayables
+        });
       } else {
         throw new Error('Failed to fetch subscription data');
       }
@@ -58,7 +113,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
       // Provide fallback subscription for free plan users
       if (session?.user?.id) {
         console.log('🔄 [SubscriptionContext] Providing fallback free plan subscription');
-        setSubscription({
+        const fallbackData = {
           plan: {
             planId: 'receivables-free',
             type: 'receivables',
@@ -81,38 +136,44 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
             monthlyVolume: 0,
             cryptoToCryptoFee: 0.9
           }
-        });
+        };
+        setSubscription(fallbackData);
+        setCachedData(fallbackData);
       }
     } finally {
       setLoading(false);
     }
-  }, [session?.user?.id, lastFetch]);
+  }, [session?.user?.id, getCachedData, setCachedData]);
 
   useEffect(() => {
     fetchSubscription();
   }, [fetchSubscription]);
 
-  // Refetch on window focus if cache is older than 30 minutes
+  // Refetch on window focus if cache is older than 10 minutes
   useEffect(() => {
     const handleFocus = () => {
-      const now = Date.now();
-      if (now - lastFetch > 30 * 60 * 1000) { // 30 minutes
-        console.log('🔄 [SubscriptionContext] Window focused, refetching subscription data');
-        fetchSubscription();
+      const cached = getCachedData();
+      if (cached) {
+        const cacheAge = Date.now() - JSON.parse(localStorage.getItem(CACHE_KEY) || '{}').timestamp;
+        if (cacheAge > 10 * 60 * 1000) { // 10 minutes
+          console.log('🔄 [SubscriptionContext] Window focused, cache is stale, refetching');
+          fetchSubscription(true);
+        }
       }
     };
 
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
-  }, [fetchSubscription, lastFetch]);
+  }, [fetchSubscription, getCachedData]);
 
   const refetch = useCallback(() => {
-    setLastFetch(0); // Reset cache to force refetch
-    fetchSubscription();
-  }, [fetchSubscription]);
+    console.log('🔄 [SubscriptionContext] Manual refetch requested - clearing cache and fetching fresh data');
+    clearCache();
+    fetchSubscription(true);
+  }, [fetchSubscription, clearCache]);
 
   return (
-    <SubscriptionContext.Provider value={{ subscription, loading, error, refetch }}>
+    <SubscriptionContext.Provider value={{ subscription, loading, error, refetch, clearCache }}>
       {children}
     </SubscriptionContext.Provider>
   )

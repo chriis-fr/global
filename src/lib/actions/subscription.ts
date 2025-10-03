@@ -32,8 +32,6 @@ export interface SubscriptionData {
 }
 
 export async function getCurrentMonthInvoiceCount(userId: string): Promise<number> {
-  console.log('🔍 [ServerAction] Getting current month invoice count for user:', userId);
-  
   try {
     const db = await getDatabase();
     const userObjectId = new ObjectId(userId);
@@ -41,80 +39,27 @@ export async function getCurrentMonthInvoiceCount(userId: string): Promise<numbe
     // Get user details
     const user = await db.collection('users').findOne({ _id: userObjectId });
     if (!user) {
-      console.log('❌ [ServerAction] User not found');
       return 0;
     }
-    
-    console.log(' [ServerAction] User details:', {
-      userId: userId,
-      userEmail: user.email,
-      userObjectId: user._id.toString()
-    });
     
     // Get current month date range
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
     
-    console.log('📅 [ServerAction] Current month range:', {
-      startOfMonth: startOfMonth.toISOString(),
-      endOfMonth: endOfMonth.toISOString(),
-      currentMonth: now.getMonth() + 1,
-      currentYear: now.getFullYear()
-    });
-    
-    // Get ALL invoices for this user first (no date filter)
-    const allInvoices = await db.collection('invoices').find({
+    // Query invoices directly with date filter for better performance
+    const currentMonthInvoices = await db.collection('invoices').find({
       $or: [
         { issuerId: userObjectId },
         { issuerId: userId },
         { userId: user.email },
         { userId: userId }
-      ]
-    }).toArray();
-    
-    console.log(' [ServerAction] All user invoices found:', {
-      totalCount: allInvoices.length,
-      invoices: allInvoices.map(inv => ({
-        id: inv._id,
-        invoiceNumber: inv.invoiceNumber,
-        issuerId: inv.issuerId,
-        userId: inv.userId,
-        createdAt: inv.createdAt,
-        createdAtType: typeof inv.createdAt
-      }))
-    });
-    
-    // Filter by current month manually
-    const currentMonthInvoices = allInvoices.filter(invoice => {
-      if (!invoice.createdAt) {
-        console.log('⚠️ [ServerAction] Invoice has no createdAt:', invoice._id);
-        return false;
+      ],
+      createdAt: {
+        $gte: startOfMonth,
+        $lte: endOfMonth
       }
-      
-      const invoiceDate = new Date(invoice.createdAt);
-      const isInCurrentMonth = invoiceDate >= startOfMonth && invoiceDate <= endOfMonth;
-      
-      console.log('📅 [ServerAction] Checking invoice:', {
-        invoiceId: invoice._id,
-        invoiceNumber: invoice.invoiceNumber,
-        invoiceDate: invoiceDate.toISOString(),
-        isInCurrentMonth,
-        month: invoiceDate.getMonth() + 1,
-        year: invoiceDate.getFullYear()
-      });
-      
-      return isInCurrentMonth;
-    });
-    
-    console.log('📊 [ServerAction] Current month invoices:', {
-      count: currentMonthInvoices.length,
-      invoices: currentMonthInvoices.map(inv => ({
-        id: inv._id,
-        invoiceNumber: inv.invoiceNumber,
-        createdAt: inv.createdAt
-      }))
-    });
+    }).toArray();
     
     return currentMonthInvoices.length;
     

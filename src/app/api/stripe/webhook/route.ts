@@ -64,7 +64,9 @@ export async function POST(request: NextRequest) {
             status: subscription.status,
             planId: subscription.metadata?.planId,
             billingPeriod: subscription.metadata?.billingPeriod,
-            customerId: customerId
+            customerId: customerId,
+            priceId: subscription.items.data[0]?.price.id,
+            quantity: subscription.items.data[0]?.quantity
           });
           
           // Get user by customer ID
@@ -121,11 +123,13 @@ export async function POST(request: NextRequest) {
     case 'customer.subscription.updated':
       console.log('🔄 [Webhook] Processing customer.subscription.updated event');
       const updatedSubscription = event.data.object as Stripe.Subscription;
-      console.log('📊 [Webhook] Subscription updated:', {
+      console.log('📊 [Webhook] Subscription updated details:', {
         subscriptionId: updatedSubscription.id,
         status: updatedSubscription.status,
         planId: updatedSubscription.metadata?.planId,
-        customerId: updatedSubscription.customer
+        customerId: updatedSubscription.customer,
+        priceId: updatedSubscription.items.data[0]?.price.id,
+        quantity: updatedSubscription.items.data[0]?.quantity
       });
       
       // Handle subscription updates (plan changes, etc.)

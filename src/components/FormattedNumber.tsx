@@ -42,7 +42,7 @@ export default function FormattedNumberDisplay({
   return (
     <span
       onClick={handleClick}
-      className={`${className} ${isClickable ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
+      className={`${className} ${isClickable ? 'cursor-pointer hover:opacity-80 hover:text-blue-400 transition-opacity' : ''}`}
       title={isClickable ? 'Click to see full value' : undefined}
     >
       {displayValue}
