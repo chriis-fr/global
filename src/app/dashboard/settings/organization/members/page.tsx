@@ -261,90 +261,90 @@ export default function OrganizationMembersPage() {
       )}
 
       <div className="space-y-6">
-        {/* Add Member Section */}
-        {isAdmin && (
-          <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-white">Add New Member</h2>
-              <div className="flex space-x-2">
-                {/* MIGRATION BUTTON - COMMENTED OUT (No longer needed) */}
-                {/* <button
-                  onClick={forceMigration}
-                  className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors flex items-center space-x-2"
-                >
-                  <Shield className="h-4 w-4" />
-                  <span>Force Migration</span>
-                </button> */}
-                {!showAddForm && (
-                  <button
-                    onClick={() => setShowAddForm(true)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span>Add Member</span>
-                  </button>
-                )}
-              </div>
-            </div>
+         {/* Add Member Section */}
+         {isAdmin && (
+           <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 relative z-10">
+             <div className="flex items-center justify-between mb-4">
+               <h2 className="text-xl font-semibold text-white">Add New Member</h2>
+               <div className="flex space-x-2">
+                 {/* MIGRATION BUTTON - COMMENTED OUT (No longer needed) */}
+                 {/* <button
+                   onClick={forceMigration}
+                   className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors flex items-center space-x-2"
+                 >
+                   <Shield className="h-4 w-4" />
+                   <span>Force Migration</span>
+                 </button> */}
+                 {!showAddForm && (
+                   <button
+                     onClick={() => setShowAddForm(true)}
+                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+                   >
+                     <Plus className="h-4 w-4" />
+                     <span>Add Member</span>
+                   </button>
+                 )}
+               </div>
+             </div>
 
-            {showAddForm && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-blue-300 text-sm font-medium mb-2">
-                      Email Address *
-                    </label>
-                    <input
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                      className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Enter member's email"
-                    />
-                  </div>
-                  
-                  <div>
-                    <RoleSelector
-                      selectedRole={formData.role}
-                      onRoleChange={(role) => setFormData(prev => ({ ...prev, role }))}
-                      showPermissions={true}
-                    />
-                  </div>
-                </div>
+             {showAddForm && (
+               <div className="space-y-4 relative z-20">
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   <div>
+                     <label className="block text-blue-300 text-sm font-medium mb-2">
+                       Email Address *
+                     </label>
+                     <input
+                       type="email"
+                       value={formData.email}
+                       onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                       className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                       placeholder="Enter member's email"
+                     />
+                   </div>
+                   
+                   <div className="relative z-30">
+                     <RoleSelector
+                       selectedRole={formData.role}
+                       onRoleChange={(role) => setFormData(prev => ({ ...prev, role }))}
+                       showPermissions={true}
+                     />
+                   </div>
+                 </div>
 
-                <div className="flex justify-end space-x-3">
-                  <button
-                    onClick={() => {
-                      setShowAddForm(false);
-                      setFormData({ email: '', role: 'member' });
-                    }}
-                    className="px-4 py-2 text-blue-300 hover:text-white transition-colors"
-                    disabled={adding}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleAddMember}
-                    disabled={adding}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 disabled:opacity-50"
-                  >
-                    {adding ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        <span>Adding...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Plus className="h-4 w-4" />
-                        <span>Add Member</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+                 <div className="flex justify-end space-x-3">
+                   <button
+                     onClick={() => {
+                       setShowAddForm(false);
+                       setFormData({ email: '', role: 'financeManager' });
+                     }}
+                     className="px-4 py-2 text-blue-300 hover:text-white transition-colors"
+                     disabled={adding}
+                   >
+                     Cancel
+                   </button>
+                   <button
+                     onClick={handleAddMember}
+                     disabled={adding}
+                     className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 disabled:opacity-50"
+                   >
+                     {adding ? (
+                       <>
+                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                         <span>Sending...</span>
+                       </>
+                     ) : (
+                       <>
+                         <Plus className="h-4 w-4" />
+                         <span>Send Invitation</span>
+                       </>
+                     )}
+                   </button>
+                 </div>
+               </div>
+             )}
+           </div>
+         )}
 
         {/* Pending Invitations */}
         {pendingInvitations.length > 0 && (

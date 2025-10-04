@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ChevronDown, Shield, Crown, DollarSign, Calculator, CheckCircle } from 'lucide-react';
 import { REQUEST_FINANCE_ROLES, type RoleKey } from '@/lib/utils/roles';
 
@@ -18,6 +18,24 @@ export default function RoleSelector({
   showPermissions = true 
 }: RoleSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
 
   const getRoleIcon = (role: RoleKey) => {
     switch (role) {
@@ -69,7 +87,7 @@ export default function RoleSelector({
   };
 
   return (
-    <div className="relative">
+    <div className="relative" ref={dropdownRef}>
       <label className="block text-blue-300 text-sm font-medium mb-2">
         Role *
       </label>
@@ -90,8 +108,10 @@ export default function RoleSelector({
       </button>
 
       {isOpen && !disabled && (
-        <div className="absolute z-10 w-full mt-1 bg-gray-900/95 backdrop-blur-sm border border-white/20 rounded-lg shadow-xl">
-          {Object.entries(REQUEST_FINANCE_ROLES).map(([roleKey, roleData]) => (
+        <div className="absolute z-50 w-full mt-1 bg-gray-900/95 backdrop-blur-sm border border-white/20 rounded-lg shadow-xl max-h-80 overflow-y-auto">
+          {Object.entries(REQUEST_FINANCE_ROLES)
+            .filter(([roleKey]) => roleKey !== 'owner') // Remove owner from selectable roles
+            .map(([roleKey, roleData]) => (
             <button
               key={roleKey}
               type="button"
