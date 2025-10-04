@@ -274,6 +274,12 @@ export default function Sidebar() {
               if (link.key === 'accountsPayable') {
                 return subscription?.canAccessPayables || false;
               }
+              // Hide Smart Invoicing service if user only has payables access (payables-only plans)
+              if (link.key === 'smartInvoicing') {
+                // Show Smart Invoicing for receivables plans, combined plans, or free plan
+                const isPayablesOnly = subscription?.plan?.type === 'payables';
+                return !isPayablesOnly;
+              }
               return true;
             }).map(link => {
               const active = pathname.startsWith(link.href);

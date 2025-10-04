@@ -518,8 +518,17 @@ export default function OrganizationSettingsPage() {
               <div className="flex items-center space-x-3">
                 <Building2 className="h-6 w-6 text-blue-400" />
                 <h2 className="text-xl font-semibold text-white">{orgInfo.organization.name}</h2>
-                <span className="px-2 py-1 bg-blue-600/20 text-blue-300 text-xs rounded-full">
-                  {orgInfo.userRole}
+                <span className={`px-2 py-1 text-xs rounded-full ${
+                  orgInfo.userRole === 'owner' 
+                    ? 'bg-yellow-600/20 text-yellow-300' 
+                    : orgInfo.userRole === 'admin'
+                    ? 'bg-purple-600/20 text-purple-300'
+                    : 'bg-blue-600/20 text-blue-300'
+                }`}>
+                  {orgInfo.userRole === 'owner' ? 'Owner' : 
+                   orgInfo.userRole === 'admin' ? 'Admin' : 
+                   orgInfo.userRole === 'member' ? 'Member' : 
+                   orgInfo.userRole || 'Unknown'}
                 </span>
               </div>
               <div className="flex space-x-2">

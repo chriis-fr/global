@@ -33,7 +33,7 @@ export async function GET() {
       );
     }
 
-    const organization = await OrganizationService.getOrganizationById(user.organizationId.toString());
+    let organization = await OrganizationService.getOrganizationById(user.organizationId.toString());
     
     if (!organization) {
       return NextResponse.json(
@@ -42,16 +42,76 @@ export async function GET() {
       );
     }
 
-    // Get member details
+    // MIGRATION CODE - COMMENTED OUT (No longer needed)
+    // All existing organizations have been migrated, new organizations use proper structure
+    
+    // Check if organization needs migration and migrate if necessary
+    // const needsMigration = organization.members.some(member => 
+    //   !member.email || !member.name || !member.joinedAt || !member.permissions
+    // );
+
+    // console.log('🔍 [Members API] Migration check:', {
+    //   needsMigration,
+    //   memberCount: organization.members.length,
+    //   members: organization.members.map(m => ({
+    //     hasEmail: !!m.email,
+    //     hasName: !!m.name,
+    //     hasJoinedAt: !!m.joinedAt,
+    //     hasPermissions: !!m.permissions,
+    //     userId: m.userId.toString(),
+    //     role: m.role
+    //   }))
+    // });
+
+    // if (needsMigration) {
+    //   console.log('🔄 [Members API] Migrating organization members...');
+    //   organization = await OrganizationService.migrateOrganizationMembers(user.organizationId.toString());
+    //   
+    //   if (!organization) {
+    //     return NextResponse.json(
+    //       { success: false, message: 'Failed to migrate organization members' },
+    //       { status: 500 }
+    //     );
+    //   }
+    //   
+    //   console.log('✅ [Members API] Migration completed:', {
+    //     memberCount: organization.members.length,
+    //     members: organization.members.map(m => ({
+    //       hasEmail: !!m.email,
+    //       hasName: !!m.name,
+    //       hasJoinedAt: !!m.joinedAt,
+    //       hasPermissions: !!m.permissions,
+    //       userId: m.userId.toString(),
+    //       role: m.role
+    //     }))
+    //   });
+    // }
+
+    // Get member details (after migration, all members should have proper structure)
     const membersWithDetails = await Promise.all(
       organization.members.map(async (member) => {
         const memberUser = await UserService.getUserById(member.userId.toString());
+        
+        // Debug logging
+        console.log('🔍 [Members API] Member data:', {
+          userId: member.userId.toString(),
+          role: member.role,
+          memberData: member,
+          userData: memberUser
+        });
+        
         return {
           userId: member.userId.toString(),
           role: member.role,
-          name: memberUser?.name || 'Unknown User',
-          email: memberUser?.email || 'unknown@email.com',
-          profilePicture: memberUser?.profilePicture || memberUser?.avatar
+          name: member.name || memberUser?.name || 'Unknown User',
+          email: member.email || memberUser?.email || 'unknown@email.com',
+          profilePicture: memberUser?.profilePicture || memberUser?.avatar,
+          joinedAt: member.joinedAt ? new Date(member.joinedAt).toISOString() : new Date().toISOString(),
+          lastActiveAt: member.lastActiveAt ? new Date(member.lastActiveAt).toISOString() : new Date().toISOString(),
+          status: member.status || 'active',
+          // Ensure all ObjectIds are converted to strings
+          _id: member._id ? member._id.toString() : undefined,
+          invitedBy: member.invitedBy ? member.invitedBy.toString() : undefined
         };
       })
     );

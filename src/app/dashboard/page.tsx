@@ -182,11 +182,32 @@ export default function DashboardPage() {
     return `${subscription.usage.invoicesThisMonth} / ${subscription.limits.invoicesPerMonth === -1 ? '∞' : subscription.limits.invoicesPerMonth}`;
   };
 
-  // Check if user has access to receivables (paid plans only)
-  const hasReceivablesAccess = subscription?.plan?.planId !== 'receivables-free';
-
+  // Check subscription type and access
+  const isPayablesOnly = subscription?.plan?.type === 'payables';
+  const isReceivablesOnly = subscription?.plan?.type === 'receivables';
+  const isCombined = subscription?.plan?.type === 'combined';
+  const isFreePlan = subscription?.plan?.planId === 'receivables-free';
+  
+  // Check if user has access to receivables (receivables plans, combined plans, or free plan)
+  const hasReceivablesAccess = isReceivablesOnly || isCombined || isFreePlan;
+  
+  // Check if user has access to payables (payables plans or combined plans)
+  const hasPayablesAccess = (isPayablesOnly || isCombined) && subscription?.canAccessPayables;
+  
   // Check if user is on a paid plan
   const isPaidUser = subscription?.plan?.planId && subscription.plan.planId !== 'receivables-free';
+
+  // Debug logging
+  console.log('🔍 [Dashboard] Subscription debug:', {
+    subscription: subscription?.plan,
+    hasReceivablesAccess,
+    hasPayablesAccess,
+    isFreePlan,
+    isReceivablesOnly,
+    isPayablesOnly,
+    isCombined,
+    canCreateInvoice: subscription?.canCreateInvoice
+  });
 
   return (
     <div className="space-y-6">
@@ -215,8 +236,8 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Plan Status Banner - Only show for free users */}
-      {subscription && subscription.plan?.planId === 'receivables-free' && (
+      {/* Plan Status Banner - Only show for receivables free users */}
+      {subscription && subscription.plan?.planId === 'receivables-free' && hasReceivablesAccess && (
         <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-3 md:p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2 md:space-x-3">
@@ -252,31 +273,37 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Financial Overview - Minimalistic Request Finance Style */}
-      <div className={`grid gap-6 ${hasReceivablesAccess && subscription?.canAccessPayables ? 'grid-cols-1 md:grid-cols-3' : hasReceivablesAccess || subscription?.canAccessPayables ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
-        {/* Net Balance - Primary metric */}
-        <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-blue-200 text-sm font-medium">Net Balance</p>
-              <p className={`text-3xl font-bold ${stats.netBalance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {stats.netBalance >= 0 ? '+' : ''}
-                <FormattedNumberDisplay value={Math.abs(stats.netBalance)} />
-              </p>
-              <p className="text-xs text-blue-300 mt-1">
-                {stats.netBalance >= 0 ? 'Positive cash flow' : 'Negative cash flow'}
-              </p>
-            </div>
-            <div className={`p-3 rounded-lg ${stats.netBalance >= 0 ? 'bg-green-500/20' : 'bg-red-500/20'}`}>
-              {stats.netBalance >= 0 ? 
-                <TrendingUp className="h-6 w-6 text-green-400" /> : 
-                <TrendingDown className="h-6 w-6 text-red-400" />
-              }
+      {/* Financial Overview - Show relevant metrics based on subscription type */}
+      <div className={`grid gap-6 ${
+        hasReceivablesAccess && hasPayablesAccess ? 'grid-cols-1 md:grid-cols-3' : 
+        hasReceivablesAccess || hasPayablesAccess ? 'grid-cols-1 md:grid-cols-2' : 
+        'grid-cols-1'
+      }`}>
+        {/* Net Balance - Show for all plans except payables-only */}
+        {!isPayablesOnly && (
+          <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-blue-200 text-sm font-medium">Net Balance</p>
+                <p className={`text-3xl font-bold ${stats.netBalance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {stats.netBalance >= 0 ? '+' : ''}
+                  <FormattedNumberDisplay value={Math.abs(stats.netBalance)} />
+                </p>
+                <p className="text-xs text-blue-300 mt-1">
+                  {stats.netBalance >= 0 ? 'Positive cash flow' : 'Negative cash flow'}
+                </p>
+              </div>
+              <div className={`p-3 rounded-lg ${stats.netBalance >= 0 ? 'bg-green-500/20' : 'bg-red-500/20'}`}>
+                {stats.netBalance >= 0 ? 
+                  <TrendingUp className="h-6 w-6 text-green-400" /> : 
+                  <TrendingDown className="h-6 w-6 text-red-400" />
+                }
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Receivables (Invoices) - Only show for paid plans */}
+        {/* Receivables (Invoices) - Only show for receivables plans */}
         {hasReceivablesAccess && (
           <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
             <div className="flex items-center justify-between">
@@ -294,8 +321,8 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Payables (Bills) - Only show if user has access */}
-        {subscription?.canAccessPayables && (
+        {/* Payables (Bills) - Only show for payables plans */}
+        {hasPayablesAccess && (
           <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -319,26 +346,30 @@ export default function DashboardPage() {
         <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
           <h3 className="text-lg font-semibold text-white mb-4">Quick Actions</h3>
           <div className="flex flex-col space-y-3">
-            <button
-              onClick={() => router.push('/dashboard/services/smart-invoicing/create')}
-              disabled={!subscription?.canCreateInvoice}
-              className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
-                subscription?.canCreateInvoice
-                  ? 'bg-blue-600 text-white hover:bg-blue-700'
-                  : 'bg-gray-500 text-gray-300 cursor-not-allowed'
-              }`}
-            >
-              <FileText className="h-5 w-5" />
-              <span>Create Invoice</span>
-              {!subscription?.canCreateInvoice && (
-                <>
-                  <span className="text-xs ml-auto">Limit Reached</span>
-                  <Lock className="h-4 w-4" />
-                </>
-              )}
-            </button>
+            {/* Show Create Invoice only for receivables plans */}
+            {hasReceivablesAccess && (
+              <button
+                onClick={() => router.push('/dashboard/services/smart-invoicing/create')}
+                disabled={!subscription?.canCreateInvoice}
+                className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+                  subscription?.canCreateInvoice
+                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                    : 'bg-gray-500 text-gray-300 cursor-not-allowed'
+                }`}
+              >
+                <FileText className="h-5 w-5" />
+                <span>Create Invoice</span>
+                {!subscription?.canCreateInvoice && (
+                  <>
+                    <span className="text-xs ml-auto">Limit Reached</span>
+                    <Lock className="h-4 w-4" />
+                  </>
+                )}
+              </button>
+            )}
             
-            {subscription?.canAccessPayables && (
+            {/* Show Create Payable only for payables plans */}
+            {hasPayablesAccess && (
               <button
                 onClick={() => router.push('/dashboard/services/payables/create')}
                 className="flex items-center space-x-3 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"

@@ -58,8 +58,8 @@ export const BILLING_PLANS: BillingPlan[] = [
     description: 'Essential payables management',
     monthlyPrice: 170,
     yearlyPrice: 1700,
-    monthlyPriceId: 'price_1SAV9MAGa3OwCLplIUXMfXdp', // Monthly
-    yearlyPriceId: 'price_1SAV9LAGa3OwCLplsqx52qBE', // Yearly
+    monthlyPriceId: 'price_1SAV9LAGa3OwCLplsqx52qBE', // Monthly
+    yearlyPriceId: 'price_1SAV9MAGa3OwCLplIUXMfXdp', // Yearly
     currency: 'USD',
     features: [
       { id: 'batch-payments', name: 'Batch payments', description: 'Process multiple payments at once', included: true },
@@ -106,8 +106,8 @@ export const BILLING_PLANS: BillingPlan[] = [
     description: 'Ideal for small businesses',
     monthlyPrice: 200,
     yearlyPrice: 2000,
-    monthlyPriceId: 'price_1SAVMIAGa3OwCLplHGrhqv40', // Monthly
-    yearlyPriceId: 'price_1SAVMIAGa3OwCLplJQvi7jk1', // Yearly
+    monthlyPriceId: 'price_1SAVMIAGa3OwCLplJQvi7jk1', // Monthly
+    yearlyPriceId: 'price_1SAVMIAGa3OwCLplHGrhqv40', // Yearly
     currency: 'USD',
     features: [
       { id: 'unlimited-crypto-fiat', name: 'Unlimited crypto-to-fiat payments', description: 'Convert crypto to fiat without limits', included: true },

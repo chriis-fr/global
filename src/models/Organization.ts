@@ -16,8 +16,53 @@ export interface ContactPerson {
 }
 
 export interface OrganizationMember {
+  _id?: ObjectId;
   userId: ObjectId; // Reference to Users
-  role: string; // e.g., "owner", "member", "accountant"
+  email: string;
+  name: string;
+  role: 'owner' | 'admin' | 'financeManager' | 'accountant' | 'approver';
+  permissions: PermissionSet;
+  status: 'active' | 'suspended' | 'pending';
+  invitedBy?: ObjectId;
+  joinedAt: Date;
+  lastActiveAt?: Date;
+}
+
+export interface PermissionSet {
+  // Treasury Control (Admin Only)
+  canAddPaymentMethods: boolean;
+  canModifyPaymentMethods: boolean;
+  canManageTreasury: boolean;
+  
+  // Team Management (Admin Only)
+  canManageTeam: boolean;
+  canInviteMembers: boolean;
+  canRemoveMembers: boolean;
+  
+  // Company Settings (Admin Only)
+  canManageCompanyInfo: boolean;
+  canManageSettings: boolean;
+  
+  // Invoice Management
+  canCreateInvoices: boolean;
+  canSendInvoices: boolean;
+  canManageInvoices: boolean;
+  
+  // Payables Management
+  canCreateBills: boolean;
+  canApproveBills: boolean;
+  canExecutePayments: boolean;
+  canManagePayables: boolean;
+  
+  // Accounting & Reporting
+  canViewAllData: boolean;
+  canExportData: boolean;
+  canReconcileTransactions: boolean;
+  canManageAccounting: boolean;
+  
+  // Approval Workflow
+  canApproveDocuments: boolean;
+  canManageApprovalPolicies: boolean;
 }
 
 export interface Organization {
@@ -130,4 +175,73 @@ export interface UpdateOrganizationInput {
   };
   status?: 'pending' | 'active' | 'suspended';
   verified?: boolean;
+}
+
+// New models for Request Finance pattern
+export interface InvitationToken {
+  _id?: ObjectId;
+  token: string;
+  organizationId: ObjectId;
+  email: string;
+  role: 'admin' | 'financeManager' | 'accountant' | 'approver';
+  permissions: PermissionSet;
+  invitedBy: ObjectId;
+  expiresAt: Date;
+  usedAt?: Date;
+  createdAt: Date;
+}
+
+export interface ApprovalPolicy {
+  _id?: ObjectId;
+  organizationId: ObjectId;
+  name: string;
+  description?: string;
+  conditions: {
+    amountThreshold?: number;
+    vendorCategories?: string[];
+    departments?: string[];
+    documentTypes?: string[];
+  };
+  approvers: {
+    role: string;
+    required: number;
+    sequential: boolean;
+  };
+  escalation: {
+    timeoutHours: number;
+    escalateTo: string;
+  };
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface AuditLog {
+  _id?: ObjectId;
+  organizationId: ObjectId;
+  userId: ObjectId;
+  action: string;
+  resource: string;
+  resourceId: ObjectId;
+  details: Record<string, any>;
+  ipAddress?: string;
+  userAgent?: string;
+  createdAt: Date;
+}
+
+export interface TreasuryControl {
+  _id?: ObjectId;
+  organizationId: ObjectId;
+  paymentMethods: {
+    canAdd: boolean;
+    canModify: boolean;
+    canRemove: boolean;
+    requires2FA: boolean;
+  };
+  auditLog: {
+    allChanges: boolean;
+    immutable: boolean;
+  };
+  createdAt: Date;
+  updatedAt: Date;
 } 
