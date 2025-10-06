@@ -111,7 +111,9 @@ export async function GET() {
           status: member.status || 'active',
           // Ensure all ObjectIds are converted to strings
           _id: member._id ? member._id.toString() : undefined,
-          invitedBy: member.invitedBy ? member.invitedBy.toString() : undefined
+          invitedBy: member.invitedBy ? member.invitedBy.toString() : undefined,
+          // Convert permissions object to plain object (remove any ObjectId references)
+          permissions: member.permissions ? JSON.parse(JSON.stringify(member.permissions)) : undefined
         };
       })
     );

@@ -6,7 +6,7 @@ import RoleSelector from '@/components/organization/RoleSelector';
 import MemberCard from '@/components/organization/MemberCard';
 import PermissionMatrix from '@/components/organization/PermissionMatrix';
 import { getOrganizationData, getOrganizationMembers } from '@/lib/actions/organization';
-import { sendInvitation, getPendingInvitations } from '@/lib/actions/invitation';
+import { sendInvitation, getPendingInvitations, resendInvitation, deleteInvitation } from '@/lib/actions/invitation';
 import { type RoleKey } from '@/lib/utils/roles';
 
 interface OrganizationInfo {
@@ -32,6 +32,8 @@ export default function OrganizationMembersPage() {
   const [editingMember, setEditingMember] = useState<any | null>(null);
   const [adding, setAdding] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [resending, setResending] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     email: '',
     role: 'financeManager' as RoleKey
@@ -128,20 +130,28 @@ export default function OrganizationMembersPage() {
       return;
     }
 
+    console.log('📧 [Members Page] Starting invitation process...');
+    console.log('📧 [Members Page] Email:', formData.email);
+    console.log('📧 [Members Page] Role:', formData.role);
+
     setAdding(true);
     try {
+      console.log('📧 [Members Page] Calling sendInvitation server action...');
       const result = await sendInvitation(formData.email, formData.role);
+      console.log('📧 [Members Page] Server action result:', result);
 
       if (result.success) {
+        console.log('✅ [Members Page] Invitation sent successfully');
         setMessage({ type: 'success', text: `Invitation sent to ${formData.email}! They will receive an email with instructions to join.` });
         setShowAddForm(false);
         setFormData({ email: '', role: 'financeManager' });
         await fetchPendingInvitations();
       } else {
+        console.log('❌ [Members Page] Invitation failed:', result.error);
         setMessage({ type: 'error', text: result.error || 'Failed to send invitation' });
       }
     } catch (error) {
-      console.error('Error sending invitation:', error);
+      console.error('❌ [Members Page] Error sending invitation:', error);
       setMessage({ type: 'error', text: 'Failed to send invitation. Please try again.' });
     } finally {
       setAdding(false);
@@ -197,6 +207,47 @@ export default function OrganizationMembersPage() {
     } catch (error) {
       console.error('Error removing member:', error);
       setMessage({ type: 'error', text: 'Failed to remove member. Please try again.' });
+    }
+  };
+
+  const handleResendInvitation = async (invitationId: string) => {
+    setResending(invitationId);
+    try {
+      const result = await resendInvitation(invitationId);
+
+      if (result.success) {
+        setMessage({ type: 'success', text: 'Invitation resent successfully!' });
+      } else {
+        setMessage({ type: 'error', text: result.error || 'Failed to resend invitation' });
+      }
+    } catch (error) {
+      console.error('Error resending invitation:', error);
+      setMessage({ type: 'error', text: 'Failed to resend invitation. Please try again.' });
+    } finally {
+      setResending(null);
+    }
+  };
+
+  const handleDeleteInvitation = async (invitationId: string) => {
+    if (!confirm('Are you sure you want to delete this invitation?')) {
+      return;
+    }
+
+    setDeleting(invitationId);
+    try {
+      const result = await deleteInvitation(invitationId);
+
+      if (result.success) {
+        setMessage({ type: 'success', text: 'Invitation deleted successfully!' });
+        await fetchPendingInvitations();
+      } else {
+        setMessage({ type: 'error', text: result.error || 'Failed to delete invitation' });
+      }
+    } catch (error) {
+      console.error('Error deleting invitation:', error);
+      setMessage({ type: 'error', text: 'Failed to delete invitation. Please try again.' });
+    } finally {
+      setDeleting(null);
     }
   };
 
@@ -346,41 +397,77 @@ export default function OrganizationMembersPage() {
            </div>
          )}
 
-        {/* Pending Invitations */}
-        {pendingInvitations.length > 0 && (
-          <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
-            <h2 className="text-xl font-semibold text-white mb-6 flex items-center space-x-2">
-              <Mail className="h-5 w-5" />
-              <span>Pending Invitations</span>
-            </h2>
-            
-            <div className="space-y-3">
-              {pendingInvitations.map((invitation) => (
-                <div key={invitation._id} className="flex items-center justify-between p-4 bg-white/5 rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-orange-600 rounded-full flex items-center justify-center">
-                      <Mail className="h-5 w-5 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="text-white font-medium">{invitation.email}</h3>
-                      <p className="text-blue-200 text-sm">Invited as {invitation.role}</p>
-                      <div className="flex items-center space-x-1 text-gray-400 text-xs mt-1">
-                        <Clock className="h-3 w-3" />
-                        <span>Expires {new Date(invitation.expiresAt).toLocaleDateString()}</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center space-x-2">
-                    <div className="px-2 py-1 bg-orange-600/20 text-orange-300 border border-orange-500/50 rounded-full text-xs">
-                      Pending
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+         {/* Pending Invitations */}
+         {pendingInvitations.length > 0 && (
+           <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
+             <h2 className="text-xl font-semibold text-white mb-6 flex items-center space-x-2">
+               <Mail className="h-5 w-5" />
+               <span>Pending Invitations</span>
+             </h2>
+             
+             <div className="space-y-3">
+               {pendingInvitations.map((invitation) => (
+                 <div key={invitation._id} className="flex items-center justify-between p-4 bg-white/5 rounded-lg">
+                   <div className="flex items-center space-x-3">
+                     <div className="w-10 h-10 bg-orange-600 rounded-full flex items-center justify-center">
+                       <Mail className="h-5 w-5 text-white" />
+                     </div>
+                     <div>
+                       <h3 className="text-white font-medium">{invitation.email}</h3>
+                       <p className="text-blue-200 text-sm">Invited as {invitation.role}</p>
+                       <div className="flex items-center space-x-1 text-gray-400 text-xs mt-1">
+                         <Clock className="h-3 w-3" />
+                         <span>Expires {new Date(invitation.expiresAt).toLocaleDateString()}</span>
+                       </div>
+                     </div>
+                   </div>
+                   
+                   <div className="flex items-center space-x-2">
+                     <div className="px-2 py-1 bg-orange-600/20 text-orange-300 border border-orange-500/50 rounded-full text-xs">
+                       Pending
+                     </div>
+                     
+                     <button
+                       onClick={() => handleResendInvitation(invitation._id)}
+                       disabled={resending === invitation._id}
+                       className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-1 disabled:opacity-50 text-sm"
+                     >
+                       {resending === invitation._id ? (
+                         <>
+                           <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                           <span>Resending...</span>
+                         </>
+                       ) : (
+                         <>
+                           <Mail className="h-3 w-3" />
+                           <span>Resend</span>
+                         </>
+                       )}
+                     </button>
+                     
+                     <button
+                       onClick={() => handleDeleteInvitation(invitation._id)}
+                       disabled={deleting === invitation._id}
+                       className="px-3 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center space-x-1 disabled:opacity-50 text-sm"
+                     >
+                       {deleting === invitation._id ? (
+                         <>
+                           <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                           <span>Deleting...</span>
+                         </>
+                       ) : (
+                         <>
+                           <Shield className="h-3 w-3" />
+                           <span>Delete</span>
+                         </>
+                       )}
+                     </button>
+                   </div>
+                 </div>
+               ))}
+             </div>
+           </div>
+         )}
 
         {/* Members List */}
         <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">

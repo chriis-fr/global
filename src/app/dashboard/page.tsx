@@ -47,6 +47,33 @@ export default function DashboardPage() {
   });
   const [loading, setLoading] = useState(true);
   const [usingFallbackData, setUsingFallbackData] = useState(false);
+  const [userName, setUserName] = useState<string>('');
+  const [organizationName, setOrganizationName] = useState<string>('');
+
+  // Fetch current user name and organization name
+  useEffect(() => {
+    const fetchUserData = async () => {
+      if (!session?.user?.email) return;
+      
+      try {
+        const response = await fetch('/api/user/settings');
+        const data = await response.json();
+        
+        if (data.success) {
+          if (data.data.profile.name) {
+            setUserName(data.data.profile.name);
+          }
+          if (data.data.organization?.name) {
+            setOrganizationName(data.data.organization.name);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch user data:', error);
+      }
+    };
+
+    fetchUserData();
+  }, [session?.user?.email]);
 
   useEffect(() => {
     const loadStats = async () => {
@@ -215,6 +242,11 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
             <h1 className="text-2xl md:text-3xl font-bold text-white mb-2 flex items-center gap-2">
+              {organizationName && (
+                <span className="text-blue-300 font-medium">
+                  {organizationName} • 
+                </span>
+              )}
               Overview
               {isPaidUser && (
                 <span className="bg-gradient-to-r from-yellow-400 to-orange-500 text-black text-xs font-bold px-2 py-1 rounded-full">
@@ -222,7 +254,7 @@ export default function DashboardPage() {
                 </span>
               )}
             </h1>
-            <p className="text-blue-200">Welcome back, {session?.user?.name || 'User'}!</p>
+            <p className="text-blue-200">Welcome back, {userName || session?.user?.name || 'User'}!</p>
             {usingFallbackData && (
               <div className="mt-2 flex items-center space-x-2">
                 <AlertTriangle className="h-4 w-4 text-orange-400" />

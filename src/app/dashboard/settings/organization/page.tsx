@@ -19,6 +19,7 @@ interface Organization {
   name: string;
   industry: string;
   companySize: '1-10' | '11-50' | '51-200' | '200+';
+  memberCount?: number;
   businessType: 'LLC' | 'Corporation' | 'Partnership' | 'Sole Proprietorship';
   phone: string;
   billingEmail: string;
@@ -161,8 +162,8 @@ export default function OrganizationSettingsPage() {
     router.push('/pricing');
   };
 
-  // Check if user has organization access (Pro plans only)
-  const hasOrganizationAccess = subscription?.canCreateOrganization;
+  // Check if user has organization access (Pro plans for individuals, or organization membership)
+  const hasOrganizationAccess = subscription?.canCreateOrganization || (orgInfo?.hasOrganization && orgInfo?.organization);
 
   if (loading) {
     return (
@@ -560,7 +561,14 @@ export default function OrganizationSettingsPage() {
               </div>
               <div>
                 <span className="text-blue-300">Company Size:</span>
-                <span className="text-white ml-2">{orgInfo.organization.companySize}</span>
+                <span className="text-white ml-2">
+                  {orgInfo.organization.companySize}
+                  {orgInfo.organization.memberCount && (
+                    <span className="text-blue-200 text-xs ml-1">
+                      ({orgInfo.organization.memberCount} members)
+                    </span>
+                  )}
+                </span>
               </div>
               <div>
                 <span className="text-blue-300">Business Type:</span>

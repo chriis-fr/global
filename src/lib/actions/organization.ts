@@ -57,15 +57,52 @@ export async function getOrganizationData(): Promise<{
         const userRole = userMember?.role || 'member';
         const userPermissions = userMember?.permissions || getRolePermissions('approver');
         
+        // Calculate actual company size based on member count
+        const memberCount = organization.members.length;
+        let actualCompanySize: '1-10' | '11-50' | '51-200' | '200+';
+        
+        if (memberCount <= 10) {
+          actualCompanySize = '1-10';
+        } else if (memberCount <= 50) {
+          actualCompanySize = '11-50';
+        } else if (memberCount <= 200) {
+          actualCompanySize = '51-200';
+        } else {
+          actualCompanySize = '200+';
+        }
+
         // Convert organization data to plain objects for client components
         const organizationData = {
-          ...organization,
           _id: organization._id?.toString(),
+          name: organization.name,
+          billingEmail: organization.billingEmail,
+          industry: organization.industry,
+          companySize: actualCompanySize, // Use calculated size
+          memberCount, // Add member count for display
+          businessType: organization.businessType,
+          phone: organization.phone,
+          website: organization.website,
+          address: organization.address,
+          taxId: organization.taxId,
+          registrationNumber: organization.registrationNumber,
+          primaryContact: organization.primaryContact,
+          services: organization.services,
+          onboarding: organization.onboarding,
+          status: organization.status,
+          verified: organization.verified,
+          createdAt: organization.createdAt.toISOString(),
+          updatedAt: organization.updatedAt.toISOString(),
           members: organization.members.map(member => ({
-            ...member,
             userId: member.userId.toString(),
+            email: member.email,
+            name: member.name,
+            role: member.role,
+            permissions: member.permissions,
+            status: member.status,
             _id: member._id?.toString(),
-            invitedBy: member.invitedBy?.toString()
+            invitedBy: member.invitedBy?.toString(),
+            joinedAt: member.joinedAt?.toISOString(),
+            lastActiveAt: member.lastActiveAt?.toISOString()
           }))
         };
 
@@ -307,9 +344,23 @@ export async function getOrganizationMembers(): Promise<{
       return { success: false, error: 'Organization not found' };
     }
 
+    // Serialize members data for client components
+    const serializedMembers = organization.members.map(member => ({
+      userId: member.userId.toString(),
+      email: member.email,
+      name: member.name,
+      role: member.role,
+      permissions: member.permissions,
+      status: member.status,
+      _id: member._id?.toString(),
+      invitedBy: member.invitedBy?.toString(),
+      joinedAt: member.joinedAt?.toISOString(),
+      lastActiveAt: member.lastActiveAt?.toISOString()
+    }));
+
     return {
       success: true,
-      data: organization.members
+      data: serializedMembers
     };
   } catch (error) {
     console.error('Error fetching organization members:', error);

@@ -1,22 +1,24 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Building2, Mail, Shield, CheckCircle, XCircle, Clock } from 'lucide-react';
-import { validateInvitationToken, acceptInvitation, declineInvitation } from '@/lib/actions/invitation';
+import { Mail, Shield, CheckCircle, XCircle, Clock } from 'lucide-react';
+import Image from 'next/image';
+import { validateInvitationToken, acceptInvitationForNewUser, completeInvitationAcceptance, declineInvitation } from '@/lib/actions/invitation';
 import PermissionMatrix from '@/components/organization/PermissionMatrix';
 import { type RoleKey } from '@/lib/utils/roles';
+import { type PermissionSet } from '@/models/Organization';
 
 interface InvitationData {
   organizationName: string;
   inviterName: string;
   role: string;
-  permissions: any;
+  permissions: PermissionSet;
   email: string;
   expiresAt: Date;
 }
 
-export default function InvitationPage({ params }: { params: { token: string } }) {
+export default function InvitationPage({ params }: { params: Promise<{ token: string }> }) {
   const router = useRouter();
   const [invitationData, setInvitationData] = useState<InvitationData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -24,40 +26,108 @@ export default function InvitationPage({ params }: { params: { token: string } }
   const [declining, setDeclining] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showPermissions, setShowPermissions] = useState(false);
+  const [token, setToken] = useState<string>('');
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  
+  const isInitialized = useRef(false);
 
-  useEffect(() => {
-    validateInvitation();
-  }, [params.token]);
-
-  const validateInvitation = async () => {
+  const checkAuthentication = useCallback(async () => {
     try {
-      const result = await validateInvitationToken(params.token);
+      const response = await fetch('/api/auth/session');
+      const session = await response.json();
+      const isAuth = !!session?.user;
+      setIsAuthenticated(isAuth);
+      console.log('🔐 [Auth Check] Authentication status:', isAuth);
+    } catch (error) {
+      console.error('Error checking authentication:', error);
+      setIsAuthenticated(false);
+    }
+  }, []);
+
+  const validateInvitation = useCallback(async () => {
+    try {
+      console.log('🔍 [Invitation Page] Validating invitation with token:', token);
+      const result = await validateInvitationToken(token);
+      
+      console.log('🔍 [Invitation Page] Validation result:', result);
       
       if (result.success && result.data) {
+        console.log('✅ [Invitation Page] Invitation data received:', result.data);
         setInvitationData(result.data);
+        console.log('📧 [Invitation Page] Invitation validated for:', result.data.email);
       } else {
+        console.log('❌ [Invitation Page] Validation failed:', result.error);
         setMessage({ type: 'error', text: result.error || 'Invalid or expired invitation' });
       }
     } catch (error) {
-      console.error('Error validating invitation:', error);
+      console.error('❌ [Invitation Page] Error validating invitation:', error);
       setMessage({ type: 'error', text: 'Failed to validate invitation' });
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    const getToken = async () => {
+      const resolvedParams = await params;
+      setToken(resolvedParams.token);
+    };
+    getToken();
+  }, [params]);
+
+  useEffect(() => {
+    if (token && !isInitialized.current) {
+      isInitialized.current = true;
+      console.log('🚀 [Invitation Page] Initializing with token:', token);
+      validateInvitation();
+      checkAuthentication();
+    }
+  }, [token, validateInvitation, checkAuthentication]);
+
 
   const handleAcceptInvitation = async () => {
     setAccepting(true);
     try {
-      const result = await acceptInvitation(params.token);
-
-      if (result.success) {
-        setMessage({ type: 'success', text: 'Welcome to the organization! Redirecting to dashboard...' });
-        setTimeout(() => {
-          router.push('/dashboard');
-        }, 2000);
+      // Always get invitation data first
+      const invitationResult = await acceptInvitationForNewUser(token);
+      
+      if (invitationResult.success && invitationResult.data) {
+        // Store invitation data in localStorage for signup page
+        localStorage.setItem('invitationData', JSON.stringify({
+          token,
+          email: invitationResult.data.email,
+          organizationName: invitationResult.data.organizationName,
+          organizationIndustry: invitationResult.data.organizationIndustry,
+          inviterName: invitationResult.data.inviterName,
+          role: invitationResult.data.role
+        }));
+        
+        if (isAuthenticated) {
+          // User is authenticated - try to complete invitation directly
+          try {
+            const result = await completeInvitationAcceptance(token);
+            if (result.success) {
+              setMessage({ type: 'success', text: 'Welcome to the organization! Redirecting to dashboard...' });
+              setTimeout(() => {
+                router.push('/dashboard');
+              }, 2000);
+            } else {
+              setMessage({ type: 'error', text: result.error || 'Failed to accept invitation' });
+            }
+          } catch (error) {
+            console.log('⚠️ [Invitation] User authenticated but invitation completion failed, redirecting to auth page');
+            console.error('❌ [Invitation] Invitation completion error:', error);
+            // Redirect to auth page for signup
+            router.push('/auth');
+            return;
+          }
+        } else {
+          // User not authenticated - redirect to auth page for signup
+          router.push('/auth');
+          return;
+        }
       } else {
-        setMessage({ type: 'error', text: result.error || 'Failed to accept invitation' });
+        setMessage({ type: 'error', text: invitationResult.error || 'Failed to process invitation' });
       }
     } catch (error) {
       console.error('Error accepting invitation:', error);
@@ -70,7 +140,7 @@ export default function InvitationPage({ params }: { params: { token: string } }
   const handleDeclineInvitation = async () => {
     setDeclining(true);
     try {
-      const result = await declineInvitation(params.token);
+      const result = await declineInvitation(token);
 
       if (result.success) {
         setMessage({ type: 'success', text: 'Invitation declined. Redirecting to home...' });
@@ -167,12 +237,36 @@ export default function InvitationPage({ params }: { params: { token: string } }
         <div className="bg-white/10 backdrop-blur-sm rounded-xl p-8">
           {/* Header */}
           <div className="text-center mb-8">
-            <Building2 className="h-16 w-16 text-blue-400 mx-auto mb-4" />
-            <h1 className="text-3xl font-bold text-white mb-2">You're Invited!</h1>
+            <div className="flex justify-center mb-4">
+              <Image
+                src="/chains.png"
+                alt="ERP Logo"
+                width={64}
+                height={64}
+                className="h-20 w-20  rounded-2xl"
+              />
+            </div>
+            <h1 className="text-3xl font-bold text-white mb-2">You&apos;re Invited!</h1>
             <p className="text-blue-200">
-              You've been invited to join <strong>{invitationData.organizationName}</strong>
+              You&apos;ve been invited to join <strong>{invitationData.organizationName}</strong>
             </p>
           </div>
+
+          {/* Authentication Status */}
+          {isAuthenticated === false && (
+            <div className="bg-blue-600/20 border border-blue-500/50 rounded-lg p-4 mb-6">
+              <div className="flex items-center space-x-2">
+                <Shield className="h-5 w-5 text-blue-400" />
+                <div>
+                  <h3 className="text-blue-200 font-semibold">New User</h3>
+                  <p className="text-blue-300 text-sm">
+                    You&apos;ll need to create an account to accept this invitation. 
+                    Your email is already verified through this invitation.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Invitation Details */}
           <div className="bg-white/5 rounded-lg p-6 mb-6">
@@ -232,6 +326,7 @@ export default function InvitationPage({ params }: { params: { token: string } }
             </div>
           )}
 
+
           {/* Action Buttons */}
           <div className="flex space-x-4">
             <button
@@ -247,7 +342,7 @@ export default function InvitationPage({ params }: { params: { token: string } }
               ) : (
                 <>
                   <CheckCircle className="h-4 w-4" />
-                  <span>Accept Invitation</span>
+                  <span>{!isAuthenticated ? 'Sign Up & Accept' : 'Accept Invitation'}</span>
                 </>
               )}
             </button>

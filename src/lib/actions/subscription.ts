@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth';
 import { getDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
 import { BILLING_PLANS } from '@/data/billingPlans';
+import { OrganizationMember } from '@/models/Organization';
 
 export interface SubscriptionData {
   plan: {
@@ -93,12 +94,195 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
     console.log(' [ServerAction] User found:', {
       userId: session.user.id,
       email: user.email,
-      hasSubscription: !!user.subscription
+      hasSubscription: !!user.subscription,
+      organizationId: user.organizationId
     });
     
-    // Initialize free plan if no subscription data
+    // Check if user is a member of an organization
+    if (user.organizationId) {
+      console.log('🏢 [ServerAction] User is organization member, using organization subscription');
+      
+      // Get organization details
+      const organization = await db.collection('organizations').findOne({ _id: user.organizationId });
+      if (organization) {
+        console.log('🏢 [ServerAction] User is organization member, getting subscription from owner');
+        
+        // Find the owner by matching billing email or by role
+        let owner = organization.members.find((member: OrganizationMember) => member.role === 'owner');
+        
+        if (owner) {
+          console.log('✅ [ServerAction] Found owner by role:', { 
+            userId: owner.userId, 
+            email: owner.email, 
+            role: owner.role 
+          });
+        }
+        
+        // If no owner role found, find by billing email match
+        if (!owner) {
+          owner = organization.members.find((member: OrganizationMember) => 
+            member.email === organization.billingEmail
+          );
+          if (owner) {
+            console.log('🔍 [ServerAction] Found owner by billing email match:', { 
+              userId: owner.userId, 
+              email: owner.email, 
+              role: owner.role 
+            });
+          }
+        }
+        
+        if (!owner) {
+          console.log('❌ [ServerAction] No owner found in organization');
+          console.log('🔍 [ServerAction] Available members:', organization.members.map((m: OrganizationMember) => ({ role: m.role, email: m.email, userId: m.userId })));
+          console.log('🔍 [ServerAction] Billing email:', organization.billingEmail);
+          return null;
+        }
+        
+        // Get the owner's user record to access their subscription
+        console.log('🔍 [ServerAction] Looking for owner user with ID:', owner.userId);
+        const ownerUser = await db.collection('users').findOne({ _id: new ObjectId(owner.userId) });
+        if (!ownerUser) {
+          console.log('❌ [ServerAction] Owner user not found for ID:', owner.userId);
+          console.log('🔍 [ServerAction] Owner data:', { 
+            userId: owner.userId, 
+            email: owner.email, 
+            role: owner.role 
+          });
+          return null;
+        }
+        
+        console.log('✅ [ServerAction] Found owner user:', { 
+          _id: ownerUser._id, 
+          email: ownerUser.email, 
+          hasSubscription: !!ownerUser.subscription 
+        });
+        
+        if (!ownerUser.subscription) {
+          console.log('❌ [ServerAction] Owner has no subscription');
+          return null;
+        }
+        
+        console.log('✅ [ServerAction] Using owner\'s subscription for organization member:', ownerUser.subscription.planId);
+        
+        // Check if organization has cached subscription and if it's up to date
+        let orgSubscription = organization.subscription;
+        let needsUpdate = false;
+        
+        if (!orgSubscription) {
+          console.log('🔄 [ServerAction] No cached subscription, using owner\'s subscription');
+          orgSubscription = ownerUser.subscription;
+          needsUpdate = true;
+        } else {
+          // Check if owner's subscription is newer than cached subscription
+          const ownerUpdatedAt = new Date(ownerUser.subscription.updatedAt || ownerUser.subscription.createdAt);
+          const orgUpdatedAt = new Date(orgSubscription.updatedAt || orgSubscription.createdAt);
+          
+          if (ownerUpdatedAt > orgUpdatedAt) {
+            console.log('🔄 [ServerAction] Owner\'s subscription is newer, updating organization cache');
+            orgSubscription = ownerUser.subscription;
+            needsUpdate = true;
+          } else {
+            console.log('✅ [ServerAction] Using cached organization subscription');
+          }
+        }
+        
+        // Update organization subscription cache if needed
+        if (needsUpdate) {
+          try {
+            await db.collection('organizations').updateOne(
+              { _id: user.organizationId },
+              { 
+                $set: { 
+                  subscription: orgSubscription,
+                  updatedAt: new Date()
+                }
+              }
+            );
+            console.log('✅ [ServerAction] Organization subscription cache updated');
+          } catch (error) {
+            console.error('❌ [ServerAction] Failed to update organization subscription cache:', error);
+            // Continue with owner's subscription even if cache update fails
+          }
+        }
+        const planId = orgSubscription.planId || 'receivables-free';
+        const plan = BILLING_PLANS.find(p => p.planId === planId) || null;
+        
+        // Check trial status for organization
+        const now = new Date();
+        const trialEndDate = orgSubscription.trialEndDate ? new Date(orgSubscription.trialEndDate) : null;
+        const isTrialActive = Boolean(orgSubscription.status === 'trial' && trialEndDate && now < trialEndDate);
+        const trialDaysRemaining = trialEndDate ? Math.max(0, Math.ceil((trialEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))) : 0;
+        
+        // Feature access based on organization subscription
+        const canCreateOrganization = false; // Members can't create organizations
+        const canAccessPayables = Boolean((planId.includes('payables') || planId.includes('combined')) && orgSubscription.status === 'active');
+        
+        // Get organization's current month invoice count (use organization's usage, not individual)
+        const currentMonthInvoiceCount = orgSubscription.usage?.invoicesThisMonth || 0;
+        
+        // Check if organization can create invoice
+        let canCreateInvoice = false;
+        if (planId === 'receivables-free') {
+          canCreateInvoice = currentMonthInvoiceCount < 5;
+        } else {
+          canCreateInvoice = orgSubscription.status === 'active';
+        }
+        
+        const canUseAdvancedFeatures = Boolean(planId !== 'receivables-free' && orgSubscription.status === 'active');
+        
+        return {
+          plan: plan ? {
+            planId: plan.planId,
+            type: plan.type,
+            tier: plan.tier
+          } : null,
+          status: orgSubscription.status || 'inactive',
+          isTrialActive,
+          trialDaysRemaining,
+          usage: {
+            invoicesThisMonth: currentMonthInvoiceCount,
+            monthlyVolume: orgSubscription.usage?.monthlyVolume || 0,
+            recentInvoiceCount: currentMonthInvoiceCount
+          },
+          canCreateOrganization,
+          canAccessPayables,
+          canCreateInvoice,
+          canUseAdvancedFeatures,
+          limits: {
+            invoicesPerMonth: plan?.limits?.invoicesPerMonth || 5,
+            monthlyVolume: plan?.limits?.monthlyVolume || 0,
+            cryptoToCryptoFee: plan?.limits?.cryptoToCryptoFee || 0
+          }
+        };
+      } else {
+        console.log('❌ [ServerAction] Organization not found for member');
+        return null;
+      }
+    }
+    
+    // Check if user has a pending invitation before initializing free plan
     if (!user.subscription) {
-      console.log('🔄 [ServerAction] Initializing free plan for user');
+      console.log('🔍 [ServerAction] No subscription found, checking for pending invitations...');
+      
+      // Check if user has a pending invitation
+      const pendingInvitation = await db.collection('invitation_tokens').findOne({
+        email: user.email,
+        usedAt: { $exists: false },
+        expiresAt: { $gt: new Date() }
+      });
+      
+      if (pendingInvitation) {
+        console.log('⏳ [ServerAction] User has pending invitation, skipping free plan initialization');
+        console.log('📋 [ServerAction] Pending invitation details:', {
+          organizationId: pendingInvitation.organizationId,
+          role: pendingInvitation.role,
+          expiresAt: pendingInvitation.expiresAt
+        });
+        return null; // Return null to indicate no subscription yet (will be set after invitation completion)
+      }
+      
+      console.log('🔄 [ServerAction] No pending invitation found, initializing free plan for user');
       await db.collection('users').updateOne(
         { _id: userObjectId },
         {

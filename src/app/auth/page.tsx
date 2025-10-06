@@ -9,6 +9,7 @@ import {
   Eye, 
   EyeOff,
   Building,
+  Building2,
   UserCheck,
   Shield,
   ChevronDown,
@@ -30,8 +31,8 @@ function AuthContent() {
     email: '',
     password: '',
     confirmPassword: '',
-    name: '',
-    companyName: '',
+    fullName: '', // Person's actual name
+    companyName: '', // Business/organization name
     userType: 'individual' as 'individual' | 'business',
     phone: '',
     industry: '',
@@ -66,6 +67,48 @@ function AuthContent() {
       setIsEmailLocked(true) // Lock the email field
     }
   }, [searchParams])
+
+  // Handle invitation data from localStorage
+  useEffect(() => {
+    const invitationData = localStorage.getItem('invitationData')
+    
+    if (invitationData) {
+      try {
+        const data = JSON.parse(invitationData)
+        console.log('📧 [Auth] Invitation data found:', data)
+        
+        // Pre-fill all organization data since they're joining an existing company
+        setFormData(prev => ({
+          ...prev,
+          email: data.email,
+          userType: 'business', // Invitations are for business accounts
+          companyName: data.organizationName, // Pre-fill with organization name
+          industry: data.organizationIndustry || '', // Pre-fill with organization industry if available
+          // Keep other fields empty for user to fill
+          fullName: '', // User needs to enter their full name
+          phone: '',
+          address: {
+            street: '',
+            city: '',
+            country: defaultCountry.code,
+            postalCode: ''
+          },
+          taxId: ''
+        }))
+        setIsLogin(false) // Switch to signup mode
+        setIsEmailLocked(true) // Lock the email field
+        
+        console.log('✅ [Auth] Pre-filled form with organization invitation data:', {
+          email: data.email,
+          companyName: data.organizationName,
+          industry: data.organizationIndustry
+        })
+      } catch (error) {
+        console.error('❌ [Auth] Error parsing invitation data:', error)
+        localStorage.removeItem('invitationData') // Clean up invalid data
+      }
+    }
+  }, [])
 
   // Helper function to format phone number
   const formatPhoneNumber = (phone: string, countryCode: string) => {
@@ -305,10 +348,14 @@ function AuthContent() {
           return
         }
         
+        // Check if this is an organization invitation
+        const isInvitationSignup = !!localStorage.getItem('invitationData')
+        
         const signupData = {
           email: formData.email,
           password: formData.password,
-          name: formData.userType === 'business' ? formData.companyName : formData.name,
+          name: formData.fullName, // Always use the person's full name
+          companyName: formData.companyName, // Business name (for business users)
           userType: formData.userType,
           phone: cleanPhoneNumber(formData.phone),
           industry: formData.industry,
@@ -318,7 +365,9 @@ function AuthContent() {
             agreed: true,
             agreedAt: new Date(),
             termsVersion: '1.0'
-          }
+          },
+          // Add invitation flag if this is an organization invitation
+          isInvitationSignup
         }
         console.log('📤 [Auth] Sending signup request with data:', {
           email: signupData.email,
@@ -358,7 +407,12 @@ function AuthContent() {
                 console.error('❌ [Auth] Automatic login failed:', loginResult.error)
                 // Fallback: store user data and redirect anyway
                 localStorage.setItem('user', JSON.stringify(data.data))
-                window.location.href = '/onboarding'
+                // If this was an organization invitation, go to dashboard
+                if (localStorage.getItem('invitationData')) {
+                  window.location.href = '/dashboard'
+                } else {
+                  window.location.href = '/onboarding'
+                }
               } else if (loginResult?.ok) {
                 console.log('✅ [Auth] Automatic login successful, checking for invoice token...')
                 
@@ -395,21 +449,90 @@ function AuthContent() {
                     window.location.href = '/onboarding'
                   }
                 } else {
-                  // No invoice token, proceed with normal onboarding
-                  window.location.href = '/onboarding'
+                  // Check if this signup was triggered by an organization invitation
+                  const invitationData = localStorage.getItem('invitationData')
+                  if (invitationData) {
+                    console.log('🔗 [Auth] Processing organization invitation...')
+                    try {
+                      const invitation = JSON.parse(invitationData)
+                      
+                      // Complete the invitation acceptance
+                      const invitationResponse = await fetch('/api/organization/complete-invitation', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                          token: invitation.token,
+                          userId: data.data._id
+                        }),
+                      })
+                      
+                      const invitationResult = await invitationResponse.json()
+                      if (invitationResult.success) {
+                        console.log('✅ [Auth] Organization invitation completed successfully')
+                        // Clean up invitation data
+                        localStorage.removeItem('invitationData')
+                        // Redirect to dashboard
+                        window.location.href = '/dashboard'
+                      } else {
+                        console.log('⚠️ [Auth] Failed to complete organization invitation:', invitationResult.message)
+                        // Clean up invitation data and redirect to dashboard (skip onboarding for org members)
+                        localStorage.removeItem('invitationData')
+                        window.location.href = '/dashboard'
+                      }
+                    } catch (invitationError) {
+                      console.error('❌ [Auth] Error processing organization invitation:', invitationError)
+                      // Clean up invitation data and fallback to dashboard
+                      localStorage.removeItem('invitationData')
+                      window.location.href = '/dashboard'
+                    }
+                  } else {
+                    // No special tokens: route based on organization membership
+                    try {
+                      const orgResp = await fetch('/api/organization')
+                      const orgJson = await orgResp.json()
+                      if (orgJson.success && orgJson.data?.hasOrganization) {
+                        window.location.href = '/dashboard'
+                      } else {
+                        window.location.href = '/onboarding'
+                      }
+                    } catch {
+                      window.location.href = '/onboarding'
+                    }
+                  }
                 }
               }
             } catch (loginError) {
               console.error('❌ [Auth] Error during automatic login:', loginError)
               // Fallback: store user data and redirect anyway
               localStorage.setItem('user', JSON.stringify(data.data))
-              window.location.href = '/onboarding'
+              if (localStorage.getItem('invitationData')) {
+                window.location.href = '/dashboard'
+              } else {
+                window.location.href = '/onboarding'
+              }
             }
           } else {
             // Fallback if no autoLogin data
             console.log('⚠️ [Auth] No autoLogin data, using fallback...')
             localStorage.setItem('user', JSON.stringify(data.data))
-            window.location.href = '/onboarding'
+            if (localStorage.getItem('invitationData')) {
+              window.location.href = '/dashboard'
+            } else {
+              // Try org-based routing
+              try {
+                const orgResp = await fetch('/api/organization')
+                const orgJson = await orgResp.json()
+                if (orgJson.success && orgJson.data?.hasOrganization) {
+                  window.location.href = '/dashboard'
+                } else {
+                  window.location.href = '/onboarding'
+                }
+              } catch {
+                window.location.href = '/onboarding'
+              }
+            }
           }
         } else {
           console.log('❌ [Auth] Signup failed:', data.message)
@@ -478,12 +601,12 @@ function AuthContent() {
                   : 'text-blue-200 hover:text-white'
               }`}
             >
-              {isEmailLocked ? 'Create Account & Access Invoice' : 'Sign Up'}
+              Sign Up
             </button>
           </div>
 
           {/* Invoice Signup Notice */}
-          {isEmailLocked && (
+          {isEmailLocked && searchParams.get('invoiceToken') && (
             <div className="mb-6 p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg">
               <div className="flex items-center space-x-2 mb-2">
                 <Receipt className="h-5 w-5 text-blue-400" />
@@ -492,6 +615,19 @@ function AuthContent() {
               <p className="text-blue-300 text-sm">
                 You&apos;re creating an account to access an invoice sent to <strong>{formData.email}</strong>. 
                 This email address cannot be changed as it&apos;s linked to the invoice.
+              </p>
+            </div>
+          )}
+
+          {/* Organization Invitation Notice */}
+          {isEmailLocked && localStorage.getItem('invitationData') && (
+            <div className="mb-6 p-4 bg-green-900/20 border border-green-500/30 rounded-lg">
+              <div className="flex items-center space-x-2 mb-2">
+                <UserCheck className="h-5 w-5 text-green-400" />
+                <h3 className="text-green-200 font-medium">Organization Invitation</h3>
+              </div>
+              <p className="text-green-300 text-sm">
+                You&apos;ve been invited to join an organization. Company name and industry are pre-filled since you&apos;re joining an existing organization.
               </p>
             </div>
           )}
@@ -512,14 +648,22 @@ function AuthContent() {
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-blue-100">
                       Account Type
+                      {isEmailLocked && localStorage.getItem('invitationData') && (
+                        <span className="ml-2 text-xs text-green-300 bg-green-900/30 px-2 py-1 rounded">
+                          Business Only
+                        </span>
+                      )}
                     </label>
                     <div className="flex gap-2">
                       <button
                         type="button"
                         onClick={() => setFormData(prev => ({ ...prev, userType: 'individual' }))}
+                        disabled={isEmailLocked && localStorage.getItem('invitationData')} // Disable for organization invitations
                         className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
                           formData.userType === 'individual'
                             ? 'bg-blue-600 text-white'
+                            : isEmailLocked && localStorage.getItem('invitationData')
+                            ? 'bg-white/5 text-blue-300 cursor-not-allowed'
                             : 'bg-white/10 text-blue-200 hover:bg-white/20'
                         }`}
                       >
@@ -541,24 +685,50 @@ function AuthContent() {
                     </div>
                   </div>
 
-                  {/* Name Fields */}
+                  {/* Full Name Field - Always shown */}
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-blue-100">
-                      {formData.userType === 'business' ? 'Company Name' : 'Full Name'}
+                      Full Name
                     </label>
                     <div className="relative">
                       <input
                         type="text"
-                        name={formData.userType === 'business' ? 'companyName' : 'name'}
-                        value={formData.userType === 'business' ? formData.companyName : formData.name}
+                        name="fullName"
+                        value={formData.fullName}
                         onChange={handleInputChange}
-                        className="w-full pl-10 pr-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder={formData.userType === 'business' ? 'Enter company name' : 'Enter your full name'}
+                        className="w-full pl-10 pr-4 py-3 border rounded-lg text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white/10 border-white/20"
+                        placeholder="Enter your full name"
                         required
                       />
                       <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-blue-300" />
                     </div>
                   </div>
+
+                  {/* Company Name Field - Only for business users */}
+                  {formData.userType === 'business' && (
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-blue-100">
+                        Company Name
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          name="companyName"
+                          value={formData.companyName}
+                          onChange={handleInputChange}
+                          disabled={isEmailLocked && localStorage.getItem('invitationData')} // Disable for organization invitations
+                          className={`w-full pl-10 pr-4 py-3 border rounded-lg text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                            isEmailLocked && localStorage.getItem('invitationData')
+                              ? 'bg-white/5 border-white/10 text-blue-200 cursor-not-allowed' 
+                              : 'bg-white/10 border-white/20'
+                          }`}
+                          placeholder="Enter company name"
+                          required
+                        />
+                        <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-blue-300" />
+                      </div>
+                    </div>
+                  )}
 
                   {/* Additional Fields for Signup */}
                   <motion.div
@@ -648,7 +818,12 @@ function AuthContent() {
                         <button
                           type="button"
                           onClick={() => setShowIndustryDropdown(!showIndustryDropdown)}
-                          className="w-full pl-10 pr-10 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-left flex items-center justify-between"
+                          disabled={isEmailLocked && localStorage.getItem('invitationData')} // Disable for organization invitations
+                          className={`w-full pl-10 pr-10 py-3 border rounded-lg text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-left flex items-center justify-between ${
+                            isEmailLocked && localStorage.getItem('invitationData')
+                              ? 'bg-white/5 border-white/10 text-blue-200 cursor-not-allowed' 
+                              : 'bg-white/10 border-white/20'
+                          }`}
                         >
                           <span className={formData.industry ? 'text-white' : 'text-blue-200'}>
                             {formData.industry || 'Select your industry'}
@@ -793,9 +968,14 @@ function AuthContent() {
             <div className="space-y-2">
               <label className="text-sm font-medium text-blue-100">
                 Email Address
-                {isEmailLocked && (
+                {isEmailLocked && searchParams.get('invoiceToken') && (
                   <span className="ml-2 text-xs text-blue-300 bg-blue-900/30 px-2 py-1 rounded">
                     Locked to invoice recipient
+                  </span>
+                )}
+                {isEmailLocked && localStorage.getItem('invitationData') && (
+                  <span className="ml-2 text-xs text-green-300 bg-green-900/30 px-2 py-1 rounded">
+                    From invitation
                   </span>
                 )}
               </label>
@@ -811,12 +991,18 @@ function AuthContent() {
                       ? 'bg-white/5 border-white/10 text-blue-200 cursor-not-allowed' 
                       : 'bg-white/10 border-white/20'
                   }`}
-                  placeholder={isEmailLocked ? "Email locked to invoice recipient" : "Enter your email"}
+                  placeholder={
+                    isEmailLocked && searchParams.get('invoiceToken') 
+                      ? "Email locked to invoice recipient" 
+                      : isEmailLocked && localStorage.getItem('invitationData')
+                      ? "Email from invitation"
+                      : "Enter your email"
+                  }
                   required
                 />
                 <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-blue-300" />
               </div>
-              {isEmailLocked && (
+              {isEmailLocked && searchParams.get('invoiceToken') && (
                 <p className="text-xs text-blue-300 mt-1">
                   This email address is locked because you&apos;re creating an account to access an invoice sent to this address.
                 </p>

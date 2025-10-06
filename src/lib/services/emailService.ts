@@ -748,6 +748,155 @@ The Chains ERP-Global Team
   }
 };
 
+// Send organization invitation email
+export const sendOrganizationInvitation = async (
+  inviteeEmail: string,
+  organizationName: string,
+  inviterName: string,
+  role: string,
+  invitationLink: string,
+  expiresAt: Date
+) => {
+  const mailOptions = {
+    from: `"${organizationName} via Chains ERP-Global" <${emailConfig.auth.user}>`,
+    to: inviteeEmail,
+    subject: `You're invited to join ${organizationName} on Chains ERP-Global!`,
+    headers: getEmailHeaders(),
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
+          <div style="margin-bottom: 20px;">
+            <img src="https://chains-erp.com/chainsnobg.png" 
+              alt="Chains ERP-Global Logo" 
+              style="max-width: 150px; height: auto; border-radius: 8px;">
+          </div>
+          <h1 style="margin: 0; font-size: 28px;">You're Invited!</h1>
+          <p style="margin: 10px 0 0 0; opacity: 0.9;">Join ${organizationName} on Chains ERP-Global</p>
+        </div>
+        
+        <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
+          <h2 style="color: #333; margin-top: 0;">Hello,</h2>
+          
+          <p style="color: #666; line-height: 1.6;">
+            <strong>${inviterName}</strong> has invited you to join <strong>${organizationName}</strong> as a <strong>${role}</strong> on Chains ERP-Global.
+          </p>
+          
+          <div style="background: #e8f5e8; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #28a745;">
+            <p style="color: #155724; margin: 0; font-weight: bold;">
+              🎉 You're invited to join the team!
+            </p>
+            <p style="color: #155724; margin: 5px 0 0 0; font-size: 14px;">
+              Click the button below to accept your invitation and get started.
+            </p>
+          </div>
+          
+          <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #667eea;">
+            <h3 style="color: #333; margin-top: 0;">Invitation Details</h3>
+            <p style="color: #666; margin: 5px 0;"><strong>Organization:</strong> ${organizationName}</p>
+            <p style="color: #666; margin: 5px 0;"><strong>Role:</strong> ${role}</p>
+            <p style="color: #666; margin: 5px 0;"><strong>Invited by:</strong> ${inviterName}</p>
+            <p style="color: #666; margin: 5px 0;"><strong>Expires:</strong> ${expiresAt.toLocaleDateString()}</p>
+          </div>
+          
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${invitationLink}" 
+               style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                      color: white; 
+                      padding: 15px 30px; 
+                      text-decoration: none; 
+                      border-radius: 25px; 
+                      display: inline-block; 
+                      font-weight: bold;
+                      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);">
+              Accept Invitation
+            </a>
+          </div>
+          
+          <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <h4 style="color: #856404; margin-top: 0;">⚠️ Important</h4>
+            <p style="color: #856404; margin: 0; font-size: 14px;">
+              This invitation will expire on ${expiresAt.toLocaleDateString()}. Please accept it before then.
+            </p>
+          </div>
+          
+          <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #dee2e6;">
+            <p style="color: #666; font-size: 14px; margin: 0;">
+              <strong>What's next?</strong> After accepting, you'll be able to access your organization's dashboard and start collaborating with your team.
+            </p>
+          </div>
+        </div>
+        
+        <div style="text-align: center; margin-top: 20px; color: #6c757d; font-size: 12px;">
+          <p>This is an automated message from Chains ERP-Global</p>
+          <p>Please do not reply to this email</p>
+        </div>
+      </div>
+    `,
+    text: `
+You're invited to join ${organizationName} on Chains ERP-Global!
+
+Hello,
+
+${inviterName} has invited you to join ${organizationName} as a ${role} on Chains ERP-Global.
+
+🎉 You're invited to join the team!
+
+Invitation Details:
+Organization: ${organizationName}
+Role: ${role}
+Invited by: ${inviterName}
+Expires: ${expiresAt.toLocaleDateString()}
+
+Accept your invitation: ${invitationLink}
+
+⚠️ Important: This invitation will expire on ${expiresAt.toLocaleDateString()}. Please accept it before then.
+
+What's next? After accepting, you'll be able to access your organization's dashboard and start collaborating with your team.
+
+Best regards,
+The Chains ERP-Global Team
+    `,
+  };
+
+  try {
+    const startTime = Date.now();
+    const info = await transporter.sendMail(mailOptions);
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    
+    console.log('✅ Organization invitation email sent successfully (took', duration, 'ms)');
+    console.log('📧 Invitation email details:', {
+      messageId: info.messageId,
+      to: inviteeEmail,
+      subject: mailOptions.subject,
+      organization: organizationName,
+      role,
+      invitationLink,
+      previewUrl: nodemailer.getTestMessageUrl(info),
+    });
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('❌ Failed to send organization invitation email:', error);
+    
+    // Provide more specific error information
+    let errorMessage = 'Unknown email error';
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      if (error.message.includes('ECONNREFUSED')) {
+        errorMessage = 'SMTP connection refused - check server configuration';
+      } else if (error.message.includes('EAUTH')) {
+        errorMessage = 'SMTP authentication failed - check credentials';
+      } else if (error.message.includes('ETIMEDOUT')) {
+        errorMessage = 'SMTP connection timed out - check network connectivity';
+      } else if (error.message.includes('ENOTFOUND')) {
+        errorMessage = 'SMTP host not found - check SMTP_HOST configuration';
+      }
+    }
+    
+    return { success: false, error: new Error(errorMessage) };
+  }
+};
+
 // Send test email
 export const sendTestEmail = async (toEmail: string) => {
   const mailOptions = {

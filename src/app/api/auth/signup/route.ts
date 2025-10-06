@@ -6,6 +6,8 @@ import { createDefaultServices } from '@/lib/services/serviceManager';
 import bcrypt from 'bcryptjs';
 import { ObjectId } from 'mongodb';
 import { SubscriptionService } from '@/lib/services/subscriptionService';
+import { getDatabase } from '@/lib/database';
+
 
 export async function POST(request: NextRequest) {
   console.log('🚀 [SIGNUP] Starting signup process...');
@@ -19,7 +21,7 @@ export async function POST(request: NextRequest) {
       hasAddress: !!body.address
     });
     
-    const { email, password, name, userType, phone, industry, address, taxId, termsAgreement } = body;
+    const { email, password, name, userType, phone, industry, address, taxId, termsAgreement, companyName } = body;
 
     // Basic validation
     console.log('🔍 [SIGNUP] Validating required fields...');
@@ -39,6 +41,18 @@ export async function POST(request: NextRequest) {
         { 
           success: false, 
           message: 'Email, password, name, userType, and address are required' 
+        },
+        { status: 400 }
+      );
+    }
+    
+    // Validate company name for business users
+    if (userType === 'business' && !companyName) {
+      console.log('❌ [SIGNUP] Validation failed - company name required for business users');
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: 'Company name is required for business accounts' 
         },
         { status: 400 }
       );
@@ -147,13 +161,23 @@ export async function POST(request: NextRequest) {
       // Don't fail signup if pending payables processing fails
     }
     
-    // If this is a business user, create an organization
+    // Check if this is an invitation signup (user will join existing organization)
+    const isInvitationSignup = body.invitationToken || body.isInvitationSignup;
+    
+    console.log('🔍 [SIGNUP] Invitation signup check:', {
+      isInvitationSignup,
+      invitationToken: body.invitationToken,
+      isInvitationSignupFlag: body.isInvitationSignup,
+      userType
+    });
+    
+    // If this is a business user, create an organization (unless it's an invitation signup)
     let organization = null;
-    if (userType === 'business') {
+    if (userType === 'business' && !isInvitationSignup) {
       console.log('🏢 [SIGNUP] Creating organization for business user...');
       
       const orgData: CreateOrganizationInput = {
-        name: name,
+        name: companyName, // Use company name for organization, not user name
         billingEmail: email,
         industry: industry || 'Other',
         companySize: '1-10', // Default size, can be updated later
@@ -162,14 +186,43 @@ export async function POST(request: NextRequest) {
         address: address,
         taxId: taxId || '',
         primaryContact: {
-          name: name,
+          name: name, // User's actual name for primary contact
           email: email,
           phone: phone || '',
           role: 'Owner'
         },
         members: [{
           userId: new ObjectId(newUser._id),
-          role: 'owner'
+          email: email,
+          name: name,
+          role: 'owner',
+          permissions: {
+            canAddPaymentMethods: true,
+            canModifyPaymentMethods: true,
+            canManageTreasury: true,
+            canManageTeam: true,
+            canInviteMembers: true,
+            canRemoveMembers: true,
+            canManageCompanyInfo: true,
+            canManageSettings: true,
+            canCreateInvoices: true,
+            canSendInvoices: true,
+            canManageInvoices: true,
+            canCreateBills: true,
+            canApproveBills: true,
+            canExecutePayments: true,
+            canManagePayables: true,
+            canViewAllData: true,
+            canExportData: true,
+            canReconcileTransactions: true,
+            canManageAccounting: true,
+            canApproveDocuments: true,
+            canManageApprovalPolicies: true
+          },
+          status: 'active',
+          invitedBy: new ObjectId(newUser._id),
+          joinedAt: new Date(),
+          lastActiveAt: new Date()
         }],
         services: createDefaultServices(),
         onboarding: {
@@ -195,8 +248,56 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Initialize trial for new users
-    await SubscriptionService.initializeTrial(new ObjectId(newUser._id));
+    // Initialize trial for new users (skip for invitation signups as they'll use organization's subscription)
+    if (!isInvitationSignup) {
+      console.log('🔄 [SubscriptionService] Initializing trial for user:', new ObjectId(newUser._id));
+      await SubscriptionService.initializeTrial(new ObjectId(newUser._id));
+      
+      // If organization was created, ensure the owner has proper permissions
+      if (organization && organization._id && newUser._id) {
+        console.log('🔄 [SIGNUP] Setting up owner permissions for organization...');
+        
+        const db = await getDatabase();
+        await db.collection('organizations').updateOne(
+          { 
+            _id: new ObjectId(organization._id),
+            'members.userId': new ObjectId(newUser._id)
+          },
+          { 
+            $set: { 
+              'members.$.role': 'owner',
+              'members.$.permissions': {
+                canAddPaymentMethods: true,
+                canModifyPaymentMethods: true,
+                canManageTreasury: true,
+                canManageTeam: true,
+                canInviteMembers: true,
+                canRemoveMembers: true,
+                canManageCompanyInfo: true,
+                canManageSettings: true,
+                canCreateInvoices: true,
+                canSendInvoices: true,
+                canManageInvoices: true,
+                canCreateBills: true,
+                canApproveBills: true,
+                canExecutePayments: true,
+                canManagePayables: true,
+                canViewAllData: true,
+                canExportData: true,
+                canReconcileTransactions: true,
+                canManageAccounting: true,
+                canApproveDocuments: true,
+                canManageApprovalPolicies: true
+              },
+              updatedAt: new Date()
+            }
+          }
+        );
+        console.log('✅ [SIGNUP] Organization member updated with owner role and permissions');
+      }
+    } else {
+      console.log('⏭️ [SIGNUP] Skipping trial initialization for invitation signup - will use organization subscription');
+    }
     
     // Remove password from response - extract password to exclude it from response
     // eslint-disable-next-line @typescript-eslint/no-unused-vars

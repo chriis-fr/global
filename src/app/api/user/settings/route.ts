@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { UserService } from '@/lib/services/userService';
 import { UpdateUserInput } from '@/models';
+import { getDatabase } from '@/lib/database';
 
 // GET /api/user/settings - Get current user settings
 export async function GET() {
@@ -25,16 +26,32 @@ export async function GET() {
       );
     }
 
+    // Get organization data if user belongs to one
+    let organizationData = null;
+    if (user.organizationId) {
+      const db = await getDatabase();
+      const organization = await db.collection('organizations').findOne({ _id: user.organizationId });
+      if (organization) {
+        organizationData = {
+          name: organization.name,
+          industry: organization.industry || '',
+          address: organization.address,
+        };
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: {
         profile: {
-          name: user.name,
+          name: user.name, // User's full name
           email: user.email,
           phone: user.phone || '',
           currencyPreference: user.settings?.currencyPreference || 'USD',
+          profilePhoto: user.profilePicture || user.avatar || '',
+          isGoogleUser: user.profilePicture ? true : false, // If user has profilePicture, they're likely a Google user
         },
-        organization: {
+        organization: organizationData || {
           industry: user.industry || '',
           address: user.address,
         },

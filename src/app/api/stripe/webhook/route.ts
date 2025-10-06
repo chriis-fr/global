@@ -149,6 +149,42 @@ export async function POST(request: NextRequest) {
             );
             
             console.log(`✅ [Webhook] User ${userId} subscription updated to ${updatedSubscription.metadata.planId}`);
+            
+            // Update organization subscription if user is an organization owner
+            try {
+              const { getDatabase } = await import('@/lib/database');
+              const db = await getDatabase();
+              
+              // Find organizations where this user is the owner
+              const organizations = await db.collection('organizations').find({
+                'members.userId': new ObjectId(userId),
+                'members.role': 'owner'
+              }).toArray();
+              
+              if (organizations.length > 0) {
+                console.log(`🔄 [Webhook] Updating subscription for ${organizations.length} organization(s) where user is owner`);
+                
+                // Get the updated user subscription
+                const user = await db.collection('users').findOne({ _id: new ObjectId(userId) });
+                if (user && user.subscription) {
+                  // Update all organizations where this user is the owner
+                  for (const org of organizations) {
+                    await db.collection('organizations').updateOne(
+                      { _id: org._id },
+                      { 
+                        $set: { 
+                          subscription: user.subscription,
+                          updatedAt: new Date()
+                        }
+                      }
+                    );
+                    console.log(`✅ [Webhook] Updated organization ${org.name} subscription to ${user.subscription.planId}`);
+                  }
+                }
+              }
+            } catch (orgError) {
+              console.error('❌ [Webhook] Error updating organization subscriptions:', orgError);
+            }
           }
         } catch (error) {
           console.error('❌ [Webhook] Error updating subscription:', error);
@@ -176,6 +212,42 @@ export async function POST(request: NextRequest) {
           
           await SubscriptionService.cancelSubscription(new ObjectId(userId));
           console.log(`✅ [Webhook] User ${userId} subscription cancelled successfully`);
+          
+          // Update organization subscription if user is an organization owner
+          try {
+            const { getDatabase } = await import('@/lib/database');
+            const db = await getDatabase();
+            
+            // Find organizations where this user is the owner
+            const organizations = await db.collection('organizations').find({
+              'members.userId': new ObjectId(userId),
+              'members.role': 'owner'
+            }).toArray();
+            
+            if (organizations.length > 0) {
+              console.log(`🔄 [Webhook] Updating subscription for ${organizations.length} organization(s) where user is owner`);
+              
+              // Get the updated user subscription (should be cancelled)
+              const user = await db.collection('users').findOne({ _id: new ObjectId(userId) });
+              if (user && user.subscription) {
+                // Update all organizations where this user is the owner
+                for (const org of organizations) {
+                  await db.collection('organizations').updateOne(
+                    { _id: org._id },
+                    { 
+                      $set: { 
+                        subscription: user.subscription,
+                        updatedAt: new Date()
+                      }
+                    }
+                  );
+                  console.log(`✅ [Webhook] Updated organization ${org.name} subscription to cancelled status`);
+                }
+              }
+            }
+          } catch (orgError) {
+            console.error('❌ [Webhook] Error updating organization subscriptions:', orgError);
+          }
         } else {
           console.log('❌ [Webhook] Customer not found or deleted for subscription cancellation:', {
             customerId: deletedSubscription.customer,
