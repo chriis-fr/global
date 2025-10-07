@@ -1408,11 +1408,6 @@ export default function CreateInvoicePage() {
 
       clearTimeout(timeoutId);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Server error: ${response.status} - ${errorText}`);
-      }
-
       const result = await response.json();
 
       if (result.success) {
@@ -1425,6 +1420,17 @@ export default function CreateInvoicePage() {
         // Clear saved form data after successful send
         clearSavedData();
         // Redirect to invoices page
+        router.push('/dashboard/services/smart-invoicing/invoices');
+      } else if (result.requiresApproval) {
+        // Handle pending approval gracefully
+        console.log('⏳ [Smart Invoicing] Invoice requires approval:', {
+          invoiceNumber: formData.invoiceNumber,
+          status: result.status
+        });
+        alert('Invoice created successfully and is now awaiting approval. You can track its status in the Pending Approvals section.');
+        // Clear saved form data
+        clearSavedData();
+        // Redirect to invoices page where they can see pending approvals
         router.push('/dashboard/services/smart-invoicing/invoices');
       } else {
         console.error('❌ [Smart Invoicing] Failed to send invoice:', result.message);

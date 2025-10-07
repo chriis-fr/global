@@ -15,10 +15,11 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
     requireApproval: true,
     approvalRules: {
       amountThresholds: {
-        low: 1000,
-        medium: 10000,
-        high: 50000
+        low: 100,      // Under $100 - auto approve
+        medium: 1000,  // $100-$1000 - single approval
+        high: 1000     // Over $1000 - requires approval even for owners
       },
+      currency: 'USD',
       requiredApprovers: {
         low: 1,
         medium: 1,
@@ -251,6 +252,19 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
           <Settings className="h-6 w-6 text-blue-400" />
           <h2 className="text-xl font-semibold text-white">Approval Settings</h2>
         </div>
+        
+        <div className="p-4 bg-blue-500/20 border border-blue-400/30 rounded-lg">
+          <div className="flex items-start space-x-2">
+            <AlertCircle className="h-5 w-5 text-blue-300 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-blue-100 text-sm font-medium mb-1">Important: When approval is enabled</p>
+              <p className="text-blue-200 text-xs">
+                ALL invoices (including those created by owners) will require approval before being sent to recipients. 
+                This ensures proper oversight and prevents unauthorized large transactions.
+              </p>
+            </div>
+          </div>
+        </div>
 
         {error && (
           <div className="bg-red-600/10 border border-red-500/30 rounded-xl p-4">
@@ -312,7 +326,7 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
                     className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500"
                     placeholder="1000"
                   />
-                  <p className="text-blue-200 text-xs mt-1">Auto-approve below this amount</p>
+                  <p className="text-blue-200 text-xs mt-1">Auto-approve below this amount (when approval is disabled)</p>
                 </div>
                 
                 <div>

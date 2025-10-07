@@ -173,18 +173,51 @@ export async function POST(request: NextRequest) {
     const ownerId = isOrganization ? session.user.organizationId : session.user.email;
     const ownerType = isOrganization ? 'organization' : 'individual';
 
-    // Check if approval is required
+    // Connect to database
+    const db = await connectToDatabase();
+
+    // Check if approval is required based on organization settings
     let requiresApproval = false;
     let initialStatus = status || 'pending';
+    let organization = null;
 
     if (isOrganization && ownerId) {
-      // Non-admin users need approval
-      requiresApproval = true;
-      initialStatus = 'pending_approval';
+      // Get organization approval settings
+      organization = await db.collection('organizations').findOne({
+        _id: new ObjectId(ownerId)
+      });
+
+      console.log('🔍 [Approval Check] Organization approval settings:', {
+        hasApprovalSettings: !!organization?.approvalSettings,
+        requireApproval: organization?.approvalSettings?.requireApproval,
+        amountThresholds: organization?.approvalSettings?.approvalRules?.amountThresholds,
+        invoiceAmount: parseFloat(total) || 0
+      });
+
+      if (organization?.approvalSettings?.requireApproval) {
+        // Check if user is owner/admin (can bypass approval)
+        const userMember = organization.members.find((member: { userId: ObjectId; role: string }) => 
+          member.userId.toString() === session.user.id && 
+          (member.role === 'owner' || member.role === 'admin')
+        );
+
+        console.log('🔍 [Approval Check] User member details:', {
+          isOwnerOrAdmin: !!userMember,
+          userRole: userMember?.role,
+          userId: session.user.id
+        });
+
+        // ALL users (including owners) need approval when approval is enabled
+        // This ensures proper oversight and prevents owners from bypassing approval
+        requiresApproval = true;
+        initialStatus = 'pending_approval';
+        console.log('⏳ [Approval Check] Approval required for all users (including owners) when approval is enabled');
+      } else {
+        console.log('ℹ️ [Approval Check] Approval not required for this organization');
+      }
     }
 
     // Generate secure invoice number if not provided or if provided number already exists
-    const db = await connectToDatabase();
     let finalInvoiceNumber = invoiceNumber;
     
     if (finalInvoiceNumber) {
@@ -217,7 +250,9 @@ export async function POST(request: NextRequest) {
       ownerId,
       total,
       requiresApproval,
-      initialStatus
+      initialStatus,
+      isOrganization,
+      approvalSettings: organization?.approvalSettings ? 'enabled' : 'disabled'
     });
 
     // Transform data to match InvoiceFormData structure exactly

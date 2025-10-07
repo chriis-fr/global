@@ -69,6 +69,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check if invoice requires approval and is not yet approved
+    if (invoice.status === 'pending_approval') {
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: 'Invoice is pending approval and cannot be sent yet',
+          requiresApproval: true,
+          status: 'pending_approval'
+        },
+        { status: 200 } // Return 200 instead of 400 for better UX
+      );
+    }
+
+    // Check if invoice was rejected
+    if (invoice.status === 'rejected') {
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: 'Invoice was rejected and cannot be sent',
+          status: 'rejected'
+        },
+        { status: 200 } // Return 200 instead of 400 for better UX
+      );
+    }
+
+    // Allow sending approved invoices
+    if (invoice.status === 'approved') {
+      console.log('📧 [Send Invoice] Sending approved invoice:', invoice.invoiceNumber);
+    }
+
 
     // Prepare payment methods for display
     const paymentMethods: string[] = [];

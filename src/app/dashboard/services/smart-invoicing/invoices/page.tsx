@@ -21,6 +21,7 @@ import FormattedNumberDisplay from '@/components/FormattedNumber';
 import { InvoiceService } from '@/lib/services/invoiceService';
 import { Invoice } from '@/models/Invoice';
 import FloatingActionButton from '@/components/dashboard/FloatingActionButton';
+import PendingInvoiceApprovals from '@/components/dashboard/PendingInvoiceApprovals';
 
 export default function InvoicesPage() {
   const router = useRouter();
@@ -28,7 +29,7 @@ export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'sent' | 'pending' | 'paid' | 'overdue'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'sent' | 'pending' | 'paid' | 'overdue' | 'pending_approval' | 'rejected'>('all');
   const [totalRevenue, setTotalRevenue] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -38,6 +39,8 @@ export default function InvoicesPage() {
     draft: 0,
     sent: 0,
     pending: 0,
+    pending_approval: 0,
+    rejected: 0,
     paid: 0,
     overdue: 0
   });
@@ -423,6 +426,9 @@ export default function InvoicesPage() {
           </select>
         </div>
       </div>
+
+      {/* Pending Approvals Section */}
+      <PendingInvoiceApprovals />
 
       {/* Stats Cards - Mobile Optimized */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
@@ -877,11 +883,13 @@ export default function InvoicesPage() {
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="all">All Statuses</option>
-                      <option value="draft">Draft</option>
-                      <option value="sent">Sent</option>
-                      <option value="pending">Pending</option>
-                      <option value="paid">Paid</option>
-                      <option value="overdue">Overdue</option>
+            <option value="draft">Draft</option>
+            <option value="sent">Sent</option>
+            <option value="pending">Pending</option>
+            <option value="pending_approval">Pending Approval</option>
+            <option value="rejected">Rejected</option>
+            <option value="paid">Paid</option>
+            <option value="overdue">Overdue</option>
                     </select>
                   </div>
                 )}

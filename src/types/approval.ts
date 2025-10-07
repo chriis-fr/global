@@ -12,6 +12,9 @@ export interface ApprovalSettings {
       high: number;     // > $10000 - dual approval
     };
     
+    // Currency for thresholds
+    currency: string;   // USD, EUR, etc.
+    
     // Required approvers by amount
     requiredApprovers: {
       low: number;      // 1 approver

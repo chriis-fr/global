@@ -363,10 +363,11 @@ export class ApprovalService {
       requireApproval: true,
       approvalRules: {
         amountThresholds: {
-          low: 1000,
-          medium: 10000,
-          high: 50000
+          low: 100,      // Under $100 - auto approve
+          medium: 1000,  // $100-$1000 - single approval
+          high: 1000     // Over $1000 - requires approval even for owners
         },
+        currency: 'USD',
         requiredApprovers: {
           low: 1,
           medium: 1,
