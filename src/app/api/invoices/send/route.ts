@@ -42,8 +42,8 @@ export async function POST(request: NextRequest) {
     const db = await connectToDatabase();
     const invoicesCollection = db.collection('invoices');
 
-    // Get the invoice
-    const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
+    // Get the invoice - Organization members should always see organization's invoices
+    const isOrganization = !!session.user.organizationId;
     const query = isOrganization 
       ? { _id: new ObjectId(invoiceId), organizationId: session.user.organizationId }
       : { 

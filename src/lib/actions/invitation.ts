@@ -534,11 +534,21 @@ export async function completeInvitationAcceptance(token: string): Promise<{
       }
     );
 
-    // Update user to link to organization
-    await UserService.updateUser(user._id!.toString(), {
+    // Update user to link to organization and set status to active
+    // Only remove individual subscription if user is NOT the owner
+    const updates: any = {
       organizationId: invitation.organizationId,
-      userType: 'business'
-    });
+      userType: 'business',
+      status: 'active'
+    };
+
+    // Only remove individual subscription for non-owners
+    if (invitation.role !== 'owner') {
+      updates.subscription = null; // Remove individual subscription - will inherit organization's
+      updates.usage = null; // Remove individual usage tracking - will use organization's
+    }
+
+    await UserService.updateUser(user._id!.toString(), updates);
 
     // Mark invitation as used
     await db.collection<InvitationToken>('invitation_tokens').updateOne(

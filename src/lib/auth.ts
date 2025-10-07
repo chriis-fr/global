@@ -250,6 +250,26 @@ export const authOptions: NextAuthOptions = {
           }
         }
       }
+      
+      // Always fetch the latest user data from database to ensure organizationId is up to date
+      if (token.email) {
+        try {
+          const dbUser = await UserService.getUserByEmail(token.email as string)
+          if (dbUser) {
+            token.organizationId = dbUser.organizationId?.toString()
+            token.userType = dbUser.userType
+            token.role = dbUser.role
+            token.address = dbUser.address
+            token.taxId = dbUser.taxId
+            token.onboarding = dbUser.onboarding
+            token.services = dbUser.services || createDefaultServices()
+            token.mongoId = dbUser._id?.toString()
+          }
+        } catch (error) {
+          console.error('❌ [Auth] Error fetching latest user data for JWT:', error)
+        }
+      }
+      
       return token
     }
   },

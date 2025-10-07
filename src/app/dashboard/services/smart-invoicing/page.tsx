@@ -126,7 +126,7 @@ export default function SmartInvoicingPage() {
       
       // Load invoices with stats and check onboarding status in parallel
       const [invoicesResponse, onboardingResponse] = await Promise.all([
-        fetch('/api/invoices?convertToPreferred=true'),
+        fetch('/api/invoices?convertToPreferred=false'), // Keep original amounts
         fetch('/api/onboarding/service?service=smartInvoicing')
       ]);
       

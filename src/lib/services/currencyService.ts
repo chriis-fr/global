@@ -59,7 +59,9 @@ export class CurrencyService {
 
     try {
       const rate = await this.getExchangeRate(fromCurrency, toCurrency);
-      return amount * rate;
+      const convertedAmount = amount * rate;
+      // Round to 2 decimal places to avoid floating point precision issues
+      return Math.round(convertedAmount * 100) / 100;
     } catch (error) {
       console.error('Error converting currency:', error);
       return amount; // Return original amount if conversion fails
@@ -285,6 +287,7 @@ export class CurrencyService {
       }
     }
 
-    return total;
+    // Round to 2 decimal places to avoid floating point precision issues
+    return Math.round(total * 100) / 100;
   }
 } 

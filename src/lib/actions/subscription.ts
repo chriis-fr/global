@@ -48,19 +48,30 @@ export async function getCurrentMonthInvoiceCount(userId: string): Promise<numbe
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
     
-    // Query invoices directly with date filter for better performance
-    const currentMonthInvoices = await db.collection('invoices').find({
-      $or: [
-        { issuerId: userObjectId },
-        { issuerId: userId },
-        { userId: user.email },
-        { userId: userId }
-      ],
+    // Build query based on user type - Organization members should see organization's invoices
+    const isOrganization = user.organizationId && user.organizationId !== user._id.toString();
+    const query: Record<string, unknown> = {
       createdAt: {
         $gte: startOfMonth,
         $lte: endOfMonth
       }
-    }).toArray();
+    };
+    
+    if (isOrganization) {
+      // For organization members, count organization's invoices
+      query.organizationId = user.organizationId;
+    } else {
+      // For individual users, count their own invoices
+      query.$or = [
+        { issuerId: userObjectId },
+        { issuerId: userId },
+        { userId: user.email },
+        { userId: userId }
+      ];
+    }
+    
+    // Query invoices directly with date filter for better performance
+    const currentMonthInvoices = await db.collection('invoices').find(query).toArray();
     
     return currentMonthInvoices.length;
     

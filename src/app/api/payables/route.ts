@@ -373,7 +373,7 @@ export async function GET(request: NextRequest) {
     
     // Currency preferences loaded
 
-    // Build query
+    // Build query - Organization members should always see organization's payables
     const isOrganization = !!(session.user.organizationId && session.user.organizationId !== session.user.id);
     
     // Handle both MongoDB ObjectIds and OAuth IDs

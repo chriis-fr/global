@@ -23,7 +23,7 @@ export async function GET(
     const db = await connectToDatabase();
     const collection = db.collection('payables');
 
-    // Build query based on user type
+    // Build query based on user type - Organization members should always see organization's payables
     const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
     const query: Record<string, unknown> = { _id: new ObjectId(id) };
     

@@ -89,8 +89,8 @@ export default function DashboardPage() {
         
         // Fetch data in parallel like the services pages do - without timeout
         const [invoicesResponse, paidInvoicesResponse, clientsResponse, ledgerResponse] = await Promise.all([
-          fetch('/api/invoices?limit=1&convertToPreferred=true'),
-          fetch('/api/invoices?status=paid&convertToPreferred=true'), // Get only paid invoices
+          fetch('/api/invoices?limit=1&convertToPreferred=false'), // Keep original amounts
+          fetch('/api/invoices?status=paid&convertToPreferred=false'), // Get only paid invoices - keep original amounts
           fetch('/api/clients'),
           fetch('/api/ledger')
         ]);

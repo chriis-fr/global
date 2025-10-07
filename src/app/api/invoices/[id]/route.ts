@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
 import { CurrencyService } from '@/lib/services/currencyService';
-import { NotificationService } from '@/lib/services/notificationService';
+// import { NotificationService } from '@/lib/services/notificationService';
 
 export async function GET(
   request: NextRequest,
@@ -24,7 +24,8 @@ export async function GET(
     const convertToPreferred = searchParams.get('convertToPreferred') === 'true';
 
     // Determine if user is individual or organization
-    const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
+    // For organization owners, they should access organization invoices
+    const isOrganization = !!session.user.organizationId;
     const ownerId = isOrganization ? session.user.organizationId : session.user.email;
     const ownerType = isOrganization ? 'organization' : 'individual';
 
@@ -39,7 +40,7 @@ export async function GET(
     const db = await connectToDatabase();
     const collection = db.collection('invoices');
 
-    // Query based on owner type - use same logic as main invoices route
+    // Query based on owner type - Organization members should always see organization's invoices
     const query = isOrganization 
       ? { _id: new ObjectId(id), organizationId: session.user.organizationId }
       : { 
@@ -118,7 +119,8 @@ export async function PUT(
     const body = await request.json();
 
     // Determine if user is individual or organization
-    const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
+    // For organization owners, they should access organization invoices
+    const isOrganization = !!session.user.organizationId;
     const ownerId = isOrganization ? session.user.organizationId : session.user.email;
     const ownerType = isOrganization ? 'organization' : 'individual';
 
@@ -223,33 +225,8 @@ export async function PUT(
         // Don't fail the invoice update if payable update fails
       }
 
-      // Create notification for payment received
-      try {
-        const userId = isOrganization ? new ObjectId(session.user.organizationId) : new ObjectId(session.user.id);
-        
-        await NotificationService.createNotification({
-          userId,
-          organizationId: isOrganization ? new ObjectId(session.user.organizationId) : undefined,
-          type: 'payment_received',
-          title: 'Payment Received! 💰',
-          message: `Invoice ${existingInvoice.invoiceNumber || '#' + id.slice(-6)} has been marked as paid. Amount: ${existingInvoice.currency || 'USD'} ${(existingInvoice.totalAmount || existingInvoice.total || 0).toFixed(2)}`,
-          priority: 'high',
-          actionUrl: `/dashboard/services/smart-invoicing/invoices/${id}`,
-          actionText: 'View Invoice',
-          relatedInvoiceId: new ObjectId(id),
-          metadata: {
-            invoiceNumber: existingInvoice.invoiceNumber,
-            amount: existingInvoice.totalAmount || existingInvoice.total,
-            currency: existingInvoice.currency,
-            clientName: existingInvoice.clientName
-          },
-          tags: ['payment', 'invoice', 'receivable']
-        });
-        
-        console.log('✅ [Invoice Update] Payment notification created');
-      } catch (notificationError) {
-        console.error('⚠️ [Invoice Update] Failed to create payment notification:', notificationError);
-      }
+      // Payment processed successfully
+      console.log('✅ [Invoice Update] Payment processed successfully for invoice:', id);
     }
 
     // Get the updated invoice to return full data
@@ -282,7 +259,8 @@ export async function DELETE(
     const { id } = await params;
 
     // Determine if user is individual or organization
-    const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
+    // For organization owners, they should access organization invoices
+    const isOrganization = !!session.user.organizationId;
     const ownerId = isOrganization ? session.user.organizationId : session.user.email;
     const ownerType = isOrganization ? 'organization' : 'individual';
 

@@ -478,6 +478,9 @@ export default function CreateInvoicePage() {
           attachedFiles: data.data.attachedFiles || [],
           ccClients: data.data.ccClients || []
         };
+        
+        // Keep amounts exactly as stored - no recalculation
+        
         setFormData(loadedData);
         setIsEditing(true);
       }
@@ -841,14 +844,22 @@ export default function CreateInvoicePage() {
     const newItems = [...formData.items];
     newItems[index] = { ...newItems[index], [field]: value };
     
-    // Recalculate amount
+    // Recalculate item amount with proper precision
     const item = newItems[index];
     const subtotalBeforeTax = item.quantity * item.unitPrice * (1 - item.discount / 100);
     item.amount = subtotalBeforeTax * (1 + item.tax / 100);
     
-    // Recalculate totals
-    const subtotal = newItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice * (1 - item.discount / 100)), 0);
-    const totalTax = newItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice * (1 - item.discount / 100) * (item.tax / 100)), 0);
+    // Recalculate totals with proper precision
+    let subtotal = 0;
+    let totalTax = 0;
+    
+    newItems.forEach(item => {
+      const itemSubtotal = item.quantity * item.unitPrice * (1 - item.discount / 100);
+      const itemTax = itemSubtotal * (item.tax / 100);
+      subtotal += itemSubtotal;
+      totalTax += itemTax;
+    });
+    
     const total = subtotal + totalTax;
     
     setFormData(prev => ({
@@ -880,8 +891,18 @@ export default function CreateInvoicePage() {
   const removeItem = (index: number) => {
     if (formData.items.length > 1) {
       const newItems = formData.items.filter((_, i) => i !== index);
-      const subtotal = newItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice * (1 - item.discount / 100)), 0);
-      const totalTax = newItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice * (1 - item.discount / 100) * (item.tax / 100)), 0);
+      
+      // Recalculate totals with proper precision
+      let subtotal = 0;
+      let totalTax = 0;
+      
+      newItems.forEach(item => {
+        const itemSubtotal = item.quantity * item.unitPrice * (1 - item.discount / 100);
+        const itemTax = itemSubtotal * (item.tax / 100);
+        subtotal += itemSubtotal;
+        totalTax += itemTax;
+      });
+      
       const total = subtotal + totalTax;
       
       setFormData(prev => ({

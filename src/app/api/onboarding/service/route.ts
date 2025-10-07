@@ -191,16 +191,37 @@ export async function GET(request: NextRequest) {
         );
       }
 
+      // If organization has services enabled, mark them as completed for organization members
+      const organizationServiceOnboarding = organization.onboarding.serviceOnboarding || {};
+      const organizationServices = organization.services || {};
+      
+      // For organization members, if a service is enabled in the organization, mark it as completed
+      const completedServiceOnboarding = { ...organizationServiceOnboarding };
+      
+      // Check each service and mark as completed if enabled
+      Object.entries(organizationServices).forEach(([serviceKey, isEnabled]) => {
+        if (isEnabled && !completedServiceOnboarding[serviceKey]) {
+          completedServiceOnboarding[serviceKey] = {
+            completed: true,
+            completedAt: organization.createdAt?.toISOString() || new Date().toISOString(),
+            autoCompleted: true // Flag to indicate this was auto-completed for organization members
+          };
+        }
+      });
+
       if (serviceKey) {
         // Return specific service onboarding status from organization
-        const serviceOnboarding = organization.onboarding.serviceOnboarding[serviceKey];
+        const serviceOnboarding = completedServiceOnboarding[serviceKey];
+        const isServiceEnabled = organizationServices[serviceKey];
+        
         return NextResponse.json({
           success: true,
           data: {
             serviceKey,
             serviceOnboarding,
-            isCompleted: serviceOnboarding && typeof serviceOnboarding === 'object' && 'completed' in serviceOnboarding ? serviceOnboarding.completed : false,
-            storageLocation: 'organization'
+            isCompleted: isServiceEnabled || (serviceOnboarding && typeof serviceOnboarding === 'object' && 'completed' in serviceOnboarding ? serviceOnboarding.completed : false),
+            storageLocation: 'organization',
+            serviceEnabled: isServiceEnabled
           },
           timestamp: new Date().toISOString()
         });
@@ -209,8 +230,8 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
           success: true,
           data: {
-            serviceOnboarding: organization.onboarding.serviceOnboarding,
-            services: organization.services,
+            serviceOnboarding: completedServiceOnboarding,
+            services: organizationServices,
             storageLocation: 'organization'
           },
           timestamp: new Date().toISOString()

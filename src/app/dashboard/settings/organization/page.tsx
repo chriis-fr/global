@@ -1,9 +1,10 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Building2, Users, Edit, User, Plus, Image, Crown } from 'lucide-react';
+import { Building2, Users, Edit, User, Plus, Image, Crown, Settings } from 'lucide-react';
 import { LogoManager } from '@/components/LogoManager';
 import DashboardFloatingButton from '@/components/DashboardFloatingButton';
 import { LogoDisplay } from '@/components/LogoDisplay';
+import { ApprovalSettingsComponent } from '@/components/settings/ApprovalSettings';
 import { useSubscription } from '@/lib/contexts/SubscriptionContext';
 import { useRouter } from 'next/navigation';
 
@@ -592,7 +593,7 @@ export default function OrganizationSettingsPage() {
           </div>
 
           {/* Logo Management Section */}
-          <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
+          <div className="bg-white/10 mb-4 backdrop-blur-sm rounded-xl p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center space-x-3">
                 <Image className="h-6 w-6 text-blue-400" aria-label="Logo management icon" />
@@ -627,6 +628,20 @@ export default function OrganizationSettingsPage() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Approval Settings Section */}
+      {orgInfo?.hasOrganization && (
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
+          <div className="flex items-center space-x-3 mb-6">
+            <Settings className="h-6 w-6 text-blue-400" />
+            <h2 className="text-xl font-semibold text-white">Approval Settings</h2>
+          </div>
+          <p className="text-blue-200 text-sm mb-6">
+            Configure approval workflows and rules for your organization&apos;s bills and payments.
+          </p>
+          <ApprovalSettingsComponent />
         </div>
       )}
 

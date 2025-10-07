@@ -105,7 +105,7 @@ export default function PayablesListPage() {
     
     try {
       setLoading(true);
-      const response = await fetch('/api/payables?convertToPreferred=true');
+      const response = await fetch('/api/payables?convertToPreferred=false'); // Keep original amounts
       const data = await response.json();
       
       if (data.success) {

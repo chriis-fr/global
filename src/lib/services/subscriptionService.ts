@@ -137,17 +137,18 @@ export class SubscriptionService {
     console.log('🔍 [SubscriptionService] Getting current month invoice count for user:', userId);
     const db = await getDatabase();
     
-    // Get user email for query
+    // Get user details
     const user = await db.collection('users').findOne({ _id: userId });
     if (!user) {
       console.log('❌ [SubscriptionService] User not found for invoice count');
       return 0;
     }
     
-    console.log(' [SubscriptionService] User details:', {
+    console.log('✅ [SubscriptionService] User details:', {
       userId: userId.toString(),
       userEmail: user.email,
-      userObjectId: user._id.toString()
+      userObjectId: user._id.toString(),
+      organizationId: user.organizationId
     });
     
     // Get start and end of current month
@@ -163,118 +164,47 @@ export class SubscriptionService {
       currentDate: now.toISOString()
     });
     
-    // Try multiple query approaches to find invoices
-    console.log('🔍 [SubscriptionService] Attempting to find invoices with multiple queries...');
-    
-    // Query 1: Try with ObjectId
-    const query1 = await db.collection('invoices').find({
-      issuerId: userId,
+    // Build query based on user type - Organization members should see organization's invoices
+    const isOrganization = user.organizationId && user.organizationId !== user._id.toString();
+    const query: Record<string, unknown> = {
       createdAt: { 
         $gte: startOfMonth,
         $lte: endOfMonth
       }
-    }).toArray();
+    };
     
-    console.log('📋 [SubscriptionService] Query 1 (issuerId: ObjectId):', {
+    if (isOrganization) {
+      // For organization members, count organization's invoices
+      query.organizationId = user.organizationId;
+      console.log('🏢 [SubscriptionService] Counting organization invoices for organizationId:', user.organizationId);
+    } else {
+      // For individual users, count their own invoices
+      query.issuerId = userId;
+      console.log('👤 [SubscriptionService] Counting individual invoices for userId:', userId.toString());
+    }
+    
+    // Try multiple query approaches to find invoices
+    console.log('🔍 [SubscriptionService] Attempting to find invoices with query:', query);
+    
+    // Query 1: Try with the built query
+    const query1 = await db.collection('invoices').find(query).toArray();
+    
+    console.log('📋 [SubscriptionService] Query result:', {
       count: query1.length,
       invoices: query1.map(inv => ({
         id: inv._id,
         invoiceNumber: inv.invoiceNumber,
+        organizationId: inv.organizationId,
         issuerId: inv.issuerId,
         createdAt: inv.createdAt
       }))
     });
     
-    // Query 2: Try with ObjectId as string
-    const query2 = await db.collection('invoices').find({
-      issuerId: userId.toString(),
-      createdAt: { 
-        $gte: startOfMonth,
-        $lte: endOfMonth
-      }
-    }).toArray();
+    // Return the count from our main query
+    const count = query1.length;
+    console.log('📊 [SubscriptionService] Final current month invoice count:', count);
     
-    console.log('📋 [SubscriptionService] Query 2 (issuerId: string):', {
-      count: query2.length,
-      invoices: query2.map(inv => ({
-        id: inv._id,
-        invoiceNumber: inv.invoiceNumber,
-        issuerId: inv.issuerId,
-        createdAt: inv.createdAt
-      }))
-    });
-    
-    // Query 3: Try with user email
-    const query3 = await db.collection('invoices').find({
-      userId: user.email,
-      createdAt: { 
-        $gte: startOfMonth,
-        $lte: endOfMonth
-      }
-    }).toArray();
-    
-    console.log('📋 [SubscriptionService] Query 3 (userId: email):', {
-      count: query3.length,
-      invoices: query3.map(inv => ({
-        id: inv._id,
-        invoiceNumber: inv.invoiceNumber,
-        userId: inv.userId,
-        createdAt: inv.createdAt
-      }))
-    });
-    
-    // Query 4: Try without date filter first to see all user invoices
-    const allInvoices = await db.collection('invoices').find({
-      $or: [
-        { issuerId: userId },
-        { issuerId: userId.toString() },
-        { userId: user.email },
-        { userId: userId.toString() }
-      ]
-    }).toArray();
-    
-    console.log('📋 [SubscriptionService] All user invoices (no date filter):', {
-      count: allInvoices.length,
-      invoices: allInvoices.map(inv => ({
-        id: inv._id,
-        invoiceNumber: inv.invoiceNumber,
-        issuerId: inv.issuerId,
-        userId: inv.userId,
-        createdAt: inv.createdAt,
-        createdAtType: typeof inv.createdAt,
-        createdAtString: inv.createdAt?.toString()
-      }))
-    });
-    
-    // Now filter by current month manually
-    const currentMonthInvoices = allInvoices.filter(invoice => {
-      if (!invoice.createdAt) return false;
-      
-      const invoiceDate = new Date(invoice.createdAt);
-      const isInCurrentMonth = invoiceDate >= startOfMonth && invoiceDate <= endOfMonth;
-      
-      console.log('📅 [SubscriptionService] Checking invoice date:', {
-        invoiceId: invoice._id,
-        invoiceNumber: invoice.invoiceNumber,
-        invoiceDate: invoiceDate.toISOString(),
-        startOfMonth: startOfMonth.toISOString(),
-        endOfMonth: endOfMonth.toISOString(),
-        isInCurrentMonth
-      });
-      
-      return isInCurrentMonth;
-    });
-    
-    console.log('📊 [SubscriptionService] Final current month invoices:', {
-      count: currentMonthInvoices.length,
-      invoices: currentMonthInvoices.map(inv => ({
-        id: inv._id,
-        invoiceNumber: inv.invoiceNumber,
-        createdAt: inv.createdAt
-      }))
-    });
-    
-    return currentMonthInvoices.length;
+    return count;
   }
 
   // Subscribe user to a plan (called by webhook)

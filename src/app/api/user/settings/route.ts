@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { UserService } from '@/lib/services/userService';
 import { UpdateUserInput } from '@/models';
 import { getDatabase } from '@/lib/database';
+import { ObjectId } from 'mongodb';
 
 // GET /api/user/settings - Get current user settings
 export async function GET() {
@@ -30,12 +31,19 @@ export async function GET() {
     let organizationData = null;
     if (user.organizationId) {
       const db = await getDatabase();
-      const organization = await db.collection('organizations').findOne({ _id: user.organizationId });
+      const organization = await db.collection('organizations').findOne({ 
+        _id: new ObjectId(user.organizationId.toString()) 
+      });
       if (organization) {
         organizationData = {
+          _id: organization._id?.toString(),
           name: organization.name,
           industry: organization.industry || '',
           address: organization.address,
+          billingEmail: organization.billingEmail,
+          services: organization.services || [],
+          onboarding: organization.onboarding || {},
+          subscription: organization.subscription
         };
       }
     }

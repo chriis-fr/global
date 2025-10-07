@@ -157,10 +157,19 @@ export async function POST(request: NextRequest) {
       clientPhone
     } = body;
 
+    // Amount validation and logging
+    console.log('📊 [API Invoices] Received invoice amounts:', {
+      subtotal,
+      totalTax,
+      total,
+      currency
+    });
+
     await connectToDatabase();
 
     // Determine if user is individual or organization
-    const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
+    // For organization owners, they should create organization invoices
+    const isOrganization = !!session.user.organizationId;
     const ownerId = isOrganization ? session.user.organizationId : session.user.email;
     const ownerType = isOrganization ? 'organization' : 'individual';
 
@@ -325,6 +334,7 @@ export async function POST(request: NextRequest) {
         amount: totalTax
       }],
       totalAmount: total,
+      
       paymentSettings: {
         method: paymentMethod,
         currency,
@@ -452,8 +462,8 @@ export async function GET(request: NextRequest) {
     const userPreferences = await CurrencyService.getUserPreferredCurrency(session.user.email);
     const preferredCurrency = userPreferences.preferredCurrency;
 
-    // Build query
-    const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
+    // Build query - Organization members should always see organization's invoices
+    const isOrganization = !!session.user.organizationId;
     let query = isOrganization 
       ? { organizationId: session.user.organizationId }
       : { 

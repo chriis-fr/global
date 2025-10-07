@@ -138,7 +138,7 @@ export default function AccountsPayablePage() {
       // Load payables with stats and check onboarding status in parallel
       console.log('🔍 [Frontend] Loading payables for user:', session.user.email);
       const [payablesResponse, onboardingResponse] = await Promise.all([
-        fetch('/api/payables?convertToPreferred=true'),
+        fetch('/api/payables?convertToPreferred=false'), // Keep original amounts
         fetch('/api/onboarding/service?service=accountsPayable')
       ]);
       

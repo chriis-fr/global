@@ -1,0 +1,262 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { ApprovalService } from '@/lib/services/approvalService';
+import { RBACService } from '@/lib/services/rbacService';
+import { getDatabase } from '@/lib/database';
+import { ObjectId } from 'mongodb';
+import { ApprovalSettings } from '@/types/approval';
+
+// GET /api/organization/approval-settings - Get approval settings
+export async function GET(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user?.email) {
+      return NextResponse.json(
+        { success: false, message: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    const db = await getDatabase();
+    const user = await db.collection('users').findOne({
+      email: session.user.email
+    });
+
+    if (!user || !user.organizationId) {
+      return NextResponse.json(
+        { success: false, message: 'User not found or not in organization' },
+        { status: 404 }
+      );
+    }
+
+    // Check if user can manage approval settings
+    const organization = await db.collection('organizations').findOne({
+      _id: user.organizationId
+    });
+
+    if (!organization) {
+      return NextResponse.json(
+        { success: false, message: 'Organization not found' },
+        { status: 404 }
+      );
+    }
+
+    const member = organization.members.find((m: any) => m.userId.toString() === user._id?.toString());
+    if (!member) {
+      return NextResponse.json(
+        { success: false, message: 'User not found in organization' },
+        { status: 404 }
+      );
+    }
+
+    // Check permissions
+    if (!RBACService.canManageSettings(member)) {
+      return NextResponse.json(
+        { success: false, message: 'Insufficient permissions' },
+        { status: 403 }
+      );
+    }
+
+    // Get approval settings
+    const settings = await ApprovalService.getApprovalSettings(user.organizationId.toString());
+
+    return NextResponse.json({
+      success: true,
+      data: settings,
+      message: 'Approval settings retrieved successfully'
+    });
+
+  } catch (error) {
+    console.error('Error getting approval settings:', error);
+    return NextResponse.json(
+      { 
+        success: false, 
+        message: 'Failed to get approval settings',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      },
+      { status: 500 }
+    );
+  }
+}
+
+// PUT /api/organization/approval-settings - Update approval settings
+export async function PUT(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user?.email) {
+      return NextResponse.json(
+        { success: false, message: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    const body = await request.json();
+    const { settings } = body;
+
+    if (!settings) {
+      return NextResponse.json(
+        { success: false, message: 'Settings data is required' },
+        { status: 400 }
+      );
+    }
+
+    const db = await getDatabase();
+    const user = await db.collection('users').findOne({
+      email: session.user.email
+    });
+
+    if (!user || !user.organizationId) {
+      return NextResponse.json(
+        { success: false, message: 'User not found or not in organization' },
+        { status: 404 }
+      );
+    }
+
+    // Check if user can manage approval settings
+    const organization = await db.collection('organizations').findOne({
+      _id: user.organizationId
+    });
+
+    if (!organization) {
+      return NextResponse.json(
+        { success: false, message: 'Organization not found' },
+        { status: 404 }
+      );
+    }
+
+    const member = organization.members.find((m: any) => m.userId.toString() === user._id?.toString());
+    if (!member) {
+      return NextResponse.json(
+        { success: false, message: 'User not found in organization' },
+        { status: 404 }
+      );
+    }
+
+    // Check permissions
+    if (!RBACService.canManageSettings(member)) {
+      return NextResponse.json(
+        { success: false, message: 'Insufficient permissions' },
+        { status: 403 }
+      );
+    }
+
+    // Validate settings
+    const validatedSettings = validateApprovalSettings(settings);
+    if (!validatedSettings) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid settings data' },
+        { status: 400 }
+      );
+    }
+
+    // Update approval settings
+    const success = await ApprovalService.updateApprovalSettings(
+      user.organizationId.toString(),
+      validatedSettings
+    );
+
+    if (success) {
+      // Log the settings change
+      await ApprovalService.logAuditAction(
+        user.organizationId.toString(),
+        user._id!.toString(),
+        'settings_change',
+        'organization',
+        user.organizationId.toString(),
+        'Approval settings updated',
+        { 
+          previousSettings: organization.approvalSettings,
+          newSettings: validatedSettings
+        }
+      );
+
+      return NextResponse.json({
+        success: true,
+        message: 'Approval settings updated successfully'
+      });
+    } else {
+      return NextResponse.json(
+        { success: false, message: 'Failed to update approval settings' },
+        { status: 500 }
+      );
+    }
+
+  } catch (error) {
+    console.error('Error updating approval settings:', error);
+    return NextResponse.json(
+      { 
+        success: false, 
+        message: 'Failed to update approval settings',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      },
+      { status: 500 }
+    );
+  }
+}
+
+// Validate approval settings
+function validateApprovalSettings(settings: any): ApprovalSettings | null {
+  try {
+    // Basic validation
+    if (typeof settings.requireApproval !== 'boolean') {
+      return null;
+    }
+
+    // Validate approval rules
+    if (!settings.approvalRules || typeof settings.approvalRules !== 'object') {
+      return null;
+    }
+
+    const { amountThresholds, requiredApprovers, fallbackApprovers, autoApprove } = settings.approvalRules;
+
+    // Validate amount thresholds
+    if (!amountThresholds || 
+        typeof amountThresholds.low !== 'number' ||
+        typeof amountThresholds.medium !== 'number' ||
+        typeof amountThresholds.high !== 'number') {
+      return null;
+    }
+
+    // Validate required approvers
+    if (!requiredApprovers ||
+        typeof requiredApprovers.low !== 'number' ||
+        typeof requiredApprovers.medium !== 'number' ||
+        typeof requiredApprovers.high !== 'number') {
+      return null;
+    }
+
+    // Validate fallback approvers
+    if (!Array.isArray(fallbackApprovers)) {
+      return null;
+    }
+
+    // Validate auto-approve settings
+    if (!autoApprove || typeof autoApprove.enabled !== 'boolean') {
+      return null;
+    }
+
+    if (!autoApprove.conditions ||
+        !Array.isArray(autoApprove.conditions.vendorWhitelist) ||
+        !Array.isArray(autoApprove.conditions.categoryWhitelist) ||
+        typeof autoApprove.conditions.amountLimit !== 'number') {
+      return null;
+    }
+
+    // Validate email settings
+    if (!settings.emailSettings ||
+        typeof settings.emailSettings.primaryEmail !== 'string' ||
+        !Array.isArray(settings.emailSettings.notificationEmails) ||
+        typeof settings.emailSettings.approvalNotifications !== 'boolean' ||
+        typeof settings.emailSettings.paymentNotifications !== 'boolean') {
+      return null;
+    }
+
+    return settings as ApprovalSettings;
+  } catch (error) {
+    console.error('Error validating approval settings:', error);
+    return null;
+  }
+}

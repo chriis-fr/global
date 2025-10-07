@@ -170,11 +170,11 @@ export default function PricingPage() {
               >
                 Yearly <span className="text-xs bg-green-500 text-white px-1 rounded ml-1">Save 17%</span>
               </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
+                  </div>
+                    </div>
+                    </div>
+                  </div>
+                  
       {/* Plan Type Selector */}
       <div className="bg-white py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -196,9 +196,9 @@ export default function PricingPage() {
                 </div>
               </button>
             ))}
-          </div>
-        </div>
-      </div>
+                    </div>
+                  </div>
+                </div>
 
       {/* Plans Grid */}
       <div className="py-16 bg-gray-50">
@@ -214,39 +214,39 @@ export default function PricingPage() {
                 isCurrentPlan={session && subscription?.plan?.planId === plan.planId ? true : undefined}
               />
             ))}
-          </div>
+                  </div>
+                </div>
         </div>
-      </div>
 
-      {/* FAQ Section */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.8 }}
+        {/* FAQ Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.8 }}
         className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center"
-      >
-        <h2 className="text-3xl font-bold text-gray-900 mb-8">
-          Frequently Asked Questions
-        </h2>
-        <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-          <div className="text-left">
-            <h3 className="font-semibold text-gray-900 mb-2">Can I change plans anytime?</h3>
-            <p className="text-gray-600">Yes, you can upgrade or downgrade your plan at any time. Changes take effect immediately.</p>
-          </div>
-          <div className="text-left">
+        >
+          <h2 className="text-3xl font-bold text-gray-900 mb-8">
+            Frequently Asked Questions
+          </h2>
+          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+            <div className="text-left">
+              <h3 className="font-semibold text-gray-900 mb-2">Can I change plans anytime?</h3>
+              <p className="text-gray-600">Yes, you can upgrade or downgrade your plan at any time. Changes take effect immediately.</p>
+            </div>
+            <div className="text-left">
             <h3 className="font-semibold text-gray-900 mb-2">What happens if I exceed my limits?</h3>
             <p className="text-gray-600">We&apos;ll notify you when you&apos;re approaching your limits. You can upgrade your plan or pay overage fees.</p>
           </div>
           <div className="text-left">
             <h3 className="font-semibold text-gray-900 mb-2">Can I create organizations on free plan?</h3>
             <p className="text-gray-600">No, organization creation requires a paid plan. Upgrade to Pro to create teams and organizations.</p>
-          </div>
-          <div className="text-left">
-            <h3 className="font-semibold text-gray-900 mb-2">What payment methods do you accept?</h3>
+            </div>
+            <div className="text-left">
+              <h3 className="font-semibold text-gray-900 mb-2">What payment methods do you accept?</h3>
             <p className="text-gray-600">We accept all major credit cards through our secure Stripe payment system.</p>
+            </div>
           </div>
-        </div>
-      </motion.div>
+        </motion.div>
     </div>
   )
 }
@@ -352,7 +352,7 @@ function PlanCard({
         ) : (
           plan.ctaText
         )}
-      </button>
+            </button>
     </div>
   )
 } 

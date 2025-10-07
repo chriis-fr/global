@@ -57,7 +57,7 @@ export default function InvoicesPage() {
       
       // Build query parameters
       const params = new URLSearchParams({
-        convertToPreferred: 'true',
+        convertToPreferred: 'false', // Keep original amounts - no conversion
         page: currentPage.toString(),
         limit: showAll ? '1000' : '10' // Show all or paginated
       });
