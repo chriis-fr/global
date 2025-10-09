@@ -60,25 +60,46 @@ export async function GET(request: NextRequest) {
 
     // Get pending approvals for this user
     const pendingApprovals = await ApprovalService.getPendingApprovals(user._id!.toString());
+    
+    console.log('🔍 [Approval API] Pending approvals found:', {
+      userId: user._id,
+      userEmail: user.email,
+      organizationId: user.organizationId,
+      pendingCount: pendingApprovals.length,
+      approvals: pendingApprovals.map(a => ({
+        _id: a._id,
+        billId: a.billId,
+        status: a.status,
+        currentStep: a.currentStep
+      }))
+    });
 
-    // Enrich with bill details
+    // Enrich with payable details (since we're using payables, not bills)
     const enrichedApprovals = await Promise.all(
       pendingApprovals.map(async (approval) => {
-        const bill = await db.collection('bills').findOne({
+        // First try to find in payables collection
+        let payable = await db.collection('payables').findOne({
           _id: new ObjectId(approval.billId)
         });
 
+        // If not found in payables, try bills collection for backward compatibility
+        if (!payable) {
+          payable = await db.collection('bills').findOne({
+            _id: new ObjectId(approval.billId)
+          });
+        }
+
         return {
           ...approval,
-          bill: bill ? {
-            _id: bill._id,
-            vendor: bill.vendor,
-            amount: bill.amount,
-            currency: bill.currency,
-            description: bill.description,
-            category: bill.category,
-            dueDate: bill.dueDate,
-            createdAt: bill.createdAt
+          bill: payable ? {
+            _id: payable._id,
+            vendor: payable.vendorName || payable.vendor,
+            amount: payable.total || payable.amount,
+            currency: payable.currency,
+            description: payable.payableName || payable.description,
+            category: payable.category || 'Invoice Payment',
+            dueDate: payable.dueDate,
+            createdAt: payable.createdAt
           } : null
         };
       })
@@ -195,6 +216,22 @@ export async function POST(request: NextRequest) {
               }
             }
           );
+
+          // Check if this is a payable from an invoice and sync status
+          const payable = await db.collection('payables').findOne({
+            _id: new ObjectId(workflow.billId)
+          });
+
+          if (payable && payable.relatedInvoiceId) {
+            console.log('🔄 [Approval] Syncing invoice status for approved payable');
+            try {
+              const { syncInvoiceStatusWithPayable } = await import('@/lib/actions/payableStatusSync');
+              await syncInvoiceStatusWithPayable(workflow.billId, 'approved', comments);
+              console.log('✅ [Approval] Invoice status synced successfully');
+            } catch (syncError) {
+              console.error('⚠️ [Approval] Failed to sync invoice status:', syncError);
+            }
+          }
         }
       } else if (decision === 'rejected') {
         // Update bill status to rejected
@@ -209,6 +246,22 @@ export async function POST(request: NextRequest) {
               }
             }
           );
+
+          // Check if this is a payable from an invoice and sync status
+          const payable = await db.collection('payables').findOne({
+            _id: new ObjectId(workflow.billId)
+          });
+
+          if (payable && payable.relatedInvoiceId) {
+            console.log('🔄 [Approval] Syncing invoice status for rejected payable');
+            try {
+              const { syncInvoiceStatusWithPayable } = await import('@/lib/actions/payableStatusSync');
+              await syncInvoiceStatusWithPayable(workflow.billId, 'rejected', comments);
+              console.log('✅ [Approval] Invoice status synced successfully');
+            } catch (syncError) {
+              console.error('⚠️ [Approval] Failed to sync invoice status:', syncError);
+            }
+          }
         }
       }
 

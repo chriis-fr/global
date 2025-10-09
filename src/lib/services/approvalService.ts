@@ -93,6 +93,17 @@ export class ApprovalService {
       // Find approvers
       const approvers = this.findApprovers(organization.members, settings);
       const fallbackApprovers = this.findFallbackApprovers(organization.members, settings);
+      
+      console.log('🔍 [ApprovalService] Creating approval workflow:', {
+        organizationId,
+        createdBy,
+        amount,
+        amountThreshold,
+        requiredApprovers,
+        autoApproved,
+        approvers: approvers.map(a => ({ userId: a.userId, email: a.email, role: a.role })),
+        fallbackApprovers: fallbackApprovers.map(a => ({ userId: a.userId, email: a.email, role: a.role }))
+      });
 
       // Create approval steps
       const approvalSteps: ApprovalStep[] = [];
@@ -138,6 +149,23 @@ export class ApprovalService {
 
       // Save to database
       const result = await db.collection('approval_workflows').insertOne(workflow);
+      
+      console.log('✅ [ApprovalService] Approval workflow created:', {
+        workflowId: result.insertedId,
+        workflow: {
+          _id: result.insertedId,
+          status: workflow.status,
+          organizationId: workflow.organizationId,
+          billId: workflow.billId,
+          currentStep: workflow.currentStep,
+          approvals: workflow.approvals.map(a => ({
+            stepNumber: a.stepNumber,
+            approverId: a.approverId,
+            approverEmail: a.approverEmail,
+            decision: a.decision
+          }))
+        }
+      });
       
       if (result.insertedId) {
         workflow._id = result.insertedId.toString();
@@ -285,17 +313,86 @@ export class ApprovalService {
     }
   }
 
+  // Update workflow with bill ID after bill creation
+  static async updateWorkflowBillId(workflowId: string, billId: ObjectId): Promise<boolean> {
+    try {
+      const db = await getDatabase();
+      
+      const result = await db.collection('approval_workflows').updateOne(
+        { _id: new ObjectId(workflowId) },
+        { 
+          $set: { 
+            billId: billId,
+            updatedAt: new Date()
+          }
+        }
+      );
+
+      return result.modifiedCount > 0;
+    } catch (error) {
+      console.error('Error updating workflow bill ID:', error);
+      return false;
+    }
+  }
+
   // Get pending approvals for a user
   static async getPendingApprovals(userId: string): Promise<ApprovalWorkflow[]> {
     try {
       const db = await getDatabase();
       
-      const workflows = await db.collection('approval_workflows').find({
+      console.log('🔍 [ApprovalService] Getting pending approvals for userId:', userId);
+      
+      // First, let's see all approval workflows for debugging
+      const allWorkflows = await db.collection('approval_workflows').find({}).toArray();
+      console.log('🔍 [ApprovalService] All approval workflows found:', {
+        count: allWorkflows.length,
+        workflows: allWorkflows.map(w => ({
+          _id: w._id,
+          status: w.status,
+          organizationId: w.organizationId,
+          billId: w.billId,
+          currentStep: w.currentStep,
+          approvals: w.approvals?.map((a: any) => ({
+            stepNumber: a.stepNumber,
+            approverId: a.approverId,
+            approverEmail: a.approverEmail,
+            decision: a.decision
+          }))
+        }))
+      });
+      
+      // Get all pending workflows where user is an approver
+      // Handle both string and ObjectId user IDs
+      const allPendingWorkflows = await db.collection('approval_workflows').find({
         status: 'pending',
-        'approvals.approverId': userId,
-        'approvals.decision': 'pending',
-        'approvals.stepNumber': { $lte: '$currentStep' }
+        $or: [
+          { 'approvals.approverId': userId },
+          { 'approvals.approverId': new ObjectId(userId) }
+        ],
+        'approvals.decision': 'pending'
       }).toArray();
+
+      // Filter to only include workflows where the user's step is current or past
+      const workflows = allPendingWorkflows.filter(workflow => {
+        const userApproval = workflow.approvals.find((approval: any) => {
+          // Handle both string and ObjectId comparisons
+          const approverIdStr = approval.approverId?.toString();
+          const userIdStr = userId.toString();
+          return approverIdStr === userIdStr && approval.decision === 'pending';
+        });
+        return userApproval && userApproval.stepNumber <= workflow.currentStep;
+      });
+
+      console.log('🔍 [ApprovalService] Pending approvals found for user:', {
+        userId,
+        count: workflows.length,
+        workflows: workflows.map(w => ({
+          _id: w._id,
+          status: w.status,
+          billId: w.billId,
+          currentStep: w.currentStep
+        }))
+      });
 
       return workflows;
     } catch (error) {
@@ -317,10 +414,12 @@ export class ApprovalService {
     try {
       const db = await getDatabase();
       
-      // Get user details
-      const user = await db.collection('users').findOne({
-        _id: new ObjectId(userId)
-      });
+      // Get user details - handle both string and ObjectId userId
+      const userQuery = typeof userId === 'string' && /^[0-9a-fA-F]{24}$/.test(userId) 
+        ? { _id: new ObjectId(userId) }
+        : { _id: userId };
+      
+      const user = await db.collection('users').findOne(userQuery);
 
       if (!user) {
         console.error('User not found for audit log');

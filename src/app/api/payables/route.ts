@@ -385,13 +385,26 @@ export async function GET(request: NextRequest) {
     // Query details prepared
     
     let query = isOrganization 
-      ? { organizationId: session.user.organizationId }
+      ? { 
+          $or: [
+            { organizationId: session.user.organizationId },
+            { organizationId: new ObjectId(session.user.organizationId) }
+          ]
+        }
       : { 
           $or: [
             issuerIdQuery,
             { userId: session.user.email }
           ]
         };
+
+    console.log('🔍 [Payables API] Query details:', {
+      isOrganization,
+      userOrganizationId: session.user.organizationId,
+      userEmail: session.user.email,
+      userId: session.user.id,
+      query: query
+    });
 
     // Query built successfully
 
@@ -441,6 +454,18 @@ export async function GET(request: NextRequest) {
       .skip(skip)
       .limit(limit)
       .toArray();
+
+    console.log('🔍 [Payables API] Found payables:', {
+      count: payables.length,
+      payables: payables.map(p => ({
+        _id: p._id,
+        payableNumber: p.payableNumber,
+        organizationId: p.organizationId,
+        userId: p.userId,
+        issuerId: p.issuerId,
+        status: p.status
+      }))
+    });
 
     // Payables fetched successfully
 

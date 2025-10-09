@@ -2515,11 +2515,11 @@ export default function CreateInvoicePage() {
                                 onClick={() => selectClient(client)}
                                 className="w-full text-left p-2 hover:bg-gray-100 rounded border"
                               >
-                                <div className="font-medium">
+                                <div className="font-medium text-black">
                                   {client.company ? client.company : client.name}
                                 </div>
                                 {client.company && (
-                                  <div className="text-sm text-gray-500">Attn: {client.name}</div>
+                                  <div className="text-sm text-black">Attn: {client.name}</div>
                                 )}
                                 <div className="text-sm text-gray-600">{client.email}</div>
                               </button>
@@ -2546,7 +2546,7 @@ export default function CreateInvoicePage() {
                       {formData.clientCompany ? formData.clientCompany : formData.clientName || 'Client Name'}
                     </div>
                     {formData.clientCompany && (
-                      <div className="text-gray-700">
+                      <div className="text-black">
                         Attn: {formData.clientName || 'Client Name'}
                       </div>
                     )}

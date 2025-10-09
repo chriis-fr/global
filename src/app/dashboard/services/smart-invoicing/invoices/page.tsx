@@ -564,7 +564,7 @@ export default function InvoicesPage() {
                       <div className="text-right flex-shrink-0 ml-3">
                         <p className="text-white font-semibold text-sm">
                           <FormattedNumberDisplay 
-                            value={invoice.totalAmount || 0} 
+                            value={invoice.total || invoice.totalAmount || 0} 
                             currency={invoice.currency === 'USD' ? '$' : invoice.currency === 'EUR' ? '€' : invoice.currency === 'GBP' ? '£' : '$'}
                           />
                         </p>

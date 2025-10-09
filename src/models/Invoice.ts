@@ -98,7 +98,8 @@ export interface Invoice {
   items: InvoiceItem[];
   taxes: InvoiceTax[];
   subtotal: number;
-  totalAmount: number;
+  total: number; // Primary total field
+  totalAmount: number; // Backward compatibility
   
   // Payment Settings
   paymentSettings: PaymentSettings;

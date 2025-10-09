@@ -680,7 +680,7 @@ export default function InvoiceViewPage() {
               </div>
               <div style="display: flex; justify-content: space-between; padding: 15px 0; background: #f9fafb; margin-top: 10px; border-radius: 8px; padding: 15px;">
                 <span style="font-size: 18px; font-weight: bold; color: #1f2937;">Total:</span>
-                <span style="font-size: 18px; font-weight: bold; color: #1f2937;">${getCurrencySymbol(invoice.currency || '')}${invoice.totalAmount?.toFixed(2) || '0.00'}</span>
+                <span style="font-size: 18px; font-weight: bold; color: #1f2937;">${getCurrencySymbol(invoice.currency || '')}${(invoice.total || invoice.total || invoice.totalAmount || 0).toFixed(2)}</span>
               </div>
             </div>
           </div>
@@ -870,7 +870,7 @@ export default function InvoiceViewPage() {
           <div style="margin-bottom: 15px;">
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: #3b82f6; color: white; border-radius: 6px; flex-wrap: wrap; gap: 10px;">
               <span style="font-size: 16px; font-weight: bold; word-wrap: break-word;">TOTAL PAID:</span>
-              <span style="font-size: 20px; font-weight: bold; word-wrap: break-word;">${getCurrencyByCode(invoice.currency || 'USD')?.symbol || '$'}${(invoice.totalAmount || invoice.total || 0).toFixed(2)}</span>
+              <span style="font-size: 20px; font-weight: bold; word-wrap: break-word;">${getCurrencyByCode(invoice.currency || 'USD')?.symbol || '$'}${(invoice.total || invoice.total || invoice.totalAmount || 0).toFixed(2)}</span>
             </div>
           </div>
 
@@ -1292,7 +1292,7 @@ export default function InvoiceViewPage() {
                   <span>Total amount</span>
                   <span>
                     <FormattedNumberDisplay 
-                      value={invoice.totalAmount || 0} 
+                      value={invoice.total || invoice.totalAmount || 0} 
                     />
                   </span>
                 </div>
@@ -1300,7 +1300,7 @@ export default function InvoiceViewPage() {
                   <span>Due</span>
                   <span>
                     <FormattedNumberDisplay 
-                      value={invoice.totalAmount || 0} 
+                      value={invoice.total || invoice.totalAmount || 0} 
                     />
                   </span>
                 </div>

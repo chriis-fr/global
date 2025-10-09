@@ -223,8 +223,8 @@ const generateInvoicePDF = async (invoiceId: string): Promise<string | null> => 
   try {
     console.log('📄 [PDF Generation] Starting PDF generation for invoice:', invoiceId);
     
-    // Fetch invoice data
-    const response = await fetch(`/api/invoices/${invoiceId}?convertToPreferred=true`);
+    // Fetch invoice data WITHOUT currency conversion to maintain original amounts
+    const response = await fetch(`/api/invoices/${invoiceId}?convertToPreferred=false`);
     const data = await response.json();
     
     if (!data.success || !data.data) {

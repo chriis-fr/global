@@ -317,7 +317,7 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
                 <h3 className="text-lg font-medium text-white">Amount Thresholds</h3>
               </div>
               
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-white mb-2">
                     Low Threshold
@@ -369,7 +369,7 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
                 <h3 className="text-lg font-medium text-white">Required Approvers</h3>
               </div>
               
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-white mb-2">
                     Low Amount

@@ -45,7 +45,13 @@ export async function POST(request: NextRequest) {
     // Get the invoice - Organization members should always see organization's invoices
     const isOrganization = !!session.user.organizationId;
     const query = isOrganization 
-      ? { _id: new ObjectId(invoiceId), organizationId: session.user.organizationId }
+      ? { 
+          _id: new ObjectId(invoiceId), 
+          $or: [
+            { organizationId: session.user.organizationId },
+            { organizationId: new ObjectId(session.user.organizationId) }
+          ]
+        }
       : { 
           _id: new ObjectId(invoiceId),
           $or: [
@@ -54,20 +60,80 @@ export async function POST(request: NextRequest) {
           ]
         };
 
-    const invoice = await invoicesCollection.findOne(query);
+    let invoice = await invoicesCollection.findOne(query);
 
     if (!invoice) {
-      console.log('❌ [Send Invoice] Invoice not found:', {
+      console.log('❌ [Send Invoice] Invoice not found with primary query:', {
         invoiceId,
         ownerType: isOrganization ? 'organization' : 'individual',
         ownerId: isOrganization ? session.user.organizationId : session.user.email,
-        userEmail: session.user.email
+        userEmail: session.user.email,
+        query: query
       });
-      return NextResponse.json(
-        { success: false, message: 'Invoice not found' },
-        { status: 404 }
-      );
+      
+      // Try to find the invoice without organization filter to debug
+      const debugInvoice = await invoicesCollection.findOne({ _id: new ObjectId(invoiceId) });
+      if (debugInvoice) {
+        console.log('🔍 [Send Invoice] Debug - Invoice exists but query failed:', {
+          invoiceId,
+          foundInvoice: {
+            _id: debugInvoice._id,
+            invoiceNumber: debugInvoice.invoiceNumber,
+            organizationId: debugInvoice.organizationId,
+            issuerId: debugInvoice.issuerId,
+            userId: debugInvoice.userId,
+            status: debugInvoice.status
+          },
+          userSession: {
+            id: session.user.id,
+            email: session.user.email,
+            organizationId: session.user.organizationId
+          }
+        });
+        
+        // Try a more permissive query as fallback
+        console.log('🔄 [Send Invoice] Trying fallback query...');
+        const fallbackQuery = {
+          _id: new ObjectId(invoiceId),
+          $or: [
+            { issuerId: session.user.id },
+            { userId: session.user.email },
+            { organizationId: session.user.organizationId },
+            { organizationId: new ObjectId(session.user.organizationId) }
+          ]
+        };
+        
+        const fallbackInvoice = await invoicesCollection.findOne(fallbackQuery);
+        if (fallbackInvoice) {
+          console.log('✅ [Send Invoice] Found invoice with fallback query, using it');
+          invoice = fallbackInvoice;
+        } else {
+          console.log('❌ [Send Invoice] Fallback query also failed');
+          return NextResponse.json(
+            { success: false, message: 'Invoice not found' },
+            { status: 404 }
+          );
+        }
+      } else {
+        return NextResponse.json(
+          { success: false, message: 'Invoice not found' },
+          { status: 404 }
+        );
+      }
     }
+
+    console.log('✅ [Send Invoice] Invoice found:', {
+      invoiceId: invoice._id,
+      invoiceNumber: invoice.invoiceNumber,
+      invoiceName: invoice.invoiceName,
+      total: invoice.total,
+      totalAmount: invoice.totalAmount,
+      currency: invoice.currency,
+      status: invoice.status,
+      organizationId: invoice.organizationId,
+      issuerId: invoice.issuerId,
+      userId: invoice.userId
+    });
 
     // Check if invoice requires approval and is not yet approved
     if (invoice.status === 'pending_approval') {
@@ -182,7 +248,7 @@ export async function POST(request: NextRequest) {
           recipientEmail,
           greetingName, // Proper greeting name
           invoice.invoiceNumber,
-          invoice.totalAmount,
+          invoice.total || invoice.totalAmount || 0, // Use consistent field name
           invoice.currency,
           invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : 'N/A',
           invoice.companyDetails?.name || (isOrganization ? 'Your Company' : ''), // Company name (empty for individuals)
@@ -264,7 +330,33 @@ async function createPayableForRecipient(recipientEmail: string, invoice: Record
     console.log('💳 [Auto Payable] Checking if recipient is registered:', recipientEmail);
 
     // Check if recipient has an account
-    const recipientUser = await UserService.getUserByEmail(recipientEmail);
+    let recipientUser = await UserService.getUserByEmail(recipientEmail);
+    
+    // If recipient email is not a registered user, check if it's an organization's primary email
+    if (!recipientUser) {
+      console.log('📧 [Auto Payable] Recipient email not found, checking if it\'s an organization primary email:', recipientEmail);
+      
+      const db = await connectToDatabase();
+      const organization = await db.collection('organizations').findOne({
+        billingEmail: recipientEmail
+      });
+      
+      if (organization) {
+        console.log('🏢 [Auto Payable] Found organization with this primary email, using organization owner:', organization.name);
+        
+        // Find the organization owner to use as the recipient user
+        const owner = organization.members.find((member: any) => member.role === 'owner');
+        if (owner) {
+          recipientUser = await db.collection('users').findOne({
+            _id: new ObjectId(owner.userId)
+          });
+          
+          if (recipientUser) {
+            console.log('✅ [Auto Payable] Using organization owner as recipient user:', recipientUser.email);
+          }
+        }
+      }
+    }
     
     if (!recipientUser) {
       console.log('📧 [Auto Payable] Recipient not registered, storing for future signup:', recipientEmail);
@@ -302,12 +394,62 @@ async function createPayableForRecipient(recipientEmail: string, invoice: Record
     // Generate payable number
     const payableNumber = `PAY-${Date.now()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
 
+    // Check if recipient is part of an organization and get approval settings
+    let approvalWorkflow = null;
+    let approvalStatus = 'pending';
+    let payableStatus = 'pending';
+    
+    if (recipientUser.organizationId) {
+      console.log('🏢 [Auto Payable] Recipient is organization member, checking approval settings');
+      
+      try {
+        const { ApprovalService } = await import('@/lib/services/approvalService');
+        const approvalSettings = await ApprovalService.getApprovalSettings(recipientUser.organizationId);
+        
+        if (approvalSettings?.requireApproval) {
+          console.log('✅ [Auto Payable] Organization requires approval, creating workflow');
+          
+          // Create approval workflow for the payable
+          approvalWorkflow = await ApprovalService.createApprovalWorkflow(
+            null, // Will be set after payable creation
+            recipientUser.organizationId,
+            recipientUser._id?.toString() || recipientUser.email,
+            parseFloat(invoice.total || invoice.totalAmount || 0) // Use consistent field name
+          );
+          
+          if (approvalWorkflow) {
+            approvalStatus = approvalWorkflow.status === 'approved' ? 'approved' : 'pending_approval';
+            payableStatus = approvalWorkflow.status === 'approved' ? 'approved' : 'pending_approval';
+            console.log('✅ [Auto Payable] Approval workflow created:', approvalWorkflow._id);
+          }
+        } else {
+          console.log('✅ [Auto Payable] Organization has no approval requirements');
+          approvalStatus = 'approved';
+          payableStatus = 'approved';
+        }
+      } catch (approvalError) {
+        console.error('⚠️ [Auto Payable] Failed to check approval settings:', approvalError);
+        // Continue with default status if approval check fails
+      }
+    } else {
+      console.log('👤 [Auto Payable] Recipient is individual user, no approval required');
+      approvalStatus = 'approved';
+      payableStatus = 'approved';
+    }
+
     // Create comprehensive payable data with full tracking
     const payableData = {
       // Basic payable info
       payableNumber,
       payableName: `Invoice Payment - ${invoice.invoiceNumber}`,
       payableType: 'invoice_payment',
+      
+      // Organization/User identification
+      issuerId: recipientIssuerId,
+      userId: recipientEmail, // Use original recipient email, not organization owner's email
+      organizationId: recipientUser.organizationId || null, // Set organization ID if user belongs to one
+      ownerId: recipientUser.organizationId || recipientEmail, // Owner ID for ledger sync
+      ownerType: recipientUser.organizationId ? 'organization' : 'individual', // Owner type for ledger sync
       
       // Dates and timing
       issueDate: new Date(),
@@ -325,7 +467,7 @@ async function createPayableForRecipient(recipientEmail: string, invoice: Record
       
       // Vendor information (recipient)
       vendorName: (invoice.clientDetails as Record<string, unknown>)?.name || invoice.clientName,
-      vendorEmail: (invoice.clientDetails as Record<string, unknown>)?.email || invoice.clientEmail,
+      vendorEmail: recipientEmail, // Use original recipient email
       vendorPhone: (invoice.clientDetails as Record<string, unknown>)?.phone || invoice.clientPhone,
       vendorAddress: (invoice.clientDetails as Record<string, unknown>)?.address || invoice.clientAddress,
       
@@ -340,16 +482,17 @@ async function createPayableForRecipient(recipientEmail: string, invoice: Record
       items: invoice.items || [],
       subtotal: invoice.subtotal || 0,
       totalTax: invoice.totalTax || 0,
-      total: invoice.totalAmount || 0,
+      total: invoice.total || invoice.totalAmount || 0, // Use consistent field name
       memo: `Auto-generated payable from invoice ${invoice.invoiceNumber}`,
       
       // Status and workflow
-      status: 'pending', // pending, approved, paid, overdue, cancelled
+      status: payableStatus, // pending, approved, paid, overdue, cancelled
       priority: 'medium', // low, medium, high, urgent
       category: 'Invoice Payment',
       
       // Approval workflow
-      approvalStatus: 'pending', // pending, approved, rejected
+      approvalStatus: approvalStatus, // pending, approved, rejected
+      approvalWorkflowId: approvalWorkflow?._id || null,
       approvedBy: null,
       approvedAt: null,
       approvalNotes: '',
@@ -398,6 +541,27 @@ async function createPayableForRecipient(recipientEmail: string, invoice: Record
 
     const result = await payablesCollection.insertOne(payableData);
     console.log('✅ [Auto Payable] Payable created with ID:', result.insertedId);
+
+    // Update approval workflow with payable ID if it exists
+    if (approvalWorkflow && approvalWorkflow._id) {
+      try {
+        const { ApprovalService } = await import('@/lib/services/approvalService');
+        await ApprovalService.updateWorkflowBillId(approvalWorkflow._id, result.insertedId);
+        console.log('✅ [Auto Payable] Approval workflow updated with payable ID');
+      } catch (workflowError) {
+        console.error('⚠️ [Auto Payable] Failed to update workflow with payable ID:', workflowError);
+      }
+    }
+
+    // Send approval notifications if payable requires approval
+    if (approvalStatus === 'pending_approval' && approvalWorkflow) {
+      try {
+        await sendPayableApprovalNotifications(approvalWorkflow, payableData, recipientUser);
+        console.log('✅ [Auto Payable] Approval notifications sent');
+      } catch (notificationError) {
+        console.error('⚠️ [Auto Payable] Failed to send approval notifications:', notificationError);
+      }
+    }
 
     // Also sync to financial ledger
     try {
@@ -463,6 +627,101 @@ async function storePendingPayable(recipientEmail: string, invoice: Record<strin
 
   } catch (error) {
     console.error('❌ [Pending Payable] Error storing pending payable:', error);
+    throw error;
+  }
+}
+
+/**
+ * Send approval notifications for payables created from invoices
+ */
+async function sendPayableApprovalNotifications(
+  workflow: Record<string, unknown>,
+  payableData: Record<string, unknown>,
+  recipientUser: Record<string, unknown>
+) {
+  try {
+    console.log('📧 [Payable Approval] Sending notifications for payable:', payableData.payableNumber);
+    
+    const { NotificationService } = await import('@/lib/services/notificationService');
+    const db = await connectToDatabase();
+    
+    // Get organization details
+    const organization = await db.collection('organizations').findOne({
+      _id: new ObjectId(recipientUser.organizationId)
+    });
+    
+    if (!organization) {
+      console.error('❌ [Payable Approval] Organization not found');
+      return;
+    }
+    
+    // Get ALL approvers in the organization (not just current step)
+    const organizationMembers = organization.members || [];
+    const approvers = organizationMembers.filter((member: any) => 
+      member.role === 'admin' || member.role === 'approver' || member.role === 'owner'
+    );
+    
+    console.log('📧 [Payable Approval] Found approvers in organization:', {
+      totalMembers: organizationMembers.length,
+      approvers: approvers.length,
+      approverRoles: approvers.map((a: any) => a.role)
+    });
+    
+    if (approvers.length === 0) {
+      console.error('❌ [Payable Approval] No approvers found in organization');
+      return;
+    }
+    
+    // Send notification to ALL approvers (except the recipient email)
+    const notificationPromises = approvers.map(async (approver: any) => {
+      try {
+        // Get approver user details
+        const approverUser = await db.collection('users').findOne({
+          _id: new ObjectId(approver.userId)
+        });
+        
+        if (!approverUser) {
+          console.error('❌ [Payable Approval] Approver user not found:', approver.userId);
+          return;
+        }
+        
+        // Skip if this approver is the recipient (they already received the invoice email)
+        if (approverUser.email === recipientUser.email) {
+          console.log('⏭️ [Payable Approval] Skipping notification to recipient:', approverUser.email);
+          return;
+        }
+        
+        // Send approval request notification
+        await NotificationService.sendApprovalRequest(
+          approverUser.email,
+          approverUser.name || approverUser.email,
+          {
+            vendor: payableData.vendorName || payableData.companyName,
+            amount: payableData.total,
+            currency: payableData.currency,
+            description: `Invoice payment: ${payableData.payableName}`,
+            dueDate: payableData.dueDate
+          },
+          workflow,
+          organization.name
+        );
+        
+        console.log('✅ [Payable Approval] Notification sent to:', approverUser.email, `(${approver.role})`);
+        return approverUser.email;
+      } catch (error) {
+        console.error('❌ [Payable Approval] Failed to send notification to approver:', approver.userId, error);
+        return null;
+      }
+    });
+    
+    // Wait for all notifications to be sent
+    const results = await Promise.all(notificationPromises);
+    const successfulNotifications = results.filter(Boolean);
+    
+    console.log('✅ [Payable Approval] Notifications sent to approvers:', successfulNotifications);
+    
+  } catch (error) {
+    console.error('❌ [Payable Approval] Error sending notifications:', error);
     throw error;
   }
 } 

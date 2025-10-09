@@ -192,7 +192,7 @@ export function PendingApprovalsList({ onApprovalDecision }: PendingApprovalsLis
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 text-sm">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
             <div className="flex items-center space-x-2">
               <User className="h-4 w-4 text-blue-400" />
               <span className="text-blue-200">Current Approver:</span>
