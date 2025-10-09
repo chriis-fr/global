@@ -168,7 +168,16 @@ export async function GET(request: NextRequest) {
       currency: 'USD' // Default currency, can be enhanced later
     };
 
-    stats.netBalance = stats.totalReceivablesAmount - stats.totalPayablesAmount;
+    // Calculate net balance: PAID receivables - PAID payables (actual money in/out)
+    const paidReceivablesAmount = allEntries
+      .filter(e => e.type === 'receivable' && e.status === 'paid')
+      .reduce((sum, e) => sum + e.amount, 0);
+    
+    const paidPayablesAmount = allEntries
+      .filter(e => e.type === 'payable' && e.status === 'paid')
+      .reduce((sum, e) => sum + e.amount, 0);
+    
+    stats.netBalance = paidReceivablesAmount - paidPayablesAmount;
 
     // Get entries with pagination
     const skip = (page - 1) * limit;

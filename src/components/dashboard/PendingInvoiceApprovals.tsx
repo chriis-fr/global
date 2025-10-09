@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { approveInvoice, rejectInvoice, getPendingApprovals } from '@/lib/actions/invoiceApproval';
+import { autoSendApprovedInvoice } from '@/lib/utils/autoSendInvoice';
 import { CheckCircle, XCircle, Clock, DollarSign, User, Mail } from 'lucide-react';
 
 interface PendingInvoice {
@@ -14,6 +15,17 @@ interface PendingInvoice {
   clientEmail: string;
   createdAt: string;
   createdBy: string;
+  createdByName: string;
+  createdByEmail: string;
+  approvalCount: number;
+  requiredApprovals: number;
+  approvals: Array<{
+    approverId: string;
+    approverName: string;
+    approverEmail: string;
+    approvedAt: string;
+    comments?: string;
+  }>;
 }
 
 export default function PendingInvoiceApprovals() {
@@ -43,46 +55,76 @@ export default function PendingInvoiceApprovals() {
     }
   };
 
-  const handleApprove = async (invoiceId: string) => {
-    try {
-      setActionLoading(invoiceId);
-      const result = await approveInvoice(invoiceId);
-      if (result.success) {
-        // Remove from pending list
-        setPendingInvoices(prev => prev.filter(invoice => invoice._id !== invoiceId));
-        alert(result.message);
-      } else {
-        alert(result.message);
-      }
-    } catch (error) {
-      console.error('Error approving invoice:', error);
-      alert('Failed to approve invoice');
-    } finally {
-      setActionLoading(null);
-    }
-  };
+         const handleApprove = async (invoiceId: string) => {
+           try {
+             setActionLoading(invoiceId);
+             const result = await approveInvoice(invoiceId);
+             
+             if (result.success) {
+               // Check if the invoice is fully approved and ready to send
+               if (result.fullyApproved && result.invoiceData) {
+                 console.log('🚀 [Auto-Send] Invoice fully approved, starting auto-send process...');
+                 
+                 // Show loading message
+                 alert('✅ Invoice approved! Generating PDF and sending to recipient...');
+                 
+                 // Auto-send the invoice with PDF
+                 const autoSendResult = await autoSendApprovedInvoice(result.invoiceData);
+                 
+                 if (autoSendResult.success) {
+                   alert(`🎉 ${autoSendResult.message}`);
+                 } else {
+                   alert(`⚠️ ${autoSendResult.message}`);
+                 }
+               } else {
+                 // Regular approval (not fully approved yet)
+                 alert(result.message);
+               }
+               
+               // Remove from pending list
+               setPendingInvoices(prev => prev.filter(invoice => invoice._id !== invoiceId));
+             } else {
+               // Show more detailed error message for owners trying to approve their own invoices
+               if (result.message.includes('cannot approve your own invoices')) {
+                 alert('❌ You cannot approve your own invoices.\n\nPlease ask another admin or approver to review and approve this invoice. They will receive an email notification about this pending approval.\n\nNote: If your organization has insufficient approvers, you may be able to approve your own invoices to prevent deadlocks.');
+               } else {
+                 alert(result.message);
+               }
+             }
+           } catch (error) {
+             console.error('Error approving invoice:', error);
+             alert('Failed to approve invoice');
+           } finally {
+             setActionLoading(null);
+           }
+         };
 
-  const handleReject = async (invoiceId: string) => {
-    const reason = prompt('Please provide a reason for rejection:');
-    if (!reason) return;
+         const handleReject = async (invoiceId: string) => {
+           const reason = prompt('Please provide a reason for rejection:');
+           if (!reason) return;
 
-    try {
-      setActionLoading(invoiceId);
-      const result = await rejectInvoice(invoiceId, reason);
-      if (result.success) {
-        // Remove from pending list
-        setPendingInvoices(prev => prev.filter(invoice => invoice._id !== invoiceId));
-        alert(result.message);
-      } else {
-        alert(result.message);
-      }
-    } catch (error) {
-      console.error('Error rejecting invoice:', error);
-      alert('Failed to reject invoice');
-    } finally {
-      setActionLoading(null);
-    }
-  };
+           try {
+             setActionLoading(invoiceId);
+             const result = await rejectInvoice(invoiceId, reason);
+             if (result.success) {
+               // Remove from pending list
+               setPendingInvoices(prev => prev.filter(invoice => invoice._id !== invoiceId));
+               alert(result.message);
+             } else {
+               // Show more detailed error message for owners trying to reject their own invoices
+               if (result.message.includes('cannot reject your own invoices')) {
+                 alert('❌ You cannot reject your own invoices.\n\nPlease ask another admin or approver to review this invoice. They will receive an email notification about this pending approval.\n\nNote: If your organization has insufficient approvers, you may be able to reject your own invoices to prevent deadlocks.');
+               } else {
+                 alert(result.message);
+               }
+             }
+           } catch (error) {
+             console.error('Error rejecting invoice:', error);
+             alert('Failed to reject invoice');
+           } finally {
+             setActionLoading(null);
+           }
+         };
 
   const formatCurrency = (amount: number, currency: string) => {
     return new Intl.NumberFormat('en-US', {
@@ -111,17 +153,9 @@ export default function PendingInvoiceApprovals() {
     );
   }
 
+  // Don't render anything if there are no pending approvals
   if (pendingInvoices.length === 0) {
-    return (
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex items-center justify-center h-32 text-gray-500">
-          <div className="text-center">
-            <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-500" />
-            <p>No pending invoice approvals</p>
-          </div>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   return (
@@ -167,7 +201,28 @@ export default function PendingInvoiceApprovals() {
                 </div>
                 
                 <div className="mt-2 text-xs text-gray-500">
-                  Created: {formatDate(invoice.createdAt)}
+                  Created: {formatDate(invoice.createdAt)} by {invoice.createdByName} ({invoice.createdByEmail})
+                </div>
+                
+                {/* Approval Progress */}
+                <div className="mt-3">
+                  <div className="flex items-center justify-between text-sm mb-1">
+                    <span className="text-gray-600">Approval Progress:</span>
+                    <span className="font-medium text-gray-900">
+                      {invoice.approvalCount}/{invoice.requiredApprovals}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${(invoice.approvalCount / invoice.requiredApprovals) * 100}%` }}
+                    ></div>
+                  </div>
+                  {invoice.approvalCount > 0 && (
+                    <div className="mt-1 text-xs text-gray-500">
+                      Approved by: {invoice.approvals.map(approval => approval.approverName).join(', ')}
+                    </div>
+                  )}
                 </div>
               </div>
               

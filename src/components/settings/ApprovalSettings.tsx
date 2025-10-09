@@ -253,18 +253,21 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
           <h2 className="text-xl font-semibold text-white">Approval Settings</h2>
         </div>
         
-        <div className="p-4 bg-blue-500/20 border border-blue-400/30 rounded-lg">
-          <div className="flex items-start space-x-2">
-            <AlertCircle className="h-5 w-5 text-blue-300 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-blue-100 text-sm font-medium mb-1">Important: When approval is enabled</p>
-              <p className="text-blue-200 text-xs">
-                ALL invoices (including those created by owners) will require approval before being sent to recipients. 
-                This ensures proper oversight and prevents unauthorized large transactions.
-              </p>
-            </div>
-          </div>
-        </div>
+               <div className="p-4 bg-blue-500/20 border border-blue-400/30 rounded-lg">
+                 <div className="flex items-start space-x-2">
+                   <AlertCircle className="h-5 w-5 text-blue-300 mt-0.5 flex-shrink-0" />
+                   <div>
+                     <p className="text-blue-100 text-sm font-medium mb-1">Important: When approval is enabled</p>
+                     <p className="text-blue-200 text-xs">
+                       ALL invoices (including those created by owners) will require approval before being sent to recipients. 
+                       <strong>Owners cannot approve their own invoices</strong> unless there are insufficient approvers in the organization.
+                       If you have fewer admins/approvers than required approvals, owners can approve their own invoices to prevent deadlocks.
+                       <strong>Once all required approvals are received, the invoice will be automatically sent to the recipient.</strong>
+                       Approvers will receive email notifications when invoices need their approval.
+                     </p>
+                   </div>
+                 </div>
+               </div>
 
         {error && (
           <div className="bg-red-600/10 border border-red-500/30 rounded-xl p-4">

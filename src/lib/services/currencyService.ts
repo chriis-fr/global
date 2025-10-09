@@ -271,15 +271,21 @@ export class CurrencyService {
 
     for (const invoice of invoices) {
       // Type guard to check if invoice has required properties
-      if (!invoice || typeof invoice !== 'object' || !('currency' in invoice) || !('totalAmount' in invoice)) {
+      if (!invoice || typeof invoice !== 'object' || !('currency' in invoice)) {
+        continue;
+      }
+
+      // Get the total amount - could be totalAmount or total
+      const amount = (invoice.totalAmount || invoice.total) as number;
+      if (!amount) {
         continue;
       }
 
       if (invoice.currency === preferredCurrency) {
-        total += invoice.totalAmount as number;
+        total += amount;
       } else {
         const converted = await this.convertCurrency(
-          invoice.totalAmount as number,
+          amount,
           invoice.currency as string,
           preferredCurrency
         );

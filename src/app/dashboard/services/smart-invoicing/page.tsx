@@ -18,7 +18,8 @@ import {
   Building2,
   LayoutDashboard,
   AlertCircle,
-  Lock
+  Lock,
+  CheckCircle
 } from 'lucide-react';
 import { InvoiceService, InvoiceStats } from '@/lib/services/invoiceService';
 import { Invoice } from '@/models/Invoice';
@@ -126,7 +127,7 @@ export default function SmartInvoicingPage() {
       
       // Load invoices with stats and check onboarding status in parallel
       const [invoicesResponse, onboardingResponse] = await Promise.all([
-        fetch('/api/invoices?convertToPreferred=false'), // Keep original amounts
+        fetch('/api/invoices?convertToPreferred=true'), // Convert to user's preferred currency
         fetch('/api/onboarding/service?service=smartInvoicing')
       ]);
       
@@ -583,7 +584,18 @@ export default function SmartInvoicingPage() {
                     <FileText className="h-4 w-4 text-white" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-white font-medium text-sm sm:text-base truncate">{invoice.invoiceNumber || 'Invoice'}</p>
+                    <div className="flex items-center space-x-2">
+                      <p className="text-white font-medium text-sm sm:text-base truncate">{invoice.invoiceNumber || 'Invoice'}</p>
+                      {/* Approval indicator - only for organizations */}
+                      {(invoice.status === 'approved' || invoice.status === 'sent') && invoice.organizationId && (
+                        <div className="relative group">
+                          <CheckCircle className="h-4 w-4 text-green-400 flex-shrink-0" />
+                          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                            Approved
+                          </div>
+                        </div>
+                      )}
+                    </div>
                     <p className="text-blue-200 text-xs sm:text-sm truncate">
                       {invoice.clientDetails?.companyName || 
                        [invoice.clientDetails?.firstName, invoice.clientDetails?.lastName].filter(Boolean).join(' ') || 
@@ -597,11 +609,11 @@ export default function SmartInvoicingPage() {
                   </p>
                   <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                     invoice.status === 'paid' ? 'bg-green-100 text-green-800' :
-                    invoice.status === 'sent' || invoice.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                    invoice.status === 'sent' || invoice.status === 'pending' || invoice.status === 'approved' ? 'bg-yellow-100 text-yellow-800' :
                     invoice.status === 'draft' ? 'bg-gray-100 text-gray-800' :
                     'bg-red-100 text-red-800'
                   }`}>
-                    {invoice.status === 'sent' ? 'pending' : invoice.status}
+                    {invoice.status === 'sent' || invoice.status === 'approved' ? 'pending' : invoice.status}
                   </span>
                 </div>
               </motion.div>

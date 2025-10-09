@@ -437,6 +437,18 @@ export class SubscriptionService {
     console.log('🔄 [SubscriptionService] Updating usage:', { userId: userId.toString(), type, amount });
     const db = await getDatabase();
     
+    // First, ensure the usage object exists
+    await db.collection('users').updateOne(
+      { _id: userId, usage: null },
+      { $set: { usage: { invoicesThisMonth: 0, monthlyVolume: 0 } } }
+    );
+    
+    // Also ensure usage object exists for users who don't have it at all
+    await db.collection('users').updateOne(
+      { _id: userId, usage: { $exists: false } },
+      { $set: { usage: { invoicesThisMonth: 0, monthlyVolume: 0 } } }
+    );
+    
     const updateField = type === 'invoice' ? 'usage.invoicesThisMonth' : 'usage.monthlyVolume';
     
     const result = await db.collection('users').updateOne(

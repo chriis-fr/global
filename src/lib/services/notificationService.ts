@@ -7,7 +7,7 @@ export class NotificationService {
   // Initialize email transporter
   private static async getTransporter(): Promise<nodemailer.Transporter> {
     if (!this.transporter) {
-      this.transporter = nodemailer.createTransporter({
+      this.transporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST,
         port: parseInt(process.env.SMTP_PORT || '587'),
         secure: process.env.SMTP_SECURE === 'true',
@@ -18,6 +18,108 @@ export class NotificationService {
       });
     }
     return this.transporter;
+  }
+
+  // Send invoice approval request notification
+  static async sendInvoiceApprovalRequest(
+    approverEmail: string,
+    approverName: string,
+    invoiceDetails: {
+      invoiceNumber: string;
+      invoiceName: string;
+      amount: number;
+      currency: string;
+      clientName: string;
+      clientEmail: string;
+      dueDate: string;
+    },
+    organizationName: string,
+    createdByName: string
+  ): Promise<boolean> {
+    try {
+      const transporter = await this.getTransporter();
+      
+      // Generate approval URL with fallback for localhost
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.FRONTEND_URL || 'http://localhost:3000';
+      const approvalUrl = `${baseUrl}/dashboard/approvals`;
+      
+      const mailOptions = {
+        from: `"${organizationName}" <${process.env.SMTP_USER}>`,
+        to: approverEmail,
+        subject: `Invoice Approval Required: ${invoiceDetails.invoiceName} by ${createdByName} - ${invoiceDetails.currency} ${invoiceDetails.amount}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
+              <h1 style="color: white; margin: 0; font-size: 24px;">Invoice Approval Required</h1>
+              <p style="color: #e0e7ff; margin: 10px 0 0 0;">${organizationName}</p>
+            </div>
+            
+            <div style="padding: 30px; background: #f8fafc;">
+              <p style="color: #374151; font-size: 16px; margin: 0 0 20px 0;">
+                Hello ${approverName},
+              </p>
+              
+              <p style="color: #374151; font-size: 16px; margin: 0 0 20px 0;">
+                <strong>${createdByName}</strong> has created an invoice that requires your approval before it can be sent to the client.
+              </p>
+              
+              <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; border-left: 4px solid #3b82f6;">
+                <h3 style="color: #1f2937; margin: 0 0 15px 0; font-size: 18px;">Invoice Details</h3>
+                <table style="width: 100%; border-collapse: collapse;">
+                  <tr>
+                    <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Invoice Number:</td>
+                    <td style="padding: 8px 0; color: #1f2937; font-weight: 600;">${invoiceDetails.invoiceNumber}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Invoice Name:</td>
+                    <td style="padding: 8px 0; color: #1f2937; font-weight: 600;">${invoiceDetails.invoiceName}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Amount:</td>
+                    <td style="padding: 8px 0; color: #1f2937; font-weight: 600;">${invoiceDetails.currency} ${invoiceDetails.amount.toLocaleString()}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Client:</td>
+                    <td style="padding: 8px 0; color: #1f2937; font-weight: 600;">${invoiceDetails.clientName}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Client Email:</td>
+                    <td style="padding: 8px 0; color: #1f2937; font-weight: 600;">${invoiceDetails.clientEmail}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Due Date:</td>
+                    <td style="padding: 8px 0; color: #1f2937; font-weight: 600;">${new Date(invoiceDetails.dueDate).toLocaleDateString()}</td>
+                  </tr>
+                </table>
+              </div>
+              
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="${approvalUrl}" style="display: inline-block; background: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                  Review & Approve Invoice
+                </a>
+              </div>
+              
+              <p style="color: #6b7280; font-size: 14px; margin: 20px 0 0 0;">
+                Please review this invoice and approve or reject it. Once approved, the invoice will be automatically sent to the client.
+              </p>
+            </div>
+            
+            <div style="background: #f1f5f9; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="color: #64748b; font-size: 12px; margin: 0;">
+                This is an automated notification from ${organizationName}. Please do not reply to this email.
+              </p>
+            </div>
+          </div>
+        `
+      };
+
+      await transporter.sendMail(mailOptions);
+      console.log('✅ [Notification] Invoice approval request sent to:', approverEmail);
+      return true;
+    } catch (error) {
+      console.error('❌ [Notification] Failed to send invoice approval request:', error);
+      return false;
+    }
   }
 
   // Send approval request notification
@@ -37,7 +139,9 @@ export class NotificationService {
     try {
       const transporter = await this.getTransporter();
       
-      const approvalUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/dashboard/approvals/${workflow._id}`;
+      // Generate approval URL with fallback for localhost
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.FRONTEND_URL || 'http://localhost:3000';
+      const approvalUrl = `${baseUrl}/dashboard/approvals/${workflow._id}`;
       
       const mailOptions = {
         from: `"${organizationName}" <${process.env.SMTP_USER}>`,
@@ -130,7 +234,9 @@ export class NotificationService {
     try {
       const transporter = await this.getTransporter();
       
-      const dashboardUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/dashboard`;
+      // Generate dashboard URL with fallback for localhost
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.FRONTEND_URL || 'http://localhost:3000';
+      const dashboardUrl = `${baseUrl}/dashboard`;
       const isApproved = decision === 'approved';
       
       const mailOptions = {
@@ -373,4 +479,4 @@ export class NotificationService {
       return false;
     }
   }
-}
+} 

@@ -14,7 +14,7 @@ export interface InvoiceTax {
   amount: number;
 }
 
-export type InvoiceStatus = 'draft' | 'sent' | 'pending' | 'paid' | 'overdue' | 'cancelled' | 'pending_approval' | 'rejected';
+export type InvoiceStatus = 'draft' | 'sent' | 'pending' | 'paid' | 'overdue' | 'cancelled' | 'pending_approval' | 'approved' | 'rejected';
 export type PaymentMethod = 'crypto' | 'fiat';
 export type InvoiceType = 'regular' | 'recurring';
 export type RecurringFrequency = 'weekly' | 'monthly' | 'quarterly' | 'yearly';

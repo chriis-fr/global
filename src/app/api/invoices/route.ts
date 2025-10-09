@@ -335,6 +335,25 @@ export async function POST(request: NextRequest) {
         submittedAt: new Date()
       } : undefined,
       
+      // Approval tracking
+      approvals: [], // Array of approval objects
+      approvalCount: 0, // Current number of approvals
+      requiredApprovals: requiresApproval ? (() => {
+        // Calculate required approvals based on amount and settings
+        if (organization?.approvalSettings) {
+          const amount = parseFloat(total) || 0;
+          const settings = organization.approvalSettings.approvalRules;
+          if (amount >= settings.amountThresholds.high) {
+            return settings.requiredApprovers.high;
+          } else if (amount >= settings.amountThresholds.medium) {
+            return settings.requiredApprovers.medium;
+          } else {
+            return settings.requiredApprovers.low;
+          }
+        }
+        return 1; // Default
+      })() : 0,
+      
       // Backward compatibility - keep nested structure for existing code
       type: invoiceType || 'regular',
       companyDetails: {
@@ -440,16 +459,77 @@ export async function POST(request: NextRequest) {
       // Don't fail the request if sync fails
     }
 
-    // After successful invoice creation, increment usage:
-    await SubscriptionService.incrementInvoiceUsage(
-      new ObjectId(session.user.id)
-    );
+           // After successful invoice creation, increment usage:
+           await SubscriptionService.incrementInvoiceUsage(
+             new ObjectId(session.user.id)
+           );
 
-    return NextResponse.json({
-      success: true,
-      message: 'Invoice saved successfully',
-      invoice: { _id: result.insertedId, ...invoiceData }
-    });
+           // Send approval notifications if invoice requires approval
+           if (requiresApproval && organization) {
+             try {
+               const { NotificationService } = await import('@/lib/services/notificationService');
+               
+               // Get all admins, approvers, and owners who can approve
+               const approvers = organization.members.filter((member: { role: string; userId: ObjectId }) => 
+                 (member.role === 'owner' || member.role === 'admin' || member.role === 'approver') && 
+                 member.userId.toString() !== session.user.id // Don't notify the creator
+               );
+
+               console.log('📧 [Approval Notifications] Found approvers:', {
+                 totalApprovers: approvers.length,
+                 approverRoles: approvers.map((a: { role: string }) => a.role),
+                 creatorId: session.user.id,
+                 organizationMembers: organization.members.map((m: { role: string; userId: ObjectId }) => ({ role: m.role, userId: m.userId.toString() }))
+               });
+
+               // Send notification to each approver
+               for (const approver of approvers) {
+                 const approverUser = await db.collection('users').findOne({
+                   _id: new ObjectId(approver.userId)
+                 });
+
+                 if (approverUser?.email) {
+                   console.log('📧 [Approval Notifications] Sending notification to:', {
+                     email: approverUser.email,
+                     name: approverUser.name || approverUser.email,
+                     role: approver.role
+                   });
+                   
+                   await NotificationService.sendInvoiceApprovalRequest(
+                     approverUser.email,
+                     approverUser.name || approverUser.email,
+                     {
+                       invoiceNumber: finalInvoiceNumber,
+                       invoiceName: invoiceName || 'Invoice',
+                       amount: parseFloat(total) || 0,
+                       currency: currency || 'USD',
+                       clientName: clientName || 'Unknown Client',
+                       clientEmail: clientEmail || '',
+                       dueDate: dueDate
+                     },
+                     organization.name,
+                     session.user.name || session.user.email || 'Unknown User'
+                   );
+                 } else {
+                   console.log('⚠️ [Approval Notifications] Approver user not found:', {
+                     userId: approver.userId.toString(),
+                     role: approver.role
+                   });
+                 }
+               }
+
+               console.log('✅ [API Invoices] Approval notifications sent to', approvers.length, 'approvers');
+             } catch (notificationError) {
+               console.error('⚠️ [API Invoices] Failed to send approval notifications:', notificationError);
+               // Don't fail the request if notifications fail
+             }
+           }
+
+           return NextResponse.json({
+             success: true,
+             message: 'Invoice saved successfully',
+             invoice: { _id: result.insertedId, ...invoiceData }
+           });
 
   } catch (error) {
     console.error('❌ [API Invoices] Error saving invoice:', error);
@@ -558,19 +638,42 @@ export async function GET(request: NextRequest) {
     }
 
     // Calculate total revenue in preferred currency
-    // If status filter is applied, calculate revenue only from filtered invoices
-    const revenueQuery = status 
-      ? query // Use the filtered query if status is specified
-      : (isOrganization 
-          ? { organizationId: session.user.organizationId }
-          : { 
-              $or: [
-                { issuerId: session.user.id },
-                { userId: session.user.email }
-              ]
-            });
+    // Only include approved invoices (approved, sent, paid) - exclude pending_approval, rejected, draft, cancelled
+    const baseRevenueQuery = isOrganization 
+      ? { organizationId: session.user.organizationId }
+      : { 
+          $or: [
+            { issuerId: session.user.id },
+            { userId: session.user.email }
+          ]
+        };
+    
+    // Add status filter to only include approved invoices
+    const revenueQuery = {
+      ...baseRevenueQuery,
+      status: { $in: ['approved', 'sent', 'paid'] }
+    };
+    
     const allInvoices = await invoicesCollection.find(revenueQuery).toArray();
+    
+    // Always convert total revenue to user's preferred currency for consistent display
+    // The convertToPreferred parameter only affects individual invoice conversion, not total revenue
+    console.log('🔍 [Currency Debug] Converting total revenue:', {
+      userEmail: session.user.email,
+      preferredCurrency,
+      invoiceCount: allInvoices.length,
+      sampleInvoice: allInvoices[0] ? {
+        currency: allInvoices[0].currency,
+        totalAmount: allInvoices[0].totalAmount || allInvoices[0].total
+      } : null
+    });
+    
     const totalRevenue = await CurrencyService.calculateTotalRevenue(allInvoices as { [key: string]: unknown }[], preferredCurrency);
+    
+    console.log('🔍 [Currency Debug] Total revenue calculated:', {
+      totalRevenue,
+      preferredCurrency
+    });
 
     return NextResponse.json({
       success: true,

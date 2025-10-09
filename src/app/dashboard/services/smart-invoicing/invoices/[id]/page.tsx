@@ -241,7 +241,7 @@ export default function InvoiceViewPage() {
   const loadInvoice = useCallback(async (id: string) => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/invoices/${id}?convertToPreferred=false`); // Keep original amounts
+      const response = await fetch(`/api/invoices/${id}?convertToPreferred=true`); // Convert to user's preferred currency
       const data = await response.json();
       
       if (data.success && data.data) {

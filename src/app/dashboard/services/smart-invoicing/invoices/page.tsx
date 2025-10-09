@@ -15,7 +15,8 @@ import {
   Calendar,
   TrendingUp,
   Download,
-  ArrowLeft
+  ArrowLeft,
+  CheckCircle
 } from 'lucide-react';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
 import { InvoiceService } from '@/lib/services/invoiceService';
@@ -60,7 +61,7 @@ export default function InvoicesPage() {
       
       // Build query parameters
       const params = new URLSearchParams({
-        convertToPreferred: 'false', // Keep original amounts - no conversion
+        convertToPreferred: 'true', // Convert to user's preferred currency
         page: currentPage.toString(),
         limit: showAll ? '1000' : '10' // Show all or paginated
       });
@@ -427,9 +428,6 @@ export default function InvoicesPage() {
         </div>
       </div>
 
-      {/* Pending Approvals Section */}
-      <PendingInvoiceApprovals />
-
       {/* Stats Cards - Mobile Optimized */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
         <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20">
@@ -482,6 +480,9 @@ export default function InvoicesPage() {
           </div>
         </div>
       </div>
+
+      {/* Pending Approvals Section */}
+      <PendingInvoiceApprovals />
 
       {/* Invoices Table - Mobile Optimized */}
       <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 overflow-hidden">
@@ -544,6 +545,15 @@ export default function InvoicesPage() {
                           <h3 className="text-white font-semibold text-sm truncate">
                             {invoice.invoiceNumber || 'Invoice'}
                           </h3>
+                          {/* Approval indicator - only for organizations */}
+                          {(invoice.status === 'approved' || invoice.status === 'sent') && invoice.organizationId && (
+                            <div className="relative group">
+                              <CheckCircle className="h-4 w-4 text-green-400 flex-shrink-0" />
+                              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                                Approved
+                              </div>
+                            </div>
+                          )}
                         </div>
                         <p className="text-blue-200 text-xs">
                           {invoice.clientDetails?.companyName || 
@@ -558,8 +568,9 @@ export default function InvoicesPage() {
                             currency={invoice.currency === 'USD' ? '$' : invoice.currency === 'EUR' ? '€' : invoice.currency === 'GBP' ? '£' : '$'}
                           />
                         </p>
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(invoice.status)}`}>
-                          {invoice.status === 'sent' ? 'Pending' : 
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(invoice.status === 'approved' ? 'sent' : invoice.status)}`}>
+                          {invoice.status === 'approved' ? 'Pending' :
+                           invoice.status === 'sent' ? 'Pending' : 
                            invoice.status ? (invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)) : 'Draft'}
                         </span>
                       </div>
@@ -666,8 +677,19 @@ export default function InvoicesPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div>
-                          <div className="text-sm font-semibold text-white">
-                            {invoice.invoiceNumber || 'Invoice'}
+                          <div className="flex items-center space-x-2">
+                            <div className="text-sm font-semibold text-white">
+                              {invoice.invoiceNumber || 'Invoice'}
+                            </div>
+                            {/* Approval indicator */}
+                            {(invoice.status === 'approved' || invoice.status === 'sent') && (
+                              <div className="relative group">
+                                <CheckCircle className="h-4 w-4 text-green-400 flex-shrink-0" />
+                                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                                  Approved
+                                </div>
+                              </div>
+                            )}
                           </div>
                           <div className="text-sm text-blue-200">
                             {invoice.issueDate ? formatDate(invoice.issueDate.toString()) : 'N/A'}
@@ -690,8 +712,9 @@ export default function InvoicesPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${getStatusColor(invoice.status)}`}>
-                          {invoice.status === 'sent' ? 'Pending' : 
+                        <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${getStatusColor(invoice.status === 'approved' ? 'sent' : invoice.status)}`}>
+                          {invoice.status === 'approved' ? 'Pending' :
+                           invoice.status === 'sent' ? 'Pending' : 
                            invoice.status ? (invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)) : 'Draft'}
                         </span>
                       </td>

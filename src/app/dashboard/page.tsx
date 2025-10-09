@@ -128,8 +128,8 @@ export default function DashboardPage() {
         // Get unified financial stats from ledger
         const ledgerStats = ledgerData.success ? ledgerData.data.stats : null;
 
-        // Calculate net balance from paid revenue only
-        const netBalance = paidRevenue - totalExpenses;
+        // Use the correct net balance from ledger: PAID receivables - PAID payables
+        const netBalance = ledgerStats?.netBalance || 0;
 
         setStats({
           totalRevenue,
@@ -137,7 +137,7 @@ export default function DashboardPage() {
           pendingInvoices,
           paidInvoices,
           totalClients: clients.length,
-          // Net balance = received payments (paid invoices) - payables (bills)
+          // Net balance = PAID receivables - PAID payables (actual money in/out)
           netBalance: netBalance,
           totalPayables: ledgerStats?.totalPayablesAmount || 0,
           overdueCount: (ledgerStats?.overdueReceivables || 0) + (ledgerStats?.overduePayables || 0)

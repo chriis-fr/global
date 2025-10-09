@@ -44,9 +44,14 @@ export class InvoiceService {
     const pendingCount = invoices.filter(inv => inv.status === 'sent' || inv.status === 'pending').length;
     const paidCount = invoices.filter(inv => inv.status === 'paid').length;
     
-    // Calculate total revenue from converted amounts
+    // Calculate total revenue from approved invoices only (approved, sent, paid)
+    // Exclude pending_approval, rejected, draft, and cancelled invoices
     const totalRevenue = invoices
-      .filter(inv => inv.status === 'paid')
+      .filter(inv => 
+        inv.status === 'approved' || 
+        inv.status === 'sent' || 
+        inv.status === 'paid'
+      )
       .reduce((sum, inv) => sum + (inv.totalAmount || 0), 0);
 
     return {
