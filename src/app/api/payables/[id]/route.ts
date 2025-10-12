@@ -156,12 +156,6 @@ export async function PUT(
       return NextResponse.json({ success: false, message: 'Payable not found' }, { status: 404 });
     }
 
-    console.log('🔍 [Payable Update] Found payable:', {
-      id: existingPayable._id,
-      status: existingPayable.status,
-      relatedInvoiceId: existingPayable.relatedInvoiceId,
-      payableNumber: existingPayable.payableNumber
-    });
 
     // Handle "Mark as Paid" action
     if (markAsPaid) {
@@ -212,13 +206,6 @@ export async function PUT(
             }
           );
           
-          console.log('✅ [Payable Update] Related invoice update result:', {
-            matchedCount: invoiceUpdateResult.matchedCount,
-            modifiedCount: invoiceUpdateResult.modifiedCount,
-            invoiceId: existingPayable.relatedInvoiceId
-          });
-        } else {
-          console.log('⚠️ [Payable Update] No relatedInvoiceId found for payable:', id);
         }
       } catch (invoiceUpdateError) {
         console.error('⚠️ [Payable Update] Failed to update related invoice:', invoiceUpdateError);
@@ -248,30 +235,28 @@ export async function PUT(
           tags: ['payment', 'payable', 'expense']
         });
         
-        console.log('✅ [Payable Update] Payment notification created');
       } catch (notificationError) {
         console.error('⚠️ [Payable Update] Failed to create payment notification:', notificationError);
       }
 
-      // Update financial ledger for net balance calculation
-      try {
-        const ledgerCollection = db.collection('financial_ledger');
-        await ledgerCollection.updateOne(
-          { 
-            relatedPayableId: new ObjectId(id),
-            type: 'payable'
-          },
-          {
-            $set: {
-              status: 'paid',
-              updatedAt: new Date()
+        // Update financial ledger for net balance calculation
+        try {
+          const ledgerCollection = db.collection('financial_ledger');
+          await ledgerCollection.updateOne(
+            { 
+              relatedPayableId: new ObjectId(id),
+              type: 'payable'
+            },
+            {
+              $set: {
+                status: 'paid',
+                updatedAt: new Date()
+              }
             }
-          }
-        );
-        console.log('✅ [Payable Update] Financial ledger updated for payable:', id);
-      } catch (ledgerError) {
-        console.error('⚠️ [Payable Update] Failed to update financial ledger:', ledgerError);
-      }
+          );
+        } catch (ledgerError) {
+          console.error('⚠️ [Payable Update] Failed to update financial ledger:', ledgerError);
+        }
 
       return NextResponse.json({
         success: true,
@@ -323,13 +308,6 @@ export async function PUT(
               }
             );
             
-            console.log('✅ [Payable Update] Related invoice update result via status change:', {
-              matchedCount: invoiceUpdateResult.matchedCount,
-              modifiedCount: invoiceUpdateResult.modifiedCount,
-              invoiceId: currentPayable.relatedInvoiceId
-            });
-          } else {
-            console.log('⚠️ [Payable Update] No relatedInvoiceId found for payable via status change:', id);
           }
         } catch (invoiceUpdateError) {
           console.error('⚠️ [Payable Update] Failed to update related invoice via status change:', invoiceUpdateError);
@@ -351,7 +329,6 @@ export async function PUT(
               }
             }
           );
-          console.log('✅ [Payable Update] Financial ledger updated for payable via status change:', id);
         } catch (ledgerError) {
           console.error('⚠️ [Payable Update] Failed to update financial ledger via status change:', ledgerError);
         }

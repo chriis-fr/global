@@ -143,37 +143,9 @@ export async function getDashboardStats(): Promise<{ success: boolean; data?: Da
     
     const totalPayablesAmount = payableBills.reduce((sum, payable) => sum + (payable.total || payable.amount || 0), 0);
 
-    console.log('🔍 [Dashboard Stats] Payables calculation:', {
-      payablesQuery,
-      allPayablesCount: allPayables.length,
-      payableBillsCount: payableBills.length,
-      totalPayablesAmount,
-      approvedCount: payableBills.length,
-      totalApprovedAmount: totalPayablesAmount,
-      samplePayable: allPayables[0] ? {
-        total: allPayables[0].total,
-        amount: allPayables[0].amount,
-        status: allPayables[0].status
-      } : null
-    });
 
     // Get ledger stats for net balance and overdue counts
     // Net balance should only include PAID receivables and APPROVED payables
-    
-    // First, let's check what ledger entries exist
-    const allLedgerEntries = await ledgerCollection.find(baseQuery).toArray();
-    console.log('🔍 [Dashboard Stats] All ledger entries:', {
-      totalEntries: allLedgerEntries.length,
-      entries: allLedgerEntries.map(entry => ({
-        _id: entry._id,
-        type: entry.type,
-        status: entry.status,
-        amount: entry.amount,
-        organizationId: entry.organizationId,
-        issuerId: entry.issuerId
-      }))
-    });
-    
     const ledgerStats = await ledgerCollection.aggregate([
       { 
         $match: {
@@ -195,12 +167,6 @@ export async function getDashboardStats(): Promise<{ success: boolean; data?: Da
     ]).toArray();
 
     const ledgerData = ledgerStats[0] || { netBalance: 0, overdueReceivables: 0, overduePayables: 0 };
-    
-    console.log('🔍 [Dashboard Stats] Ledger aggregation result:', {
-      baseQuery,
-      ledgerStats,
-      ledgerData
-    });
 
     const stats: DashboardStats = {
       totalReceivables, // Expected revenue from all invoices
@@ -214,13 +180,6 @@ export async function getDashboardStats(): Promise<{ success: boolean; data?: Da
       overdueCount: (ledgerData.overdueReceivables || 0) + (ledgerData.overduePayables || 0)
     };
 
-    console.log('🔍 [Dashboard Stats] Revenue breakdown:', {
-      totalReceivables: totalReceivables, // Expected revenue (all invoices)
-      totalPaidRevenue: totalPaidRevenue, // Money actually received
-      netBalance: ledgerData.netBalance || 0, // Cash flow (paid receivables - approved payables)
-      pendingInvoices,
-      paidInvoices: paidInvoicesCount
-    });
 
     return { success: true, data: stats };
 

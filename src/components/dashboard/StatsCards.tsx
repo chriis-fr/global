@@ -49,17 +49,6 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
   const hasReceivablesAccess = isReceivablesOnly || isCombined || isFreePlan;
   const hasPayablesAccess = (isPayablesOnly || isCombined) && subscription?.canAccessPayables;
 
-  // Debug logging
-  console.log('🔍 [StatsCards] Subscription debug:', {
-    subscription: subscription?.plan,
-    isPayablesOnly,
-    isReceivablesOnly,
-    isCombined,
-    isFreePlan,
-    hasReceivablesAccess,
-    hasPayablesAccess,
-    canAccessPayables: subscription?.canAccessPayables
-  });
 
          useEffect(() => {
            const loadStats = async () => {
@@ -94,7 +83,6 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
         const result = await getDashboardStats();
         
         if (result.success && result.data) {
-          console.log('✅ [StatsCards] Received stats data:', result.data);
           setStats(result.data);
           
           // Cache in localStorage

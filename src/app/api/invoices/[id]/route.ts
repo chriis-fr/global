@@ -232,13 +232,9 @@ export async function PUT(
     // If invoice status is being updated to 'paid', also update the related payable
     if (body.status === 'paid') {
       try {
-        console.log('🔄 [Invoice Update] Updating related payable:', {
-          invoiceId: id,
-          status: 'paid'
-        });
         
         const payablesCollection = db.collection('payables');
-        const payableUpdateResult = await payablesCollection.updateOne(
+        await payablesCollection.updateOne(
           { relatedInvoiceId: new ObjectId(id) },
           {
             $set: {
@@ -258,51 +254,26 @@ export async function PUT(
           } as Record<string, unknown>
         );
         
-        console.log('✅ [Invoice Update] Related payable update result:', {
-          matchedCount: payableUpdateResult.matchedCount,
-          modifiedCount: payableUpdateResult.modifiedCount,
-          invoiceId: id
-        });
 
         // Update financial ledger for net balance calculation
         try {
           const ledgerCollection = db.collection('financial_ledger');
           
-          // First, check if the ledger entry exists
+          // Find ledger entry by relatedInvoiceId or entryId
           const existingLedgerEntry = await ledgerCollection.findOne({
             relatedInvoiceId: new ObjectId(id),
             type: 'receivable'
           });
           
-          // Also try to find by entryId (invoice number)
           const existingLedgerEntryByNumber = await ledgerCollection.findOne({
             entryId: existingInvoice.invoiceNumber,
             type: 'receivable'
           });
           
-          console.log('🔍 [Invoice Update] Checking ledger entry:', {
-            invoiceId: id,
-            invoiceNumber: existingInvoice.invoiceNumber,
-            existingEntry: existingLedgerEntry ? {
-              _id: existingLedgerEntry._id,
-              status: existingLedgerEntry.status,
-              amount: existingLedgerEntry.amount,
-              organizationId: existingLedgerEntry.organizationId,
-              issuerId: existingLedgerEntry.issuerId
-            } : 'NOT FOUND',
-            existingEntryByNumber: existingLedgerEntryByNumber ? {
-              _id: existingLedgerEntryByNumber._id,
-              status: existingLedgerEntryByNumber.status,
-              amount: existingLedgerEntryByNumber.amount,
-              organizationId: existingLedgerEntryByNumber.organizationId,
-              issuerId: existingLedgerEntryByNumber.issuerId
-            } : 'NOT FOUND'
-          });
-          
           const ledgerEntryToUpdate = existingLedgerEntry || existingLedgerEntryByNumber;
           
           if (ledgerEntryToUpdate) {
-            const updateResult = await ledgerCollection.updateOne(
+            await ledgerCollection.updateOne(
               { 
                 _id: ledgerEntryToUpdate._id
               },
@@ -313,15 +284,7 @@ export async function PUT(
                 }
               }
             );
-            
-            console.log('✅ [Invoice Update] Financial ledger update result:', {
-              invoiceId: id,
-              ledgerEntryId: ledgerEntryToUpdate._id,
-              matchedCount: updateResult.matchedCount,
-              modifiedCount: updateResult.modifiedCount
-            });
-          } else {
-            console.log('⚠️ [Invoice Update] No ledger entry found for invoice:', id);
+            console.log('✅ [Invoice Update] Financial ledger updated for invoice:', id);
           }
         } catch (ledgerError) {
           console.error('⚠️ [Invoice Update] Failed to update financial ledger:', ledgerError);
@@ -331,8 +294,6 @@ export async function PUT(
         // Don't fail the invoice update if payable update fails
       }
 
-      // Payment processed successfully
-      console.log('✅ [Invoice Update] Payment processed successfully for invoice:', id);
     }
 
     // Get the updated invoice to return full data
