@@ -165,7 +165,7 @@ export class SubscriptionService {
     });
     
     // Build query based on user type - Organization members should see organization's invoices
-    const isOrganization = user.organizationId && user.organizationId !== user._id.toString();
+    const isOrganization = !!user.organizationId;
     const query: Record<string, unknown> = {
       createdAt: { 
         $gte: startOfMonth,

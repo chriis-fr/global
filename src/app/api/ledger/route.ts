@@ -78,16 +78,35 @@ export async function GET(request: NextRequest) {
     const db = await connectToDatabase();
     const ledgerCollection = db.collection('financial_ledger');
 
-    // Build query
+    // Build query - handle both ObjectId and string formats for organizationId
     const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
-    const query: Record<string, unknown> = isOrganization 
-      ? { organizationId: session.user.organizationId }
-      : { 
-          $or: [
-            { issuerId: session.user.id },
-            { userId: session.user.email }
-          ]
-        };
+    let query: Record<string, unknown>;
+    
+    if (isOrganization) {
+      // For organizations, check both ObjectId and string formats
+      const orgId = session.user.organizationId;
+      query = {
+        $or: [
+          { organizationId: orgId },
+          { organizationId: new ObjectId(orgId) }
+        ]
+      };
+    } else {
+      query = { 
+        $or: [
+          { issuerId: session.user.id },
+          { userId: session.user.email }
+        ]
+      };
+    }
+
+    console.log('🔍 [Ledger API] Query details:', {
+      isOrganization,
+      userOrganizationId: session.user.organizationId,
+      userId: session.user.id,
+      userEmail: session.user.email,
+      query
+    });
 
     // Apply filters
     if (type) {
@@ -153,6 +172,12 @@ export async function GET(request: NextRequest) {
 
     const allEntries = await ledgerCollection.find(statsQuery).toArray();
     
+    console.log('🔍 [Ledger API] Found entries:', {
+      totalEntries: allEntries.length,
+      entryTypes: allEntries.map(e => ({ type: e.type, status: e.status, amount: e.amount })),
+      payableEntries: allEntries.filter(e => e.type === 'payable').length
+    });
+    
     const stats: LedgerStats = {
       totalReceivables: allEntries.filter(e => e.type === 'receivable').length,
       totalPayables: allEntries.filter(e => e.type === 'payable').length,
@@ -164,9 +189,58 @@ export async function GET(request: NextRequest) {
       paidReceivables: allEntries.filter(e => e.type === 'receivable' && e.status === 'paid').length,
       paidPayables: allEntries.filter(e => e.type === 'payable' && e.status === 'paid').length,
       totalReceivablesAmount: allEntries.filter(e => e.type === 'receivable').reduce((sum, e) => sum + e.amount, 0),
-      totalPayablesAmount: allEntries.filter(e => e.type === 'payable').reduce((sum, e) => sum + e.amount, 0),
+      totalPayablesAmount: allEntries.filter(e => e.type === 'payable' && (e.status === 'approved' || e.status === 'pending' || e.status === 'pending_approval')).reduce((sum, e) => sum + e.amount, 0),
       currency: 'USD' // Default currency, can be enhanced later
     };
+
+    // Debug logging for payables
+    const payableEntries = allEntries.filter(e => e.type === 'payable');
+    console.log('🔍 [Ledger API] Payable entries found:', {
+      totalPayables: payableEntries.length,
+      payableStatuses: payableEntries.map(p => ({ status: p.status, amount: p.amount })),
+      totalPayablesAmount: stats.totalPayablesAmount
+    });
+
+    // Fallback: If no ledger entries found, calculate from payables directly
+    if (payableEntries.length === 0 && isOrganization) {
+      console.log('⚠️ [Ledger API] No ledger entries found, calculating from payables directly...');
+      
+      const payablesCollection = db.collection('payables');
+      const orgId = session.user.organizationId;
+      
+      // Query payables with both ObjectId and string formats
+      const directPayables = await payablesCollection.find({
+        $or: [
+          { organizationId: orgId },
+          { organizationId: new ObjectId(orgId) }
+        ]
+      }).toArray();
+      
+      console.log('🔍 [Ledger API] Direct payables found:', {
+        totalPayables: directPayables.length,
+        payableStatuses: directPayables.map(p => ({ 
+          status: p.status, 
+          amount: p.total || p.amount,
+          payableNumber: p.payableNumber 
+        }))
+      });
+      
+      // Calculate total from direct payables - only approved ones
+      const directTotalAmount = directPayables
+        .filter(p => p.status === 'approved')
+        .reduce((sum, p) => sum + (p.total || p.amount || 0), 0);
+      
+      console.log('🔍 [Ledger API] Direct calculation result:', {
+        directTotalAmount,
+        approvedPayables: directPayables.filter(p => p.status === 'approved').length,
+        pendingPayables: directPayables.filter(p => p.status === 'pending' || p.status === 'pending_approval').length
+      });
+      
+      // Update stats with direct calculation
+      stats.totalPayablesAmount = directTotalAmount;
+      stats.totalPayables = directPayables.length;
+      stats.pendingPayables = directPayables.filter(p => p.status === 'pending' || p.status === 'pending_approval').length;
+    }
 
     // Calculate net balance: PAID receivables - PAID payables (actual money in/out)
     const paidReceivablesAmount = allEntries

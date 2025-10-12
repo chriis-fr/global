@@ -94,16 +94,7 @@ export class ApprovalService {
       const approvers = this.findApprovers(organization.members, settings);
       const fallbackApprovers = this.findFallbackApprovers(organization.members, settings);
       
-      console.log('🔍 [ApprovalService] Creating approval workflow:', {
-        organizationId,
-        createdBy,
-        amount,
-        amountThreshold,
-        requiredApprovers,
-        autoApproved,
-        approvers: approvers.map(a => ({ userId: a.userId, email: a.email, role: a.role })),
-        fallbackApprovers: fallbackApprovers.map(a => ({ userId: a.userId, email: a.email, role: a.role }))
-      });
+      // Creating approval workflow
 
       // Create approval steps
       const approvalSteps: ApprovalStep[] = [];
@@ -150,22 +141,7 @@ export class ApprovalService {
       // Save to database
       const result = await db.collection('approval_workflows').insertOne(workflow);
       
-      console.log('✅ [ApprovalService] Approval workflow created:', {
-        workflowId: result.insertedId,
-        workflow: {
-          _id: result.insertedId,
-          status: workflow.status,
-          organizationId: workflow.organizationId,
-          billId: workflow.billId,
-          currentStep: workflow.currentStep,
-          approvals: workflow.approvals.map(a => ({
-            stepNumber: a.stepNumber,
-            approverId: a.approverId,
-            approverEmail: a.approverEmail,
-            decision: a.decision
-          }))
-        }
-      });
+      // Approval workflow created successfully
       
       if (result.insertedId) {
         workflow._id = result.insertedId.toString();
@@ -221,9 +197,17 @@ export class ApprovalService {
         return false;
       }
 
-      // Verify approver
-      if (currentStep.approverId !== approverId) {
-        console.error('Approver mismatch');
+      // Verify approver (handle both ObjectId and string types)
+      const currentApproverId = currentStep.approverId?.toString();
+      const approverIdStr = approverId.toString();
+      
+      if (currentApproverId !== approverIdStr) {
+        console.error('Approver mismatch:', {
+          currentApproverId,
+          approverIdStr,
+          currentStep: workflow.currentStep,
+          totalSteps: workflow.approvals.length
+        });
         return false;
       }
 
@@ -246,12 +230,18 @@ export class ApprovalService {
 
       if (decision === 'rejected') {
         newStatus = 'rejected';
-      } else if (workflow.currentStep >= workflow.approvals.length) {
-        newStatus = 'approved';
-        nextStep = workflow.currentStep + 1;
       } else {
-        newStatus = 'pending';
-        nextStep = workflow.currentStep + 1;
+        // Check if this was the last approval step
+        const completedApprovals = updatedApprovals.filter(step => step.decision === 'approved').length;
+        const totalApprovals = workflow.approvals.length;
+        
+        if (completedApprovals >= totalApprovals) {
+          newStatus = 'approved';
+          nextStep = workflow.currentStep + 1;
+        } else {
+          newStatus = 'pending';
+          nextStep = workflow.currentStep + 1;
+        }
       }
 
       // Update workflow
@@ -266,6 +256,16 @@ export class ApprovalService {
           }
         }
       );
+
+      console.log('✅ [ApprovalService] Workflow updated:', {
+        workflowId,
+        decision,
+        newStatus,
+        nextStep,
+        completedApprovals: updatedApprovals.filter(step => step.decision === 'approved').length,
+        totalApprovals: workflow.approvals.length,
+        updated: result.modifiedCount > 0
+      });
 
       if (result.modifiedCount > 0) {
         // Log the approval action
@@ -284,8 +284,7 @@ export class ApprovalService {
           }
         );
 
-        // Send notifications
-        await this.sendApprovalNotifications(workflow, decision, comments, approverId);
+        // No notifications needed - status updates will be visible in the system
 
         return true;
       }
@@ -318,6 +317,12 @@ export class ApprovalService {
     try {
       const db = await getDatabase();
       
+      console.log('🔍 [ApprovalService] Updating workflow with bill ID:', {
+        workflowId,
+        billId,
+        billIdType: typeof billId
+      });
+      
       const result = await db.collection('approval_workflows').updateOne(
         { _id: new ObjectId(workflowId) },
         { 
@@ -327,6 +332,13 @@ export class ApprovalService {
           }
         }
       );
+
+      console.log('✅ [ApprovalService] Workflow bill ID update result:', {
+        workflowId,
+        billId,
+        modifiedCount: result.modifiedCount,
+        success: result.modifiedCount > 0
+      });
 
       return result.modifiedCount > 0;
     } catch (error) {
@@ -340,26 +352,10 @@ export class ApprovalService {
     try {
       const db = await getDatabase();
       
-      console.log('🔍 [ApprovalService] Getting pending approvals for userId:', userId);
+      // Getting pending approvals
       
-      // First, let's see all approval workflows for debugging
+      // Get all approval workflows
       const allWorkflows = await db.collection('approval_workflows').find({}).toArray();
-      console.log('🔍 [ApprovalService] All approval workflows found:', {
-        count: allWorkflows.length,
-        workflows: allWorkflows.map(w => ({
-          _id: w._id,
-          status: w.status,
-          organizationId: w.organizationId,
-          billId: w.billId,
-          currentStep: w.currentStep,
-          approvals: w.approvals?.map((a: any) => ({
-            stepNumber: a.stepNumber,
-            approverId: a.approverId,
-            approverEmail: a.approverEmail,
-            decision: a.decision
-          }))
-        }))
-      });
       
       // Get all pending workflows where user is an approver
       // Handle both string and ObjectId user IDs
@@ -383,16 +379,7 @@ export class ApprovalService {
         return userApproval && userApproval.stepNumber <= workflow.currentStep;
       });
 
-      console.log('🔍 [ApprovalService] Pending approvals found for user:', {
-        userId,
-        count: workflows.length,
-        workflows: workflows.map(w => ({
-          _id: w._id,
-          status: w.status,
-          billId: w.billId,
-          currentStep: w.currentStep
-        }))
-      });
+      // Pending approvals found
 
       return workflows;
     } catch (error) {
@@ -529,8 +516,8 @@ export class ApprovalService {
     );
   }
 
-  // Send approval notifications
-  private static async sendApprovalNotifications(
+  // Send approval notifications - DISABLED: No notifications needed
+  private static async sendApprovalNotifications_DISABLED(
     workflow: ApprovalWorkflow,
     decision: 'approved' | 'rejected',
     comments: string | undefined,
@@ -539,13 +526,13 @@ export class ApprovalService {
     try {
       const db = await getDatabase();
       
-      // Get bill details
-      const bill = await db.collection('bills').findOne({
+      // Get payable details (we use payables, not bills)
+      const payable = await db.collection('payables').findOne({
         _id: new ObjectId(workflow.billId)
       });
 
-      if (!bill) {
-        console.error('Bill not found for notification');
+      if (!payable) {
+        console.error('Payable not found for notification');
         return;
       }
 
@@ -559,36 +546,41 @@ export class ApprovalService {
         return;
       }
 
-      // Get bill creator details
-      const creator = await db.collection('users').findOne({
-        _id: new ObjectId(workflow.createdBy)
-      });
+      // Get payable creator details
+      const creatorQuery = typeof workflow.createdBy === 'string' && /^[0-9a-fA-F]{24}$/.test(workflow.createdBy) 
+        ? { _id: new ObjectId(workflow.createdBy) }
+        : { _id: workflow.createdBy };
+      
+      const creator = await db.collection('users').findOne(creatorQuery);
 
       if (!creator) {
-        console.error('Bill creator not found for notification');
+        console.error('Payable creator not found for notification');
         return;
       }
 
       // Get approver details
-      const approver = await db.collection('users').findOne({
-        _id: new ObjectId(approverId)
-      });
+      const approverQuery = typeof approverId === 'string' && /^[0-9a-fA-F]{24}$/.test(approverId) 
+        ? { _id: new ObjectId(approverId) }
+        : { _id: approverId };
+      
+      const approver = await db.collection('users').findOne(approverQuery);
 
       if (!approver) {
         console.error('Approver not found for notification');
         return;
       }
 
-      // Send notification to bill creator
+      // Send notification to payable creator
       await NotificationService.sendApprovalDecision(
         creator.email,
         creator.name || creator.email,
         decision,
         {
-          vendor: bill.vendor,
-          amount: bill.amount,
-          currency: bill.currency,
-          description: bill.description
+          type: 'bill',
+          number: payable.payableNumber || payable._id.toString(),
+          name: payable.payableName || payable.vendorName || 'Payable',
+          amount: payable.total || payable.amount,
+          currency: payable.currency
         },
         approver.name || approver.email,
         comments,
@@ -603,11 +595,11 @@ export class ApprovalService {
             nextStep.approverEmail,
             nextStep.approverEmail, // We don't have the approver's name here
             {
-              vendor: bill.vendor,
-              amount: bill.amount,
-              currency: bill.currency,
-              description: bill.description,
-              dueDate: bill.dueDate.toISOString()
+              vendor: payable.vendorName || payable.vendor || 'Unknown Vendor',
+              amount: payable.total || payable.amount,
+              currency: payable.currency,
+              description: payable.payableName || payable.description || 'Payable',
+              dueDate: payable.dueDate ? new Date(payable.dueDate).toISOString() : new Date().toISOString()
             },
             workflow,
             organization.name

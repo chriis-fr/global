@@ -24,14 +24,24 @@ export async function GET(
     const collection = db.collection('payables');
 
     // Build query based on user type - Organization members should always see organization's payables
-    const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
+    const isOrganization = !!(session.user.organizationId && session.user.organizationId !== session.user.id);
+    
+    // Handle both MongoDB ObjectIds and OAuth IDs
+    const isObjectId = /^[0-9a-fA-F]{24}$/.test(session.user.id);
+    const issuerIdQuery = isObjectId 
+      ? { issuerId: new ObjectId(session.user.id) }
+      : { issuerId: session.user.id };
+    
     const query: Record<string, unknown> = { _id: new ObjectId(id) };
     
     if (isOrganization) {
-      query.organizationId = session.user.organizationId;
+      query.$or = [
+        { organizationId: session.user.organizationId },
+        { organizationId: new ObjectId(session.user.organizationId) }
+      ];
     } else {
       query.$or = [
-        { issuerId: session.user.id },
+        issuerIdQuery,
         { userId: session.user.email }
       ];
     }
@@ -118,14 +128,24 @@ export async function PUT(
     const collection = db.collection('payables');
 
     // Build query based on user type
-    const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
+    const isOrganization = !!(session.user.organizationId && session.user.organizationId !== session.user.id);
+    
+    // Handle both MongoDB ObjectIds and OAuth IDs
+    const isObjectId = /^[0-9a-fA-F]{24}$/.test(session.user.id);
+    const issuerIdQuery = isObjectId 
+      ? { issuerId: new ObjectId(session.user.id) }
+      : { issuerId: session.user.id };
+    
     const query: Record<string, unknown> = { _id: new ObjectId(id) };
     
     if (isOrganization) {
-      query.organizationId = session.user.organizationId;
+      query.$or = [
+        { organizationId: session.user.organizationId },
+        { organizationId: new ObjectId(session.user.organizationId) }
+      ];
     } else {
       query.$or = [
-        { issuerId: session.user.id },
+        issuerIdQuery,
         { userId: session.user.email }
       ];
     }
@@ -432,7 +452,7 @@ export async function DELETE(
     const collection = db.collection('payables');
 
     // Build query based on user type
-    const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
+    const isOrganization = !!(session.user.organizationId && session.user.organizationId !== session.user.id);
     const query: Record<string, unknown> = { _id: new ObjectId(id) };
     
     if (isOrganization) {

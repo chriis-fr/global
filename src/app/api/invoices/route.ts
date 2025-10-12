@@ -217,6 +217,24 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Check if recipient is an organization
+    let recipientType = 'individual';
+    let recipientOrganization = null;
+    
+    if (clientEmail) {
+      // Check if the recipient email belongs to an organization's primary email
+      recipientOrganization = await db.collection('organizations').findOne({
+        billingEmail: clientEmail
+      });
+      
+      if (recipientOrganization) {
+        recipientType = 'organization';
+        console.log('🏢 [Invoice Creation] Recipient is organization:', recipientOrganization.name);
+      } else {
+        console.log('👤 [Invoice Creation] Recipient is individual user');
+      }
+    }
+
     // Generate secure invoice number if not provided or if provided number already exists
     let finalInvoiceNumber = invoiceNumber;
     
@@ -404,7 +422,10 @@ export async function POST(request: NextRequest) {
       },
       notes: memo,
       pdfUrl: '',
-      isTemplate: false
+      isTemplate: false,
+      
+      // Recipient type for conditional approval display
+      recipientType: recipientType
     };
 
     // Use MongoDB directly since the model structure is complex

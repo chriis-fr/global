@@ -54,6 +54,8 @@ export default function SmartInvoicingPage() {
   const [loading, setLoading] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filteredInvoices, setFilteredInvoices] = useState<Invoice[]>([]);
   
   // Load cached data from localStorage
   const loadCachedData = useCallback(() => {
@@ -241,6 +243,23 @@ export default function SmartInvoicingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataLoaded]);
 
+  // Filter invoices based on search term
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      setFilteredInvoices(invoices);
+    } else {
+      const filtered = invoices.filter(invoice => 
+        invoice.invoiceNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        invoice.clientDetails?.companyName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        invoice.clientDetails?.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        invoice.clientDetails?.lastName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        invoice.clientDetails?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        invoice.status?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setFilteredInvoices(filtered);
+    }
+  }, [searchTerm, invoices]);
+
   const handleCreateInvoice = () => {
     // Check if user can create invoice (limit reached)
     if (!subscription?.canCreateInvoice) {
@@ -280,63 +299,73 @@ export default function SmartInvoicingPage() {
 
   return (
     <div className="space-y-4 sm:space-y-6 px-4 sm:px-0">
-      {/* Header - Mobile Optimized */}
-      <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
-        <div className="flex-1">
-          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-2">Smart Invoicing</h1>
-          <p className="text-blue-200 text-sm sm:text-base">
-            Create, manage, and get paid with both fiat and blockchain payments seamlessly
-            {refreshing && (
-              <span className="ml-2 text-xs text-blue-300">
-                🔄 Updating...
-              </span>
-            )}
-          </p>
-        </div>
-        
-        {/* Mobile Action Buttons */}
-        <div className="flex flex-col space-y-3 sm:flex-row sm:items-center sm:space-y-0 sm:space-x-3">
-          <button
-            onClick={() => loadAllData(true)}
-            disabled={refreshing}
-            className="flex items-center justify-center w-10 h-10 sm:w-8 sm:h-8 text-blue-300 hover:text-blue-200 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-50 self-end sm:self-auto"
-            title={refreshing ? "Refreshing..." : "Refresh data"}
-          >
-            <RotateCcw className={`h-4 w-4 sm:h-3 sm:w-3 ${refreshing ? 'animate-spin' : ''}`} />
-          </button>
-          
-          <div className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-3">
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleViewInvoices}
-              className="flex items-center justify-center space-x-2 bg-white/10 backdrop-blur-sm text-white px-4 py-3 sm:px-4 sm:py-2 rounded-lg hover:bg-white/20 transition-colors border border-white/20 text-sm sm:text-base min-h-[44px] sm:min-h-auto"
-            >
-              <List className="h-4 w-4 sm:h-5 sm:w-5" />
-              <span>View Invoices</span>
-            </motion.button>
-            <motion.button
-              whileHover={{ scale: subscription?.canCreateInvoice ? 1.05 : 1 }}
-              whileTap={{ scale: subscription?.canCreateInvoice ? 0.95 : 1 }}
-              onClick={handleCreateInvoice}
-              disabled={!subscription?.canCreateInvoice}
-              className={`flex items-center justify-center space-x-2 px-4 py-3 sm:px-4 sm:py-2 rounded-lg transition-colors text-sm sm:text-base min-h-[44px] sm:min-h-auto ${
-                subscription?.canCreateInvoice
-                  ? 'bg-blue-600 text-white hover:bg-blue-700'
-                  : 'bg-gray-500 text-gray-300 cursor-not-allowed'
-              }`}
-            >
-              <Plus className="h-4 w-4 sm:h-5 sm:w-5" />
-              <span className="text-center">
-                {!subscription?.canCreateInvoice ? 'Limit Reached' :
-                 !dataLoaded && loading ? 'Loading...' : 
-                 dataLoaded && isOnboardingCompleted === false ? 'Setup & Create' : 
-                 'Create Invoice'}
-              </span>
-              {!subscription?.canCreateInvoice && (
-                <Lock className="h-4 w-4 sm:h-5 sm:w-5" />
-              )}
-            </motion.button>
+      {/* Header - Modern Design */}
+      <div className="bg-white/10 backdrop-blur-sm border-b rounded-lg border-white/20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center space-x-2 sm:space-x-4 min-w-0 flex-1">
+              <FileText className="h-6 w-6 sm:h-8 sm:w-8 text-blue-400 flex-shrink-0" />
+              <div className="min-w-0 flex-1">
+                <h1 className="text-lg sm:text-xl font-semibold text-white truncate">Smart Invoicing</h1>
+                <p className="text-xs sm:text-sm text-blue-200 hidden sm:block">
+                  Create, manage, and get paid with both fiat and blockchain payments seamlessly
+                  {refreshing && (
+                    <span className="ml-2 text-xs text-blue-300">
+                      🔄 Updating...
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
+              <button
+                onClick={() => loadAllData(true)}
+                disabled={refreshing}
+                className="flex items-center justify-center w-8 h-8 text-blue-300 hover:text-blue-200 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-50"
+                title={refreshing ? "Refreshing..." : "Refresh data"}
+              >
+                <RotateCcw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
+              </button>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleViewInvoices}
+                className="flex items-center space-x-1 sm:space-x-2 bg-white/10 backdrop-blur-sm text-white px-2 sm:px-4 py-2 rounded-lg hover:bg-white/20 transition-colors border border-white/20 text-sm"
+              >
+                <List className="h-4 w-4" />
+                <span className="hidden sm:inline">View Invoices</span>
+                <span className="sm:hidden">View</span>
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: subscription?.canCreateInvoice ? 1.05 : 1 }}
+                whileTap={{ scale: subscription?.canCreateInvoice ? 0.95 : 1 }}
+                onClick={handleCreateInvoice}
+                disabled={!subscription?.canCreateInvoice}
+                className={`flex items-center space-x-1 sm:space-x-2 px-2 sm:px-4 py-2 rounded-lg transition-colors text-sm ${
+                  subscription?.canCreateInvoice
+                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                    : 'bg-gray-500 text-gray-300 cursor-not-allowed'
+                }`}
+              >
+                <Plus className="h-4 w-4" />
+                <span className="hidden sm:inline">
+                  {!subscription?.canCreateInvoice ? 'Limit Reached' :
+                   !dataLoaded && loading ? 'Loading...' : 
+                   dataLoaded && isOnboardingCompleted === false ? 'Setup & Create' : 
+                   'Create Invoice'}
+                </span>
+                <span className="sm:hidden">
+                  {!subscription?.canCreateInvoice ? 'Limit' :
+                   !dataLoaded && loading ? 'Loading...' : 
+                   dataLoaded && isOnboardingCompleted === false ? 'Setup' : 
+                   'Create'}
+                </span>
+                {!subscription?.canCreateInvoice && (
+                  <Lock className="h-4 w-4" />
+                )}
+              </motion.button>
+            </div>
           </div>
         </div>
       </div>
@@ -372,21 +401,24 @@ export default function SmartInvoicingPage() {
         </motion.div>
       )}
 
-      {/* Stats Cards - Mobile Optimized */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+      {/* Stats Cards - Modern Design */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20"
+          className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200"
         >
           <div className="flex items-center justify-between">
-            <div className="flex-1">
-               <p className="text-blue-200 text-xs sm:text-sm">Total Invoices</p>
-               <p className="text-lg sm:text-2xl font-bold text-white">
-                 {stats.totalInvoices}
-               </p>
+            <div>
+              <p className="text-blue-200 text-sm font-medium">Total Invoices</p>
+              <p className="text-2xl font-bold text-white">
+                {stats.totalInvoices}
+              </p>
             </div>
-            <FileText className="h-6 w-6 sm:h-8 sm:w-8 text-blue-400 flex-shrink-0" />
+            <div className="p-3 bg-blue-500/20 rounded-lg">
+              <FileText className="h-6 w-6 text-blue-400" />
+            </div>
           </div>
         </motion.div>
 
@@ -394,16 +426,18 @@ export default function SmartInvoicingPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20"
+          className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200"
         >
           <div className="flex items-center justify-between">
-            <div className="flex-1">
-               <p className="text-blue-200 text-xs sm:text-sm">Total Revenue</p>
-               <p className="text-lg sm:text-2xl font-bold text-white">
-                 <FormattedNumberDisplay value={stats.totalRevenue} usePreferredCurrency={true} />
-               </p>
+            <div>
+              <p className="text-blue-200 text-sm font-medium">Total Revenue</p>
+              <p className="text-2xl font-bold text-white">
+                <FormattedNumberDisplay value={stats.totalRevenue} usePreferredCurrency={true} />
+              </p>
             </div>
-            <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-green-400 flex-shrink-0" />
+            <div className="p-3 bg-green-500/20 rounded-lg">
+              <DollarSign className="h-6 w-6 text-green-400" />
+            </div>
           </div>
         </motion.div>
 
@@ -411,16 +445,18 @@ export default function SmartInvoicingPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20"
+          className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200"
         >
           <div className="flex items-center justify-between">
-            <div className="flex-1">
-               <p className="text-blue-200 text-xs sm:text-sm">Pending</p>
-               <p className="text-lg sm:text-2xl font-bold text-white">
-                 {stats.pendingCount}
-               </p>
+            <div>
+              <p className="text-blue-200 text-sm font-medium">Pending</p>
+              <p className="text-2xl font-bold text-white">
+                {stats.pendingCount}
+              </p>
             </div>
-            <Calendar className="h-6 w-6 sm:h-8 sm:w-8 text-yellow-400 flex-shrink-0" />
+            <div className="p-3 bg-yellow-500/20 rounded-lg">
+              <Calendar className="h-6 w-6 text-yellow-400" />
+            </div>
           </div>
         </motion.div>
 
@@ -428,50 +464,52 @@ export default function SmartInvoicingPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20"
+          className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200"
         >
           <div className="flex items-center justify-between">
-            <div className="flex-1">
-               <p className="text-blue-200 text-xs sm:text-sm">Paid</p>
-               <p className="text-lg sm:text-2xl font-bold text-white">
-                 {stats.paidCount}
-               </p>
+            <div>
+              <p className="text-blue-200 text-sm font-medium">Paid</p>
+              <p className="text-2xl font-bold text-white">
+                {stats.paidCount}
+              </p>
             </div>
-            <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-green-400 flex-shrink-0" />
+            <div className="p-3 bg-green-500/20 rounded-lg">
+              <TrendingUp className="h-6 w-6 text-green-400" />
+            </div>
           </div>
         </motion.div>
+        </div>
       </div>
 
-      {/* Quick Actions - Mobile Optimized */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+      {/* Quick Actions - Modern Design */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* Only show Create New Invoice card when onboarding is not completed */}
         {(!dataLoaded || isOnboardingCompleted === false) && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
-            className={`backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20 transition-colors cursor-pointer min-h-[120px] sm:min-h-auto ${
-              subscription?.canCreateInvoice 
-                ? 'bg-white/10 hover:bg-white/20' 
-                : 'bg-gray-500/20 cursor-not-allowed'
+            className={`bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200 cursor-pointer ${
+              !subscription?.canCreateInvoice ? 'opacity-50 cursor-not-allowed' : ''
             }`}
             onClick={subscription?.canCreateInvoice ? handleCreateInvoice : undefined}
           >
-            <div className="flex items-center space-x-3 sm:space-x-4">
-              <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                subscription?.canCreateInvoice ? 'bg-blue-600' : 'bg-gray-500'
+            <div className="flex items-center space-x-4">
+              <div className={`p-3 rounded-lg ${
+                subscription?.canCreateInvoice ? 'bg-blue-500/20' : 'bg-gray-500/20'
               }`}>
                 {subscription?.canCreateInvoice ? (
-                  <Plus className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+                  <Plus className="h-6 w-6 text-blue-400" />
                 ) : (
-                  <Lock className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+                  <Lock className="h-6 w-6 text-gray-400" />
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="text-base sm:text-lg font-semibold text-white">
+                <h3 className="text-lg font-semibold text-white">
                   {subscription?.canCreateInvoice ? 'Create New Invoice' : 'Invoice Limit Reached'}
                 </h3>
-                <p className="text-blue-200 text-xs sm:text-sm">
+                <p className="text-blue-200 text-sm">
                   {subscription?.canCreateInvoice 
                     ? 'Start with our guided walkthrough' 
                     : 'Upgrade to create more invoices'
@@ -479,7 +517,7 @@ export default function SmartInvoicingPage() {
                 </p>
               </div>
               {subscription?.canCreateInvoice && (
-                <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 text-blue-400 flex-shrink-0" />
+                <ArrowRight className="h-5 w-5 text-blue-400 flex-shrink-0" />
               )}
             </div>
           </motion.div>
@@ -489,18 +527,18 @@ export default function SmartInvoicingPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
-          className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20 hover:bg-white/20 transition-colors cursor-pointer min-h-[120px] sm:min-h-auto"
+          className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200 cursor-pointer"
           onClick={handleManageInvoiceInfo}
         >
-          <div className="flex items-center space-x-3 sm:space-x-4">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-orange-600 rounded-lg flex items-center justify-center flex-shrink-0">
-              <Building2 className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+          <div className="flex items-center space-x-4">
+            <div className="p-3 bg-orange-500/20 rounded-lg">
+              <Building2 className="h-6 w-6 text-orange-400" />
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="text-base sm:text-lg font-semibold text-white">Manage Invoice Info</h3>
-              <p className="text-blue-200 text-xs sm:text-sm">Configure business information and settings</p>
+              <h3 className="text-lg font-semibold text-white">Manage Invoice Info</h3>
+              <p className="text-blue-200 text-sm">Configure business information and settings</p>
             </div>
-            <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 text-blue-400 flex-shrink-0" />
+            <ArrowRight className="h-5 w-5 text-blue-400 flex-shrink-0" />
           </div>
         </motion.div>
 
@@ -508,18 +546,18 @@ export default function SmartInvoicingPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.6 }}
-          className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20 hover:bg-white/20 transition-colors cursor-pointer min-h-[120px] sm:min-h-auto sm:col-span-2 lg:col-span-1"
+          className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200 cursor-pointer"
           onClick={handleManageClients}
         >
-          <div className="flex items-center space-x-3 sm:space-x-4">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-600 rounded-lg flex items-center justify-center flex-shrink-0">
-              <Building2 className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+          <div className="flex items-center space-x-4">
+            <div className="p-3 bg-green-500/20 rounded-lg">
+              <Users className="h-6 w-6 text-green-400" />
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="text-base sm:text-lg font-semibold text-white">Manage Clients</h3>
-              <p className="text-blue-200 text-xs sm:text-sm">Add and organize your clients</p>
+              <h3 className="text-lg font-semibold text-white">Manage Clients</h3>
+              <p className="text-blue-200 text-sm">Add and organize your clients</p>
             </div>
-            <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 text-blue-400 flex-shrink-0" />
+            <ArrowRight className="h-5 w-5 text-blue-400 flex-shrink-0" />
           </div>
         </motion.div>
 
@@ -529,31 +567,33 @@ export default function SmartInvoicingPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.7 }}
-            className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20 hover:bg-white/20 transition-colors cursor-pointer min-h-[120px] sm:min-h-auto sm:col-span-2 lg:col-span-1"
+            className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200 cursor-pointer"
             onClick={() => router.push('/dashboard/settings/organization')}
           >
-            <div className="flex items-center space-x-3 sm:space-x-4">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                <Users className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+            <div className="flex items-center space-x-4">
+              <div className="p-3 bg-purple-500/20 rounded-lg">
+                <Users className="h-6 w-6 text-purple-400" />
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="text-base sm:text-lg font-semibold text-white">Team Settings</h3>
-                <p className="text-blue-200 text-xs sm:text-sm">Configure team permissions</p>
+                <h3 className="text-lg font-semibold text-white">Team Settings</h3>
+                <p className="text-blue-200 text-sm">Configure team permissions</p>
               </div>
-              <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 text-blue-400 flex-shrink-0" />
+              <ArrowRight className="h-5 w-5 text-blue-400 flex-shrink-0" />
             </div>
           </motion.div>
         )}
+        </div>
       </div>
 
-      {/* Recent Activity - Mobile Optimized */}
+      {/* Recent Activity - Modern Design */}
       {invoices.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.7 }}
-          className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20"
-        >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.7 }}
+            className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6"
+          >
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base sm:text-lg font-semibold text-white">Recent Invoices</h3>
             <button
@@ -563,8 +603,26 @@ export default function SmartInvoicingPage() {
               View All
             </button>
           </div>
+          
+          {/* Search Bar */}
+          <div className="mb-6">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search by invoice number, client, or status..."
+                value={searchTerm}
+                className="w-full px-4 py-2 pl-10 bg-white/5 border border-white/20 rounded-lg text-white placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-200"
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg className="h-4 w-4 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+            </div>
+          </div>
           <div className="space-y-3">
-            {invoices.slice(0, 5).map((invoice, index) => (
+            {(searchTerm ? filteredInvoices : invoices).slice(0, 5).map((invoice, index) => (
               <motion.div
                 key={invoice._id?.toString() || index}
                 initial={{ opacity: 0, x: -20 }}
@@ -586,8 +644,8 @@ export default function SmartInvoicingPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center space-x-2">
                       <p className="text-white font-medium text-sm sm:text-base truncate">{invoice.invoiceNumber || 'Invoice'}</p>
-                      {/* Approval indicator - only for organizations */}
-                      {(invoice.status === 'approved' || invoice.status === 'sent') && invoice.organizationId && (
+                      {/* Approval indicator - only for organization recipients */}
+                      {(invoice.status === 'approved' || invoice.status === 'sent') && invoice.organizationId && invoice.recipientType === 'organization' && (
                         <div className="relative group">
                           <CheckCircle className="h-4 w-4 text-green-400 flex-shrink-0" />
                           <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
@@ -619,17 +677,19 @@ export default function SmartInvoicingPage() {
               </motion.div>
             ))}
           </div>
-        </motion.div>
+          </motion.div>
+        </div>
       )}
 
-      {/* Empty State - Mobile Optimized */}
+      {/* Empty State - Modern Design */}
       {invoices.length === 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.8 }}
-          className="bg-white/10 backdrop-blur-sm rounded-xl p-8 sm:p-12 border border-white/20 text-center"
-        >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.8 }}
+            className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-12 text-center"
+          >
           <FileText className="h-12 w-12 sm:h-16 sm:w-16 text-blue-400 mx-auto mb-4" />
           <h3 className="text-lg sm:text-xl font-semibold text-white mb-2">No invoices yet</h3>
           <p className="text-blue-200 mb-6 text-sm sm:text-base">
@@ -656,7 +716,8 @@ export default function SmartInvoicingPage() {
               </>
             )}
           </button>
-        </motion.div>
+          </motion.div>
+        </div>
       )}
 
       {/* Floating Dashboard Button */}

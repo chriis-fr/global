@@ -21,7 +21,7 @@ export function PermissionGuard({
   const { permissions: userPermissions, loading } = usePermissions();
 
   if (loading) {
-    return <div className="animate-pulse bg-gray-200 rounded h-4 w-full"></div>;
+    return null; // Don't show loading state, let components handle their own loading
   }
 
   // Check single permission

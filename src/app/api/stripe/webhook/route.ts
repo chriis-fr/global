@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { SubscriptionService } from '@/lib/services/subscriptionService';
+import { clearSubscriptionCache } from '@/lib/actions/subscription';
 import { ObjectId } from 'mongodb';
 
 const endpointWebhookSecret = process.env.SIGN_SECRET_STRIPE_LOCAL;
@@ -185,6 +186,14 @@ export async function POST(request: NextRequest) {
             } catch (orgError) {
               console.error('❌ [Webhook] Error updating organization subscriptions:', orgError);
             }
+            
+            // Clear subscription cache for the user
+            try {
+              await clearSubscriptionCache(userId);
+              console.log('🗑️ [Webhook] Cleared subscription cache for user:', userId);
+            } catch (cacheError) {
+              console.error('❌ [Webhook] Error clearing subscription cache:', cacheError);
+            }
           }
         } catch (error) {
           console.error('❌ [Webhook] Error updating subscription:', error);
@@ -247,6 +256,14 @@ export async function POST(request: NextRequest) {
             }
           } catch (orgError) {
             console.error('❌ [Webhook] Error updating organization subscriptions:', orgError);
+          }
+          
+          // Clear subscription cache for the user
+          try {
+            await clearSubscriptionCache(userId);
+            console.log('🗑️ [Webhook] Cleared subscription cache for user:', userId);
+          } catch (cacheError) {
+            console.error('❌ [Webhook] Error clearing subscription cache:', cacheError);
           }
         } else {
           console.log('❌ [Webhook] Customer not found or deleted for subscription cancellation:', {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { approveInvoice, rejectInvoice, getPendingApprovals } from '@/lib/actions/invoiceApproval';
 import { autoSendApprovedInvoice } from '@/lib/utils/autoSendInvoice';
 import { CheckCircle, XCircle, Clock, DollarSign, User, Mail } from 'lucide-react';
@@ -32,24 +32,55 @@ export default function PendingInvoiceApprovals() {
   const [pendingInvoices, setPendingInvoices] = useState<PendingInvoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const hasInitialized = useRef(false);
 
   useEffect(() => {
-    fetchPendingApprovals();
+    if (!hasInitialized.current) {
+      hasInitialized.current = true;
+      fetchPendingApprovals();
+    }
   }, []);
 
-  const fetchPendingApprovals = async () => {
+  const fetchPendingApprovals = async (forceRefresh = false) => {
     try {
       setLoading(true);
+      
+      // Check localStorage cache first
+      const cacheKey = `invoice_approvals_${Date.now().toString().slice(0, -6)}`; // Cache by hour
+      const cachedData = localStorage.getItem(cacheKey);
+      
+      if (!forceRefresh && cachedData) {
+        try {
+          const parsed = JSON.parse(cachedData);
+          const now = Date.now();
+          
+          // Use cached data if it's less than 10 minutes old
+          if ((now - parsed.timestamp) < (10 * 60 * 1000)) {
+            setPendingInvoices(parsed.invoices);
+            setLoading(false);
+            return;
+          }
+        } catch (err) {
+          localStorage.removeItem(cacheKey);
+        }
+      }
+
       const result = await getPendingApprovals();
-      console.log('🔍 [PendingInvoiceApprovals] Fetch result:', result);
       if (result.success && result.data) {
         setPendingInvoices(result.data);
-        console.log('✅ [PendingInvoiceApprovals] Set pending invoices:', result.data);
+        
+        // Cache in localStorage
+        const cacheData = {
+          invoices: result.data,
+          timestamp: Date.now()
+        };
+        localStorage.setItem(cacheKey, JSON.stringify(cacheData));
       } else {
-        console.log('❌ [PendingInvoiceApprovals] Failed to fetch or no data:', result.message);
+        setPendingInvoices([]);
       }
     } catch (error) {
-      console.error('❌ [PendingInvoiceApprovals] Error fetching pending approvals:', error);
+      console.error('Error fetching pending invoice approvals:', error);
+      setPendingInvoices([]);
     } finally {
       setLoading(false);
     }
@@ -83,6 +114,13 @@ export default function PendingInvoiceApprovals() {
                
                // Remove from pending list
                setPendingInvoices(prev => prev.filter(invoice => invoice._id !== invoiceId));
+               
+               // Clear invoice approval cache since data has changed
+               Object.keys(localStorage).forEach(key => {
+                 if (key.startsWith('invoice_approvals_')) {
+                   localStorage.removeItem(key);
+                 }
+               });
              } else {
                // Show more detailed error message for owners trying to approve their own invoices
                if (result.message.includes('cannot approve your own invoices')) {
@@ -109,6 +147,14 @@ export default function PendingInvoiceApprovals() {
              if (result.success) {
                // Remove from pending list
                setPendingInvoices(prev => prev.filter(invoice => invoice._id !== invoiceId));
+               
+               // Clear invoice approval cache since data has changed
+               Object.keys(localStorage).forEach(key => {
+                 if (key.startsWith('invoice_approvals_')) {
+                   localStorage.removeItem(key);
+                 }
+               });
+               
                alert(result.message);
              } else {
                // Show more detailed error message for owners trying to reject their own invoices
@@ -145,16 +191,22 @@ export default function PendingInvoiceApprovals() {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex items-center justify-center h-32">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        </div>
+      <div className="space-y-4">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
+            <div className="animate-pulse">
+              <div className="h-4 bg-white/20 rounded w-1/4 mb-4"></div>
+              <div className="h-3 bg-white/20 rounded w-1/2 mb-2"></div>
+              <div className="h-3 bg-white/20 rounded w-1/3"></div>
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
 
-  // Don't render anything if there are no pending approvals
-  if (pendingInvoices.length === 0) {
+  // Don't render anything if there are no pending approvals (but only after loading is complete)
+  if (!loading && pendingInvoices.length === 0) {
     return null;
   }
 

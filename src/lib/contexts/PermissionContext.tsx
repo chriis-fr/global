@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { OrganizationMember } from '@/types/organization';
 
@@ -42,11 +42,36 @@ export function PermissionProvider({ children }: PermissionProviderProps) {
   const [member, setMember] = useState<OrganizationMember | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const hasInitialized = useRef(false);
+  const lastFetchTime = useRef(0);
+  const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours - only refresh on logout/login
 
-  const fetchPermissions = async () => {
+  const fetchPermissions = async (forceRefresh = false) => {
     if (!session?.user?.email) {
       setLoading(false);
       return;
+    }
+
+    // Check localStorage cache first
+    const cacheKey = `permissions_${session.user.email}`;
+    const cachedData = localStorage.getItem(cacheKey);
+    
+    if (!forceRefresh && cachedData) {
+      try {
+        const parsed = JSON.parse(cachedData);
+        const now = Date.now();
+        
+        // Use cached data if it's less than 24 hours old
+        if ((now - parsed.timestamp) < CACHE_DURATION) {
+          setPermissions(parsed.permissions);
+          setMember(parsed.member);
+          setLoading(false);
+          return;
+        }
+      } catch (err) {
+        // If cache is corrupted, remove it and fetch fresh
+        localStorage.removeItem(cacheKey);
+      }
     }
 
     try {
@@ -59,6 +84,14 @@ export function PermissionProvider({ children }: PermissionProviderProps) {
       if (data.success) {
         setPermissions(data.data.permissions);
         setMember(data.data.member);
+        
+        // Cache in localStorage
+        const cacheData = {
+          permissions: data.data.permissions,
+          member: data.data.member,
+          timestamp: Date.now()
+        };
+        localStorage.setItem(cacheKey, JSON.stringify(cacheData));
       } else {
         setError(data.message || 'Failed to fetch permissions');
       }
@@ -71,13 +104,24 @@ export function PermissionProvider({ children }: PermissionProviderProps) {
   };
 
   const refreshPermissions = async () => {
-    await fetchPermissions();
+    await fetchPermissions(true); // Force refresh
   };
 
   useEffect(() => {
-    if (status === 'authenticated') {
+    if (status === 'authenticated' && !hasInitialized.current) {
+      hasInitialized.current = true;
       fetchPermissions();
     } else if (status === 'unauthenticated') {
+      hasInitialized.current = false;
+      lastFetchTime.current = 0;
+      
+      // Clear all permission caches on logout
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('permissions_')) {
+          localStorage.removeItem(key);
+        }
+      });
+      
       setLoading(false);
       setPermissions({
         canManageTreasury: false,
@@ -91,7 +135,7 @@ export function PermissionProvider({ children }: PermissionProviderProps) {
       });
       setMember(null);
     }
-  }, [session, status]);
+  }, [status]);
 
   const value: PermissionContextType = {
     permissions,

@@ -394,17 +394,25 @@ async function createPayableForRecipient(recipientEmail: string, invoice: Record
     // Generate payable number
     const payableNumber = `PAY-${Date.now()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
 
-    // Check if recipient is part of an organization and get approval settings
+    // Check if recipient is an organization (not just a member of one)
     let approvalWorkflow = null;
     let approvalStatus = 'pending';
     let payableStatus = 'pending';
+    let isOrganizationRecipient = false;
     
-    if (recipientUser.organizationId) {
-      console.log('🏢 [Auto Payable] Recipient is organization member, checking approval settings');
+    // First, check if the recipient email belongs to an organization's primary email
+    const db = await connectToDatabase();
+    const recipientOrganization = await db.collection('organizations').findOne({
+      billingEmail: recipientEmail
+    });
+    
+    if (recipientOrganization) {
+      console.log('🏢 [Auto Payable] Recipient email is organization primary email:', recipientOrganization.name);
+      isOrganizationRecipient = true;
       
       try {
         const { ApprovalService } = await import('@/lib/services/approvalService');
-        const approvalSettings = await ApprovalService.getApprovalSettings(recipientUser.organizationId);
+        const approvalSettings = await ApprovalService.getApprovalSettings(recipientOrganization._id.toString());
         
         if (approvalSettings?.requireApproval) {
           console.log('✅ [Auto Payable] Organization requires approval, creating workflow');
@@ -412,7 +420,7 @@ async function createPayableForRecipient(recipientEmail: string, invoice: Record
           // Create approval workflow for the payable
           approvalWorkflow = await ApprovalService.createApprovalWorkflow(
             null, // Will be set after payable creation
-            recipientUser.organizationId,
+            recipientOrganization._id.toString(),
             recipientUser._id?.toString() || recipientUser.email,
             parseFloat(invoice.total || invoice.totalAmount || 0) // Use consistent field name
           );
@@ -447,9 +455,9 @@ async function createPayableForRecipient(recipientEmail: string, invoice: Record
       // Organization/User identification
       issuerId: recipientIssuerId,
       userId: recipientEmail, // Use original recipient email, not organization owner's email
-      organizationId: recipientUser.organizationId || null, // Set organization ID if user belongs to one
-      ownerId: recipientUser.organizationId || recipientEmail, // Owner ID for ledger sync
-      ownerType: recipientUser.organizationId ? 'organization' : 'individual', // Owner type for ledger sync
+      organizationId: isOrganizationRecipient ? recipientOrganization._id : (recipientUser.organizationId || null), // Use recipient organization if it's an org email
+      ownerId: isOrganizationRecipient ? recipientOrganization._id.toString() : (recipientUser.organizationId || recipientEmail), // Owner ID for ledger sync
+      ownerType: isOrganizationRecipient ? 'organization' : (recipientUser.organizationId ? 'organization' : 'individual'), // Owner type for ledger sync
       
       // Dates and timing
       issueDate: new Date(),
@@ -515,7 +523,7 @@ async function createPayableForRecipient(recipientEmail: string, invoice: Record
       attachedFiles: [],
       issuerId: recipientIssuerId,
       userId: recipientUser.email, // Add userId field for query compatibility
-      organizationId: recipientUser.organizationId ? new ObjectId(recipientUser.organizationId) : null,
+      organizationId: isOrganizationRecipient ? recipientOrganization._id : (recipientUser.organizationId ? new ObjectId(recipientUser.organizationId) : null),
       relatedInvoiceId: new ObjectId(invoice._id as unknown as string),
       
       // Ledger integration
@@ -572,6 +580,51 @@ async function createPayableForRecipient(recipientEmail: string, invoice: Record
     } catch (syncError) {
       console.error('⚠️ [Auto Payable] Failed to sync payable to ledger:', syncError);
       // Don't fail if sync fails
+    }
+
+    // If this is an organization recipient, also create payables for organization members
+    if (isOrganizationRecipient && recipientOrganization) {
+      console.log('🏢 [Auto Payable] Creating payables for organization members');
+      
+      // Get all organization members
+      const organizationMembers = recipientOrganization.members || [];
+      
+      for (const member of organizationMembers) {
+        if (member.role !== 'owner') { // Skip owner as they already have the payable
+          try {
+            const memberUser = await db.collection('users').findOne({
+              _id: new ObjectId(member.userId)
+            });
+            
+            if (memberUser) {
+              // Create a payable for this member
+              const memberPayableNumber = `PAY-${Date.now()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+              
+              const memberPayableData = {
+                ...payableData,
+                payableNumber: memberPayableNumber,
+                issuerId: new ObjectId(member.userId),
+                userId: memberUser.email,
+                organizationId: recipientOrganization._id,
+                ownerId: recipientOrganization._id.toString(),
+                ownerType: 'organization',
+                // Inherit the same approval status as the main payable
+                status: payableStatus,
+                approvalStatus: approvalStatus,
+                approvalWorkflowId: approvalWorkflow?._id || null,
+                relatedInvoiceId: new ObjectId(invoice._id as unknown as string),
+                createdAt: new Date(),
+                updatedAt: new Date()
+              };
+              
+              await payablesCollection.insertOne(memberPayableData);
+              console.log('✅ [Auto Payable] Created payable for organization member:', memberUser.email);
+            }
+          } catch (memberError) {
+            console.error('⚠️ [Auto Payable] Failed to create payable for member:', member.userId, memberError);
+          }
+        }
+      }
     }
 
   } catch (error) {

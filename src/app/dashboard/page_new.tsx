@@ -6,6 +6,7 @@ import {
   FileText, 
   Users,
   Receipt,
+  AlertTriangle,
   Clock,
   Crown,
   Lock
@@ -20,7 +21,7 @@ export default function DashboardPage() {
   const { data: session } = useSession();
   const { subscription, loading: subscriptionLoading } = useSubscription();
   const router = useRouter();
-  // const [usingFallbackData, setUsingFallbackData] = useState(false); // Not needed with independent loading
+  const [usingFallbackData, setUsingFallbackData] = useState(false);
   const [userName, setUserName] = useState<string>('');
   const [organizationName, setOrganizationName] = useState<string>('');
 
@@ -111,7 +112,12 @@ export default function DashboardPage() {
               )}
             </h1>
             <p className="text-blue-200">Welcome back, {userName || session?.user?.name || 'User'}!</p>
-            {/* Fallback data warning removed - components handle their own loading states */}
+            {usingFallbackData && (
+              <div className="mt-2 flex items-center space-x-2">
+                <AlertTriangle className="h-4 w-4 text-orange-400" />
+                <p className="text-orange-400 text-sm">Using offline data - some features may be limited</p>
+              </div>
+            )}
         </div>
         <div className="text-right">
             <p className="text-sm text-blue-300">Last updated</p>

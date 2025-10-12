@@ -49,7 +49,7 @@ export async function getCurrentMonthInvoiceCount(userId: string): Promise<numbe
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
     
     // Build query based on user type - Organization members should see organization's invoices
-    const isOrganization = user.organizationId && user.organizationId !== user._id.toString();
+    const isOrganization = !!user.organizationId;
     const query: Record<string, unknown> = {
       createdAt: {
         $gte: startOfMonth,
@@ -81,6 +81,21 @@ export async function getCurrentMonthInvoiceCount(userId: string): Promise<numbe
   }
 }
 
+// In-memory cache for subscription data (per session)
+const subscriptionCache = new Map<string, { data: SubscriptionData; timestamp: number }>();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
+
+// Function to clear cache for a specific user (call this on login/subscription changes)
+export async function clearSubscriptionCache(userId?: string): Promise<void> {
+  if (userId) {
+    subscriptionCache.delete(userId);
+    console.log('🗑️ [ServerAction] Cleared subscription cache for user:', userId);
+  } else {
+    subscriptionCache.clear();
+    console.log('🗑️ [ServerAction] Cleared all subscription cache');
+  }
+}
+
 export async function getUserSubscription(): Promise<SubscriptionData | null> {
   console.log('🔍 [ServerAction] Getting user subscription');
   
@@ -90,6 +105,16 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
     if (!session?.user?.id) {
       console.log('❌ [ServerAction] No session found');
       return null;
+    }
+
+    // Check cache first
+    const cacheKey = session.user.id;
+    const cached = subscriptionCache.get(cacheKey);
+    const currentTime = Date.now();
+    
+    if (cached && (currentTime - cached.timestamp) < CACHE_DURATION) {
+      console.log('✅ [ServerAction] Using cached subscription data');
+      return cached.data;
     }
     
     const db = await getDatabase();
@@ -173,6 +198,13 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
           console.log('❌ [ServerAction] Owner has no subscription');
           return null;
         }
+
+        console.log('🔍 [ServerAction] Owner subscription details:', {
+          planId: ownerUser.subscription.planId,
+          status: ownerUser.subscription.status,
+          updatedAt: ownerUser.subscription.updatedAt,
+          createdAt: ownerUser.subscription.createdAt
+        });
         
         console.log('✅ [ServerAction] Using owner\'s subscription for organization member:', ownerUser.subscription.planId);
         
@@ -220,10 +252,10 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
         const plan = BILLING_PLANS.find(p => p.planId === planId) || null;
         
         // Check trial status for organization
-        const now = new Date();
+        const currentDate = new Date();
         const trialEndDate = orgSubscription.trialEndDate ? new Date(orgSubscription.trialEndDate) : null;
-        const isTrialActive = Boolean(orgSubscription.status === 'trial' && trialEndDate && now < trialEndDate);
-        const trialDaysRemaining = trialEndDate ? Math.max(0, Math.ceil((trialEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))) : 0;
+        const isTrialActive = Boolean(orgSubscription.status === 'trial' && trialEndDate && currentDate < trialEndDate);
+        const trialDaysRemaining = trialEndDate ? Math.max(0, Math.ceil((trialEndDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24))) : 0;
         
         // Feature access based on organization subscription
         const canCreateOrganization = false; // Members can't create organizations
@@ -242,7 +274,7 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
         
         const canUseAdvancedFeatures = Boolean(planId !== 'receivables-free' && orgSubscription.status === 'active');
         
-        return {
+        const subscriptionData = {
           plan: plan ? {
             planId: plan.planId,
             type: plan.type,
@@ -266,6 +298,20 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
             cryptoToCryptoFee: plan?.limits?.cryptoToCryptoFee || 0
           }
         };
+
+        console.log('✅ [ServerAction] Returning subscription data for organization member:', {
+          planId: subscriptionData.plan?.planId,
+          status: subscriptionData.status,
+          canCreateInvoice: subscriptionData.canCreateInvoice,
+          canAccessPayables: subscriptionData.canAccessPayables,
+          canUseAdvancedFeatures: subscriptionData.canUseAdvancedFeatures
+        });
+
+        // Cache the result for organization members too
+        subscriptionCache.set(cacheKey, { data: subscriptionData, timestamp: currentTime });
+        console.log('💾 [ServerAction] Cached organization subscription data for user:', session.user.id);
+
+        return subscriptionData;
       } else {
         console.log('❌ [ServerAction] Organization not found for member');
         return null;
@@ -318,10 +364,10 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
     const plan = BILLING_PLANS.find(p => p.planId === planId) || null;
     
     // Check trial status
-    const now = new Date();
+    const currentDate = new Date();
     const trialEndDate = subscription.trialEndDate ? new Date(subscription.trialEndDate) : null;
-    const isTrialActive = Boolean(subscription.status === 'trial' && trialEndDate && now < trialEndDate);
-    const trialDaysRemaining = trialEndDate ? Math.max(0, Math.ceil((trialEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))) : 0;
+    const isTrialActive = Boolean(subscription.status === 'trial' && trialEndDate && currentDate < trialEndDate);
+    const trialDaysRemaining = trialEndDate ? Math.max(0, Math.ceil((trialEndDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24))) : 0;
     
     // Feature access
     const canCreateOrganization = Boolean(planId !== 'receivables-free' && subscription.status === 'active');
@@ -390,6 +436,10 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
       canCreateInvoice: result.canCreateInvoice,
       limitReached: !result.canCreateInvoice
     });
+    
+    // Cache the result
+    subscriptionCache.set(cacheKey, { data: result, timestamp: currentTime });
+    console.log('💾 [ServerAction] Cached subscription data for user:', session.user.id);
     
     return result;
     

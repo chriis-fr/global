@@ -14,8 +14,9 @@ interface SubscriptionContextType {
 
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined);
 
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
+const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes cache (longer for better UX)
 const CACHE_KEY = 'subscription_cache';
+const USER_CACHE_KEY = 'subscription_user_id'; // Track which user the cache belongs to
 
 export function SubscriptionProvider({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
@@ -23,47 +24,57 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const getCachedData = useCallback(() => {
+  const getCachedData = useCallback((userId?: string) => {
     if (typeof window === 'undefined') return null;
     
     try {
       const cached = localStorage.getItem(CACHE_KEY);
-      if (cached) {
+      const cachedUserId = localStorage.getItem(USER_CACHE_KEY);
+      
+      if (cached && cachedUserId) {
         const { data, timestamp } = JSON.parse(cached);
         const now = Date.now();
         
-        // Check if cache is still valid
-        if (now - timestamp < CACHE_DURATION) {
-          console.log('📦 [SubscriptionContext] Using cached subscription data');
+        // Check if cache is for the current user and still valid
+        if (cachedUserId === userId && now - timestamp < CACHE_DURATION) {
+          console.log('📦 [SubscriptionContext] Using cached subscription data for user:', userId);
           return data;
+        } else if (cachedUserId !== userId) {
+          console.log('🔄 [SubscriptionContext] Cache is for different user, clearing');
+          localStorage.removeItem(CACHE_KEY);
+          localStorage.removeItem(USER_CACHE_KEY);
         } else {
           console.log('⏰ [SubscriptionContext] Cache expired, removing');
           localStorage.removeItem(CACHE_KEY);
+          localStorage.removeItem(USER_CACHE_KEY);
         }
       }
     } catch (error) {
       console.error('❌ [SubscriptionContext] Error reading cache:', error);
       localStorage.removeItem(CACHE_KEY);
+      localStorage.removeItem(USER_CACHE_KEY);
     }
     
     return null;
   }, []);
 
-  const setCachedData = useCallback((data: SubscriptionData | null) => {
+  const setCachedData = useCallback((data: SubscriptionData | null, userId?: string) => {
     if (typeof window === 'undefined') return;
     
     try {
-      if (data) {
+      if (data && userId) {
         const cacheData = {
           data,
           timestamp: Date.now()
         };
         localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
-        console.log('💾 [SubscriptionContext] Subscription data cached');
+        localStorage.setItem(USER_CACHE_KEY, userId);
+        console.log('💾 [SubscriptionContext] Subscription data cached for user:', userId);
       } else {
         // Clear cache for organization members or when no subscription data
         localStorage.removeItem(CACHE_KEY);
-        console.log('🗑️ [SubscriptionContext] Cache cleared for organization member');
+        localStorage.removeItem(USER_CACHE_KEY);
+        console.log('🗑️ [SubscriptionContext] Cache cleared');
       }
     } catch (error) {
       console.error('❌ [SubscriptionContext] Error caching data:', error);
@@ -73,6 +84,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
   const clearCache = useCallback(() => {
     if (typeof window === 'undefined') return;
     localStorage.removeItem(CACHE_KEY);
+    localStorage.removeItem(USER_CACHE_KEY);
     console.log('🗑️ [SubscriptionContext] Cache cleared');
   }, []);
 
@@ -85,7 +97,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
 
     // Check cache first (unless force refresh)
     if (!forceRefresh) {
-      const cachedData = getCachedData();
+      const cachedData = getCachedData(session.user.id);
       if (cachedData) {
         setSubscription(cachedData);
         setLoading(false);
@@ -102,7 +114,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
       
       if (subscriptionData) {
         setSubscription(subscriptionData);
-        setCachedData(subscriptionData);
+        setCachedData(subscriptionData, session.user.id);
         console.log('✅ [SubscriptionContext] Subscription data received and cached:', {
           planId: subscriptionData.plan?.planId,
           status: subscriptionData.status,
@@ -160,7 +172,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
               }
             };
             setSubscription(fallbackData);
-            setCachedData(fallbackData);
+            setCachedData(fallbackData, session.user.id);
           }
         } catch (orgError) {
           console.error('❌ [SubscriptionContext] Error checking organization status:', orgError);
@@ -204,29 +216,32 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     if (session?.user?.id) {
       fetchSubscription();
     } else {
-      // Clear subscription data for unauthenticated users
+      // Clear subscription data and cache for unauthenticated users
       setSubscription(null);
       setLoading(false);
       setError(null);
+      clearCache(); // Clear cache on logout
     }
-  }, [session?.user?.id, fetchSubscription]);
+  }, [session?.user?.id, fetchSubscription, clearCache]);
 
-  // Refetch on window focus if cache is older than 10 minutes
+  // Refetch on window focus if cache is older than 30 minutes (less aggressive)
   useEffect(() => {
     const handleFocus = () => {
-      const cached = getCachedData();
-      if (cached) {
-        const cacheAge = Date.now() - JSON.parse(localStorage.getItem(CACHE_KEY) || '{}').timestamp;
-        if (cacheAge > 10 * 60 * 1000) { // 10 minutes
-          console.log('🔄 [SubscriptionContext] Window focused, cache is stale, refetching');
-          fetchSubscription(true);
+      if (session?.user?.id) {
+        const cached = getCachedData(session.user.id);
+        if (cached) {
+          const cacheAge = Date.now() - JSON.parse(localStorage.getItem(CACHE_KEY) || '{}').timestamp;
+          if (cacheAge > 30 * 60 * 1000) { // 30 minutes
+            console.log('🔄 [SubscriptionContext] Window focused, cache is stale, refetching');
+            fetchSubscription(true);
+          }
         }
       }
     };
 
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
-  }, [fetchSubscription, getCachedData]);
+  }, [fetchSubscription, getCachedData, session?.user?.id]);
 
   const refetch = useCallback(() => {
     console.log('🔄 [SubscriptionContext] Manual refetch requested - clearing cache and fetching fresh data');

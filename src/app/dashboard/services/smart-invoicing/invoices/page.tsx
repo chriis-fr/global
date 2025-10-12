@@ -19,15 +19,14 @@ import {
   CheckCircle
 } from 'lucide-react';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
-import { InvoiceService } from '@/lib/services/invoiceService';
-import { Invoice } from '@/models/Invoice';
 import FloatingActionButton from '@/components/dashboard/FloatingActionButton';
 import PendingInvoiceApprovals from '@/components/dashboard/PendingInvoiceApprovals';
+import { getInvoicesListMinimal, getFullInvoicesForExport, InvoiceDetails } from '@/lib/actions/invoices';
 
 export default function InvoicesPage() {
   const router = useRouter();
   const { data: session } = useSession();
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [invoices, setInvoices] = useState<InvoiceDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'sent' | 'pending' | 'paid' | 'overdue' | 'pending_approval' | 'rejected'>('all');
@@ -59,53 +58,72 @@ export default function InvoicesPage() {
     try {
       setLoading(true);
       
-      // Build query parameters
-      const params = new URLSearchParams({
-        convertToPreferred: 'true', // Convert to user's preferred currency
-        page: currentPage.toString(),
-        limit: showAll ? '1000' : '10' // Show all or paginated
-      });
+      let result;
+      const limit = showAll ? 1000 : 10;
       
-      if (statusFilter !== 'all') {
-        params.append('status', statusFilter);
+      if (searchTerm.trim()) {
+        // Use search server action with minimal data
+        result = await getInvoicesListMinimal(currentPage, limit, statusFilter, searchTerm.trim());
+      } else {
+        // Use paginated list server action with minimal data
+        result = await getInvoicesListMinimal(currentPage, limit, statusFilter);
       }
       
-      // Fetch invoices with pagination
-      const response = await fetch(`/api/invoices?${params.toString()}`);
-      const data = await response.json();
-      
-      if (data.success) {
-        setInvoices(data.data.invoices || []);
-        setTotalRevenue(data.data.stats?.totalRevenue || 0);
-        setTotalPages(data.data.pagination?.pages || 1);
-        setTotalInvoices(data.data.pagination?.total || 0);
-        setStatusCounts(data.data.stats?.statusCounts || {
+      if (result.success && result.data) {
+        setInvoices(result.data.invoices || []);
+        setTotalPages(result.data.pagination?.pages || 1);
+        setTotalInvoices(result.data.pagination?.total || 0);
+        
+        // Calculate total revenue from loaded invoices
+        const revenue = result.data.invoices?.reduce((sum, invoice) => {
+          if (invoice.status === 'paid') {
+            return sum + (invoice.total || 0);
+          }
+          return sum;
+        }, 0) || 0;
+        setTotalRevenue(revenue);
+        
+        // Calculate status counts
+        const counts = result.data.invoices?.reduce((acc, invoice) => {
+          acc[invoice.status as keyof typeof acc] = (acc[invoice.status as keyof typeof acc] || 0) + 1;
+          return acc;
+        }, {
           draft: 0,
           sent: 0,
           pending: 0,
+          pending_approval: 0,
+          rejected: 0,
           paid: 0,
           overdue: 0
-        });
+        }) || {
+          draft: 0,
+          sent: 0,
+          pending: 0,
+          pending_approval: 0,
+          rejected: 0,
+          paid: 0,
+          overdue: 0
+        };
+        setStatusCounts(counts);
       } else {
-        // Fallback to InvoiceService if API fails
-        const invoicesData = await InvoiceService.getInvoices();
-        setInvoices(invoicesData);
-        setTotalRevenue(0); // Will be calculated from loaded invoices
+        console.error('❌ [Invoices Page] Server action failed:', result.error);
+        // Fallback to empty state
+        setInvoices([]);
+        setTotalRevenue(0);
         setTotalPages(1);
-        setTotalInvoices(invoicesData.length);
+        setTotalInvoices(0);
       }
     } catch (error) {
       console.error('❌ [Invoices Page] Error loading invoices:', error);
-      // Fallback to InvoiceService if fetch fails
-      const invoicesData = await InvoiceService.getInvoices();
-      setInvoices(invoicesData);
+      // Fallback to empty state
+      setInvoices([]);
       setTotalRevenue(0);
       setTotalPages(1);
-      setTotalInvoices(invoicesData.length);
+      setTotalInvoices(0);
     } finally {
       setLoading(false);
     }
-  }, [currentPage, statusFilter, showAll]);
+  }, [currentPage, searchTerm, statusFilter, showAll]);
 
   useEffect(() => {
     if (session?.user) {
@@ -161,19 +179,18 @@ export default function InvoicesPage() {
           break;
       }
 
-      // Fetch invoices based on criteria
-      const response = await fetch(`/api/invoices?${params.toString()}`);
-      const data = await response.json();
+      // Fetch invoices with full data for export
+      const result = await getFullInvoicesForExport(statusFilter, searchTerm);
       
-      if (!data.success) {
-        throw new Error('Failed to fetch invoices');
+      if (!result.success || !result.data) {
+        throw new Error('Failed to fetch invoices for export');
       }
 
-      let invoicesToDownload = data.data.invoices || [];
+      let invoicesToDownload = result.data;
 
       // Filter by selected invoices if needed
       if (downloadCriteria.type === 'selected' && selectedInvoices.length > 0) {
-        invoicesToDownload = invoicesToDownload.filter((invoice: Invoice) => 
+        invoicesToDownload = invoicesToDownload.filter((invoice: InvoiceDetails) => 
           invoice._id && selectedInvoices.includes(invoice._id.toString())
         );
       }
@@ -199,7 +216,7 @@ export default function InvoicesPage() {
       csvRows.push(headers.join(','));
       
       // Process each invoice
-      invoicesToDownload.forEach((invoice: Invoice) => {
+      invoicesToDownload.forEach((invoice: InvoiceDetails) => {
         // Get company details
         const companyName = invoice.companyDetails?.name || 'N/A';
         const companyEmail = 'N/A';
@@ -235,17 +252,17 @@ export default function InvoicesPage() {
         
         // Combine all items into a single description
         const itemsDescription = invoice.items && invoice.items.length > 0
-          ? invoice.items.map((item) => `${item.description || 'Item'} (Qty: ${item.quantity || 0}, Price: ${item.unitPrice?.toFixed(2) || '0.00'})`).join('; ')
+          ? invoice.items.map((item: { description?: string; quantity?: number; unitPrice?: number }) => `${item.description || 'Item'} (Qty: ${item.quantity || 0}, Price: ${item.unitPrice?.toFixed(2) || '0.00'})`).join('; ')
           : 'No items';
         
         // Calculate total quantity
-        const totalQuantity = invoice.items ? invoice.items.reduce((sum: number, item) => sum + (item.quantity || 0), 0) : 0;
+        const totalQuantity = invoice.items ? invoice.items.reduce((sum: number, item: { quantity?: number }) => sum + (item.quantity || 0), 0) : 0;
 
         const row = [
           `"${invoice.invoiceNumber || 'N/A'}"`,
           `"${invoice.invoiceNumber || 'N/A'}"`,
-          `"${formatDate(invoice.issueDate?.toISOString() || '')}"`,
-          `"${formatDate(invoice.dueDate?.toISOString() || '')}"`,
+          `"${formatDate(invoice.issueDate || '')}"`,
+          `"${formatDate(invoice.dueDate || '')}"`,
           `"${invoice.status || 'N/A'}"`,
           `"${companyName}"`,
           `"${companyEmail}"`,
@@ -260,7 +277,7 @@ export default function InvoicesPage() {
           `"${itemsDescription}"`,
           `"${totalQuantity}"`,
           `"${invoice.subtotal?.toFixed(2) || '0.00'}"`,
-          `"${invoice.taxes?.reduce((sum, tax) => sum + tax.amount, 0).toFixed(2) || '0.00'}"`,
+          `"${invoice.taxes?.reduce((sum: number, tax: { amount?: number }) => sum + (tax.amount || 0), 0).toFixed(2) || '0.00'}"`,
           `"${invoice.totalAmount?.toFixed(2) || '0.00'}"`,
           `"${invoice.currency || 'N/A'}"`,
           `"${paymentMethod}"`,
@@ -270,7 +287,7 @@ export default function InvoicesPage() {
           `"${network}"`,
           `"${paymentAddress}"`,
           `"${invoice.notes || ''}"`,
-          `"${formatDate(invoice.createdAt?.toISOString() || '')}"`
+          `"${formatDate(invoice.createdAt || '')}"`
         ];
         csvRows.push(row.join(','));
       });
@@ -545,8 +562,8 @@ export default function InvoicesPage() {
                           <h3 className="text-white font-semibold text-sm truncate">
                             {invoice.invoiceNumber || 'Invoice'}
                           </h3>
-                          {/* Approval indicator - only for organizations */}
-                          {(invoice.status === 'approved' || invoice.status === 'sent') && invoice.organizationId && (
+                          {/* Approval indicator - only for organization recipients */}
+                          {(invoice.status === 'approved' || invoice.status === 'sent') && invoice.organizationId && invoice.recipientType === 'organization' && (
                             <div className="relative group">
                               <CheckCircle className="h-4 w-4 text-green-400 flex-shrink-0" />
                               <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">

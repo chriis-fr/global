@@ -24,7 +24,7 @@ export default function ApprovalsPage() {
             <PendingInvoiceApprovals />
           </div>
           
-          {/* Bill Approvals - Always show for organizations, check for actual pending approvals */}
+          {/* Bill Approvals */}
           <div>
             <h2 className="text-xl font-semibold text-white mb-4">Pending Bill Approvals</h2>
             <PendingApprovalsList />

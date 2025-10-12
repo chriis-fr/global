@@ -58,11 +58,21 @@ export function ApprovalWorkflow({
 
   const isCurrentUserApprover = () => {
     const currentStep = getCurrentStep();
-    return currentStep && currentStep.approverId === currentUserId;
+    const currentApproverId = currentStep?.approverId?.toString();
+    const userIdStr = currentUserId?.toString();
+    return currentStep && currentApproverId === userIdStr;
   };
 
   const canCurrentUserApprove = () => {
-    return canApprove && isCurrentUserApprover() && workflow.status === 'pending';
+    const currentStep = getCurrentStep();
+    const currentApproverId = currentStep?.approverId?.toString();
+    const userIdStr = currentUserId?.toString();
+    const isApprover = currentStep && currentApproverId === userIdStr;
+    const canApproveNow = canApprove && isApprover && workflow.status === 'pending';
+    
+    // Approval permission check
+    
+    return canApproveNow;
   };
 
   return (
@@ -74,142 +84,125 @@ export function ApprovalWorkflow({
         </div>
       </div>
 
-      {/* Workflow Rules Applied */}
-      <div className="mb-6 p-4 bg-blue-600/10 border border-blue-500/30 rounded-lg">
-        <h4 className="text-blue-300 font-medium mb-2">Applied Rules</h4>
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <span className="text-blue-200">Amount Threshold:</span>
-            <span className="text-white ml-2 capitalize">{workflow.appliedRules.amountThreshold}</span>
-          </div>
-          <div>
-            <span className="text-blue-200">Required Approvers:</span>
-            <span className="text-white ml-2">{workflow.appliedRules.requiredApprovers}</span>
-          </div>
-          <div>
-            <span className="text-blue-200">Auto-Approved:</span>
-            <span className="text-white ml-2">{workflow.appliedRules.autoApproved ? 'Yes' : 'No'}</span>
-          </div>
-          {workflow.appliedRules.reason && (
-            <div className="col-span-2">
-              <span className="text-blue-200">Reason:</span>
-              <span className="text-white ml-2">{workflow.appliedRules.reason}</span>
+      {/* Payable Details */}
+      {workflow.bill && (
+        <div className="mb-6 p-4 bg-green-600/10 border border-green-500/30 rounded-lg">
+          <h4 className="text-green-300 font-medium mb-3">Payable Details</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="text-green-200">Vendor:</span>
+              <span className="text-white ml-2 font-medium">{workflow.bill.vendor || 'Unknown'}</span>
             </div>
-          )}
+            <div>
+              <span className="text-green-200">Amount:</span>
+              <span className="text-white ml-2 font-medium">{workflow.bill.currency} {workflow.bill.amount?.toLocaleString() || '0'}</span>
+            </div>
+            <div className="md:col-span-2">
+              <span className="text-green-200">Description:</span>
+              <span className="text-white ml-2">{workflow.bill.description || 'No description'}</span>
+            </div>
+            {workflow.bill.dueDate && (
+              <div>
+                <span className="text-green-200">Due Date:</span>
+                <span className="text-white ml-2">{new Date(workflow.bill.dueDate).toLocaleDateString()}</span>
+              </div>
+            )}
+            {workflow.bill.category && (
+              <div>
+                <span className="text-green-200">Category:</span>
+                <span className="text-white ml-2">{workflow.bill.category}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Approval Progress */}
+      <div className="mb-6 p-4 bg-blue-600/10 border border-blue-500/30 rounded-lg">
+        <h4 className="text-blue-300 font-medium mb-2">Approval Progress</h4>
+        <div className="text-sm">
+          <span className="text-blue-200">Step {workflow.currentStep} of {workflow.approvals.length}</span>
+          <span className="text-white ml-2">({workflow.approvals.length} approver{workflow.approvals.length !== 1 ? 's' : ''} required)</span>
         </div>
       </div>
 
-      {/* Approval Steps */}
-      <div className="space-y-4">
-        <h4 className="text-white font-medium">Approval Steps</h4>
+      {/* Current Approver Actions */}
+      {canCurrentUserApprove() && (
+        <div className="mb-6 p-4 bg-blue-600/20 border border-blue-500/50 rounded-lg">
+          <h4 className="text-blue-300 font-medium mb-3">Your Approval Required</h4>
+          
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-white mb-2">
+              Comments (Optional)
+            </label>
+            <textarea
+              value={comments}
+              onChange={(e) => setComments(e.target.value)}
+              className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+              placeholder="Add any comments about your decision..."
+              rows={3}
+            />
+          </div>
+
+          <div className="flex space-x-3">
+            <button
+              onClick={() => handleApprovalDecision('approved')}
+              disabled={isProcessing}
+              className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <CheckCircle className="h-4 w-4" />
+              <span>Approve</span>
+            </button>
+            <button
+              onClick={() => handleApprovalDecision('rejected')}
+              disabled={isProcessing}
+              className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <XCircle className="h-4 w-4" />
+              <span>Reject</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Approvers List */}
+      <div className="space-y-2">
+        <h4 className="text-white font-medium">Approvers</h4>
         {workflow.approvals.map((step, index) => (
           <div
             key={step._id || index}
-            className={`p-4 rounded-lg border ${
+            className={`p-3 rounded-lg border ${
               step.stepNumber === workflow.currentStep
                 ? 'border-blue-500 bg-blue-600/10'
+                : step.decision === 'approved'
+                ? 'border-green-500 bg-green-600/10'
+                : step.decision === 'rejected'
+                ? 'border-red-500 bg-red-600/10'
                 : 'border-white/20 bg-white/5'
             }`}
           >
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center space-x-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
                 {getStatusIcon(step.decision)}
-                <div>
-                  <div className="flex items-center space-x-2">
-                    <User className="h-4 w-4 text-blue-400" />
-                    <span className="text-white font-medium">{step.approverEmail}</span>
-                    <span className="text-blue-200 text-sm">({step.approverRole})</span>
-                  </div>
-                  {step.isFallback && (
-                    <span className="text-yellow-400 text-xs">Fallback Approver</span>
-                  )}
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-sm text-blue-200">
-                  Step {step.stepNumber} of {workflow.approvals.length}
-                </div>
-                {step.completedAt && (
-                  <div className="text-xs text-gray-400">
-                    <Calendar className="h-3 w-3 inline mr-1" />
-                    {new Date(step.completedAt).toLocaleDateString()}
-                  </div>
+                <span className="text-white font-medium">{step.approverEmail}</span>
+                <span className="text-blue-200 text-sm">({step.approverRole})</span>
+                {step.isFallback && (
+                  <span className="text-yellow-400 text-xs">Fallback</span>
                 )}
               </div>
-            </div>
-
-            {step.comments && (
-              <div className="mt-3 p-3 bg-white/5 rounded-lg">
-                <div className="flex items-start space-x-2">
-                  <MessageSquare className="h-4 w-4 text-blue-400 mt-0.5" />
-                  <div>
-                    <div className="text-blue-200 text-sm font-medium">Comments:</div>
-                    <div className="text-white text-sm">{step.comments}</div>
-                  </div>
-                </div>
+              <div className="text-sm text-blue-200">
+                Step {step.stepNumber}
               </div>
-            )}
-
-            {/* Current Step Actions */}
-            {step.stepNumber === workflow.currentStep && canCurrentUserApprove() && (
-              <div className="mt-4 p-4 bg-blue-600/20 border border-blue-500/50 rounded-lg">
-                <h5 className="text-blue-300 font-medium mb-3">Your Approval Required</h5>
-                
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-white mb-2">
-                    Comments (Optional)
-                  </label>
-                  <textarea
-                    value={comments}
-                    onChange={(e) => setComments(e.target.value)}
-                    className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
-                    placeholder="Add any comments about your decision..."
-                    rows={3}
-                  />
-                </div>
-
-                <div className="flex space-x-3">
-                  <button
-                    onClick={() => handleApprovalDecision('approved')}
-                    disabled={isProcessing}
-                    className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <CheckCircle className="h-4 w-4" />
-                    <span>Approve</span>
-                  </button>
-                  <button
-                    onClick={() => handleApprovalDecision('rejected')}
-                    disabled={isProcessing}
-                    className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <XCircle className="h-4 w-4" />
-                    <span>Reject</span>
-                  </button>
-                </div>
+            </div>
+            {step.comments && (
+              <div className="mt-2 text-sm text-gray-300">
+                "{step.comments}"
               </div>
             )}
           </div>
         ))}
       </div>
 
-      {/* Workflow Timeline */}
-      <div className="mt-6 pt-6 border-t border-white/20">
-        <h4 className="text-white font-medium mb-3">Timeline</h4>
-        <div className="space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-blue-200">Created:</span>
-            <span className="text-white">
-              {new Date(workflow.createdAt).toLocaleString()}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-blue-200">Last Updated:</span>
-            <span className="text-white">
-              {new Date(workflow.updatedAt).toLocaleString()}
-            </span>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

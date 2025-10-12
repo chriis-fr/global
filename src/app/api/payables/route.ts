@@ -479,18 +479,57 @@ export async function GET(request: NextRequest) {
       payables = convertedPayables as typeof payables;
     }
 
-    // Calculate total amount for all payables
-    const totalQuery = isOrganization 
-      ? { organizationId: session.user.organizationId }
+    // Calculate total amount for all payables - use the same query as main query
+    // Redefine variables for stats query (they might be out of scope)
+    const statsIsOrganization = !!(session.user.organizationId && session.user.organizationId !== session.user.id);
+    const statsIsObjectId = /^[0-9a-fA-F]{24}$/.test(session.user.id);
+    const statsIssuerIdQuery = statsIsObjectId 
+      ? { issuerId: new ObjectId(session.user.id) }
+      : { issuerId: session.user.id };
+    
+    const totalQuery = statsIsOrganization 
+      ? { 
+          $or: [
+            { organizationId: session.user.organizationId },
+            { organizationId: new ObjectId(session.user.organizationId) }
+          ]
+        }
       : { 
           $or: [
-            issuerIdQuery,
+            statsIssuerIdQuery,
             { userId: session.user.email }
           ]
         };
+    console.log('🔍 [Payables API] Stats query:', {
+      statsIsOrganization,
+      organizationId: session.user.organizationId,
+      totalQuery
+    });
+    
     const allPayables = await payablesCollection.find(totalQuery).toArray();
     
-    let totalAmount = allPayables.reduce((sum, payable) => sum + (payable.total || 0), 0);
+    console.log('🔍 [Payables API] Total calculation:', {
+      totalPayables: allPayables.length,
+      payableStatuses: allPayables.map(p => ({ 
+        status: p.status, 
+        amount: p.total || p.amount,
+        payableNumber: p.payableNumber 
+      }))
+    });
+    
+    // Only sum approved payables (bills that are ready to be paid)
+    const payableBills = allPayables.filter(payable => 
+      payable.status === 'approved'
+    );
+    
+    let totalAmount = payableBills.reduce((sum, payable) => sum + (payable.total || payable.amount || 0), 0);
+    
+    console.log('🔍 [Payables API] Bills to pay calculation:', {
+      payableBillsCount: payableBills.length,
+      totalAmount,
+      approvedCount: payableBills.length, // All payableBills are approved now
+      totalApprovedAmount: totalAmount
+    });
     
     // Convert total amount if currency conversion is requested
     if (convertToPreferred && allPayables.length > 0) {

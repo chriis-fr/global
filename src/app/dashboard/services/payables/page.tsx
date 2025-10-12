@@ -323,14 +323,14 @@ export default function AccountsPayablePage() {
       <div className="bg-white/10 backdrop-blur-sm border-b rounded-lg border-white/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-4">
-              <Receipt className="h-8 w-8 text-blue-400" />
-              <div>
-                <h1 className="text-xl font-semibold text-white">Accounts Payable</h1>
-                <p className="text-sm text-blue-200">Manage your business payments and vendor relationships</p>
+            <div className="flex items-center space-x-2 sm:space-x-4 min-w-0 flex-1">
+              <Receipt className="h-6 w-6 sm:h-8 sm:w-8 text-blue-400 flex-shrink-0" />
+              <div className="min-w-0 flex-1">
+                <h1 className="text-lg sm:text-xl font-semibold text-white truncate">Accounts Payable</h1>
+                <p className="text-xs sm:text-sm text-blue-200 hidden sm:block">Manage your business payments and vendor relationships</p>
               </div>
             </div>
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
               <button
                 onClick={() => loadAllData(true)}
                 className="flex items-center justify-center w-8 h-8 text-blue-300 hover:text-blue-200 hover:bg-white/10 rounded-lg transition-colors"
@@ -340,10 +340,11 @@ export default function AccountsPayablePage() {
               </button>
               <button
                 onClick={handleCreatePayable}
-                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="flex items-center space-x-1 sm:space-x-2 px-2 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 <Plus className="h-4 w-4" />
-                <span>Create Payable</span>
+                <span className="hidden sm:inline">Create Payable</span>
+                <span className="sm:hidden">Add</span>
               </button>
             </div>
           </div>
@@ -352,7 +353,7 @@ export default function AccountsPayablePage() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -482,10 +483,11 @@ export default function AccountsPayablePage() {
                   <h3 className="text-lg font-semibold text-white">Bills & Invoices</h3>
                   <button
                     onClick={handleCreatePayable}
-                    className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    className="flex items-center space-x-1 sm:space-x-2 px-2 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                   >
                     <Plus className="h-4 w-4" />
-                    <span>Add Bill</span>
+                    <span className="hidden sm:inline">Add Bill</span>
+                    <span className="sm:hidden">Add</span>
                   </button>
                 </div>
                 
@@ -496,37 +498,38 @@ export default function AccountsPayablePage() {
                     <p className="text-blue-200 mb-6">Get started by adding your first bill or invoice.</p>
                     <button
                       onClick={handleCreatePayable}
-                      className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                      className="inline-flex items-center space-x-1 sm:space-x-2 px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                     >
                       <Plus className="h-4 w-4" />
-                      <span>Add Bill</span>
+                      <span className="hidden sm:inline">Add Bill</span>
+                      <span className="sm:hidden">Add</span>
                     </button>
                   </div>
                 ) : (
                   <div className="space-y-4">
                     {payables.slice(0, 10).map((payable) => (
                       <div key={payable._id} className="flex items-center justify-between p-4 bg-white/5 rounded-lg hover:bg-white/10 transition-colors">
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                           <div className="flex items-center space-x-3">
-                            <div>
-                              <p className="text-sm font-medium text-white">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-white truncate">
                                 {payable.companyName || payable.vendorCompany || payable.vendorName}
                               </p>
                               <p className="text-sm text-blue-300">#{payable.payableNumber}</p>
                             </div>
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(payable.status)}`}>
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${getStatusColor(payable.status)}`}>
                               {payable.status}
                             </span>
                           </div>
                         </div>
-                        <div className="flex items-center space-x-4">
+                        <div className="flex items-center space-x-2 sm:space-x-4 flex-shrink-0">
                           <div className="text-right">
                             <p className="text-sm font-medium text-white">
                               <FormattedNumberDisplay value={payable.total} />
                             </p>
                             <p className="text-sm text-blue-300">{payable.currency}</p>
                           </div>
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center space-x-1 sm:space-x-2">
                             <button
                               onClick={() => router.push(`/dashboard/services/payables/${payable._id}`)}
                               className="text-blue-600 hover:text-blue-700 transition-colors p-1 rounded-lg hover:bg-blue-50"

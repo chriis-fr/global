@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Clock, User, DollarSign, Calendar, Eye, CheckCircle, XCircle } from 'lucide-react';
 import { ApprovalWorkflow } from '@/types/approval';
 import { ApprovalWorkflow as ApprovalWorkflowComponent } from './ApprovalWorkflow';
+import { useSession } from 'next-auth/react';
 
 interface PendingApprovalsListProps {
   onApprovalDecision?: (workflowId: string, decision: 'approved' | 'rejected', comments?: string) => void;
@@ -23,21 +24,51 @@ interface EnrichedApproval extends ApprovalWorkflow {
 }
 
 export function PendingApprovalsList({ onApprovalDecision }: PendingApprovalsListProps) {
+  const { data: session } = useSession();
   const [approvals, setApprovals] = useState<EnrichedApproval[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedApproval, setSelectedApproval] = useState<EnrichedApproval | null>(null);
+  const hasInitialized = useRef(false);
 
-  const fetchPendingApprovals = async () => {
+  const fetchPendingApprovals = async (forceRefresh = false) => {
     try {
       setLoading(true);
       setError(null);
+
+      // Check localStorage cache first
+      const cacheKey = `approvals_${session?.user?.email}`;
+      const cachedData = localStorage.getItem(cacheKey);
+      
+      if (!forceRefresh && cachedData) {
+        try {
+          const parsed = JSON.parse(cachedData);
+          const now = Date.now();
+          
+          // Use cached data if it's less than 10 minutes old (approvals change more frequently)
+          if ((now - parsed.timestamp) < (10 * 60 * 1000)) {
+            setApprovals(parsed.approvals);
+            setLoading(false);
+            return;
+          }
+        } catch (err) {
+          // If cache is corrupted, remove it and fetch fresh
+          localStorage.removeItem(cacheKey);
+        }
+      }
 
       const response = await fetch('/api/organization/approvals');
       const data = await response.json();
 
       if (data.success) {
         setApprovals(data.data);
+        
+        // Cache in localStorage
+        const cacheData = {
+          approvals: data.data,
+          timestamp: Date.now()
+        };
+        localStorage.setItem(cacheKey, JSON.stringify(cacheData));
       } else {
         setError(data.message || 'Failed to fetch pending approvals');
       }
@@ -66,8 +97,14 @@ export function PendingApprovalsList({ onApprovalDecision }: PendingApprovalsLis
       const data = await response.json();
 
       if (data.success) {
-        // Refresh the list
-        await fetchPendingApprovals();
+        // Update local state instead of refetching
+        setApprovals(prevApprovals => 
+          prevApprovals.filter(approval => approval._id !== workflowId)
+        );
+        
+        // Clear approval cache since data has changed
+        const cacheKey = `approvals_${session?.user?.email}`;
+        localStorage.removeItem(cacheKey);
         
         // Close the detail view
         setSelectedApproval(null);
@@ -86,7 +123,10 @@ export function PendingApprovalsList({ onApprovalDecision }: PendingApprovalsLis
   };
 
   useEffect(() => {
-    fetchPendingApprovals();
+    if (!hasInitialized.current) {
+      hasInitialized.current = true;
+      fetchPendingApprovals();
+    }
   }, []);
 
   if (loading) {
@@ -125,7 +165,7 @@ export function PendingApprovalsList({ onApprovalDecision }: PendingApprovalsLis
     );
   }
 
-  if (approvals.length === 0) {
+  if (!loading && approvals.length === 0) {
     return (
       <div className="bg-blue-600/10 border border-blue-500/30 rounded-xl p-6 text-center">
         <CheckCircle className="h-12 w-12 text-blue-400 mx-auto mb-4" />
@@ -150,6 +190,7 @@ export function PendingApprovalsList({ onApprovalDecision }: PendingApprovalsLis
           workflow={selectedApproval}
           onApprovalDecision={handleApprovalDecision}
           canApprove={true}
+          currentUserId={session?.user?.id}
         />
       </div>
     );
@@ -157,8 +198,7 @@ export function PendingApprovalsList({ onApprovalDecision }: PendingApprovalsLis
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-white">Pending Approvals</h2>
+      <div className="flex items-center justify-end">
         <span className="text-blue-200 text-sm">
           {approvals.length} bill{approvals.length !== 1 ? 's' : ''} waiting
         </span>

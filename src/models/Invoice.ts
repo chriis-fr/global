@@ -138,6 +138,9 @@ export interface Invoice {
   // Template Information (for saving as template)
   isTemplate: boolean;
   templateName?: string;
+  
+  // Recipient type for conditional approval display
+  recipientType?: 'individual' | 'organization';
 }
 
 export interface CreateInvoiceInput {

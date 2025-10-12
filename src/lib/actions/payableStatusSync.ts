@@ -4,16 +4,13 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
-import { NotificationService } from '@/lib/services/notificationService';
 
 /**
- * Sync invoice status when payable approval status changes
- * This ensures the sender's invoice reflects the organization's approval decision
+ * Sync invoice status when payable is marked as paid
+ * This ensures the sender's invoice reflects the payment status
  */
-export async function syncInvoiceStatusWithPayable(
-  payableId: string,
-  approvalStatus: 'approved' | 'rejected',
-  approvalNotes?: string
+export async function syncInvoiceWhenPayablePaid(
+  payableId: string
 ): Promise<{ success: boolean; message: string }> {
   try {
     const session = await getServerSession(authOptions);
@@ -33,62 +30,46 @@ export async function syncInvoiceStatusWithPayable(
       return { success: false, message: 'Payable not found' };
     }
 
-    // Get the related invoice
-    const invoice = await db.collection('invoices').findOne({
-      _id: new ObjectId(payable.relatedInvoiceId)
-    });
+    // Check if payable is paid and has a related invoice
+    if (payable.status === 'paid' && payable.relatedInvoiceId) {
+      // Update the related invoice to paid status
+      const invoiceUpdate = await db.collection('invoices').updateOne(
+        { _id: new ObjectId(payable.relatedInvoiceId) },
+        {
+          $set: {
+            status: 'paid',
+            paidAt: new Date(),
+            updatedAt: new Date()
+          }
+        }
+      );
 
-    if (!invoice) {
-      return { success: false, message: 'Related invoice not found' };
+      if (invoiceUpdate.modifiedCount > 0) {
+        console.log('✅ [PayableStatusSync] Invoice marked as paid:', {
+          invoiceId: payable.relatedInvoiceId,
+          payableId: payable._id,
+          payableNumber: payable.payableNumber || 'N/A'
+        });
+        
+        return { 
+          success: true, 
+          message: 'Invoice status updated to paid' 
+        };
+      } else {
+        return { 
+          success: false, 
+          message: 'Invoice was already marked as paid' 
+        };
+      }
+    } else {
+      return { 
+        success: false, 
+        message: 'Payable is not paid or has no related invoice' 
+      };
     }
 
-    // Update payable status
-    await db.collection('payables').updateOne(
-      { _id: new ObjectId(payableId) },
-      {
-        $set: {
-          approvalStatus,
-          status: approvalStatus === 'approved' ? 'approved' : 'rejected',
-          approvedAt: new Date(),
-          approvalNotes: approvalNotes || '',
-          updatedAt: new Date()
-        }
-      }
-    );
-
-    // Update invoice status to reflect approval decision
-    const invoiceStatus = approvalStatus === 'approved' ? 'approved' : 'rejected';
-    await db.collection('invoices').updateOne(
-      { _id: new ObjectId(payable.relatedInvoiceId) },
-      {
-        $set: {
-          status: invoiceStatus,
-          approvalStatus,
-          approvedAt: approvalStatus === 'approved' ? new Date() : null,
-          approvalNotes: approvalNotes || '',
-          updatedAt: new Date()
-        }
-      }
-    );
-
-    // Send notification to invoice sender about approval decision
-    await sendApprovalDecisionNotification(
-      invoice,
-      payable,
-      approvalStatus,
-      approvalNotes,
-      session.user.name || session.user.email || 'Unknown Approver'
-    );
-
-    console.log(`✅ [Status Sync] Invoice ${invoice.invoiceNumber} status updated to: ${invoiceStatus}`);
-    
-    return { 
-      success: true, 
-      message: `Invoice status updated to ${invoiceStatus}` 
-    };
-
   } catch (error) {
-    console.error('❌ [Status Sync] Error syncing invoice status:', error);
+    console.error('❌ [PayableStatusSync] Error syncing invoice status:', error);
     return { 
       success: false, 
       message: 'Failed to sync invoice status' 
@@ -97,73 +78,12 @@ export async function syncInvoiceStatusWithPayable(
 }
 
 /**
- * Send notification to invoice sender about approval decision
+ * Sync payable status when invoice is marked as paid
+ * This ensures the recipient's payable reflects the payment status
  */
-async function sendApprovalDecisionNotification(
-  invoice: Record<string, unknown>,
-  payable: Record<string, unknown>,
-  approvalStatus: 'approved' | 'rejected',
-  approvalNotes: string | undefined,
-  approverName: string
-) {
-  try {
-    console.log('📧 [Status Sync] Sending approval decision notification to sender');
-    
-    // Get sender details
-    const db = await connectToDatabase();
-    const sender = await db.collection('users').findOne({
-      $or: [
-        { _id: new ObjectId(invoice.issuerId) },
-        { email: invoice.userId }
-      ]
-    });
-
-    if (!sender) {
-      console.error('❌ [Status Sync] Invoice sender not found');
-      return;
-    }
-
-    // Get organization details for notification
-    const organization = await db.collection('organizations').findOne({
-      _id: new ObjectId(payable.organizationId)
-    });
-
-    if (!organization) {
-      console.error('❌ [Status Sync] Organization not found');
-      return;
-    }
-
-    // Send notification
-    await NotificationService.sendApprovalDecision(
-      sender.email,
-      sender.name || sender.email,
-      approverName,
-      approvalStatus,
-      {
-        type: 'invoice',
-        number: invoice.invoiceNumber,
-        name: invoice.invoiceName || invoice.invoiceNumber,
-        amount: invoice.totalAmount || invoice.total,
-        currency: invoice.currency
-      },
-      organization.name,
-      approvalNotes
-    );
-
-    console.log('✅ [Status Sync] Approval decision notification sent to:', sender.email);
-
-  } catch (error) {
-    console.error('❌ [Status Sync] Error sending approval decision notification:', error);
-  }
-}
-
-/**
- * Get invoice status for a specific payable
- * This can be used to check the current status
- */
-export async function getInvoiceStatusForPayable(
-  payableId: string
-): Promise<{ success: boolean; invoiceStatus?: string; message: string }> {
+export async function syncPayableWhenInvoicePaid(
+  invoiceId: string
+): Promise<{ success: boolean; message: string }> {
   try {
     const session = await getServerSession(authOptions);
     
@@ -173,35 +93,70 @@ export async function getInvoiceStatusForPayable(
 
     const db = await connectToDatabase();
     
-    // Get the payable
-    const payable = await db.collection('payables').findOne({
-      _id: new ObjectId(payableId)
-    });
-
-    if (!payable) {
-      return { success: false, message: 'Payable not found' };
-    }
-
-    // Get the related invoice
+    // Get the invoice
     const invoice = await db.collection('invoices').findOne({
-      _id: new ObjectId(payable.relatedInvoiceId)
+      _id: new ObjectId(invoiceId)
     });
 
     if (!invoice) {
-      return { success: false, message: 'Related invoice not found' };
+      return { success: false, message: 'Invoice not found' };
     }
 
-    return { 
-      success: true, 
-      invoiceStatus: invoice.status,
-      message: 'Invoice status retrieved successfully'
-    };
+    // Check if invoice is paid
+    if (invoice.status === 'paid') {
+      // Find the related payable
+      const payable = await db.collection('payables').findOne({
+        relatedInvoiceId: new ObjectId(invoiceId)
+      });
+
+      if (payable && payable.status !== 'paid') {
+        // Update the payable to paid status
+        const payableUpdate = await db.collection('payables').updateOne(
+          { _id: payable._id },
+          {
+            $set: {
+              status: 'paid',
+              paymentDate: new Date(),
+              updatedAt: new Date()
+            }
+          }
+        );
+
+        if (payableUpdate.modifiedCount > 0) {
+          console.log('✅ [PayableStatusSync] Payable marked as paid:', {
+            payableId: payable._id,
+            invoiceId: invoice._id,
+            payableNumber: payable.payableNumber || 'N/A'
+          });
+          
+          return { 
+            success: true, 
+            message: 'Payable status updated to paid' 
+          };
+        } else {
+          return { 
+            success: false, 
+            message: 'Payable was already marked as paid' 
+          };
+        }
+      } else {
+        return { 
+          success: false, 
+          message: 'No related payable found or already paid' 
+        };
+      }
+    } else {
+      return { 
+        success: false, 
+        message: 'Invoice is not marked as paid' 
+      };
+    }
 
   } catch (error) {
-    console.error('❌ [Status Sync] Error getting invoice status:', error);
+    console.error('❌ [PayableStatusSync] Error syncing payable status:', error);
     return { 
       success: false, 
-      message: 'Failed to get invoice status' 
+      message: 'Failed to sync payable status' 
     };
   }
 }

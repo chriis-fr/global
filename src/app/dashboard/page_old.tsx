@@ -6,6 +6,7 @@ import {
   FileText, 
   Users,
   Receipt,
+  AlertTriangle,
   Clock,
   Crown,
   Lock
@@ -20,7 +21,7 @@ export default function DashboardPage() {
   const { data: session } = useSession();
   const { subscription, loading: subscriptionLoading } = useSubscription();
   const router = useRouter();
-  // const [usingFallbackData, setUsingFallbackData] = useState(false); // Not needed with independent loading
+  const [usingFallbackData, setUsingFallbackData] = useState(false);
   const [userName, setUserName] = useState<string>('');
   const [organizationName, setOrganizationName] = useState<string>('');
 
@@ -48,6 +49,112 @@ export default function DashboardPage() {
 
     fetchUserData();
   }, [session?.user?.email]);
+
+  useEffect(() => {
+    const loadStats = async () => {
+      // Don't load data if no session
+      if (!session?.user) {
+        console.log('Dashboard: No session user, skipping data load');
+        return;
+      }
+
+      try {
+        console.log('Dashboard: Loading stats for user:', session.user.email);
+        // setLoading(true); // Removed - stats load independently
+        
+        // Fetch data in parallel like the services pages do - without timeout
+        const [invoicesResponse, paidInvoicesResponse, clientsResponse, ledgerResponse] = await Promise.all([
+          fetch('/api/invoices?limit=1&convertToPreferred=false'), // Keep original amounts
+          fetch('/api/invoices?status=paid&convertToPreferred=false'), // Get only paid invoices - keep original amounts
+          fetch('/api/clients'),
+          fetch('/api/ledger')
+        ]);
+
+        const invoicesData = await invoicesResponse.json();
+        const paidInvoicesData = await paidInvoicesResponse.json();
+        const clientsData = await clientsResponse.json();
+        const ledgerData = await ledgerResponse.json();
+
+        console.log('Dashboard: API responses:', {
+          invoices: invoicesData.success,
+          paidInvoices: paidInvoicesData.success,
+          clients: clientsData.success,
+          ledger: ledgerData.success,
+          invoicesStatus: invoicesResponse.status,
+          paidInvoicesStatus: paidInvoicesResponse.status,
+          clientsStatus: clientsResponse.status,
+          ledgerStatus: ledgerResponse.status
+        });
+
+        const clients = clientsData.success ? clientsData.data : [];
+        
+        // Use total revenue from API stats (includes all invoices, not just paginated ones)
+        const totalRevenue = invoicesData.success ? invoicesData.data.stats?.totalRevenue || 0 : 0;
+        
+        // Calculate paid revenue from paid invoices only
+        const paidRevenue = paidInvoicesData.success ? paidInvoicesData.data.stats?.totalRevenue || 0 : 0;
+
+        const statusCounts = invoicesData.success ? invoicesData.data.stats?.statusCounts || {} : {};
+        const pendingInvoices = (statusCounts.sent || 0) + (statusCounts.pending || 0);
+        const paidInvoices = statusCounts.paid || 0;
+        
+        const totalExpenses = 0; // Will be implemented when expenses service is ready
+
+        // Get unified financial stats from ledger
+        const ledgerStats = ledgerData.success ? ledgerData.data.stats : null;
+
+        // Use the correct net balance from ledger: PAID receivables - PAID payables
+        const netBalance = ledgerStats?.netBalance || 0;
+
+        setStats({
+          totalRevenue,
+          totalExpenses,
+          pendingInvoices,
+          paidInvoices,
+          totalClients: clients.length,
+          // Net balance = PAID receivables - PAID payables (actual money in/out)
+          netBalance: netBalance,
+          totalPayables: ledgerStats?.totalPayablesAmount || 0,
+          overdueCount: (ledgerStats?.overdueReceivables || 0) + (ledgerStats?.overduePayables || 0)
+        });
+
+        console.log('✅ Dashboard: Stats loaded successfully', {
+          totalRevenue,
+          paidRevenue,
+          pendingInvoices,
+          paidInvoices,
+          totalClients: clients.length,
+          netBalance: netBalance
+        });
+
+        // Reset fallback data flag if we successfully loaded data
+        setUsingFallbackData(false);
+
+      } catch (error) {
+        console.error('Error loading dashboard stats:', error);
+        
+        // For any error, show fallback data
+        console.log('⚠️ Dashboard: Using fallback data due to API error');
+        
+        setStats({
+          totalRevenue: 0,
+          totalExpenses: 0,
+          pendingInvoices: 0,
+          paidInvoices: 0,
+          totalClients: 0,
+          netBalance: 0,
+          totalPayables: 0,
+          overdueCount: 0
+        });
+        
+        setUsingFallbackData(true);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadStats();
+  }, [session?.user]);
 
   // Show loading only if subscription is loading (stats load independently)
   if (subscriptionLoading) {
@@ -92,6 +199,18 @@ export default function DashboardPage() {
   // Check if user is on a paid plan
   const isPaidUser = subscription?.plan?.planId && subscription.plan.planId !== 'receivables-free';
 
+  // Debug logging
+  console.log('🔍 [Dashboard] Subscription debug:', {
+    subscription: subscription?.plan,
+    hasReceivablesAccess,
+    hasPayablesAccess,
+    isFreePlan,
+    isReceivablesOnly,
+    isPayablesOnly,
+    isCombined,
+    canCreateInvoice: subscription?.canCreateInvoice
+  });
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -111,7 +230,12 @@ export default function DashboardPage() {
               )}
             </h1>
             <p className="text-blue-200">Welcome back, {userName || session?.user?.name || 'User'}!</p>
-            {/* Fallback data warning removed - components handle their own loading states */}
+            {usingFallbackData && (
+              <div className="mt-2 flex items-center space-x-2">
+                <AlertTriangle className="h-4 w-4 text-orange-400" />
+                <p className="text-orange-400 text-sm">Using offline data - some features may be limited</p>
+              </div>
+            )}
         </div>
         <div className="text-right">
             <p className="text-sm text-blue-300">Last updated</p>
@@ -204,11 +328,31 @@ export default function DashboardPage() {
         <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
           <h3 className="text-lg font-semibold text-white mb-4">Status</h3>
           <div className="space-y-3">
-            <div className="flex items-center space-x-3 p-3 bg-green-500/20 border border-green-500/30 rounded-lg">
-              <Users className="h-5 w-5 text-blue-400" />
-              <div>
-                <p className="text-blue-400 font-medium">System Active</p>
-                <p className="text-blue-300 text-sm">All services running</p>
+            {stats.overdueCount > 0 ? (
+              <div className="flex items-center space-x-3 p-3 bg-orange-500/20 border border-orange-500/30 rounded-lg">
+                <AlertTriangle className="h-5 w-5 text-orange-400" />
+                <div>
+                  <p className="text-orange-400 font-medium">{stats.overdueCount} overdue items</p>
+                  <p className="text-orange-300 text-sm">Need immediate attention</p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center space-x-3 p-3 bg-green-500/20 border border-green-500/30 rounded-lg">
+                <TrendingUp className="h-5 w-5 text-green-400" />
+                <div>
+                  <p className="text-green-400 font-medium">All up to date</p>
+                  <p className="text-green-300 text-sm">No overdue items</p>
+                </div>
+              </div>
+            )}
+            
+            <div className="flex items-center justify-between p-3 bg-blue-500/20 border border-blue-500/30 rounded-lg">
+              <div className="flex items-center space-x-3">
+                <Users className="h-5 w-5 text-blue-400" />
+                <div>
+                  <p className="text-blue-400 font-medium">{stats.totalClients} clients</p>
+                  <p className="text-blue-300 text-sm">Active relationships</p>
+                </div>
               </div>
             </div>
           </div>
@@ -222,4 +366,4 @@ export default function DashboardPage() {
       </div>
     </div>
   );
-}
+} 
