@@ -45,6 +45,13 @@ export class RBACService {
         { action: 'reject', resource: 'bill' },
         { action: 'pay', resource: 'bill' },
         
+        // Invoices
+        { action: 'create', resource: 'invoice' },
+        { action: 'read', resource: 'invoice' },
+        { action: 'update', resource: 'invoice' },
+        { action: 'delete', resource: 'invoice' },
+        { action: 'mark_paid', resource: 'invoice' },
+        
         // Financial Data
         { action: 'read', resource: 'transaction' },
         { action: 'reconcile', resource: 'transaction' },
@@ -87,6 +94,13 @@ export class RBACService {
         { action: 'approve', resource: 'bill' },
         { action: 'reject', resource: 'bill' },
         { action: 'pay', resource: 'bill' },
+        
+        // Invoices
+        { action: 'create', resource: 'invoice' },
+        { action: 'read', resource: 'invoice' },
+        { action: 'update', resource: 'invoice' },
+        { action: 'delete', resource: 'invoice' },
+        { action: 'mark_paid', resource: 'invoice' },
         
         // Financial Data
         { action: 'read', resource: 'transaction' },
@@ -153,6 +167,10 @@ export class RBACService {
         // Limited organization access
         { action: 'read', resource: 'organization' },
         { action: 'read', resource: 'member' },
+        
+        // Invoices (can mark approved invoices as paid)
+        { action: 'read', resource: 'invoice' },
+        { action: 'mark_paid', resource: 'invoice' },
         
         // Audit access
         { action: 'read', resource: 'audit_log' }
@@ -313,6 +331,11 @@ export class RBACService {
   static canManageSettings(member: OrganizationMember): boolean {
     return this.hasPermission(member, 'manage', 'approval_settings') &&
            this.hasPermission(member, 'update', 'organization');
+  }
+
+  // Check if user can mark invoices as paid
+  static canMarkInvoiceAsPaid(member: OrganizationMember): boolean {
+    return this.hasPermission(member, 'mark_paid', 'invoice');
   }
 
   // Get approval limits for a user

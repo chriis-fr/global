@@ -8,7 +8,8 @@ import {
   Receipt,
   Clock,
   Crown,
-  Lock
+  Lock,
+  BarChart3
 } from 'lucide-react';
 import DashboardSkeleton from '@/components/ui/DashboardSkeleton';
 import { useSubscription } from '@/lib/contexts/SubscriptionContext';
@@ -197,6 +198,7 @@ export default function DashboardPage() {
                 <span>Create Payable</span>
               </button>
             )}
+
           </div>
         </div>
 
@@ -211,6 +213,17 @@ export default function DashboardPage() {
                 <p className="text-blue-300 text-sm">All services running</p>
               </div>
             </div>
+            
+            <button
+              onClick={() => router.push('/dashboard/stats')}
+              className="flex items-center space-x-3 p-3 bg-blue-500/20 border border-blue-500/30 rounded-lg hover:bg-blue-500/30 transition-colors w-full"
+            >
+              <BarChart3 className="h-5 w-5 text-blue-400" />
+              <div className="text-left">
+                <p className="text-blue-400 font-medium">View Statistics</p>
+                <p className="text-blue-300 text-sm">Financial overview & analytics</p>
+              </div>
+            </button>
           </div>
         </div>
       </div>

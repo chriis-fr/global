@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import { usePermissions } from '@/lib/contexts/PermissionContext';
 import Image from 'next/image';
 import { 
   ArrowLeft, 
@@ -116,6 +117,7 @@ export default function InvoiceViewPage() {
   const router = useRouter();
   const params = useParams();
   const { data: session } = useSession();
+  const { permissions } = usePermissions();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
   const [updatingStatus, setUpdatingStatus] = useState(false);
@@ -335,18 +337,22 @@ export default function InvoiceViewPage() {
       return true;
     }
     
-    // For organization users, check if they are admin or have proper rights
-    // For now, we'll allow organization members to mark invoices as paid
-    // You can add more specific permission checks here later
-    return true;
+    // For organization users, check permissions
+    if (permissions?.canMarkInvoiceAsPaid) {
+      return true;
+    }
+    
+    // Fallback: allow owners and admins to mark invoices as paid
+    const userRole = session.user.role;
+    return userRole === 'owner' || userRole === 'admin';
   };
 
   // Check if invoice can be marked as paid
   const canMarkInvoiceAsPaid = () => {
     if (!invoice) return false;
     
-    // Only allow marking as paid if status is 'sent' or 'pending'
-    const allowedStatuses = ['sent', 'pending'];
+    // Allow marking as paid if status is 'sent', 'pending', or 'approved'
+    const allowedStatuses = ['sent', 'pending', 'approved'];
     return allowedStatuses.includes(invoice.status || '') && canMarkAsPaid();
   };
 
@@ -1178,7 +1184,7 @@ export default function InvoiceViewPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <p className="text-sm text-gray-600 mb-2">Payment Method</p>
-                <p className="font-medium">
+                <p className="font-medium text-gray-600">
                   {invoice.paymentMethod === 'crypto' || invoice.paymentSettings?.method === 'crypto' ? 'Cryptocurrency' : 'Bank Transfer'}
                 </p>
                 {(invoice.paymentMethod === 'crypto' || invoice.paymentSettings?.method === 'crypto') && (invoice.paymentNetwork || invoice.paymentSettings?.cryptoNetwork) && (
@@ -1199,7 +1205,7 @@ export default function InvoiceViewPage() {
               </div>
               <div>
                 <p className="text-sm text-gray-600 mb-2">Currency</p>
-                <p className="font-medium">{invoice.currency || invoice.paymentSettings?.currency || 'USD'}</p>
+                <p className="font-medium text-gray-600">{invoice.currency || invoice.paymentSettings?.currency || 'USD'}</p>
                 {(invoice.enableMultiCurrency || invoice.paymentSettings?.enableMultiCurrency) && (
                   <p className="text-sm text-blue-600">Multi-currency enabled</p>
                 )}
@@ -1288,7 +1294,7 @@ export default function InvoiceViewPage() {
                     />
                   </span>
                 </div>
-                <div className="flex justify-between text-lg font-semibold border-t pt-2">
+                <div className="flex justify-between text-black text-lg font-semibold border-t pt-2">
                   <span>Total amount</span>
                   <span>
                     <FormattedNumberDisplay 

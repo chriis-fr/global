@@ -156,9 +156,52 @@ export async function PUT(
     if (body.status === 'paid') {
       // Individual users can always mark their own invoices as paid
       if (isOrganization) {
-        // For organization users, we'll allow organization members to mark invoices as paid
-        // You can add more specific permission checks here later
-      } else {
+        // For organization users, check if they have permission to mark invoices as paid
+        // Get user's permissions
+        const user = await db.collection('users').findOne({ email: session.user.email });
+        if (!user) {
+          return NextResponse.json(
+            { success: false, message: 'User not found' },
+            { status: 404 }
+          );
+        }
+
+        // Get organization and member details
+        const organization = await db.collection('organizations').findOne({
+          _id: user.organizationId
+        });
+
+        if (!organization) {
+          return NextResponse.json(
+            { success: false, message: 'Organization not found' },
+            { status: 404 }
+          );
+        }
+
+        const member = organization.members.find((m: { userId: string | ObjectId }) => m.userId.toString() === user._id?.toString());
+        if (!member) {
+          return NextResponse.json(
+            { success: false, message: 'User not found in organization' },
+            { status: 404 }
+          );
+        }
+
+        // Check if user has permission to mark invoices as paid
+        const { RBACService } = await import('@/lib/services/rbacService');
+        if (!RBACService.canMarkInvoiceAsPaid(member)) {
+          return NextResponse.json(
+            { success: false, message: 'Insufficient permissions to mark invoice as paid' },
+            { status: 403 }
+          );
+        }
+
+        // Additional check: Only allow marking approved invoices as paid for approvers
+        if (member.role === 'approver' && existingInvoice.status !== 'approved') {
+          return NextResponse.json(
+            { success: false, message: 'Approvers can only mark approved invoices as paid' },
+            { status: 403 }
+          );
+        }
       }
     }
 
@@ -220,6 +263,69 @@ export async function PUT(
           modifiedCount: payableUpdateResult.modifiedCount,
           invoiceId: id
         });
+
+        // Update financial ledger for net balance calculation
+        try {
+          const ledgerCollection = db.collection('financial_ledger');
+          
+          // First, check if the ledger entry exists
+          const existingLedgerEntry = await ledgerCollection.findOne({
+            relatedInvoiceId: new ObjectId(id),
+            type: 'receivable'
+          });
+          
+          // Also try to find by entryId (invoice number)
+          const existingLedgerEntryByNumber = await ledgerCollection.findOne({
+            entryId: existingInvoice.invoiceNumber,
+            type: 'receivable'
+          });
+          
+          console.log('🔍 [Invoice Update] Checking ledger entry:', {
+            invoiceId: id,
+            invoiceNumber: existingInvoice.invoiceNumber,
+            existingEntry: existingLedgerEntry ? {
+              _id: existingLedgerEntry._id,
+              status: existingLedgerEntry.status,
+              amount: existingLedgerEntry.amount,
+              organizationId: existingLedgerEntry.organizationId,
+              issuerId: existingLedgerEntry.issuerId
+            } : 'NOT FOUND',
+            existingEntryByNumber: existingLedgerEntryByNumber ? {
+              _id: existingLedgerEntryByNumber._id,
+              status: existingLedgerEntryByNumber.status,
+              amount: existingLedgerEntryByNumber.amount,
+              organizationId: existingLedgerEntryByNumber.organizationId,
+              issuerId: existingLedgerEntryByNumber.issuerId
+            } : 'NOT FOUND'
+          });
+          
+          const ledgerEntryToUpdate = existingLedgerEntry || existingLedgerEntryByNumber;
+          
+          if (ledgerEntryToUpdate) {
+            const updateResult = await ledgerCollection.updateOne(
+              { 
+                _id: ledgerEntryToUpdate._id
+              },
+              {
+                $set: {
+                  status: 'paid',
+                  updatedAt: new Date()
+                }
+              }
+            );
+            
+            console.log('✅ [Invoice Update] Financial ledger update result:', {
+              invoiceId: id,
+              ledgerEntryId: ledgerEntryToUpdate._id,
+              matchedCount: updateResult.matchedCount,
+              modifiedCount: updateResult.modifiedCount
+            });
+          } else {
+            console.log('⚠️ [Invoice Update] No ledger entry found for invoice:', id);
+          }
+        } catch (ledgerError) {
+          console.error('⚠️ [Invoice Update] Failed to update financial ledger:', ledgerError);
+        }
       } catch (payableUpdateError) {
         console.error('⚠️ [Invoice Update] Failed to update related payable:', payableUpdateError);
         // Don't fail the invoice update if payable update fails

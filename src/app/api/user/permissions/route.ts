@@ -43,6 +43,7 @@ export async function GET(request: NextRequest) {
             canExecutePayments: true,
             canViewFinancialData: true,
             canExportData: true,
+            canMarkInvoiceAsPaid: true,
           },
           member: null,
           role: 'individual',
@@ -82,6 +83,7 @@ export async function GET(request: NextRequest) {
       canExecutePayments: RBACService.canExecutePayments(member),
       canViewFinancialData: RBACService.hasPermission(member, 'read', 'transaction'),
       canExportData: RBACService.hasPermission(member, 'export', 'report'),
+      canMarkInvoiceAsPaid: RBACService.canMarkInvoiceAsPaid(member),
     };
 
     // Get approval limits

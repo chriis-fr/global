@@ -14,6 +14,7 @@ interface PermissionContextType {
     canExecutePayments: boolean;
     canViewFinancialData: boolean;
     canExportData: boolean;
+    canMarkInvoiceAsPaid: boolean;
   };
   member: OrganizationMember | null;
   loading: boolean;
@@ -38,6 +39,7 @@ export function PermissionProvider({ children }: PermissionProviderProps) {
     canExecutePayments: false,
     canViewFinancialData: false,
     canExportData: false,
+    canMarkInvoiceAsPaid: false,
   });
   const [member, setMember] = useState<OrganizationMember | null>(null);
   const [loading, setLoading] = useState(true);
@@ -132,6 +134,7 @@ export function PermissionProvider({ children }: PermissionProviderProps) {
         canExecutePayments: false,
         canViewFinancialData: false,
         canExportData: false,
+        canMarkInvoiceAsPaid: false,
       });
       setMember(null);
     }

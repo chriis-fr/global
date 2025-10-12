@@ -159,6 +159,21 @@ export async function getDashboardStats(): Promise<{ success: boolean; data?: Da
 
     // Get ledger stats for net balance and overdue counts
     // Net balance should only include PAID receivables and APPROVED payables
+    
+    // First, let's check what ledger entries exist
+    const allLedgerEntries = await ledgerCollection.find(baseQuery).toArray();
+    console.log('🔍 [Dashboard Stats] All ledger entries:', {
+      totalEntries: allLedgerEntries.length,
+      entries: allLedgerEntries.map(entry => ({
+        _id: entry._id,
+        type: entry.type,
+        status: entry.status,
+        amount: entry.amount,
+        organizationId: entry.organizationId,
+        issuerId: entry.issuerId
+      }))
+    });
+    
     const ledgerStats = await ledgerCollection.aggregate([
       { 
         $match: {
@@ -180,6 +195,12 @@ export async function getDashboardStats(): Promise<{ success: boolean; data?: Da
     ]).toArray();
 
     const ledgerData = ledgerStats[0] || { netBalance: 0, overdueReceivables: 0, overduePayables: 0 };
+    
+    console.log('🔍 [Dashboard Stats] Ledger aggregation result:', {
+      baseQuery,
+      ledgerStats,
+      ledgerData
+    });
 
     const stats: DashboardStats = {
       totalReceivables, // Expected revenue from all invoices

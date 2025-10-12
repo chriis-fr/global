@@ -253,6 +253,26 @@ export async function PUT(
         console.error('⚠️ [Payable Update] Failed to create payment notification:', notificationError);
       }
 
+      // Update financial ledger for net balance calculation
+      try {
+        const ledgerCollection = db.collection('financial_ledger');
+        await ledgerCollection.updateOne(
+          { 
+            relatedPayableId: new ObjectId(id),
+            type: 'payable'
+          },
+          {
+            $set: {
+              status: 'paid',
+              updatedAt: new Date()
+            }
+          }
+        );
+        console.log('✅ [Payable Update] Financial ledger updated for payable:', id);
+      } catch (ledgerError) {
+        console.error('⚠️ [Payable Update] Failed to update financial ledger:', ledgerError);
+      }
+
       return NextResponse.json({
         success: true,
         message: 'Payable marked as paid successfully',
@@ -314,6 +334,26 @@ export async function PUT(
         } catch (invoiceUpdateError) {
           console.error('⚠️ [Payable Update] Failed to update related invoice via status change:', invoiceUpdateError);
           // Don't fail the payable update if invoice update fails
+        }
+
+        // Update financial ledger for net balance calculation
+        try {
+          const ledgerCollection = db.collection('financial_ledger');
+          await ledgerCollection.updateOne(
+            { 
+              relatedPayableId: new ObjectId(id),
+              type: 'payable'
+            },
+            {
+              $set: {
+                status: 'paid',
+                updatedAt: new Date()
+              }
+            }
+          );
+          console.log('✅ [Payable Update] Financial ledger updated for payable via status change:', id);
+        } catch (ledgerError) {
+          console.error('⚠️ [Payable Update] Failed to update financial ledger via status change:', ledgerError);
         }
       }
     }
