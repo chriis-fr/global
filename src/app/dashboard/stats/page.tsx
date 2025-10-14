@@ -5,11 +5,9 @@ import { useSession } from 'next-auth/react';
 import { 
   TrendingUp, 
   TrendingDown, 
-  DollarSign, 
   Users, 
   FileText, 
   Receipt,
-  Calendar,
   ArrowUpRight,
   ArrowDownLeft,
   BarChart3,
@@ -140,15 +138,15 @@ export default function StatsPage() {
           getTransactionGraphData()
         ]);
 
-        if (statsResult.success) {
+        if (statsResult.success && statsResult.data) {
           setStats(statsResult.data);
         }
 
-        if (auditResult.success) {
+        if (auditResult.success && auditResult.data) {
           setAuditData(auditResult.data);
         }
 
-        if (graphResult.success) {
+        if (graphResult.success && graphResult.data) {
           setGraphData(graphResult.data);
         }
       } catch (err) {
@@ -196,7 +194,7 @@ export default function StatsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-6">
+    <div className="min-h-screen rounded-xl bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
