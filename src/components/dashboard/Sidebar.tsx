@@ -221,7 +221,7 @@ export default function Sidebar() {
       {/* Fixed Header */}
       <div className="p-6 border-b border-white/10 flex-shrink-0">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
+          <Link href="/dashboard" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
             <Image
                   src="/chainsnobg.png"
@@ -234,7 +234,7 @@ export default function Sidebar() {
             {(!isCollapsed || isAutoHidden) && (
               <span className="text-white text-lg font-bold whitespace-nowrap">Global Finance</span>
             )}
-          </div>
+          </Link>
           
           {/* Notifications Bell Icon */}
           <div className="flex items-center space-x-2">
