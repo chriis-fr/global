@@ -127,6 +127,9 @@ export interface User {
     stripePriceId?: string;
     createdAt: Date;
     updatedAt: Date;
+    // New trial system fields
+    hasUsedTrial?: boolean; // Track if user has used their 30-day trial
+    trialActivatedAt?: Date; // When the 30-day trial was activated
   };
 
   // Usage tracking

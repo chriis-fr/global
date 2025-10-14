@@ -119,6 +119,17 @@ export const authOptions: NextAuthOptions = {
               avatar: user.image || undefined,
               lastLoginAt: new Date()
             })
+            
+            // Check if existing user should get 30-day trial
+            const { activate30DayTrial } = await import('@/lib/actions/subscription');
+            const hasProSubscription = existingUser.subscription && existingUser.subscription.planId !== 'receivables-free' && existingUser.subscription.status === 'active';
+            const hasUsedTrial = existingUser.subscription?.hasUsedTrial;
+            
+            if (!hasProSubscription && !hasUsedTrial) {
+              console.log('🎉 [Auth] Existing user eligible for 30-day trial, activating...');
+              await activate30DayTrial(existingUser._id!.toString());
+            }
+            
             console.log('✅ [Auth] Existing user updated successfully')
             return true
           }

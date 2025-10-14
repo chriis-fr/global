@@ -1,6 +1,6 @@
 import { ObjectId } from 'mongodb';
 
-export type PlanType = 'receivables' | 'payables' | 'combined';
+export type PlanType = 'receivables' | 'payables' | 'combined' | 'trial';
 export type BillingPeriod = 'monthly' | 'yearly';
 
 export interface BillingFeature {
@@ -22,7 +22,7 @@ export interface BillingLimits {
 export interface BillingPlan {
   planId: string;
   type: PlanType;
-  tier: 'free' | 'basic' | 'pro';
+  tier: 'free' | 'basic' | 'pro' | 'premium';
   name: string;
   description: string;
   monthlyPrice: number;

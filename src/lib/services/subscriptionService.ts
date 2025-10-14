@@ -31,23 +31,25 @@ interface UserData {
 }
 
 export class SubscriptionService {
-  // Initialize trial for new users (10 days)
+  // Initialize 30-day trial for new users (full access)
   static async initializeTrial(userId: ObjectId): Promise<void> {
-    console.log('🔄 [SubscriptionService] Initializing trial for user:', userId);
+    console.log('🔄 [SubscriptionService] Initializing 30-day trial for user:', userId);
     const db = await getDatabase();
-    const trialEndDate = new Date();
-    trialEndDate.setDate(trialEndDate.getDate() + 10); // 10-day trial
+    const now = new Date();
+    const trialEndDate = new Date(now.getTime() + (30 * 24 * 60 * 60 * 1000)); // 30 days from now
 
     await db.collection('users').updateOne(
       { _id: userId },
       {
         $set: {
-          'subscription.planId': 'receivables-free',
+          'subscription.planId': 'trial-premium', // Full access trial plan
           'subscription.status': 'trial',
-          'subscription.trialStartDate': new Date(),
+          'subscription.trialStartDate': now,
           'subscription.trialEndDate': trialEndDate,
+          'subscription.hasUsedTrial': true,
+          'subscription.trialActivatedAt': now,
           'subscription.billingPeriod': 'monthly',
-          'subscription.createdAt': new Date(),
+          'subscription.createdAt': now,
           'subscription.updatedAt': new Date(),
           'usage.invoicesThisMonth': 0,
           'usage.monthlyVolume': 0,

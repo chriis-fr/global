@@ -1,6 +1,38 @@
 import { BillingPlan } from '@/models/Billing';
 
 export const BILLING_PLANS: BillingPlan[] = [
+  // TRIAL PLAN (30-day free trial with all features)
+  {
+    planId: 'trial-premium',
+    type: 'trial',
+    tier: 'premium',
+    name: '30-Day Free Trial',
+    description: 'Full access to all features for 30 days',
+    monthlyPrice: 0,
+    yearlyPrice: 0,
+    monthlyPriceId: 'trial_premium', // Special trial plan
+    yearlyPriceId: 'trial_premium', // Special trial plan
+    currency: 'USD',
+    features: [
+      { id: 'unlimited-invoices', name: 'Unlimited invoices', description: 'Create as many invoices as you need', included: true },
+      { id: 'client-management', name: 'Client management', description: 'Organize and manage your clients', included: true },
+      { id: 'reconciliation', name: 'Real-time reconciliation', description: 'Automatic payment tracking', included: true },
+      { id: 'organization', name: 'Organization setup', description: 'Team collaboration and branding', included: true },
+      { id: 'batch-payments', name: 'Batch payments', description: 'Process multiple payments at once', included: true },
+      { id: 'bill-payments', name: 'Bill payments', description: 'Pay and manage your bills', included: true },
+      { id: 'crypto-fees', name: 'Crypto-to-crypto fees (0.5%)', description: 'Lower transaction fees', included: true },
+      { id: 'custom-token', name: 'Custom token', description: 'Add your own custom token', included: true },
+      { id: 'approval-policies', name: 'Approval policies', description: 'Set up custom approval workflows', included: true },
+    ],
+    limits: {
+      invoicesPerMonth: -1, // Unlimited
+      monthlyVolume: -1, // Unlimited
+      cryptoToCryptoFee: 0.5,
+    },
+    ctaText: 'Trial Active',
+    ctaVariant: 'secondary',
+  },
+
   // RECEIVABLES PLANS
   {
     planId: 'receivables-free',

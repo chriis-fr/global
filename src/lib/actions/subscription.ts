@@ -96,6 +96,70 @@ export async function clearSubscriptionCache(userId?: string): Promise<void> {
   }
 }
 
+/**
+ * Activate 30-day trial for a user
+ * This gives them access to all features for 30 days
+ */
+export async function activate30DayTrial(userId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const db = await getDatabase();
+    const userObjectId = new ObjectId(userId);
+    
+    // Get current user
+    const user = await db.collection('users').findOne({ _id: userObjectId });
+    if (!user) {
+      return { success: false, error: 'User not found' };
+    }
+    
+    // Check if user already has a pro subscription (don't override)
+    if (user.subscription && user.subscription.planId !== 'receivables-free' && user.subscription.status === 'active') {
+      console.log('✅ [Trial] User already has pro subscription, skipping trial activation');
+      return { success: true };
+    }
+    
+    // Check if user has already used their trial
+    if (user.subscription?.hasUsedTrial) {
+      console.log('⚠️ [Trial] User has already used their 30-day trial');
+      return { success: false, error: 'Trial already used' };
+    }
+    
+    // Calculate trial dates
+    const now = new Date();
+    const trialEndDate = new Date(now.getTime() + (30 * 24 * 60 * 60 * 1000)); // 30 days from now
+    
+    // Update user with trial subscription
+    await db.collection('users').updateOne(
+      { _id: userObjectId },
+      {
+        $set: {
+          'subscription.planId': 'trial-premium', // Special trial plan ID
+          'subscription.status': 'trial',
+          'subscription.trialStartDate': now,
+          'subscription.trialEndDate': trialEndDate,
+          'subscription.hasUsedTrial': true,
+          'subscription.trialActivatedAt': now,
+          'subscription.billingPeriod': 'monthly',
+          'subscription.createdAt': user.subscription?.createdAt || now,
+          'subscription.updatedAt': now,
+          'usage.invoicesThisMonth': user.usage?.invoicesThisMonth || 0,
+          'usage.monthlyVolume': user.usage?.monthlyVolume || 0,
+          'usage.lastResetDate': user.usage?.lastResetDate || now
+        }
+      }
+    );
+    
+    // Clear cache for this user
+    clearSubscriptionCache(userId);
+    
+    console.log('✅ [Trial] 30-day trial activated for user:', userId);
+    return { success: true };
+    
+  } catch (error) {
+    console.error('❌ [Trial] Failed to activate 30-day trial:', error);
+    return { success: false, error: 'Failed to activate trial' };
+  }
+}
+
 export async function getUserSubscription(): Promise<SubscriptionData | null> {
   console.log('🔍 [ServerAction] Getting user subscription');
   
@@ -318,7 +382,7 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
       }
     }
     
-    // Check if user has a pending invitation before initializing free plan
+    // Check if user has a pending invitation before initializing subscription
     if (!user.subscription) {
       console.log('🔍 [ServerAction] No subscription found, checking for pending invitations...');
       
@@ -330,7 +394,7 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
       });
       
       if (pendingInvitation) {
-        console.log('⏳ [ServerAction] User has pending invitation, skipping free plan initialization');
+        console.log('⏳ [ServerAction] User has pending invitation, skipping subscription initialization');
         console.log('📋 [ServerAction] Pending invitation details:', {
           organizationId: pendingInvitation.organizationId,
           role: pendingInvitation.role,
@@ -339,22 +403,36 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
         return null; // Return null to indicate no subscription yet (will be set after invitation completion)
       }
       
-      console.log('🔄 [ServerAction] No pending invitation found, initializing free plan for user');
-      await db.collection('users').updateOne(
-        { _id: userObjectId },
-        {
-          $set: {
-            'subscription.planId': 'receivables-free',
-            'subscription.status': 'active',
-            'subscription.billingPeriod': 'monthly',
-            'subscription.createdAt': new Date(),
-            'subscription.updatedAt': new Date(),
-            'usage.invoicesThisMonth': 0,
-            'usage.monthlyVolume': 0,
-            'usage.lastResetDate': new Date()
+      // Activate 30-day trial for new users
+      console.log('🎉 [ServerAction] No pending invitation found, activating 30-day trial for user');
+      const trialResult = await activate30DayTrial(session.user.id);
+      if (!trialResult.success) {
+        console.log('⚠️ [ServerAction] Failed to activate trial, falling back to free plan');
+        await db.collection('users').updateOne(
+          { _id: userObjectId },
+          {
+            $set: {
+              'subscription.planId': 'receivables-free',
+              'subscription.status': 'active',
+              'subscription.billingPeriod': 'monthly',
+              'subscription.createdAt': new Date(),
+              'subscription.updatedAt': new Date(),
+              'usage.invoicesThisMonth': 0,
+              'usage.monthlyVolume': 0,
+              'usage.lastResetDate': new Date()
+            }
           }
-        }
-      );
+        );
+      }
+    } else {
+      // Check if existing user should get trial (if they haven't used it and don't have pro subscription)
+      const hasProSubscription = user.subscription.planId !== 'receivables-free' && user.subscription.status === 'active';
+      const hasUsedTrial = user.subscription.hasUsedTrial;
+      
+      if (!hasProSubscription && !hasUsedTrial) {
+        console.log('🎉 [ServerAction] Existing user eligible for 30-day trial, activating...');
+        await activate30DayTrial(session.user.id);
+      }
     }
     
     const subscription = user.subscription || {};
@@ -369,9 +447,28 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
     const isTrialActive = Boolean(subscription.status === 'trial' && trialEndDate && currentDate < trialEndDate);
     const trialDaysRemaining = trialEndDate ? Math.max(0, Math.ceil((trialEndDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24))) : 0;
     
-    // Feature access
-    const canCreateOrganization = Boolean(planId !== 'receivables-free' && subscription.status === 'active');
-    const canAccessPayables = Boolean((planId.includes('payables') || planId.includes('combined')) && subscription.status === 'active');
+    // If trial has expired, downgrade to free plan
+    if (subscription.status === 'trial' && trialEndDate && currentDate >= trialEndDate) {
+      console.log('⏰ [ServerAction] Trial expired, downgrading to free plan');
+      await db.collection('users').updateOne(
+        { _id: userObjectId },
+        {
+          $set: {
+            'subscription.planId': 'receivables-free',
+            'subscription.status': 'active',
+            'subscription.updatedAt': new Date()
+          }
+        }
+      );
+      // Update local subscription object
+      subscription.planId = 'receivables-free';
+      subscription.status = 'active';
+    }
+    
+    // Feature access (trial users get full access)
+    const isTrialOrPro = planId === 'trial-premium' || (planId !== 'receivables-free' && subscription.status === 'active');
+    const canCreateOrganization = Boolean(isTrialOrPro);
+    const canAccessPayables = Boolean(planId === 'trial-premium' || (planId.includes('payables') || planId.includes('combined')) && subscription.status === 'active');
     
     // Get current month invoice count
     const currentMonthInvoiceCount = await getCurrentMonthInvoiceCount(session.user.id);
@@ -379,7 +476,11 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
     // CRITICAL: Check if user can create invoice based on plan and usage limits
     let canCreateInvoice = false;
     
-    if (planId === 'receivables-free') {
+    if (planId === 'trial-premium') {
+      // Trial users get unlimited invoices
+      canCreateInvoice = true;
+      console.log('🎉 [ServerAction] Trial user - unlimited invoices');
+    } else if (planId === 'receivables-free') {
       // Free plan users can create invoices only if they haven't reached the monthly limit
       canCreateInvoice = currentMonthInvoiceCount < 5;
       console.log('🔍 [ServerAction] Free plan invoice check:', {
@@ -399,7 +500,7 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
       });
     }
     
-    const canUseAdvancedFeatures = Boolean(planId.includes('pro') && subscription.status === 'active');
+    const canUseAdvancedFeatures = Boolean(isTrialOrPro);
     
     // Usage limits
     const limits = {
