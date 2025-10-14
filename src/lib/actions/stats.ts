@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
 import { CurrencyService } from '@/lib/services/currencyService';
+import { getDashboardStats } from './dashboard';
 
 export interface StatsData {
   totalRevenue: number;
@@ -63,10 +64,17 @@ export async function getStatsData(): Promise<{ success: boolean; data?: StatsDa
       return { success: false, error: 'Unauthorized' };
     }
 
+    // Get dashboard stats for accurate core metrics
+    const dashboardResult = await getDashboardStats();
+    if (!dashboardResult.success || !dashboardResult.data) {
+      return { success: false, error: 'Failed to fetch dashboard stats' };
+    }
+
+    const dashboardStats = dashboardResult.data;
+
     const db = await connectToDatabase();
     const invoicesCollection = db.collection('invoices');
     const payablesCollection = db.collection('payables');
-    const ledgerCollection = db.collection('financial_ledger');
 
     const baseQuery = getBaseQuery(session);
 
@@ -74,30 +82,11 @@ export async function getStatsData(): Promise<{ success: boolean; data?: StatsDa
     const userPreferences = await CurrencyService.getUserPreferredCurrency(session.user.email);
     const preferredCurrency = userPreferences.preferredCurrency;
 
-    // Get invoice statistics
-    const [totalInvoices, paidInvoices, pendingInvoices] = await Promise.all([
+    // Get additional stats for charts
+    const [totalInvoices, totalPayables] = await Promise.all([
       invoicesCollection.countDocuments(baseQuery),
-      invoicesCollection.countDocuments({ ...baseQuery, status: 'paid' }),
-      invoicesCollection.countDocuments({ ...baseQuery, status: { $in: ['sent', 'pending', 'approved'] } })
+      payablesCollection.countDocuments(baseQuery)
     ]);
-
-    // Get payable statistics
-    const [totalPayables, paidPayables, pendingPayables] = await Promise.all([
-      payablesCollection.countDocuments(baseQuery),
-      payablesCollection.countDocuments({ ...baseQuery, status: 'paid' }),
-      payablesCollection.countDocuments({ ...baseQuery, status: { $in: ['pending', 'pending_approval', 'approved'] } })
-    ]);
-
-    // Get revenue data (paid invoices)
-    const paidInvoicesData = await invoicesCollection.find({ ...baseQuery, status: 'paid' }).toArray();
-    const totalRevenue = await CurrencyService.calculateTotalRevenue(paidInvoicesData as { [key: string]: unknown }[], preferredCurrency);
-
-    // Get expenses data (paid payables)
-    const paidPayablesData = await payablesCollection.find({ ...baseQuery, status: 'paid' }).toArray();
-    const totalExpenses = paidPayablesData.reduce((sum, payable) => sum + (payable.total || payable.amount || 0), 0);
-
-    // Calculate net balance
-    const netBalance = totalRevenue - totalExpenses;
 
     // Get monthly revenue data (last 12 months)
     const monthlyRevenue = await getMonthlyData(invoicesCollection, baseQuery, 'paid', preferredCurrency);
@@ -112,15 +101,15 @@ export async function getStatsData(): Promise<{ success: boolean; data?: StatsDa
     const paymentMethods = await getPaymentMethodsDistribution(invoicesCollection, payablesCollection, baseQuery, preferredCurrency);
 
     const stats: StatsData = {
-      totalRevenue,
-      totalExpenses,
-      netBalance,
+      totalRevenue: dashboardStats.totalPaidRevenue, // Use dashboard's accurate paid revenue
+      totalExpenses: dashboardStats.totalExpenses,
+      netBalance: dashboardStats.netBalance, // Use dashboard's accurate net balance
       totalInvoices,
       totalPayables,
-      paidInvoices,
-      paidPayables,
-      pendingInvoices,
-      pendingPayables,
+      paidInvoices: dashboardStats.paidInvoices,
+      paidPayables: dashboardStats.totalPayables, // This represents approved payables
+      pendingInvoices: dashboardStats.pendingInvoices,
+      pendingPayables: dashboardStats.totalPayables, // This represents approved payables
       monthlyRevenue,
       monthlyExpenses,
       topClients,

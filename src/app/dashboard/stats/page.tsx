@@ -14,10 +14,13 @@ import {
   ArrowDownLeft,
   BarChart3,
   PieChart,
-  Activity
+  Activity,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { getStatsData, getPaymentAuditData, getTransactionGraphData } from '@/lib/actions/stats';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
+import BarChart from '@/components/charts/BarChart';
 
 interface StatsData {
   totalRevenue: number;
@@ -63,6 +66,65 @@ export default function StatsPage() {
   const [graphData, setGraphData] = useState<TransactionGraphData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Pagination states for large datasets
+  const [topClientsPage, setTopClientsPage] = useState(1);
+  const [auditPage, setAuditPage] = useState(1);
+  const [paymentMethodsPage, setPaymentMethodsPage] = useState(1);
+  
+  const itemsPerPage = 5;
+
+  // Pagination helper functions
+  const getPaginatedData = <T,>(data: T[], page: number, itemsPerPage: number) => {
+    const startIndex = (page - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return data.slice(startIndex, endIndex);
+  };
+
+  const getTotalPages = (totalItems: number, itemsPerPage: number) => {
+    return Math.ceil(totalItems / itemsPerPage);
+  };
+
+  const PaginationControls = ({ 
+    currentPage, 
+    totalPages, 
+    onPageChange, 
+    totalItems 
+  }: { 
+    currentPage: number; 
+    totalPages: number; 
+    onPageChange: (page: number) => void;
+    totalItems: number;
+  }) => {
+    if (totalPages <= 1) return null;
+
+    return (
+      <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/10">
+        <div className="text-sm text-slate-400">
+          Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalItems)} of {totalItems} items
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onPageChange(currentPage - 1)}
+            disabled={currentPage === 1}
+            className="p-2 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <span className="text-sm text-slate-300 px-3">
+            Page {currentPage} of {totalPages}
+          </span>
+          <button
+            onClick={() => onPageChange(currentPage + 1)}
+            disabled={currentPage === totalPages}
+            className="p-2 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   useEffect(() => {
     const loadStatsData = async () => {
@@ -141,6 +203,9 @@ export default function StatsPage() {
           <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
             <BarChart3 className="h-8 w-8 text-purple-400" />
             Financial Statistics
+            <span className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs font-medium px-2 py-1 rounded-full">
+              BETA
+            </span>
           </h1>
           <p className="text-slate-300">Comprehensive view of your financial performance and transaction history</p>
         </div>
@@ -223,12 +288,37 @@ export default function StatsPage() {
               <BarChart3 className="h-5 w-5 text-purple-400" />
               Monthly Revenue vs Expenses
             </h3>
-            <div className="h-64 flex items-center justify-center">
-              <div className="text-slate-400 text-center">
-                <BarChart3 className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p>Chart visualization coming soon</p>
-                <p className="text-sm">Data: {stats?.monthlyRevenue?.length || 0} months</p>
-              </div>
+            <div className="h-64">
+              {stats?.monthlyRevenue && stats.monthlyExpenses && (
+                <BarChart
+                  data={{
+                    labels: stats.monthlyRevenue.map(item => item.month),
+                    datasets: [
+                      {
+                        label: 'Revenue',
+                        data: stats.monthlyRevenue.map(item => item.amount),
+                        backgroundColor: 'rgba(34, 197, 94, 0.6)',
+                        borderColor: 'rgba(34, 197, 94, 1)'
+                      },
+                      {
+                        label: 'Expenses',
+                        data: stats.monthlyExpenses.map(item => item.amount),
+                        backgroundColor: 'rgba(239, 68, 68, 0.6)',
+                        borderColor: 'rgba(239, 68, 68, 1)'
+                      }
+                    ]
+                  }}
+                  height={180}
+                />
+              )}
+              {(!stats?.monthlyRevenue || !stats?.monthlyExpenses) && (
+                <div className="h-full flex items-center justify-center">
+                  <div className="text-slate-400 text-center">
+                    <BarChart3 className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>No data available</p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -239,24 +329,37 @@ export default function StatsPage() {
               Payment Methods
             </h3>
             <div className="space-y-3">
-              {stats?.paymentMethods?.map((method, index) => (
-                <div key={index} className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-3 h-3 rounded-full ${
-                      index === 0 ? 'bg-blue-400' : 
-                      index === 1 ? 'bg-green-400' : 
-                      index === 2 ? 'bg-purple-400' : 'bg-orange-400'
-                    }`}></div>
-                    <span className="text-slate-300 capitalize">{method.method}</span>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-white font-medium">
-                      <FormattedNumberDisplay value={method.amount} />
-                    </div>
-                    <div className="text-xs text-slate-400">{method.count} transactions</div>
-                  </div>
-                </div>
-              )) || (
+              {stats?.paymentMethods && stats.paymentMethods.length > 0 ? (
+                <>
+                  {getPaginatedData(stats.paymentMethods, paymentMethodsPage, itemsPerPage).map((method, index) => {
+                    const globalIndex = (paymentMethodsPage - 1) * itemsPerPage + index;
+                    return (
+                      <div key={globalIndex} className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-3 h-3 rounded-full ${
+                            globalIndex === 0 ? 'bg-blue-400' : 
+                            globalIndex === 1 ? 'bg-green-400' : 
+                            globalIndex === 2 ? 'bg-purple-400' : 'bg-orange-400'
+                          }`}></div>
+                          <span className="text-slate-300 capitalize">{method.method}</span>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-white font-medium">
+                            <FormattedNumberDisplay value={method.amount} />
+                          </div>
+                          <div className="text-xs text-slate-400">{method.count} transactions</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <PaginationControls
+                    currentPage={paymentMethodsPage}
+                    totalPages={getTotalPages(stats.paymentMethods.length, itemsPerPage)}
+                    onPageChange={setPaymentMethodsPage}
+                    totalItems={stats.paymentMethods.length}
+                  />
+                </>
+              ) : (
                 <div className="text-slate-400 text-center py-8">
                   <PieChart className="h-8 w-8 mx-auto mb-2 opacity-50" />
                   <p>No payment method data available</p>
@@ -266,6 +369,44 @@ export default function StatsPage() {
           </div>
         </div>
 
+        {/* Transaction Trends Chart */}
+        {graphData && (
+          <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 mb-8">
+            <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <Activity className="h-5 w-5 text-purple-400" />
+              Transaction Trends (Last 12 Months)
+            </h3>
+            <div className="h-64">
+              <BarChart
+                data={{
+                  labels: graphData.labels,
+                  datasets: [
+                    {
+                      label: 'Revenue',
+                      data: graphData.revenue,
+                      backgroundColor: 'rgba(34, 197, 94, 0.6)',
+                      borderColor: 'rgba(34, 197, 94, 1)'
+                    },
+                    {
+                      label: 'Expenses',
+                      data: graphData.expenses,
+                      backgroundColor: 'rgba(239, 68, 68, 0.6)',
+                      borderColor: 'rgba(239, 68, 68, 1)'
+                    },
+                    {
+                      label: 'Net Balance',
+                      data: graphData.netBalance,
+                      backgroundColor: 'rgba(59, 130, 246, 0.6)',
+                      borderColor: 'rgba(59, 130, 246, 1)'
+                    }
+                  ]
+                }}
+                height={180}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Top Clients */}
         <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 mb-8">
           <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
@@ -273,24 +414,37 @@ export default function StatsPage() {
             Top Clients by Revenue
           </h3>
           <div className="space-y-3">
-            {stats?.topClients?.map((client, index) => (
-              <div key={index} className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-purple-500/20 rounded-full flex items-center justify-center">
-                    <span className="text-purple-400 font-medium text-sm">#{index + 1}</span>
-                  </div>
-                  <div>
-                    <div className="text-white font-medium">{client.name}</div>
-                    <div className="text-xs text-slate-400">{client.count} invoices</div>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-white font-medium">
-                    <FormattedNumberDisplay value={client.amount} />
-                  </div>
-                </div>
-              </div>
-            )) || (
+            {stats?.topClients && stats.topClients.length > 0 ? (
+              <>
+                {getPaginatedData(stats.topClients, topClientsPage, itemsPerPage).map((client, index) => {
+                  const globalIndex = (topClientsPage - 1) * itemsPerPage + index;
+                  return (
+                    <div key={globalIndex} className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-purple-500/20 rounded-full flex items-center justify-center">
+                          <span className="text-purple-400 font-medium text-sm">#{globalIndex + 1}</span>
+                        </div>
+                        <div>
+                          <div className="text-white font-medium">{client.name}</div>
+                          <div className="text-xs text-slate-400">{client.count} invoices</div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-white font-medium">
+                          <FormattedNumberDisplay value={client.amount} />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                <PaginationControls
+                  currentPage={topClientsPage}
+                  totalPages={getTotalPages(stats.topClients.length, itemsPerPage)}
+                  onPageChange={setTopClientsPage}
+                  totalItems={stats.topClients.length}
+                />
+              </>
+            ) : (
               <div className="text-slate-400 text-center py-8">
                 <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
                 <p>No client data available</p>
@@ -306,40 +460,50 @@ export default function StatsPage() {
             Recent Payment Activity
           </h3>
           <div className="space-y-3">
-            {auditData?.map((payment, index) => (
-              <div key={index} className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/10">
-                <div className="flex items-center gap-4">
-                  <div className={`p-2 rounded-lg ${
-                    payment.type === 'invoice_payment' ? 'bg-green-500/20' : 'bg-red-500/20'
-                  }`}>
-                    {payment.type === 'invoice_payment' ? 
-                      <FileText className="h-4 w-4 text-green-400" /> : 
-                      <Receipt className="h-4 w-4 text-red-400" />
-                    }
-                  </div>
-                  <div>
-                    <div className="text-white font-medium">
-                      {payment.type === 'invoice_payment' ? 'Invoice Payment' : 'Bill Payment'}
+            {auditData && auditData.length > 0 ? (
+              <>
+                {getPaginatedData(auditData, auditPage, itemsPerPage).map((payment, index) => (
+                  <div key={index} className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/10">
+                    <div className="flex items-center gap-4">
+                      <div className={`p-2 rounded-lg ${
+                        payment.type === 'invoice_payment' ? 'bg-green-500/20' : 'bg-red-500/20'
+                      }`}>
+                        {payment.type === 'invoice_payment' ? 
+                          <FileText className="h-4 w-4 text-green-400" /> : 
+                          <Receipt className="h-4 w-4 text-red-400" />
+                        }
+                      </div>
+                      <div>
+                        <div className="text-white font-medium">
+                          {payment.type === 'invoice_payment' ? 'Invoice Payment' : 'Bill Payment'}
+                        </div>
+                        <div className="text-sm text-slate-400">
+                          {payment.from} → {payment.to}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {payment.invoiceNumber || payment.payableNumber} • {new Date(payment.paymentDate).toLocaleDateString()}
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-sm text-slate-400">
-                      {payment.from} → {payment.to}
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      {payment.invoiceNumber || payment.payableNumber} • {new Date(payment.paymentDate).toLocaleDateString()}
+                    <div className="text-right">
+                      <div className={`font-medium ${
+                        payment.type === 'invoice_payment' ? 'text-green-400' : 'text-red-400'
+                      }`}>
+                        {payment.type === 'invoice_payment' ? '+' : '-'}
+                        <FormattedNumberDisplay value={payment.amount} />
+                      </div>
+                      <div className="text-xs text-slate-400 capitalize">{payment.status}</div>
                     </div>
                   </div>
-                </div>
-                <div className="text-right">
-                  <div className={`font-medium ${
-                    payment.type === 'invoice_payment' ? 'text-green-400' : 'text-red-400'
-                  }`}>
-                    {payment.type === 'invoice_payment' ? '+' : '-'}
-                    <FormattedNumberDisplay value={payment.amount} />
-                  </div>
-                  <div className="text-xs text-slate-400 capitalize">{payment.status}</div>
-                </div>
-              </div>
-            )) || (
+                ))}
+                <PaginationControls
+                  currentPage={auditPage}
+                  totalPages={getTotalPages(auditData.length, itemsPerPage)}
+                  onPageChange={setAuditPage}
+                  totalItems={auditData.length}
+                />
+              </>
+            ) : (
               <div className="text-slate-400 text-center py-8">
                 <Activity className="h-8 w-8 mx-auto mb-2 opacity-50" />
                 <p>No payment activity found</p>
