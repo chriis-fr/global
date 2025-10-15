@@ -64,6 +64,9 @@ export const cryptoCurrencies: Currency[] = [
   { id: 'cusd', code: 'CUSD', name: 'Celo Dollar', symbol: 'cUSD', type: 'crypto', logo: '/currencies/cusd.png', network: 'Celo', decimals: 18 },
   { id: 'ceur', code: 'CEUR', name: 'Celo Euro', symbol: 'cEUR', type: 'crypto', logo: '/currencies/ceur.png', network: 'Celo', decimals: 18 },
   
+  // Scroll Ecosystem (Your Priority)
+  { id: 'scr', code: 'SCR', name: 'Scroll', symbol: 'SCR', type: 'crypto', logo: '/currencies/scr.png', network: 'Scroll', decimals: 18 },
+  
   // Other Major Cryptocurrencies
   { id: 'bnb', code: 'BNB', name: 'BNB', symbol: 'BNB', type: 'crypto', logo: '/currencies/bnb.png', network: 'BNB Smart Chain', decimals: 18 },
   { id: 'sol', code: 'SOL', name: 'Solana', symbol: '◎', type: 'crypto', logo: '/currencies/sol.png', network: 'Solana', decimals: 9 },

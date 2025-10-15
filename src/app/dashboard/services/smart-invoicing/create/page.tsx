@@ -465,6 +465,7 @@ export default function CreateInvoicePage() {
       'CELO': 'celo.png', // You have this file
       'CUSD': 'cusd.png',
       'CEUR': 'ceur.png',
+      'SCR': 'scroll.png', // You have this file
       'BNB': 'bnb.png',
       'SOL': 'sol.png',
       'ADA': 'ada.png',
@@ -495,7 +496,7 @@ export default function CreateInvoicePage() {
   const getNetworkIcon = (networkId: string) => {
     // Map of network IDs to their actual file names
     const networkIconMap: { [key: string]: string } = {
-      'ethereum': 'chainsnobg.png', // Fallback to app logo - you need ethereum.png
+      'ethereum': 'ethereum.png', // You have this file
       'polygon': 'chainsnobg.png', // Fallback to app logo - you need polygon.png
       'bsc': 'chainsnobg.png', // Fallback to app logo - you need bsc.png
       'solana': 'chainsnobg.png', // Fallback to app logo - you need solana.png

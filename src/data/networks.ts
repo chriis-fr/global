@@ -15,6 +15,34 @@ export interface Network {
 
 export const networks: Network[] = [
   {
+    id: 'celo',
+    name: 'Celo',
+    chainId: '42220',
+    type: 'mainnet',
+    logo: '/networks/celo.png',
+    rpcUrl: 'https://forno.celo.org',
+    explorerUrl: 'https://explorer.celo.org',
+    nativeCurrency: {
+      name: 'CELO',
+      symbol: 'CELO',
+      decimals: 18
+    }
+  },
+  {
+    id: 'scroll',
+    name: 'Scroll',
+    chainId: '534352',
+    type: 'mainnet',
+    logo: '/networks/scroll.png',
+    rpcUrl: 'https://rpc.scroll.io',
+    explorerUrl: 'https://scrollscan.com',
+    nativeCurrency: {
+      name: 'Ether',
+      symbol: 'ETH',
+      decimals: 18
+    }
+  },
+  {
     id: 'ethereum',
     name: 'Ethereum',
     chainId: '1',
@@ -250,34 +278,6 @@ export const networks: Network[] = [
       name: 'XRP',
       symbol: 'XRP',
       decimals: 6
-    }
-  },
-  {
-    id: 'celo',
-    name: 'Celo',
-    chainId: '42220',
-    type: 'mainnet',
-    logo: '/networks/celo.png',
-    rpcUrl: 'https://forno.celo.org',
-    explorerUrl: 'https://explorer.celo.org',
-    nativeCurrency: {
-      name: 'CELO',
-      symbol: 'CELO',
-      decimals: 18
-    }
-  },
-  {
-    id: 'scroll',
-    name: 'Scroll',
-    chainId: '534352',
-    type: 'mainnet',
-    logo: '/networks/scroll.png',
-    rpcUrl: 'https://rpc.scroll.io',
-    explorerUrl: 'https://scrollscan.com',
-    nativeCurrency: {
-      name: 'Ether',
-      symbol: 'ETH',
-      decimals: 18
     }
   }
 ];
