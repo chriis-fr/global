@@ -580,9 +580,12 @@ export default function Sidebar() {
       {/* Mobile Menu Button */}
       <button
         onClick={toggleMobileMenu}
-        className={`lg:hidden fixed top-4 right-4 z-50 p-3 bg-blue-900/80 backdrop-blur-sm rounded-lg text-white hover:bg-blue-800/90 transition-colors shadow-lg touch-manipulation active:scale-95 ${
-          isMobileMenuOpen ? 'hidden' : 'block'
-        }`}
+        className={`lg:hidden fixed top-4 right-4 z-50 p-3 
+          rounded-xl text-white transition-all duration-300 ease-out shadow-xl touch-manipulation active:scale-95
+          backdrop-blur-xl bg-gradient-to-br from-white/10 to-blue-900/20
+          border border-white/20 hover:from-white/20 hover:to-blue-900/30
+          hover:shadow-2xl hover:shadow-blue-500/10
+          ${isMobileMenuOpen ? 'hidden' : 'block'}`}
         aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
       >
         <Menu className="h-5 w-5" />
@@ -598,7 +601,7 @@ export default function Sidebar() {
 
       {/* Mobile Sidebar */}
       <aside 
-        className={`lg:hidden fixed left-0 top-0 h-full w-80 sm:w-80 bg-blue-950 border-r border-white/10 z-50 transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col ${
+        className={`lg:hidden fixed  left-0 top-0 h-full w-80 sm:w-80 bg-blue-950 border-r border-white/10 z-50 transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col ${
           isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
         onTouchStart={onTouchStart}
