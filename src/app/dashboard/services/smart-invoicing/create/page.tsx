@@ -413,9 +413,122 @@ export default function CreateInvoicePage() {
            formData.currency === 'KES';
   };
 
+  // Helper function to get currency icon
+  const getCurrencyIcon = (currencyCode: string) => {
+    // Map of currency codes to their actual file names
+    const currencyIconMap: { [key: string]: string } = {
+      // Fiat Currencies
+      'USD': 'usd.png',
+      'EUR': 'euro.png',
+      'GBP': 'gbp.png',
+      'JPY': 'jpy.png',
+      'CAD': 'cad.jpeg',
+      'AUD': 'usd.png', // Fallback to USD until aud.png is added
+      'CHF': 'chf.png',
+      'CNY': 'cny.jpeg',
+      'INR': 'inr.png',
+      'BRL': 'brl.png',
+      'MXN': 'mxn.png',
+      'SGD': 'sgd.png',
+      'HKD': 'hkd.png',
+      'NZD': 'nzd.png',
+      'SEK': 'sek.png',
+      'NOK': 'nok.png',
+      'DKK': 'dkk.png',
+      'PLN': 'pln.png',
+      'CZK': 'czk.png',
+      'HUF': 'huf.png',
+      'RUB': 'rub.png',
+      'TRY': 'try.png',
+      'KRW': 'krw.png',
+      'THB': 'thb.jpeg',
+      'MYR': 'myr.png',
+      'IDR': 'idr.png',
+      'PHP': 'php.png',
+      'VND': 'vnd.png',
+      'EGP': 'egp.png',
+      'ZAR': 'zar.png',
+      'NGN': 'ngn.png',
+      'KES': 'kes.png',
+      'GHS': 'ghs.png',
+      'UGX': 'ugx.png',
+      'TZS': 'tzs.png',
+      
+      // Cryptocurrencies
+      'BTC': 'btc.png',
+      'ETH': 'eth.png',
+      'USDT': 'usdt.png',
+      'USDC': 'usdc.png',
+      'DAI': 'dai.png',
+      'USDP': 'usdp.png',
+      'TUSD': 'tusd.png',
+      'CELO': 'celo.png', // You have this file
+      'CUSD': 'cusd.png',
+      'CEUR': 'ceur.png',
+      'BNB': 'bnb.png',
+      'SOL': 'sol.png',
+      'ADA': 'ada.png',
+      'DOT': 'chainsnobg.png', // Fallback to app logo - you need dot.png
+      'MATIC': 'chainsnobg.png', // Fallback to app logo - you need matic.png
+      'LINK': 'chainsnobg.png', // Fallback to app logo - you need link.png
+      'UNI': 'chainsnobg.png', // Fallback to app logo - you need uni.png
+      'LTC': 'chainsnobg.png', // Fallback to app logo - you need ltc.png
+      'BCH': 'chainsnobg.png', // Fallback to app logo - you need bch.png
+      'XRP': 'chainsnobg.png', // Fallback to app logo - you need xrp.png
+      'AVAX': 'chainsnobg.png', // Fallback to app logo - you need avax.png
+      'ATOM': 'chainsnobg.png', // Fallback to app logo - you need atom.png
+      'FTM': 'chainsnobg.png', // Fallback to app logo - you need ftm.png
+      'NEAR': 'chainsnobg.png', // Fallback to app logo - you need near.png
+      'ALGO': 'chainsnobg.png', // Fallback to app logo - you need algo.png
+    };
+
+    const iconFile = currencyIconMap[currencyCode.toUpperCase()];
+    if (iconFile) {
+      return `/currencies/${iconFile}`;
+    }
+    
+    // Ultimate fallback - use app logo
+    return '/chainsnobg.png';
+  };
+
+  // Helper function to get network icon
+  const getNetworkIcon = (networkId: string) => {
+    // Map of network IDs to their actual file names
+    const networkIconMap: { [key: string]: string } = {
+      'ethereum': 'chainsnobg.png', // Fallback to app logo - you need ethereum.png
+      'polygon': 'chainsnobg.png', // Fallback to app logo - you need polygon.png
+      'bsc': 'chainsnobg.png', // Fallback to app logo - you need bsc.png
+      'solana': 'chainsnobg.png', // Fallback to app logo - you need solana.png
+      'avalanche': 'chainsnobg.png', // Fallback to app logo - you need avalanche.png
+      'fantom': 'chainsnobg.png', // Fallback to app logo - you need fantom.png
+      'arbitrum': 'chainsnobg.png', // Fallback to app logo - you need arbitrum.png
+      'optimism': 'chainsnobg.png', // Fallback to app logo - you need optimism.png
+      'base': 'chainsnobg.png', // Fallback to app logo - you need base.png
+      'cardano': 'chainsnobg.png', // Fallback to app logo - you need cardano.png
+      'polkadot': 'chainsnobg.png', // Fallback to app logo - you need polkadot.png
+      'cosmos': 'chainsnobg.png', // Fallback to app logo - you need cosmos.png
+      'near': 'chainsnobg.png', // Fallback to app logo - you need near.png
+      'algorand': 'chainsnobg.png', // Fallback to app logo - you need algorand.png
+      'bitcoin': 'chainsnobg.png', // Fallback to app logo - you need bitcoin.png
+      'litecoin': 'chainsnobg.png', // Fallback to app logo - you need litecoin.png
+      'ripple': 'chainsnobg.png', // Fallback to app logo - you need ripple.png
+      'celo': 'celo.png', // You have this file
+      'scroll': 'scroll.png', // You have this file
+    };
+
+    const iconFile = networkIconMap[networkId.toLowerCase()];
+    if (iconFile) {
+      return `/networks/${iconFile}`;
+    }
+    
+    // Ultimate fallback - use app logo
+    return '/chainsnobg.png';
+  };
+
   // Currency dropdown state
   const [showCurrencyDropdown, setShowCurrencyDropdown] = useState(false);
   const [currencySearch, setCurrencySearch] = useState('');
+  const [userHasSelectedCurrency, setUserHasSelectedCurrency] = useState(false);
   
   // Network dropdown state
   const [showNetworkDropdown, setShowNetworkDropdown] = useState(false);
@@ -518,7 +631,10 @@ export default function CreateInvoicePage() {
               country: finalCountry
             },
             companyTaxNumber: onboardingData.businessInfo?.taxId || prev.companyTaxNumber,
-            currency: onboardingData.invoiceSettings?.defaultCurrency || prev.currency
+            // Only set currency from onboarding if user hasn't manually selected one
+            currency: (!userHasSelectedCurrency && onboardingData.invoiceSettings?.defaultCurrency) 
+              ? onboardingData.invoiceSettings.defaultCurrency 
+              : prev.currency
           };
         });
       }
@@ -650,15 +766,49 @@ export default function CreateInvoicePage() {
   };
 
   const handleInputChange = (field: keyof InvoiceFormData, value: string | number | boolean) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData(prev => {
+      const updated = { ...prev, [field]: value };
+      
+      // Track when user manually selects a currency
+      if (field === 'currency') {
+        setUserHasSelectedCurrency(true);
+        
+        // Check if the selected currency is a cryptocurrency
+        const selectedCurrency = getCurrencyByCode(value as string);
+        if (selectedCurrency && selectedCurrency.type === 'crypto') {
+          // Automatically switch payment method to crypto for cryptocurrencies
+          updated.paymentMethod = 'crypto';
+          // Set the appropriate network for the cryptocurrency
+          if (selectedCurrency.network) {
+            // Find the network by name and set the network ID
+            const matchingNetwork = networks.find(network => network.name === selectedCurrency.network);
+            if (matchingNetwork) {
+              updated.paymentNetwork = matchingNetwork.id;
+            }
+          }
+        } else if (selectedCurrency && selectedCurrency.type === 'fiat') {
+          // Automatically switch payment method to fiat for fiat currencies
+          updated.paymentMethod = 'fiat';
+          // Clear the payment network for fiat currencies
+          updated.paymentNetwork = '';
+        }
+      }
+      
+      return updated;
+    });
   };
 
   const handleFiatPaymentSubtypeChange = (value: string) => {
     setFormData(prev => ({
       ...prev,
       fiatPaymentSubtype: value as 'bank' | 'mpesa_paybill' | 'mpesa_till',
-      // Automatically set currency to KES for M-Pesa payments
-      currency: (value === 'mpesa_paybill' || value === 'mpesa_till') ? 'KES' : prev.currency
+      // Only automatically change currency for M-Pesa payments if user hasn't manually selected a currency
+      // or if they're switching from M-Pesa back to bank transfer, preserve their previous currency
+      currency: (value === 'mpesa_paybill' || value === 'mpesa_till') 
+        ? 'KES' 
+        : (prev.fiatPaymentSubtype === 'mpesa_paybill' || prev.fiatPaymentSubtype === 'mpesa_till')
+          ? (userHasSelectedCurrency ? prev.currency : 'USD') // Preserve user selection or default to USD
+          : prev.currency
     }));
   };
 
@@ -2243,25 +2393,25 @@ export default function CreateInvoicePage() {
 
         {/* Original Form Content - Always rendered but disabled when limit reached */}
         <div className={`${subscription && !subscription.canCreateInvoice ? 'pointer-events-none opacity-50' : ''}`}>
-          {/* Header */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 space-y-4 sm:space-y-0">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 space-y-4 sm:space-y-0">
+          <button
+            onClick={() => router.back()}
+            className="flex items-center space-x-2 px-4 py-3 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm touch-manipulation active:scale-95 min-h-[44px]"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Back to Dashboard</span>
+          </button>
+          
+          <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4 w-full sm:w-auto">
             <button
-              onClick={() => router.back()}
-              className="flex items-center space-x-2 px-4 py-3 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm touch-manipulation active:scale-95 min-h-[44px]"
+              onClick={handleSaveDraft}
+              disabled={loading}
+              className="flex items-center justify-center space-x-2 px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
             >
-              <ArrowLeft className="h-4 w-4" />
-              <span>Back to Dashboard</span>
-            </button>
-
-            <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4 w-full sm:w-auto">
-              <button
-                onClick={handleSaveDraft}
-                disabled={loading}
-                className="flex items-center justify-center space-x-2 px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-              >
                 <Save className="h-4 w-4" />
                 <span>Save Draft</span>
-              </button>
+            </button>
               <button
                 type="submit"
                 disabled={loading}
@@ -2274,233 +2424,323 @@ export default function CreateInvoicePage() {
                 )}
                 <span>Send Invoice</span>
               </button>
+          </div>
+        </div>
+
+        {/* Validation Errors */}
+        {validationErrors.length > 0 && (
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-center space-x-2 mb-2">
+              <AlertCircle className="h-5 w-5 text-red-600" />
+              <h3 className="text-sm font-medium text-red-800">Please fix the following errors before generating PDF:</h3>
+            </div>
+            <ul className="list-disc list-inside text-sm text-red-700 space-y-1">
+              {validationErrors.map((error, index) => (
+                <li key={index}>{error}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Auto-save Status Indicator */}
+        {autoSaveStatus && (
+          <div className="mb-4 flex items-center justify-center">
+            <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm ${
+              autoSaveStatus === 'saving' ? 'bg-blue-50 text-blue-700' :
+              autoSaveStatus === 'saved' ? 'bg-green-50 text-green-700' :
+              'bg-red-50 text-red-700'
+            }`}>
+              {autoSaveStatus === 'saving' && (
+                <>
+                  <div className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                  <span>Auto-saving...</span>
+                </>
+              )}
+              {autoSaveStatus === 'saved' && (
+                <>
+                  <div className="h-4 w-4 bg-green-600 rounded-full flex items-center justify-center">
+                    <div className="h-2 w-2 bg-white rounded-full"></div>
+                  </div>
+                  <span>Draft saved</span>
+                </>
+              )}
+              {autoSaveStatus === 'error' && (
+                <>
+                  <div className="h-4 w-4 bg-red-600 rounded-full flex items-center justify-center">
+                    <span className="text-white text-xs">!</span>
+                  </div>
+                  <span>Save failed</span>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Invoice Document */}
+        <div ref={printRef} className="bg-white rounded-lg shadow-lg border max-w-4xl mx-auto">
+          {/* Document Header */}
+          <div className="p-4 sm:p-8 border-b border-gray-200">
+            <div className="flex flex-col sm:flex-row justify-between items-start space-y-4 sm:space-y-0">
+              {/* Left Side - Invoice Name */}
+              <div className="flex-1">
+                {renderEditableField('invoiceName', formData.invoiceName, 'Invoice #')}
+              </div>
+
+              {/* Right Side - Dates and Logo */}
+              <div className="w-full sm:w-auto">
+                {/* Mobile Layout - Stack vertically */}
+                <div className="flex flex-col space-y-3 sm:hidden">
+                  {/* Logo first on mobile */}
+                  <div 
+                    onClick={() => setShowCompanyEditModal(true)}
+                    className="w-16 h-16 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors cursor-pointer flex-shrink-0 group relative overflow-hidden self-end"
+                  >
+                    {formData.companyLogo ? (
+                      <>
+                        <Image 
+                          src={formData.companyLogo} 
+                          alt="Company Logo" 
+                          width={64}
+                          height={64}
+                          className="object-contain w-full h-full"
+                          unoptimized={formData.companyLogo.startsWith('data:')}
+                        />
+                        <div className="absolute inset-0 bg-white bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center">
+                          <Edit3 className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-center justify-center w-full h-full">
+                        <Plus className="h-6 w-6 text-gray-400" />
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Dates below logo on mobile */}
+                  <div className="text-sm text-gray-600 space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <Calendar className="h-4 w-4 flex-shrink-0" />
+                      {renderEditableDateField('issueDate', formData.issueDate, 'Issued on')}
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Clock className="h-4 w-4 flex-shrink-0" />
+                      {renderEditableDateField('dueDate', formData.dueDate, 'Payment due by')}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Desktop Layout - Side by side */}
+                <div className="hidden sm:flex items-end space-x-4">
+                  <div className="text-sm text-gray-700">
+                    <div className="flex items-center space-x-2">
+                      <Calendar className="h-4 w-4" />
+                      {renderEditableDateField('issueDate', formData.issueDate, 'Issued on')}
+                    </div>
+                    <div className="flex items-center space-x-2 mt-1">
+                      <Clock className="h-4 w-4" />
+                      {renderEditableDateField('dueDate', formData.dueDate, 'Payment due by')}
+                    </div>
+                  </div>
+                  <div 
+                    onClick={() => setShowCompanyEditModal(true)}
+                    className="w-16 h-16 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors cursor-pointer flex-shrink-0 group relative overflow-hidden"
+                  >
+                    {formData.companyLogo ? (
+                      <>
+                        <Image 
+                          src={formData.companyLogo} 
+                          alt="Company Logo" 
+                          width={64}
+                          height={64}
+                          className="object-contain w-full h-full"
+                          unoptimized={formData.companyLogo.startsWith('data:')}
+                          style={{ backgroundColor: 'white' }}
+                        />
+                        <div className="absolute inset-0  bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 rounded-lg flex items-center justify-center">
+                          <Edit3 className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+                        </div>
+                      </>
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Upload className="h-6 w-6 text-gray-400" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Validation Errors */}
-          {validationErrors.length > 0 && (
-            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-              <div className="flex items-center space-x-2 mb-2">
-                <AlertCircle className="h-5 w-5 text-red-600" />
-                <h3 className="text-sm font-medium text-red-800">Please fix the following errors before generating PDF:</h3>
-              </div>
-              <ul className="list-disc list-inside text-sm text-red-700 space-y-1">
-                {validationErrors.map((error, index) => (
-                  <li key={index}>{error}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Auto-save Status Indicator */}
-          {autoSaveStatus && (
-            <div className="mb-4 flex items-center justify-center">
-              <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm ${
-                autoSaveStatus === 'saving' ? 'bg-blue-50 text-blue-700' :
-                autoSaveStatus === 'saved' ? 'bg-green-50 text-green-700' :
-                'bg-red-50 text-red-700'
-              }`}>
-                {autoSaveStatus === 'saving' && (
-                  <>
-                    <div className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
-                    <span>Auto-saving...</span>
-                  </>
-                )}
-                {autoSaveStatus === 'saved' && (
-                  <>
-                    <div className="h-4 w-4 bg-green-600 rounded-full flex items-center justify-center">
-                      <div className="h-2 w-2 bg-white rounded-full"></div>
-                    </div>
-                    <span>Draft saved</span>
-                  </>
-                )}
-                {autoSaveStatus === 'error' && (
-                  <>
-                    <div className="h-4 w-4 bg-red-600 rounded-full flex items-center justify-center">
-                      <span className="text-white text-xs">!</span>
-                    </div>
-                    <span>Save failed</span>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Invoice Document */}
-          <div ref={printRef} className="bg-white rounded-lg shadow-lg border max-w-4xl mx-auto">
-            {/* Document Header */}
-            <div className="p-4 sm:p-8 border-b border-gray-200">
-              <div className="flex flex-col sm:flex-row justify-between items-start space-y-4 sm:space-y-0">
-                {/* Left Side - Invoice Name */}
-                <div className="flex-1">
-                  {renderEditableField('invoiceName', formData.invoiceName, 'Invoice #')}
-                </div>
-
-                {/* Right Side - Dates and Logo */}
-                <div className="w-full sm:w-auto">
-                  {/* Mobile Layout - Stack vertically */}
-                  <div className="flex flex-col space-y-3 sm:hidden">
-                    {/* Logo first on mobile */}
-                    <div 
-                      onClick={() => setShowCompanyEditModal(true)}
-                      className="w-16 h-16 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors cursor-pointer flex-shrink-0 group relative overflow-hidden self-end"
-                    >
-                      {formData.companyLogo ? (
-                        <>
-                          <Image 
-                            src={formData.companyLogo} 
-                            alt="Company Logo" 
-                            width={64}
-                            height={64}
-                            className="object-contain w-full h-full"
-                            unoptimized={formData.companyLogo.startsWith('data:')}
-                          />
-                          <div className="absolute inset-0 bg-white bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center">
-                            <Edit3 className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                          </div>
-                        </>
-                      ) : (
-                        <div className="flex items-center justify-center w-full h-full">
-                          <Plus className="h-6 w-6 text-gray-400" />
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Dates below logo on mobile */}
-                    <div className="text-sm text-gray-600 space-y-2">
-                      <div className="flex items-center space-x-2">
-                        <Calendar className="h-4 w-4 flex-shrink-0" />
-                        {renderEditableDateField('issueDate', formData.issueDate, 'Issued on')}
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Clock className="h-4 w-4 flex-shrink-0" />
-                        {renderEditableDateField('dueDate', formData.dueDate, 'Payment due by')}
-                      </div>
-                    </div>
+          {/* Company Information */}
+          <div className="p-4 sm:p-8 border-b border-gray-200">
+            <div className="flex flex-col lg:flex-row justify-between space-y-6 lg:space-y-0">
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center justify-between">
+                  <div className="flex items-center">
+                    <Building2 className="h-5 w-5 mr-2" />
+                    From
                   </div>
-
-                  {/* Desktop Layout - Side by side */}
-                  <div className="hidden sm:flex items-end space-x-4">
-                    <div className="text-sm text-gray-700">
-                      <div className="flex items-center space-x-2">
-                        <Calendar className="h-4 w-4" />
-                        {renderEditableDateField('issueDate', formData.issueDate, 'Issued on')}
+                  <button
+                    onClick={() => setShowCompanyEditModal(true)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <Edit3 className="h-4 w-4" />
+                  </button>
+                </h3>
+                <div className="flex items-start space-x-4">
+                 
+                  
+                  {/* Company Details */}
+                  <div className="flex-1 space-y-2">
+                    <div className="font-medium text-gray-700">
+                      {formData.companyName || 'Company Name'}
+                    </div>
+                    <div className="text-gray-700 space-y-1">
+                      <div>{formData.companyAddress.street || 'Street Address'}</div>
+                      <div className="flex flex-wrap space-x-2">
+                        <span>{formData.companyAddress.city || 'City'}</span>
+                        <span>{formData.companyAddress.state || 'State'}</span>
+                        <span>{formData.companyAddress.zipCode || 'ZIP'}</span>
                       </div>
-                      <div className="flex items-center space-x-2 mt-1">
-                        <Clock className="h-4 w-4" />
-                        {renderEditableDateField('dueDate', formData.dueDate, 'Payment due by')}
+                      <div>
+                        {formData.companyAddress.country ? countries.find(c => c.code === formData.companyAddress.country)?.name || formData.companyAddress.country : 'Country'}
                       </div>
                     </div>
-                    <div 
-                      onClick={() => setShowCompanyEditModal(true)}
-                      className="w-16 h-16 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors cursor-pointer flex-shrink-0 group relative overflow-hidden"
-                    >
-                      {formData.companyLogo ? (
-                        <>
-                          <Image 
-                            src={formData.companyLogo} 
-                            alt="Company Logo" 
-                            width={64}
-                            height={64}
-                            className="object-contain w-full h-full"
-                            unoptimized={formData.companyLogo.startsWith('data:')}
-                            style={{ backgroundColor: 'white' }}
-                          />
-                          <div className="absolute inset-0  bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 rounded-lg flex items-center justify-center">
-                            <Edit3 className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
-                          </div>
-                        </>
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <Upload className="h-6 w-6 text-gray-400" />
-                        </div>
-                      )}
+                    <div className="text-gray-700">
+                      Tax: {formData.companyTaxNumber || 'Tax Number'}
+                    </div>
+                    <div className="text-gray-700">
+                      {formData.companyEmail || 'Email'}
+                    </div>
+                    <div className="text-gray-700">
+                      {formData.companyPhone || 'Phone'}
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Company Information */}
-            <div className="p-4 sm:p-8 border-b border-gray-200">
-              <div className="flex flex-col lg:flex-row justify-between space-y-6 lg:space-y-0">
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center justify-between">
-                    <div className="flex items-center">
-                      <Building2 className="h-5 w-5 mr-2" />
-                      From
-                    </div>
+              {/* Client Information */}
+              <div className="flex-1 lg:ml-8">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                    <User className="h-5 w-5 mr-2" />
+                    Bill To
+                  </h3>
+                  <div className="flex items-center space-x-2">
                     <button
-                      onClick={() => setShowCompanyEditModal(true)}
+                      onClick={() => setShowClientEditModal(true)}
                       className="text-gray-400 hover:text-gray-600 transition-colors"
                     >
                       <Edit3 className="h-4 w-4" />
                     </button>
-                  </h3>
-                  <div className="flex items-start space-x-4">
-                   
-                    
-                    {/* Company Details */}
-                    <div className="flex-1 space-y-2">
-                      <div className="font-medium text-gray-700">
-                        {formData.companyName || 'Company Name'}
+                    <button
+                      onClick={() => setShowClientSelector(!showClientSelector)}
+                      className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      {formData.clientName ? 'Change Client' : 'Add Client'}
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Client Selector Dropdown */}
+                {showClientSelector && (
+                  <div className="absolute z-10 mt-2 w-full sm:w-80 bg-white border border-gray-300 rounded-lg shadow-lg">
+                    <div className="p-4">
+                      <div className="flex justify-between items-center mb-3">
+                        <h4 className="font-medium text-gray-900">Select Client</h4>
+                        <button
+                          onClick={() => setShowClientSelector(false)}
+                          className="text-gray-400 hover:text-gray-600"
+                        >
+                          ×
+                        </button>
                       </div>
-                      <div className="text-gray-700 space-y-1">
-                        <div>{formData.companyAddress.street || 'Street Address'}</div>
-                        <div className="flex flex-wrap space-x-2">
-                          <span>{formData.companyAddress.city || 'City'}</span>
-                          <span>{formData.companyAddress.state || 'State'}</span>
-                          <span>{formData.companyAddress.zipCode || 'ZIP'}</span>
+                      
+                      {clients.length > 0 ? (
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {clients.map((client) => (
+                            <button
+                              key={client._id}
+                              onClick={() => selectClient(client)}
+                              className="w-full text-left p-2 hover:bg-gray-100 rounded border"
+                            >
+                                <div className="font-medium text-black">
+                                {client.company ? client.company : client.name}
+                              </div>
+                              {client.company && (
+                                  <div className="text-sm text-black">Attn: {client.name}</div>
+                              )}
+                              <div className="text-sm text-gray-600">{client.email}</div>
+                            </button>
+                          ))}
                         </div>
-                        <div>
-                          {formData.companyAddress.country ? countries.find(c => c.code === formData.companyAddress.country)?.name || formData.companyAddress.country : 'Country'}
-                        </div>
-                      </div>
-                      <div className="text-gray-700">
-                        Tax: {formData.companyTaxNumber || 'Tax Number'}
-                      </div>
-                      <div className="text-gray-700">
-                        {formData.companyEmail || 'Email'}
-                      </div>
-                      <div className="text-gray-700">
-                        {formData.companyPhone || 'Phone'}
+                      ) : (
+                        <div className="text-gray-500 text-center py-4">No clients found</div>
+                      )}
+                      
+                      <div className="mt-3 pt-3 border-t">
+                        <button
+                          onClick={createNewClient}
+                          className="w-full text-center py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                        >
+                          Create New Client
+                        </button>
                       </div>
                     </div>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <div className="font-medium text-gray-700">
+                    {formData.clientCompany ? formData.clientCompany : formData.clientName || 'Client Name'}
+                  </div>
+                  {formData.clientCompany && (
+                      <div className="text-black">
+                      Attn: {formData.clientName || 'Client Name'}
+                    </div>
+                  )}
+                  <div className="text-gray-700 space-y-1">
+                    <div>{formData.clientAddress.street || 'Street Address'}</div>
+                    <div className="flex space-x-2">
+                      <span>{formData.clientAddress.city || 'City'}</span>
+                      <span>{formData.clientAddress.state || 'State'}</span>
+                      <span>{formData.clientAddress.zipCode || 'ZIP'}</span>
+                    </div>
+                    <div>{formData.clientAddress.country ? countries.find(c => c.code === formData.clientAddress.country)?.name || formData.clientAddress.country : 'Country'}</div>
+                  </div>
+                  <div className="text-gray-700">
+                    {formData.clientEmail || 'Email'}
+                  </div>
+                  <div className="text-gray-700">
+                    {formData.clientPhone || 'Phone'}
                   </div>
                 </div>
 
-                {/* Client Information */}
-                <div className="flex-1 lg:ml-8">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                      <User className="h-5 w-5 mr-2" />
-                      Bill To
-                    </h3>
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => setShowClientEditModal(true)}
-                        className="text-gray-400 hover:text-gray-600 transition-colors"
-                      >
-                        <Edit3 className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => setShowClientSelector(!showClientSelector)}
-                        className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
-                      >
-                        <Plus className="h-4 w-4 mr-1" />
-                        {formData.clientName ? 'Change Client' : 'Add Client'}
-                      </button>
-                    </div>
+                {/* CC Clients Section */}
+                <div className="mt-6 pt-4 border-t border-gray-200 relative">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-medium text-gray-700 flex items-center">
+                      <Mail className="h-4 w-4 mr-1" />
+                      CC Others
+                    </h4>
+                    <button
+                      onClick={() => setShowCcClientSelector(!showCcClientSelector)}
+                      className="text-xs text-blue-600 hover:text-blue-800 flex items-center"
+                    >
+                      <Plus className="h-3 w-3 mr-1" />
+                      {formData.ccClients && formData.ccClients.length > 0 ? 'Add More' : 'Add CC'}
+                    </button>
                   </div>
-                  
-                  {/* Client Selector Dropdown */}
-                  {showClientSelector && (
-                    <div className="absolute z-10 mt-2 w-full sm:w-80 bg-white border border-gray-300 rounded-lg shadow-lg">
+
+                  {/* CC Client Selector Dropdown */}
+                  {showCcClientSelector && (
+                    <div className="absolute top-full left-0 z-10 mt-2 w-80 max-w-full bg-white border border-gray-300 rounded-lg shadow-lg">
                       <div className="p-4">
                         <div className="flex justify-between items-center mb-3">
-                          <h4 className="font-medium text-gray-900">Select Client</h4>
+                          <h4 className="font-medium text-gray-900">Select CC Clients</h4>
                           <button
-                            onClick={() => setShowClientSelector(false)}
+                            onClick={() => setShowCcClientSelector(false)}
                             className="text-gray-400 hover:text-gray-600"
                           >
                             ×
@@ -2509,21 +2749,31 @@ export default function CreateInvoicePage() {
                         
                         {clients.length > 0 ? (
                           <div className="space-y-2 max-h-48 overflow-y-auto">
-                            {clients.map((client) => (
-                              <button
-                                key={client._id}
-                                onClick={() => selectClient(client)}
-                                className="w-full text-left p-2 hover:bg-gray-100 rounded border"
-                              >
-                                <div className="font-medium text-black">
-                                  {client.company ? client.company : client.name}
-                                </div>
-                                {client.company && (
-                                  <div className="text-sm text-black">Attn: {client.name}</div>
-                                )}
-                                <div className="text-sm text-gray-600">{client.email}</div>
-                              </button>
-                            ))}
+                            {clients.map((client) => {
+                              // Filter out clients that are already CC'd or are the primary client
+                              const isAlreadyCc = formData.ccClients?.some(cc => cc.email === client.email);
+                              const isPrimaryClient = formData.clientEmail === client.email;
+                              
+                              if (isAlreadyCc || isPrimaryClient) {
+                                return null;
+                              }
+
+                              return (
+                                <button
+                                  key={client._id}
+                                  onClick={() => selectCcClient(client)}
+                                  className="w-full text-left p-2 hover:bg-gray-100 rounded border"
+                                >
+                                  <div className="font-medium">
+                                    {client.company ? client.company : client.name}
+                                  </div>
+                                  {client.company && (
+                                    <div className="text-sm text-gray-500">Attn: {client.name}</div>
+                                  )}
+                                  <div className="text-sm text-gray-600">{client.email}</div>
+                                </button>
+                              );
+                            })}
                           </div>
                         ) : (
                           <div className="text-gray-500 text-center py-4">No clients found</div>
@@ -2531,7 +2781,7 @@ export default function CreateInvoicePage() {
                         
                         <div className="mt-3 pt-3 border-t">
                           <button
-                            onClick={createNewClient}
+                            onClick={createNewCcClient}
                             className="w-full text-center py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
                           >
                             Create New Client
@@ -2541,836 +2791,25 @@ export default function CreateInvoicePage() {
                     </div>
                   )}
 
-                  <div className="space-y-2">
-                    <div className="font-medium text-gray-700">
-                      {formData.clientCompany ? formData.clientCompany : formData.clientName || 'Client Name'}
-                    </div>
-                    {formData.clientCompany && (
-                      <div className="text-black">
-                        Attn: {formData.clientName || 'Client Name'}
-                      </div>
-                    )}
-                    <div className="text-gray-700 space-y-1">
-                      <div>{formData.clientAddress.street || 'Street Address'}</div>
-                      <div className="flex space-x-2">
-                        <span>{formData.clientAddress.city || 'City'}</span>
-                        <span>{formData.clientAddress.state || 'State'}</span>
-                        <span>{formData.clientAddress.zipCode || 'ZIP'}</span>
-                      </div>
-                      <div>{formData.clientAddress.country ? countries.find(c => c.code === formData.clientAddress.country)?.name || formData.clientAddress.country : 'Country'}</div>
-                    </div>
-                    <div className="text-gray-700">
-                      {formData.clientEmail || 'Email'}
-                    </div>
-                    <div className="text-gray-700">
-                      {formData.clientPhone || 'Phone'}
-                    </div>
-                  </div>
-
-                  {/* CC Clients Section */}
-                  <div className="mt-6 pt-4 border-t border-gray-200 relative">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-sm font-medium text-gray-700 flex items-center">
-                        <Mail className="h-4 w-4 mr-1" />
-                        CC Others
-                      </h4>
-                      <button
-                        onClick={() => setShowCcClientSelector(!showCcClientSelector)}
-                        className="text-xs text-blue-600 hover:text-blue-800 flex items-center"
-                      >
-                        <Plus className="h-3 w-3 mr-1" />
-                        {formData.ccClients && formData.ccClients.length > 0 ? 'Add More' : 'Add CC'}
-                      </button>
-                    </div>
-
-                    {/* CC Client Selector Dropdown */}
-                    {showCcClientSelector && (
-                      <div className="absolute top-full left-0 z-10 mt-2 w-80 max-w-full bg-white border border-gray-300 rounded-lg shadow-lg">
-                        <div className="p-4">
-                          <div className="flex justify-between items-center mb-3">
-                            <h4 className="font-medium text-gray-900">Select CC Clients</h4>
-                            <button
-                              onClick={() => setShowCcClientSelector(false)}
-                              className="text-gray-400 hover:text-gray-600"
-                            >
-                              ×
-                            </button>
-                          </div>
-                          
-                          {clients.length > 0 ? (
-                            <div className="space-y-2 max-h-48 overflow-y-auto">
-                              {clients.map((client) => {
-                                // Filter out clients that are already CC'd or are the primary client
-                                const isAlreadyCc = formData.ccClients?.some(cc => cc.email === client.email);
-                                const isPrimaryClient = formData.clientEmail === client.email;
-                                
-                                if (isAlreadyCc || isPrimaryClient) {
-                                  return null;
-                                }
-
-                                return (
-                                  <button
-                                    key={client._id}
-                                    onClick={() => selectCcClient(client)}
-                                    className="w-full text-left p-2 hover:bg-gray-100 rounded border"
-                                  >
-                                    <div className="font-medium">
-                                      {client.company ? client.company : client.name}
-                                    </div>
-                                    {client.company && (
-                                      <div className="text-sm text-gray-500">Attn: {client.name}</div>
-                                    )}
-                                    <div className="text-sm text-gray-600">{client.email}</div>
-                                  </button>
-                                );
-                              })}
+                  {/* CC Clients List */}
+                  {formData.ccClients && formData.ccClients.length > 0 && (
+                    <div className="space-y-2">
+                      {formData.ccClients.map((ccClient, index) => (
+                        <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded border">
+                          <div className="flex-1">
+                            <div className="text-sm font-medium">
+                              {ccClient.company ? ccClient.company : ccClient.name}
                             </div>
-                          ) : (
-                            <div className="text-gray-500 text-center py-4">No clients found</div>
-                          )}
-                          
-                          <div className="mt-3 pt-3 border-t">
-                            <button
-                              onClick={createNewCcClient}
-                              className="w-full text-center py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                            >
-                              Create New Client
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* CC Clients List */}
-                    {formData.ccClients && formData.ccClients.length > 0 && (
-                      <div className="space-y-2">
-                        {formData.ccClients.map((ccClient, index) => (
-                          <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded border">
-                            <div className="flex-1">
-                              <div className="text-sm font-medium">
-                                {ccClient.company ? ccClient.company : ccClient.name}
-                              </div>
-                              {ccClient.company && (
-                                <div className="text-xs text-gray-500">Attn: {ccClient.name}</div>
-                              )}
-                              <div className="text-xs text-gray-600">{ccClient.email}</div>
-                            </div>
-                            <button
-                              onClick={() => removeCcClient(ccClient.email)}
-                              className="text-red-500 hover:text-red-700 ml-2"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Invoice Settings */}
-            <div className="p-4 sm:p-8 border-b border-gray-200">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
-                {/* Currency */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Currency</label>
-                  <div className="relative currency-dropdown-container">
-                    <button
-                      type="button"
-                      onClick={() => setShowCurrencyDropdown(!showCurrencyDropdown)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-left flex items-center justify-between bg-white"
-                    >
-                      <span className={formData.currency ? 'text-gray-900' : 'text-gray-500'}>
-                        {formData.currency 
-                          ? `${formData.currency} - ${getCurrencyByCode(formData.currency)?.name || 'Unknown'}`
-                          : 'Select currency'}
-                      </span>
-                      <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${showCurrencyDropdown ? 'rotate-180' : ''}`} />
-                    </button>
-                    
-                    {showCurrencyDropdown && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto z-20">
-                        {/* Search input */}
-                        <div className="p-2 border-b border-gray-200 bg-gray-50">
-                          <div className="relative">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                                                        <input
-                      type="text"
-                      value={currencySearch}
-                      onChange={(e) => setCurrencySearch(e.target.value)}
-                      placeholder="Search currencies..."
-                      className="w-full pl-10 pr-3 py-2 bg-white border border-gray-300 rounded text-black placeholder-gray-600 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
-                    />
-                          </div>
-                        </div>
-                        
-                        {/* Currency list */}
-                        <div className="max-h-48 overflow-y-auto">
-                          {/* Fiat Currencies */}
-                          <div className="px-2 py-1 bg-gray-100 text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                            Fiat Currencies
-                          </div>
-                          {fiatCurrencies
-                            .filter(currency => 
-                              currency.name.toLowerCase().includes(currencySearch.toLowerCase()) ||
-                              currency.code.toLowerCase().includes(currencySearch.toLowerCase()) ||
-                              currency.symbol.toLowerCase().includes(currencySearch.toLowerCase())
-                            )
-                            .map(currency => (
-                            <button
-                              key={currency.code}
-                              type="button"
-                              onClick={() => {
-                                handleInputChange('currency', currency.code);
-                                setShowCurrencyDropdown(false);
-                                setCurrencySearch('');
-                              }}
-                              className="w-full px-3 py-2 text-left text-gray-900 hover:bg-blue-50 transition-colors flex items-center justify-between border-b border-gray-100 last:border-b-0"
-                            >
-                              <div className="flex items-center space-x-3">
-                                <span className="text-sm">{currency.name}</span>
-                                <span className="text-blue-600 text-xs font-medium">{currency.symbol}</span>
-                              </div>
-                              <span className="text-gray-500 text-xs font-medium">{currency.code}</span>
-                            </button>
-                          ))}
-                          
-                          {/* Cryptocurrencies */}
-                          <div className="px-2 py-1 bg-gray-100 text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                            Cryptocurrencies
-                          </div>
-                          {cryptoCurrencies
-                            .filter(currency => 
-                              currency.name.toLowerCase().includes(currencySearch.toLowerCase()) ||
-                              currency.code.toLowerCase().includes(currencySearch.toLowerCase()) ||
-                              currency.symbol.toLowerCase().includes(currencySearch.toLowerCase())
-                            )
-                            .map(currency => (
-                            <button
-                              key={currency.code}
-                              type="button"
-                              onClick={() => {
-                                handleInputChange('currency', currency.code);
-                                setShowCurrencyDropdown(false);
-                                setCurrencySearch('');
-                              }}
-                              className="w-full px-3 py-2 text-left text-gray-900 hover:bg-blue-50 transition-colors flex items-center justify-between border-b border-gray-100 last:border-b-0"
-                            >
-                              <div className="flex items-center space-x-3">
-                                <span className="text-sm">{currency.name}</span>
-                                <span className="text-blue-600 text-xs font-medium">{currency.symbol}</span>
-                              </div>
-                              <span className="text-gray-500 text-xs font-medium">{currency.code}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Invoice Type */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Invoice Type</label>
-                  <div className="space-y-2">
-                    <label className="flex items-center">
-                      <input
-                        type="radio"
-                        value="regular"
-                        checked={formData.invoiceType === 'regular'}
-                        onChange={(e) => handleInputChange('invoiceType', e.target.value)}
-                        className="mr-2 "
-                      />
-                      <span className="text-sm text-gray-600">Regular</span>
-                    </label>
-                    <label className="flex items-center">
-                      <input
-                        type="radio"
-                        value="recurring"
-                        checked={formData.invoiceType === 'recurring'}
-                        onChange={(e) => handleInputChange('invoiceType', e.target.value)}
-                        className="mr-2"
-                      />
-                      <span className="text-sm text-gray-600">Recurring</span>
-                    </label>
-                  </div>
-                </div>
-
-                {/* Multi-Currency */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Payment Options</label>
-                  <div className="space-y-2">
-                    <label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={formData.enableMultiCurrency}
-                        onChange={(e) => handleInputChange('enableMultiCurrency', e.target.checked)}
-                        className="mr-2"
-                      />
-                      <span className="text-sm text-gray-600">Enable Multi-Currency</span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Payment Method */}
-            <div className="p-4 sm:p-8 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Payment Method</h3>
-              
-              {/* Payment Method Selector */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select Saved Payment Method
-                </label>
-                <select
-                  value={selectedPaymentMethodId || ''}
-                  onChange={(e) => handlePaymentMethodSelect(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white font-medium"
-                >
-                  <option value="">-- Select a saved payment method --</option>
-                  {savedPaymentMethods.map((method) => (
-                    <option key={method._id} value={method._id}>
-                      {method.name} ({
-                        method.type === 'fiat' ? 
-                          method.fiatDetails?.subtype === 'mpesa_paybill' ? 'M-Pesa Paybill' :
-                          method.fiatDetails?.subtype === 'mpesa_till' ? 'M-Pesa Till' :
-                          'Bank Transfer' : 
-                        method.type === 'crypto' ? 'Crypto' :
-                        'Payment Method'
-                      })
-                    </option>
-                  ))}
-                </select>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Payment Type</label>
-                  <div className="space-y-3 text-gray-600">
-                    <label className="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
-                      <input
-                        type="radio"
-                        value="fiat"
-                        checked={formData.paymentMethod === 'fiat'}
-                        onChange={(e) => handleInputChange('paymentMethod', e.target.value)}
-                        className="mr-3"
-                      />
-                      <div className="flex items-center">
-                        <CreditCard className="h-5 w-5 text-green-600 mr-2" />
-                        <div>
-                          <div className="font-medium text-gray-700">Local currency ({formData.currency})</div>
-                          <div className="text-sm text-gray-700">
-                            {formData.companyAddress.country === 'KE' ? ' Dynamic Selection' : 'Bank Transfer'}
-                          </div>
-                        </div>
-                      </div>
-                    </label>
-                    <label className="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
-                      <input
-                        type="radio"
-                        value="crypto"
-                        checked={formData.paymentMethod === 'crypto'}
-                        onChange={(e) => handleInputChange('paymentMethod', e.target.value)}
-                        className="mr-3"
-                      />
-                      <div className="flex items-center">
-                        <Wallet className="h-5 w-5 text-blue-600 mr-2" />
-                        <div>
-                          <div className="font-medium text-gray-700">Crypto</div>
-                          <div className="text-sm text-gray-700">Cryptocurrency payment</div>
-                        </div>
-                      </div>
-                    </label>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Payment Details</label>
-                  {formData.paymentMethod === 'fiat' ? (
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm text-gray-600 mb-1">Payment Type</label>
-                        <div className="space-y-2">
-                          <label className="flex items-center text-gray-600">
-                            <input
-                              type="radio"
-                              value="bank"
-                              checked={formData.fiatPaymentSubtype === 'bank'}
-                              onChange={(e) => handleFiatPaymentSubtypeChange(e.target.value)}
-                              className="mr-2 text-gray-600"
-                            />
-                            <CreditCard className="h-4 w-4 text-green-600 mr-2" />
-                            Bank Transfer
-                          </label>
-                          {isKenyanUser() && (
-                            <>
-                              <label className="flex items-center text-gray-600">
-                                <input
-                                  type="radio"
-                                  value="mpesa_paybill"
-                                  checked={formData.fiatPaymentSubtype === 'mpesa_paybill'}
-                                  onChange={(e) => handleFiatPaymentSubtypeChange(e.target.value)}
-                                  className="mr-2 text-gray-600"
-                                />
-                                <Smartphone className="h-4 w-4 text-orange-600 mr-2" />
-                                M-Pesa Paybill
-                              </label>
-                              <label className="flex items-center text-gray-600">
-                                <input
-                                  type="radio"
-                                  value="mpesa_till"
-                                  checked={formData.fiatPaymentSubtype === 'mpesa_till'}
-                                  onChange={(e) => handleFiatPaymentSubtypeChange(e.target.value)}
-                                  className="mr-2 text-gray-600"
-                                />
-                                <Smartphone className="h-4 w-4 text-orange-600 mr-2" />
-                                M-Pesa Till Number
-                              </label>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      
-                      {formData.fiatPaymentSubtype === 'bank' && (
-                        <div className="space-y-4">
-                          <div>
-                            <label className="block text-sm text-gray-700 mb-1">Bank Name</label>
-                            <BankSelector
-                              countryCode="KE"
-                              value={formData.bankName || ''}
-                              onBankSelectAction={handleBankSelect}
-                              onInputChangeAction={(value) => handleInputChange('bankName', value)}
-                              placeholder="Search for a bank..."
-                              
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm text-gray-700 mb-1">SWIFT Code</label>
-                            <input
-                              type="text"
-                              value={formData.swiftCode || ''}
-                              onChange={(e) => handleInputChange('swiftCode', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                              placeholder="SWIFT/BIC code"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm text-gray-700 mb-1">Account Number</label>
-                            <input
-                              type="text"
-                              value={formData.accountNumber || ''}
-                              onChange={(e) => handleInputChange('accountNumber', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                              placeholder="Account number"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm text-gray-700 mb-1">Account Name</label>
-                            <input
-                              type="text"
-                              value={formData.accountName || ''}
-                              onChange={(e) => handleInputChange('accountName', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                              placeholder="Account holder name"
-                            />
-                          </div>
-                        </div>
-                      )}
-                      
-                      {formData.fiatPaymentSubtype === 'mpesa_paybill' && (
-                        <div className="space-y-4">
-                          <div>
-                            <label className="block text-sm text-gray-700 mb-1">Paybill Number</label>
-                            <input
-                              type="text"
-                              value={formData.paybillNumber || ''}
-                              onChange={(e) => handleInputChange('paybillNumber', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                              placeholder="e.g., 123456"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm text-gray-600 mb-1">Account Number</label>
-                            <input
-                              type="text"
-                              value={formData.mpesaAccountNumber || ''}
-                              onChange={(e) => handleInputChange('mpesaAccountNumber', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                              placeholder="Account number for paybill"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm text-gray-600 mb-1">Business Name (Optional)</label>
-                            <input
-                              type="text"
-                              value={formData.businessName || ''}
-                              onChange={(e) => handleInputChange('businessName', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                              placeholder="Your business name (optional)"
-                            />
-                          </div>
-                        </div>
-                      )}
-                      
-                      {formData.fiatPaymentSubtype === 'mpesa_till' && (
-                        <div className="space-y-4">
-                          <div>
-                            <label className="block text-sm text-gray-600 mb-1">Till Number</label>
-                            <input
-                              type="text"
-                              value={formData.tillNumber || ''}
-                              onChange={(e) => handleInputChange('tillNumber', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                              placeholder="e.g., 1234567"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm text-gray-600 mb-1">Business Name (Optional)</label>
-                            <input
-                              type="text"
-                              value={formData.businessName || ''}
-                              onChange={(e) => handleInputChange('businessName', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                              placeholder="Your business name (optional)"
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ) : formData.paymentMethod === 'crypto' ? (
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm text-gray-600 mb-1">Choose your payment network</label>
-                        <div className="relative network-dropdown-container">
-                          <button
-                            type="button"
-                            onClick={() => setShowNetworkDropdown(!showNetworkDropdown)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-left flex items-center justify-between bg-white"
-                          >
-                            <span className={formData.paymentNetwork ? 'text-gray-900' : 'text-gray-500'}>
-                              {formData.paymentNetwork 
-                                ? networks.find(n => n.id === formData.paymentNetwork)?.name || formData.paymentNetwork
-                                : 'Select network'}
-                            </span>
-                            <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${showNetworkDropdown ? 'rotate-180' : ''}`} />
-                          </button>
-                          
-                          {showNetworkDropdown && (
-                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto z-20">
-                              {/* Search input */}
-                              <div className="p-2 border-b border-gray-200 bg-gray-50">
-                                <div className="relative">
-                                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                                                      <input
-                      type="text"
-                      value={networkSearch}
-                      onChange={(e) => setNetworkSearch(e.target.value)}
-                      placeholder="Search networks..."
-                      className="w-full pl-10 pr-3 py-2 bg-white border border-gray-300 rounded text-black placeholder-gray-600 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
-                    />
-                                </div>
-                              </div>
-                              
-                              {/* Network list */}
-                              <div className="max-h-48 overflow-y-auto">
-                                {networks
-                                  .filter(network => 
-                                    network.name.toLowerCase().includes(networkSearch.toLowerCase()) ||
-                                    network.id.toLowerCase().includes(networkSearch.toLowerCase())
-                                  )
-                                  .map(network => (
-                                  <button
-                                    key={network.id}
-                                    type="button"
-                                    onClick={() => {
-                                      handleInputChange('paymentNetwork', network.id);
-                                      setShowNetworkDropdown(false);
-                                      setNetworkSearch('');
-                                    }}
-                                    className="w-full px-3 py-2 text-left text-gray-900 hover:bg-blue-50 transition-colors flex items-center justify-between border-b border-gray-100 last:border-b-0"
-                                  >
-                                    <div className="flex items-center space-x-3">
-                                      <span className="text-sm">{network.name}</span>
-                                    </div>
-                                    <span className="text-gray-500 text-xs font-medium">{network.id}</span>
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-sm text-gray-600 mb-1">Where do you want to receive your payment?</label>
-                        <input
-                          type="text"
-                          value={formData.paymentAddress || ''}
-                          onChange={(e) => handleInputChange('paymentAddress', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                          placeholder="Enter wallet address"
-                        />
-                      </div>
-                    </div>
-                  ) : null}
-                      </div>
-              </div>
-            </div>
-
-            {/* Invoice Items */}
-            <div className="p-4 sm:p-8 border-b border-gray-200">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 space-y-4 sm:space-y-0">
-                <h3 className="text-lg font-semibold text-gray-900">Invoice Items</h3>
-                <div className="flex space-x-2">
-                  {!hasAnyDiscounts && (
-                    <button
-                      onClick={() => {
-                        // Add a small discount to the first item to enable discount functionality
-                        if (formData.items.length > 0) {
-                          handleItemChange(0, 'discount', 5);
-                        }
-                      }}
-                      className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                    >
-                      <Plus className="h-4 w-4" />
-                      <span>Add Discount</span>
-                    </button>
-                  )}
-
-                  <button
-                    onClick={addItem}
-                    className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span>Add Item</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Items Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="text-left py-3 px-4 font-medium text-gray-700">Description</th>
-                      <th className="text-left py-3 px-4 font-medium text-gray-700">Qty</th>
-                      <th className="text-left py-3 px-4 font-medium text-gray-700">Unit Price</th>
-                      {hasAnyDiscounts && (
-                        <th className="text-left py-3 px-4 font-medium text-gray-700">Discount</th>
-                      )}
-                      <th className="text-left py-3 px-4 font-medium text-gray-700">Tax</th>
-                      <th className="text-left py-3 px-4 font-medium text-gray-700">Amount</th>
-                      <th className="text-left py-3 px-4 font-medium text-gray-700"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {formData.items.map((item, index) => (
-                      <tr key={item.id} className="border-b border-gray-100">
-                        <td className="py-3 px-4">
-                          <input
-                            type="text"
-                            value={item.description}
-                            onChange={(e) => handleItemChange(index, 'description', e.target.value)}
-                            className="w-full px-2 py-1 border text-gray-600 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            placeholder="Enter description"
-                          />
-                        </td>
-                        <td className="py-3 px-4">
-                          <input
-                            type="number"
-                            value={item.quantity}
-                            onChange={(e) => handleItemChange(index, 'quantity', parseFloat(e.target.value) || 0)}
-                            className="w-20 px-2 py-1 text-gray-600 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            min="0"
-                            step="1"
-                          />
-                        </td>
-                        <td className="py-3 px-4">
-                          <input
-                            type="number"
-                            value={item.unitPrice}
-                            onChange={(e) => handleItemChange(index, 'unitPrice', parseFloat(e.target.value) || 0)}
-                            className="w-24 px-2 py-1 border text-gray-600 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            min="0"
-                            step="0.01"
-                          />
-                        </td>
-                        {hasAnyDiscounts && (
-                          <td className="py-3 px-4">
-                            <div className="flex items-center space-x-2">
-                              <div className="relative">
-                                <input
-                                  type="number"
-                                  value={item.discount}
-                                  onChange={(e) => handleItemChange(index, 'discount', parseFloat(e.target.value) || 0)}
-                                  className="w-20 px-2 pr-6 py-1 border text-gray-600 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                  min="0"
-                                  max="100"
-                                  step="0.01"
-                                />
-                                <span className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">%</span>
-                              </div>
-                              {item.discount > 0 && (
-                                <button
-                                  onClick={() => handleItemChange(index, 'discount', 0)}
-                                  className="p-1 text-red-500 hover:text-red-700 transition-colors"
-                                  title="Remove discount"
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        )}
-                        <td className="py-3 px-4">
-                          <div className="relative">
-                            <input
-                              type="number"
-                              value={item.tax}
-                              onChange={(e) => handleItemChange(index, 'tax', parseFloat(e.target.value) || 0)}
-                              className="w-20 px-2 pr-6 py-1 border text-gray-600 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              min="0"
-                              max="100"
-                              step="0.01"
-                            />
-                            <span className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">%</span>
-                          </div>
-                          {/* Multi-Tax Rate Selector */}
-                          <div className="mt-1">
-                            <select
-                              onChange={(e) => {
-                                const selectedTax = e.target.value;
-                                if (selectedTax) {
-                                  const [, rate] = selectedTax.split(':');
-                                  const taxRate = parseFloat(rate);
-                                  if (taxRate > 0) {
-                                    handleItemChange(index, 'tax', taxRate);
-                                  }
-                                }
-                              }}
-                              className="w-full text-xs px-1 py-0.5 border text-gray-600 border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                              value=""
-                            >
-                              <option value="">Select tax type</option>
-                              <optgroup label="Common Rates">
-                                <option value="custom:0">0% - No Tax</option>
-                                <option value="custom:5">5% - Reduced Rate</option>
-                                <option value="custom:10">10% - Standard Rate</option>
-                                <option value="custom:16">16% - Kenya VAT</option>
-                                <option value="custom:20">20% - High Rate</option>
-                                <option value="custom:25">25% - Luxury Rate</option>
-                                <option value="custom:30">30% - Premium Rate</option>
-                              </optgroup>
-                              <optgroup label="Country Tax Rates">
-                                {(() => {
-                                  const countryTaxes = getTaxRatesByCountry(formData.companyAddress.country);
-                                  if (countryTaxes) {
-                                    return (
-                                      <>
-                                        {countryTaxes.vat && <option value={`vat:${countryTaxes.vat}`}>VAT {countryTaxes.vat}%</option>}
-                                        {countryTaxes.gst && <option value={`gst:${countryTaxes.gst}`}>GST {countryTaxes.gst}%</option>}
-                                        {countryTaxes.salesTax && <option value={`salesTax:${countryTaxes.salesTax}`}>Sales Tax {countryTaxes.salesTax}%</option>}
-                                        {countryTaxes.corporateTax && <option value={`corporateTax:${countryTaxes.corporateTax}`}>Corporate Tax {countryTaxes.corporateTax}%</option>}
-                                        {countryTaxes.personalTax && <option value={`personalTax:${countryTaxes.personalTax}`}>Personal Tax {countryTaxes.personalTax}%</option>}
-                                      </>
-                                    );
-                                  }
-                                  return null;
-                                })()}
-                              </optgroup>
-                            </select>
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 font-medium text-gray-700">
-                          {getCurrencySymbol()}{item.amount.toFixed(2)}
-                        </td>
-                        <td className="py-3 px-4">
-                          {formData.items.length > 1 && (
-                            <button
-                              onClick={() => removeItem(index)}
-                              className="text-red-600 hover:text-red-800"
-                              title="Remove item"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Totals */}
-              <div className="mt-6 flex justify-end">
-                <div className="w-full sm:w-64 space-y-2">
-                  <div className="flex justify-between text-gray-600">
-                    <span>Amount without tax</span>
-                    <span>{getCurrencySymbol()}{formData.subtotal.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-gray-600">
-                    <span>Total Tax amount</span>
-                    <span>{getCurrencySymbol()}{formData.totalTax.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-gray-700 text-lg font-semibold border-t pt-2">
-                    <span>Total amount</span>
-                    <span>{getCurrencySymbol()}{formData.total.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-lg font-semibold text-blue-600">
-                    <span>Due</span>
-                    <span>{getCurrencySymbol()}{formData.total.toFixed(2)}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Memo and Files */}
-            <div className="p-4 sm:p-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Memo</label>
-                  <textarea
-                    value={formData.memo}
-                    onChange={(e) => handleInputChange('memo', e.target.value)}
-                    rows={4}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                    placeholder="Add a memo..."
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Attached files</label>
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    multiple
-                    accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                  <div 
-                    onClick={() => fileInputRef.current?.click()}
-                    className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors cursor-pointer"
-                  >
-                    <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                    <p className="text-sm text-gray-600">No file attached yet.</p>
-                    <p className="text-xs text-gray-500 mt-1">Click to upload files</p>
-                  </div>
-                  {(formData.attachedFiles?.length || 0) > 0 && (
-                    <div className="mt-4 space-y-2">
-                      {formData.attachedFiles?.map((file, index) => (
-                        <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                          <div className="flex items-center space-x-2">
-                            <File className="h-4 w-4 text-gray-500" />
-                            <span className="text-sm text-gray-700">{file.name}</span>
-                            <span className="text-xs text-gray-500">({(file.size / 1024).toFixed(1)} KB)</span>
+                            {ccClient.company && (
+                              <div className="text-xs text-gray-500">Attn: {ccClient.name}</div>
+                            )}
+                            <div className="text-xs text-gray-600">{ccClient.email}</div>
                           </div>
                           <button
-                            onClick={() => handleRemoveFile(index)}
-                            className="text-red-500 hover:text-red-700"
+                            onClick={() => removeCcClient(ccClient.email)}
+                            className="text-red-500 hover:text-red-700 ml-2"
                           >
-                            ×
+                            <Trash2 className="h-3 w-3" />
                           </button>
                         </div>
                       ))}
@@ -3381,159 +2820,933 @@ export default function CreateInvoicePage() {
             </div>
           </div>
 
-          {/* Download and Send Buttons */}
-          <div className="flex flex-col sm:flex-row justify-center space-y-2 sm:space-y-0 sm:space-x-4 mt-8 mb-6">
-            {/* Download Dropdown */}
-            <div className="relative download-dropdown-container">
-              <button
-                onClick={() => setShowDownloadDropdown(!showDownloadDropdown)}
-                className="flex items-center justify-center space-x-2 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-              >
-                <Download className="h-4 w-4" />
-                <span>Download</span>
-                <ChevronDownIcon className="h-4 w-4" />
-              </button>
-              
-              {showDownloadDropdown && (
-                <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+          {/* Invoice Settings */}
+          <div className="p-4 sm:p-8 border-b border-gray-200">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+              {/* Currency */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Currency</label>
+                <div className="relative currency-dropdown-container">
                   <button
-                    onClick={() => {
-                      handleDownloadPdf();
-                      setShowDownloadDropdown(false);
-                    }}
-                    className="w-full flex items-center space-x-2 px-4 py-2 text-left hover:bg-gray-50 transition-colors"
+                    type="button"
+                    onClick={() => setShowCurrencyDropdown(!showCurrencyDropdown)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-left flex items-center justify-between bg-white"
                   >
-                    <File className="h-4 w-4 text-red-500" />
-                    <span>Download as PDF</span>
+                      <div className="flex items-center space-x-2">
+                        {formData.currency && (
+                          <Image
+                            src={getCurrencyIcon(formData.currency)}
+                            alt={formData.currency}
+                            width={20}
+                            height={20}
+                            className="rounded-sm"
+                            onError={(e) => {
+                              // Fallback to app logo if currency image fails to load
+                              e.currentTarget.src = '/chainsnobg.png';
+                            }}
+                          />
+                        )}
+                    <span className={formData.currency ? 'text-gray-900' : 'text-gray-500'}>
+                      {formData.currency 
+                        ? `${formData.currency} - ${getCurrencyByCode(formData.currency)?.name || 'Unknown'}`
+                        : 'Select currency'}
+                    </span>
+                      </div>
+                    <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${showCurrencyDropdown ? 'rotate-180' : ''}`} />
                   </button>
-                  <button
-                    onClick={() => {
-                      handleDownloadCsv();
-                      setShowDownloadDropdown(false);
-                    }}
-                    className="w-full flex items-center space-x-2 px-4 py-2 text-left hover:bg-gray-50 transition-colors"
-                  >
-                    <File className="h-4 w-4 text-blue-500" />
-                    <span>Download as CSV</span>
-                  </button>
+                  
+                  {showCurrencyDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto z-20">
+                      {/* Search input */}
+                      <div className="p-2 border-b border-gray-200 bg-gray-50">
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                              <input
+                      type="text"
+                      value={currencySearch}
+                      onChange={(e) => setCurrencySearch(e.target.value)}
+                      placeholder="Search currencies..."
+                      className="w-full pl-10 pr-3 py-2 bg-white border border-gray-300 rounded text-black placeholder-gray-600 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                    />
+                        </div>
+                      </div>
+                      
+                      {/* Currency list */}
+                      <div className="max-h-48 overflow-y-auto">
+                        {/* Fiat Currencies */}
+                        <div className="px-2 py-1 bg-gray-100 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                          Fiat Currencies
+                        </div>
+                        {fiatCurrencies
+                          .filter(currency => 
+                            currency.name.toLowerCase().includes(currencySearch.toLowerCase()) ||
+                            currency.code.toLowerCase().includes(currencySearch.toLowerCase()) ||
+                            currency.symbol.toLowerCase().includes(currencySearch.toLowerCase())
+                          )
+                          .map(currency => (
+                          <button
+                            key={currency.code}
+                            type="button"
+                            onClick={() => {
+                              handleInputChange('currency', currency.code);
+                              setShowCurrencyDropdown(false);
+                              setCurrencySearch('');
+                            }}
+                            className="w-full px-3 py-2 text-left text-gray-900 hover:bg-blue-50 transition-colors flex items-center justify-between border-b border-gray-100 last:border-b-0"
+                          >
+                            <div className="flex items-center space-x-3">
+                                <Image
+                                  src={getCurrencyIcon(currency.code)}
+                                  alt={currency.code}
+                                  width={16}
+                                  height={16}
+                                  className="rounded-sm flex-shrink-0"
+                                  onError={(e) => {
+                                    // Fallback to app logo if currency image fails to load
+                                    e.currentTarget.src = '/chainsnobg.png';
+                                  }}
+                                />
+                              <span className="text-sm">{currency.name}</span>
+                              <span className="text-blue-600 text-xs font-medium">{currency.symbol}</span>
+                            </div>
+                            <span className="text-gray-500 text-xs font-medium">{currency.code}</span>
+                          </button>
+                        ))}
+                        
+                        {/* Cryptocurrencies */}
+                        <div className="px-2 py-1 bg-gray-100 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                          Cryptocurrencies
+                        </div>
+                        {cryptoCurrencies
+                          .filter(currency => 
+                            currency.name.toLowerCase().includes(currencySearch.toLowerCase()) ||
+                            currency.code.toLowerCase().includes(currencySearch.toLowerCase()) ||
+                            currency.symbol.toLowerCase().includes(currencySearch.toLowerCase())
+                          )
+                          .map(currency => (
+                          <button
+                            key={currency.code}
+                            type="button"
+                            onClick={() => {
+                              handleInputChange('currency', currency.code);
+                              setShowCurrencyDropdown(false);
+                              setCurrencySearch('');
+                            }}
+                            className="w-full px-3 py-2 text-left text-gray-900 hover:bg-blue-50 transition-colors flex items-center justify-between border-b border-gray-100 last:border-b-0"
+                          >
+                            <div className="flex items-center space-x-3">
+                                <Image
+                                  src={getCurrencyIcon(currency.code)}
+                                  alt={currency.code}
+                                  width={16}
+                                  height={16}
+                                  className="rounded-sm flex-shrink-0"
+                                  onError={(e) => {
+                                    // Fallback to app logo if currency image fails to load
+                                    e.currentTarget.src = '/chainsnobg.png';
+                                  }}
+                                />
+                              <span className="text-sm">{currency.name}</span>
+                              <span className="text-blue-600 text-xs font-medium">{currency.symbol}</span>
+                            </div>
+                            <span className="text-gray-500 text-xs font-medium">{currency.code}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
+
+              {/* Invoice Type */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Invoice Type</label>
+                <div className="space-y-2">
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      value="regular"
+                      checked={formData.invoiceType === 'regular'}
+                      onChange={(e) => handleInputChange('invoiceType', e.target.value)}
+                      className="mr-2 "
+                    />
+                    <span className="text-sm text-gray-600">Regular</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      value="recurring"
+                      checked={formData.invoiceType === 'recurring'}
+                      onChange={(e) => handleInputChange('invoiceType', e.target.value)}
+                      className="mr-2"
+                    />
+                    <span className="text-sm text-gray-600">Recurring</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Multi-Currency */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Payment Options</label>
+                <div className="space-y-2">
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={formData.enableMultiCurrency}
+                      onChange={(e) => handleInputChange('enableMultiCurrency', e.target.checked)}
+                      className="mr-2"
+                    />
+                    <span className="text-sm text-gray-600">Enable Multi-Currency</span>
+                  </label>
+                </div>
+              </div>
             </div>
-            
-            <button
-              onClick={handleSendInvoice}
-              disabled={loading || sendingInvoice}
-              className="flex items-center justify-center space-x-2 px-6 py-2 bg-blue-800 text-white rounded-lg hover:bg-blue-900 transition-colors"
-            >
-              {sendingInvoice ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-              <span>Send Invoice</span>
-            </button>
           </div>
 
-          {/* Client Creation Modal */}
-          {showNewClientModal && (
-            <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative touch-manipulation">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900">Create New Client</h3>
-                  <button
-                    onClick={() => setShowNewClientModal(false)}
-                    className="text-gray-400 hover:text-gray-600 transition-colors touch-manipulation active:scale-95 p-2 -m-2"
-                  >
-                    ×
-                  </button>
-                </div>
-                
-                <ClientCreationForm 
-                  onSubmit={handleCreateClient}
-                  onCancel={() => setShowNewClientModal(false)}
-                />
-              </div>
+          {/* Payment Method */}
+          <div className="p-4 sm:p-8 border-b border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Payment Method</h3>
+            
+            {/* Payment Method Selector */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select Saved Payment Method
+              </label>
+              <select
+                value={selectedPaymentMethodId || ''}
+                onChange={(e) => handlePaymentMethodSelect(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white font-medium"
+              >
+                <option value="">-- Select a saved payment method --</option>
+                {savedPaymentMethods.map((method) => (
+                  <option key={method._id} value={method._id}>
+                    {method.name} ({
+                      method.type === 'fiat' ? 
+                        method.fiatDetails?.subtype === 'mpesa_paybill' ? 'M-Pesa Paybill' :
+                        method.fiatDetails?.subtype === 'mpesa_till' ? 'M-Pesa Till' :
+                        'Bank Transfer' : 
+                      method.type === 'crypto' ? 'Crypto' :
+                      'Payment Method'
+                    })
+                  </option>
+                ))}
+              </select>
             </div>
-          )}
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Payment Type</label>
+                <div className="space-y-3 text-gray-600">
+                  <label className="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="radio"
+                      value="fiat"
+                      checked={formData.paymentMethod === 'fiat'}
+                      onChange={(e) => handleInputChange('paymentMethod', e.target.value)}
+                      className="mr-3"
+                    />
+                    <div className="flex items-center">
+                      <CreditCard className="h-5 w-5 text-green-600 mr-2" />
+                      <div>
+                        <div className="font-medium text-gray-700">Local currency ({formData.currency})</div>
+                        <div className="text-sm text-gray-700">
+                          {formData.companyAddress.country === 'KE' ? ' Dynamic Selection' : 'Bank Transfer'}
+                        </div>
+                      </div>
+                    </div>
+                  </label>
+                  <label className="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="radio"
+                      value="crypto"
+                      checked={formData.paymentMethod === 'crypto'}
+                      onChange={(e) => handleInputChange('paymentMethod', e.target.value)}
+                      className="mr-3"
+                    />
+                    <div className="flex items-center">
+                      <Wallet className="h-5 w-5 text-blue-600 mr-2" />
+                      <div>
+                        <div className="font-medium text-gray-700">Crypto</div>
+                        <div className="text-sm text-gray-700">Cryptocurrency payment</div>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              </div>
 
-          {/* CC Client Creation Modal */}
-          {showCcClientCreationModal && (
-            <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900">Create New CC Client</h3>
-                  <button
-                    onClick={() => setShowCcClientCreationModal(false)}
-                    className="text-gray-400 hover:text-gray-600"
-                  >
-                    ×
-                  </button>
-                </div>
-                
-                <ClientCreationForm 
-                  onSubmit={handleCreateCcClient}
-                  onCancel={() => setShowCcClientCreationModal(false)}
-                />
-              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Payment Details</label>
+                {formData.paymentMethod === 'fiat' ? (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Payment Type</label>
+                      <div className="space-y-2">
+                        <label className="flex items-center text-gray-600">
+                          <input
+                            type="radio"
+                            value="bank"
+                            checked={formData.fiatPaymentSubtype === 'bank'}
+                            onChange={(e) => handleFiatPaymentSubtypeChange(e.target.value)}
+                            className="mr-2 text-gray-600"
+                          />
+                          <CreditCard className="h-4 w-4 text-green-600 mr-2" />
+                          Bank Transfer
+                        </label>
+                        {isKenyanUser() && (
+                          <>
+                            <label className="flex items-center text-gray-600">
+                              <input
+                                type="radio"
+                                value="mpesa_paybill"
+                                checked={formData.fiatPaymentSubtype === 'mpesa_paybill'}
+                                onChange={(e) => handleFiatPaymentSubtypeChange(e.target.value)}
+                                className="mr-2 text-gray-600"
+                              />
+                              <Smartphone className="h-4 w-4 text-orange-600 mr-2" />
+                              M-Pesa Paybill
+                            </label>
+                            <label className="flex items-center text-gray-600">
+                              <input
+                                type="radio"
+                                value="mpesa_till"
+                                checked={formData.fiatPaymentSubtype === 'mpesa_till'}
+                                onChange={(e) => handleFiatPaymentSubtypeChange(e.target.value)}
+                                className="mr-2 text-gray-600"
+                              />
+                              <Smartphone className="h-4 w-4 text-orange-600 mr-2" />
+                              M-Pesa Till Number
+                            </label>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {formData.fiatPaymentSubtype === 'bank' && (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm text-gray-700 mb-1">Bank Name</label>
+                          <BankSelector
+                            countryCode="KE"
+                            value={formData.bankName || ''}
+                            onBankSelectAction={handleBankSelect}
+                            onInputChangeAction={(value) => handleInputChange('bankName', value)}
+                            placeholder="Search for a bank..."
+                            
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-700 mb-1">SWIFT Code</label>
+                          <input
+                            type="text"
+                            value={formData.swiftCode || ''}
+                            onChange={(e) => handleInputChange('swiftCode', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="SWIFT/BIC code"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-700 mb-1">Account Number</label>
+                          <input
+                            type="text"
+                            value={formData.accountNumber || ''}
+                            onChange={(e) => handleInputChange('accountNumber', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="Account number"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-700 mb-1">Account Name</label>
+                          <input
+                            type="text"
+                            value={formData.accountName || ''}
+                            onChange={(e) => handleInputChange('accountName', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="Account holder name"
+                          />
+                        </div>
+                      </div>
+                    )}
+                    
+                    {formData.fiatPaymentSubtype === 'mpesa_paybill' && (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm text-gray-700 mb-1">Paybill Number</label>
+                          <input
+                            type="text"
+                            value={formData.paybillNumber || ''}
+                            onChange={(e) => handleInputChange('paybillNumber', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="e.g., 123456"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-600 mb-1">Account Number</label>
+                          <input
+                            type="text"
+                            value={formData.mpesaAccountNumber || ''}
+                            onChange={(e) => handleInputChange('mpesaAccountNumber', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="Account number for paybill"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-600 mb-1">Business Name (Optional)</label>
+                          <input
+                            type="text"
+                            value={formData.businessName || ''}
+                            onChange={(e) => handleInputChange('businessName', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="Your business name (optional)"
+                          />
+                        </div>
+                      </div>
+                    )}
+                    
+                    {formData.fiatPaymentSubtype === 'mpesa_till' && (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm text-gray-600 mb-1">Till Number</label>
+                          <input
+                            type="text"
+                            value={formData.tillNumber || ''}
+                            onChange={(e) => handleInputChange('tillNumber', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="e.g., 1234567"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-600 mb-1">Business Name (Optional)</label>
+                          <input
+                            type="text"
+                            value={formData.businessName || ''}
+                            onChange={(e) => handleInputChange('businessName', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="Your business name (optional)"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : formData.paymentMethod === 'crypto' ? (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Choose your payment network</label>
+                      <div className="relative network-dropdown-container">
+                        <button
+                          type="button"
+                          onClick={() => setShowNetworkDropdown(!showNetworkDropdown)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-left flex items-center justify-between bg-white"
+                        >
+                            <div className="flex items-center space-x-2">
+                              {formData.paymentNetwork && (
+                                <Image
+                                  src={getNetworkIcon(formData.paymentNetwork)}
+                                  alt={formData.paymentNetwork}
+                                  width={20}
+                                  height={20}
+                                  className="rounded-sm"
+                                  onError={(e) => {
+                                    // Fallback to app logo if network image fails to load
+                                    e.currentTarget.src = '/chainsnobg.png';
+                                  }}
+                                />
+                              )}
+                          <span className={formData.paymentNetwork ? 'text-gray-900' : 'text-gray-500'}>
+                            {formData.paymentNetwork 
+                              ? networks.find(n => n.id === formData.paymentNetwork)?.name || formData.paymentNetwork
+                              : 'Select network'}
+                          </span>
+                            </div>
+                          <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${showNetworkDropdown ? 'rotate-180' : ''}`} />
+                        </button>
+                        
+                        {showNetworkDropdown && (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto z-20">
+                            {/* Search input */}
+                            <div className="p-2 border-b border-gray-200 bg-gray-50">
+                              <div className="relative">
+                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                                    <input
+                      type="text"
+                      value={networkSearch}
+                      onChange={(e) => setNetworkSearch(e.target.value)}
+                      placeholder="Search networks..."
+                      className="w-full pl-10 pr-3 py-2 bg-white border border-gray-300 rounded text-black placeholder-gray-600 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                    />
+                              </div>
+                            </div>
+                            
+                            {/* Network list */}
+                            <div className="max-h-48 overflow-y-auto">
+                              {networks
+                                .filter(network => 
+                                  network.name.toLowerCase().includes(networkSearch.toLowerCase()) ||
+                                  network.id.toLowerCase().includes(networkSearch.toLowerCase())
+                                )
+                                .map(network => (
+                                <button
+                                  key={network.id}
+                                  type="button"
+                                  onClick={() => {
+                                    handleInputChange('paymentNetwork', network.id);
+                                    setShowNetworkDropdown(false);
+                                    setNetworkSearch('');
+                                  }}
+                                  className="w-full px-3 py-2 text-left text-gray-900 hover:bg-blue-50 transition-colors flex items-center justify-between border-b border-gray-100 last:border-b-0"
+                                >
+                                  <div className="flex items-center space-x-3">
+                                      <Image
+                                        src={getNetworkIcon(network.id)}
+                                        alt={network.id}
+                                        width={16}
+                                        height={16}
+                                        className="rounded-sm flex-shrink-0"
+                                        onError={(e) => {
+                                          // Fallback to money icon if network image fails to load
+                                          e.currentTarget.src = '/currency-flags/money-icon.png';
+                                        }}
+                                      />
+                                    <span className="text-sm">{network.name}</span>
+                                  </div>
+                                  <span className="text-gray-500 text-xs font-medium">{network.id}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Where do you want to receive your payment?</label>
+                      <input
+                        type="text"
+                        value={formData.paymentAddress || ''}
+                        onChange={(e) => handleInputChange('paymentAddress', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                        placeholder="Enter wallet address"
+                      />
+                    </div>
+                  </div>
+                ) : null}
+                    </div>
             </div>
-          )}
+          </div>
 
-          {/* Company Edit Modal */}
-          {showCompanyEditModal && (
-            <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative shadow-xl">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900">Edit Company Information</h3>
+          {/* Invoice Items */}
+          <div className="p-4 sm:p-8 border-b border-gray-200">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 space-y-4 sm:space-y-0">
+              <h3 className="text-lg font-semibold text-gray-900">Invoice Items</h3>
+              <div className="flex space-x-2">
+                {!hasAnyDiscounts && (
                   <button
-                    onClick={() => setShowCompanyEditModal(false)}
-                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                    onClick={() => {
+                      // Add a small discount to the first item to enable discount functionality
+                      if (formData.items.length > 0) {
+                        handleItemChange(0, 'discount', 5);
+                      }
+                    }}
+                    className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                   >
-                    ×
+                    <Plus className="h-4 w-4" />
+                    <span>Add Discount</span>
                   </button>
-                </div>
-                
-                <CompanyEditForm 
-                  formData={formData}
-                  onSubmit={(updatedData) => {
-                    setFormData(prev => ({ ...prev, ...updatedData }));
-                    setShowCompanyEditModal(false);
-                  }}
-                  onCancel={() => setShowCompanyEditModal(false)}
-                />
-              </div>
-            </div>
-          )}
+                )}
 
-          {/* Client Edit Modal */}
-          {showClientEditModal && (
-            <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative shadow-xl touch-manipulation">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900">Edit Client Information</h3>
-                  <button
-                    onClick={() => setShowClientEditModal(false)}
-                    className="text-gray-400 hover:text-gray-600 transition-colors touch-manipulation active:scale-95 p-2 -m-2"
-                  >
-                    ×
-                  </button>
-                </div>
-                
-                <ClientEditForm 
-                  formData={formData}
-                  onSubmit={(updatedData) => {
-                    setFormData(prev => ({ ...prev, ...updatedData }));
-                    setShowClientEditModal(false);
-                  }}
-                  onCancel={() => setShowClientEditModal(false)}
-                />
+                <button
+                  onClick={addItem}
+                  className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Add Item</span>
+                </button>
               </div>
             </div>
-          )}
+
+            {/* Items Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-3 px-4 font-medium text-gray-700">Description</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700">Qty</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700">Unit Price</th>
+                    {hasAnyDiscounts && (
+                      <th className="text-left py-3 px-4 font-medium text-gray-700">Discount</th>
+                    )}
+                    <th className="text-left py-3 px-4 font-medium text-gray-700">Tax</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700">Amount</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {formData.items.map((item, index) => (
+                    <tr key={item.id} className="border-b border-gray-100">
+                      <td className="py-3 px-4">
+                        <input
+                          type="text"
+                          value={item.description}
+                          onChange={(e) => handleItemChange(index, 'description', e.target.value)}
+                          className="w-full px-2 py-1 border text-gray-600 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Enter description"
+                        />
+                      </td>
+                      <td className="py-3 px-4">
+                        <input
+                          type="number"
+                          value={item.quantity}
+                          onChange={(e) => handleItemChange(index, 'quantity', parseFloat(e.target.value) || 0)}
+                          className="w-20 px-2 py-1 text-gray-600 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          min="0"
+                          step="1"
+                        />
+                      </td>
+                      <td className="py-3 px-4">
+                        <input
+                          type="number"
+                          value={item.unitPrice}
+                          onChange={(e) => handleItemChange(index, 'unitPrice', parseFloat(e.target.value) || 0)}
+                          className="w-24 px-2 py-1 border text-gray-600 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          min="0"
+                          step="0.01"
+                        />
+                      </td>
+                      {hasAnyDiscounts && (
+                        <td className="py-3 px-4">
+                          <div className="flex items-center space-x-2">
+                            <div className="relative">
+                              <input
+                                type="number"
+                                value={item.discount}
+                                onChange={(e) => handleItemChange(index, 'discount', parseFloat(e.target.value) || 0)}
+                                className="w-20 px-2 pr-6 py-1 border text-gray-600 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                min="0"
+                                max="100"
+                                step="0.01"
+                              />
+                              <span className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">%</span>
+                            </div>
+                            {item.discount > 0 && (
+                              <button
+                                onClick={() => handleItemChange(index, 'discount', 0)}
+                                className="p-1 text-red-500 hover:text-red-700 transition-colors"
+                                title="Remove discount"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )}
+                      <td className="py-3 px-4">
+                        <div className="relative">
+                          <input
+                            type="number"
+                            value={item.tax}
+                            onChange={(e) => handleItemChange(index, 'tax', parseFloat(e.target.value) || 0)}
+                            className="w-20 px-2 pr-6 py-1 border text-gray-600 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                          />
+                          <span className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">%</span>
+                        </div>
+                        {/* Multi-Tax Rate Selector */}
+                        <div className="mt-1">
+                          <select
+                            onChange={(e) => {
+                              const selectedTax = e.target.value;
+                              if (selectedTax) {
+                                const [, rate] = selectedTax.split(':');
+                                const taxRate = parseFloat(rate);
+                                if (taxRate > 0) {
+                                  handleItemChange(index, 'tax', taxRate);
+                                }
+                              }
+                            }}
+                            className="w-full text-xs px-1 py-0.5 border text-gray-600 border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            value=""
+                          >
+                            <option value="">Select tax type</option>
+                            <optgroup label="Common Rates">
+                              <option value="custom:0">0% - No Tax</option>
+                              <option value="custom:5">5% - Reduced Rate</option>
+                              <option value="custom:10">10% - Standard Rate</option>
+                              <option value="custom:16">16% - Kenya VAT</option>
+                              <option value="custom:20">20% - High Rate</option>
+                              <option value="custom:25">25% - Luxury Rate</option>
+                              <option value="custom:30">30% - Premium Rate</option>
+                            </optgroup>
+                            <optgroup label="Country Tax Rates">
+                              {(() => {
+                                const countryTaxes = getTaxRatesByCountry(formData.companyAddress.country);
+                                if (countryTaxes) {
+                                  return (
+                                    <>
+                                      {countryTaxes.vat && <option value={`vat:${countryTaxes.vat}`}>VAT {countryTaxes.vat}%</option>}
+                                      {countryTaxes.gst && <option value={`gst:${countryTaxes.gst}`}>GST {countryTaxes.gst}%</option>}
+                                      {countryTaxes.salesTax && <option value={`salesTax:${countryTaxes.salesTax}`}>Sales Tax {countryTaxes.salesTax}%</option>}
+                                      {countryTaxes.corporateTax && <option value={`corporateTax:${countryTaxes.corporateTax}`}>Corporate Tax {countryTaxes.corporateTax}%</option>}
+                                      {countryTaxes.personalTax && <option value={`personalTax:${countryTaxes.personalTax}`}>Personal Tax {countryTaxes.personalTax}%</option>}
+                                    </>
+                                  );
+                                }
+                                return null;
+                              })()}
+                            </optgroup>
+                          </select>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 font-medium text-gray-700">
+                        {getCurrencySymbol()}{item.amount.toFixed(2)}
+                      </td>
+                      <td className="py-3 px-4">
+                        {formData.items.length > 1 && (
+                          <button
+                            onClick={() => removeItem(index)}
+                            className="text-red-600 hover:text-red-800"
+                            title="Remove item"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Totals */}
+            <div className="mt-6 flex justify-end">
+              <div className="w-full sm:w-64 space-y-2">
+                <div className="flex justify-between text-gray-600">
+                  <span>Amount without tax</span>
+                  <span>{getCurrencySymbol()}{formData.subtotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-gray-600">
+                  <span>Total Tax amount</span>
+                  <span>{getCurrencySymbol()}{formData.totalTax.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-gray-700 text-lg font-semibold border-t pt-2">
+                  <span>Total amount</span>
+                  <span>{getCurrencySymbol()}{formData.total.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-lg font-semibold text-blue-600">
+                  <span>Due</span>
+                  <span>{getCurrencySymbol()}{formData.total.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Memo and Files */}
+          <div className="p-4 sm:p-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Memo</label>
+                <textarea
+                  value={formData.memo}
+                  onChange={(e) => handleInputChange('memo', e.target.value)}
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                  placeholder="Add a memo..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Attached files</label>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  multiple
+                  accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <div 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors cursor-pointer"
+                >
+                  <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-sm text-gray-600">No file attached yet.</p>
+                  <p className="text-xs text-gray-500 mt-1">Click to upload files</p>
+                </div>
+                {(formData.attachedFiles?.length || 0) > 0 && (
+                  <div className="mt-4 space-y-2">
+                    {formData.attachedFiles?.map((file, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                        <div className="flex items-center space-x-2">
+                          <File className="h-4 w-4 text-gray-500" />
+                          <span className="text-sm text-gray-700">{file.name}</span>
+                          <span className="text-xs text-gray-500">({(file.size / 1024).toFixed(1)} KB)</span>
+                        </div>
+                        <button
+                          onClick={() => handleRemoveFile(index)}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Hidden PDF View for PDF Generation */}
-        <div ref={pdfRef} className="hidden">
-          <InvoicePdfView formData={formData} invoiceNumber={formData.invoiceNumber} />
+        {/* Download and Send Buttons */}
+        <div className="flex flex-col sm:flex-row justify-center space-y-2 sm:space-y-0 sm:space-x-4 mt-8 mb-6">
+          {/* Download Dropdown */}
+          <div className="relative download-dropdown-container">
+            <button
+              onClick={() => setShowDownloadDropdown(!showDownloadDropdown)}
+              className="flex items-center justify-center space-x-2 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              <Download className="h-4 w-4" />
+              <span>Download</span>
+              <ChevronDownIcon className="h-4 w-4" />
+            </button>
+            
+            {showDownloadDropdown && (
+              <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                <button
+                  onClick={() => {
+                    handleDownloadPdf();
+                    setShowDownloadDropdown(false);
+                  }}
+                  className="w-full flex items-center space-x-2 px-4 py-2 text-left hover:bg-gray-50 transition-colors"
+                >
+                  <File className="h-4 w-4 text-red-500" />
+                  <span>Download as PDF</span>
+                </button>
+                <button
+                  onClick={() => {
+                    handleDownloadCsv();
+                    setShowDownloadDropdown(false);
+                  }}
+                  className="w-full flex items-center space-x-2 px-4 py-2 text-left hover:bg-gray-50 transition-colors"
+                >
+                  <File className="h-4 w-4 text-blue-500" />
+                  <span>Download as CSV</span>
+                </button>
+              </div>
+            )}
+          </div>
+          
+          <button
+            onClick={handleSendInvoice}
+            disabled={loading || sendingInvoice}
+            className="flex items-center justify-center space-x-2 px-6 py-2 bg-blue-800 text-white rounded-lg hover:bg-blue-900 transition-colors"
+          >
+            {sendingInvoice ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+            <span>Send Invoice</span>
+          </button>
         </div>
 
-        {/* Floating Action Button */}
-        <FloatingActionButton />
+        {/* Client Creation Modal */}
+        {showNewClientModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative touch-manipulation">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Create New Client</h3>
+                <button
+                  onClick={() => setShowNewClientModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors touch-manipulation active:scale-95 p-2 -m-2"
+                >
+                  ×
+                </button>
+              </div>
+              
+              <ClientCreationForm 
+                onSubmit={handleCreateClient}
+                onCancel={() => setShowNewClientModal(false)}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* CC Client Creation Modal */}
+        {showCcClientCreationModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Create New CC Client</h3>
+                <button
+                  onClick={() => setShowCcClientCreationModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  ×
+                </button>
+              </div>
+              
+              <ClientCreationForm 
+                onSubmit={handleCreateCcClient}
+                onCancel={() => setShowCcClientCreationModal(false)}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Company Edit Modal */}
+        {showCompanyEditModal && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative shadow-xl">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Edit Company Information</h3>
+                <button
+                  onClick={() => setShowCompanyEditModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  ×
+                </button>
+              </div>
+              
+              <CompanyEditForm 
+                formData={formData}
+                onSubmit={(updatedData) => {
+                  setFormData(prev => ({ ...prev, ...updatedData }));
+                  setShowCompanyEditModal(false);
+                }}
+                onCancel={() => setShowCompanyEditModal(false)}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Client Edit Modal */}
+        {showClientEditModal && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative shadow-xl touch-manipulation">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Edit Client Information</h3>
+                <button
+                  onClick={() => setShowClientEditModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors touch-manipulation active:scale-95 p-2 -m-2"
+                >
+                  ×
+                </button>
+              </div>
+              
+              <ClientEditForm 
+                formData={formData}
+                onSubmit={(updatedData) => {
+                  setFormData(prev => ({ ...prev, ...updatedData }));
+                  setShowClientEditModal(false);
+                }}
+                onCancel={() => setShowClientEditModal(false)}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Hidden PDF View for PDF Generation */}
+      <div ref={pdfRef} className="hidden">
+        <InvoicePdfView formData={formData} invoiceNumber={formData.invoiceNumber} />
+      </div>
+
+      {/* Floating Action Button */}
+      <FloatingActionButton />
       </div>
     </div>
   );
