@@ -4,15 +4,10 @@ import { useState, useEffect, useRef } from 'react';
 import { 
   TrendingUp, 
   TrendingDown, 
-  FileText, 
   Users,
-  Receipt,
   ArrowUpRight,
   ArrowDownLeft,
   AlertTriangle,
-  Clock,
-  Crown,
-  Lock
 } from 'lucide-react';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
 import { getDashboardStats, DashboardStats } from '@/lib/actions/dashboard';
@@ -21,6 +16,9 @@ import { useSubscription } from '@/lib/contexts/SubscriptionContext';
 interface StatsCardsProps {
   className?: string;
 }
+
+// Move CACHE_DURATION outside component to avoid dependency issues
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
 
 export default function StatsCards({ className = '' }: StatsCardsProps) {
   const { subscription } = useSubscription();
@@ -38,7 +36,6 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const hasInitialized = useRef(false);
-  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
 
   // Check if user has access to receivables and payables
   const isPayablesOnly = subscription?.plan?.type === 'payables';
@@ -71,6 +68,7 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
             return;
           }
         } catch (err) {
+          console.error('Error parsing cached data:', err);
           // If cache is corrupted, remove it and fetch fresh
           localStorage.removeItem(cacheKey);
         }
@@ -154,7 +152,7 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-blue-200 text-sm font-medium">Net Balance</p>
-            <p className={`text-3xl font-bold ${stats.netBalance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+            <p className={`text-2xl font-bold ${stats.netBalance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
               {stats.netBalance >= 0 ? '+' : ''}
               <FormattedNumberDisplay value={Math.abs(stats.netBalance)} />
             </p>
