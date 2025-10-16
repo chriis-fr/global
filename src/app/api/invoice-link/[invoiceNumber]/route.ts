@@ -16,7 +16,6 @@ export async function GET(
       );
     }
 
-    console.log('🔍 [Invoice Link] Processing request for invoice:', invoiceNumber);
 
     const db = await connectToDatabase();
     const invoicesCollection = db.collection('invoices');
@@ -27,7 +26,6 @@ export async function GET(
     });
 
     if (!invoice) {
-      console.log('❌ [Invoice Link] Invoice not found:', invoiceNumber);
       return NextResponse.json(
         { success: false, message: 'Invoice not found' },
         { status: 404 }
@@ -37,14 +35,12 @@ export async function GET(
     // Get recipient email from invoice
     const recipientEmail = invoice.clientDetails?.email;
     if (!recipientEmail) {
-      console.log('❌ [Invoice Link] No recipient email found for invoice:', invoiceNumber);
       return NextResponse.json(
         { success: false, message: 'Invalid invoice - no recipient email' },
         { status: 400 }
       );
     }
 
-    console.log('📧 [Invoice Link] Recipient email:', recipientEmail);
 
     // Check if recipient email is registered
     let isRegistered = false;
@@ -55,13 +51,11 @@ export async function GET(
       isRegistered = !!existingUser;
       requiresAccountCreation = !existingUser;
       
-      console.log('👤 [Invoice Link] User registration status:', {
         email: recipientEmail,
         isRegistered,
         requiresAccountCreation
       });
     } catch (error) {
-      console.error('❌ [Invoice Link] Error checking user registration:', error);
       // If there's an error checking, assume user needs to be created
       requiresAccountCreation = true;
     }
@@ -105,7 +99,6 @@ export async function GET(
       requiresAccountCreation
     };
 
-    console.log('✅ [Invoice Link] Returning invoice data:', {
       invoiceNumber,
       recipientEmail,
       isRegistered,
@@ -119,7 +112,6 @@ export async function GET(
     });
 
   } catch (error) {
-    console.error('❌ [Invoice Link] Error processing invoice link:', error);
     return NextResponse.json(
       { 
         success: false, 

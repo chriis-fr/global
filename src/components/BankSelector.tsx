@@ -40,7 +40,6 @@ export default function BankSelector({
         setFilteredBanks(data.data.banks);
       }
     } catch (error) {
-      console.error('Error loading banks:', error);
       setBanks([]);
       setFilteredBanks([]);
     } finally {

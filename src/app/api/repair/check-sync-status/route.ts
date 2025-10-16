@@ -10,7 +10,6 @@ export async function GET() {
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
 
-    console.log('🔍 [Sync Check] Checking invoice-payable synchronization status...');
 
     const db = await connectToDatabase();
     const payablesCollection = db.collection('payables');
@@ -21,7 +20,6 @@ export async function GET() {
       relatedInvoiceId: { $exists: true, $ne: null }
     }).toArray();
 
-    console.log(`🔍 [Sync Check] Found ${payablesWithInvoices.length} payables with related invoices`);
 
     const syncIssues = [];
     const syncedItems = [];
@@ -72,7 +70,6 @@ export async function GET() {
           });
         }
       } catch (error) {
-        console.error(`❌ [Sync Check] Error checking payable ${payable.payableNumber}:`, error);
         syncIssues.push({
           payableId: payable._id,
           payableNumber: payable.payableNumber,
@@ -85,7 +82,6 @@ export async function GET() {
       }
     }
 
-    console.log(`🔍 [Sync Check] Found ${syncIssues.length} sync issues, ${syncedItems.length} synced items`);
 
     return NextResponse.json({
       success: true,
@@ -99,7 +95,6 @@ export async function GET() {
     });
 
   } catch (error) {
-    console.error('❌ [Sync Check] Error:', error);
     return NextResponse.json(
       { success: false, message: 'Failed to check synchronization status' },
       { status: 500 }

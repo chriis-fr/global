@@ -53,7 +53,6 @@ export async function GET() {
     });
 
   } catch (error) {
-    console.error('Logo retrieval error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -161,7 +160,6 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Logo save error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -279,7 +277,6 @@ export async function PUT(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Logo update error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -374,7 +371,6 @@ export async function DELETE(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Logo delete error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 } 

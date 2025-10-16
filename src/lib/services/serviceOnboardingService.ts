@@ -55,7 +55,6 @@ export class ServiceOnboardingService {
         };
       }
     } catch (error) {
-      console.error('Error getting service onboarding data:', error);
       return null;
     }
   }
@@ -96,7 +95,6 @@ export class ServiceOnboardingService {
         };
       }
     } catch (error) {
-      console.error('Error getting all service onboarding data:', error);
       return null;
     }
   }
@@ -201,7 +199,6 @@ export class ServiceOnboardingService {
         };
       }
     } catch (error) {
-      console.error('Error saving service onboarding data:', error);
       return {
         success: false,
         message: 'Failed to save service onboarding data',

@@ -38,7 +38,6 @@ export function UserProfile() {
         setIsEditing(false)
       }
     } catch (error) {
-      console.error('Error updating profile:', error)
     } finally {
       setLoading(false)
     }

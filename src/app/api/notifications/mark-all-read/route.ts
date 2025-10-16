@@ -19,7 +19,6 @@ export async function PUT() {
     // Get user ID from session
     const userResponse = await fetch(`${process.env.NEXTAUTH_URL}/api/users/profile`);
     if (!userResponse.ok) {
-      console.error('❌ [Mark All Read API] Failed to fetch user profile:', userResponse.status, userResponse.statusText);
       return NextResponse.json(
         { success: false, message: 'Failed to get user profile' },
         { status: 500 }
@@ -28,7 +27,6 @@ export async function PUT() {
     
     const user = await userResponse.json();
     if (!user.success) {
-      console.error('❌ [Mark All Read API] User profile response indicates failure:', user);
       return NextResponse.json(
         { success: false, message: 'User not found' },
         { status: 404 }
@@ -51,7 +49,6 @@ export async function PUT() {
       message: 'All notifications marked as read'
     });
   } catch (error) {
-    console.error('Error marking all notifications as read:', error);
     return NextResponse.json(
       { success: false, message: 'Failed to mark all notifications as read' },
       { status: 500 }

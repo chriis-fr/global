@@ -52,7 +52,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { email, invoiceNumber, invoiceData } = body;
 
-    console.log('🚀 [Invoice Account Creation] Starting account creation for:', email);
 
     // Validate required fields
     if (!email || !invoiceNumber || !invoiceData) {
@@ -137,7 +136,6 @@ export async function POST(request: NextRequest) {
       }
     };
 
-    console.log('📝 [Invoice Account Creation] Creating user with data:', {
       email: userData.email,
       name: userData.name,
       userType: userData.userType
@@ -145,7 +143,6 @@ export async function POST(request: NextRequest) {
 
     // Create the user
     const newUser = await UserService.createUser(userData);
-    console.log('✅ [Invoice Account Creation] User created with ID:', newUser._id);
 
     // Create payable record for the invoice
     await createPayableFromInvoice(newUser._id!.toString(), invoiceData);
@@ -162,7 +159,6 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('❌ [Invoice Account Creation] Error creating account:', error);
     return NextResponse.json(
       { 
         success: false, 
@@ -176,7 +172,6 @@ export async function POST(request: NextRequest) {
 
 async function createPayableFromInvoice(userId: string, invoiceData: InvoiceData) {
   try {
-    console.log('💳 [Invoice Account Creation] Creating payable from invoice for user:', userId);
 
     const db = await connectToDatabase();
     const payablesCollection = db.collection('payables');
@@ -222,21 +217,17 @@ async function createPayableFromInvoice(userId: string, invoiceData: InvoiceData
     };
 
     const result = await payablesCollection.insertOne(payableData);
-    console.log('✅ [Invoice Account Creation] Payable created with ID:', result.insertedId);
 
     // Also sync to financial ledger
     try {
       const { LedgerSyncService } = await import('@/lib/services/ledgerSyncService');
       const payableWithId = { _id: result.insertedId, ...payableData };
       await LedgerSyncService.syncPayableToLedger(payableWithId);
-      console.log('✅ [Invoice Account Creation] Payable synced to ledger');
     } catch (syncError) {
-      console.error('⚠️ [Invoice Account Creation] Failed to sync payable to ledger:', syncError);
       // Don't fail the request if sync fails
     }
 
   } catch (error) {
-    console.error('❌ [Invoice Account Creation] Error creating payable:', error);
     // Don't fail the account creation if payable creation fails
   }
 }

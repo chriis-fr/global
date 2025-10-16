@@ -45,7 +45,6 @@ export default function NotificationBadge() {
       const response = await fetch('/api/notifications?limit=1');
       if (!response.ok) {
         if (loading) {
-          console.error('Error fetching notification count:', response.status);
         }
         return;
       }
@@ -65,7 +64,6 @@ export default function NotificationBadge() {
       }
     } catch (error) {
       if (loading) {
-        console.error('Error fetching notification count:', error);
       }
     } finally {
       setLoading(false);

@@ -85,7 +85,6 @@ export class LedgerSyncService {
 
       const result = await ledgerCollection.insertOne(ledgerEntry);
       
-      console.log('✅ [LedgerSync] Invoice synced to ledger:', {
         invoiceId: invoice._id,
         ledgerEntryId: result.insertedId,
         entryId: ledgerEntry.entryId
@@ -93,7 +92,6 @@ export class LedgerSyncService {
 
       return { _id: result.insertedId, ...ledgerEntry };
     } catch (error) {
-      console.error('❌ [LedgerSync] Error syncing invoice to ledger:', error);
       return null;
     }
   }
@@ -176,7 +174,6 @@ export class LedgerSyncService {
 
       const result = await ledgerCollection.insertOne(ledgerEntry);
       
-      console.log('✅ [LedgerSync] Payable synced to ledger:', {
         payableId: payable._id,
         ledgerEntryId: result.insertedId,
         entryId: ledgerEntry.entryId
@@ -184,7 +181,6 @@ export class LedgerSyncService {
 
       return { _id: result.insertedId, ...ledgerEntry };
     } catch (error) {
-      console.error('❌ [LedgerSync] Error syncing payable to ledger:', error);
       return null;
     }
   }
@@ -227,7 +223,6 @@ export class LedgerSyncService {
       const updatedEntry = await ledgerCollection.findOne({ _id: ledgerEntryId });
       return updatedEntry as FinancialLedgerEntry;
     } catch (error) {
-      console.error('❌ [LedgerSync] Error updating ledger entry from invoice:', error);
       return null;
     }
   }
@@ -272,7 +267,6 @@ export class LedgerSyncService {
       const updatedEntry = await ledgerCollection.findOne({ _id: ledgerEntryId });
       return updatedEntry as FinancialLedgerEntry;
     } catch (error) {
-      console.error('❌ [LedgerSync] Error updating ledger entry from payable:', error);
       return null;
     }
   }
@@ -332,14 +326,12 @@ export class LedgerSyncService {
         if (result) payablesSynced++;
       }
 
-      console.log('✅ [LedgerSync] Sync completed:', {
         invoicesSynced,
         payablesSynced
       });
 
       return { invoicesSynced, payablesSynced };
     } catch (error) {
-      console.error('❌ [LedgerSync] Error syncing all existing data:', error);
       return { invoicesSynced: 0, payablesSynced: 0 };
     }
   }

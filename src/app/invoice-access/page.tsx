@@ -96,7 +96,6 @@ function InvoiceAccessContent() {
         }),
       });
     } catch (error) {
-      console.error('Error marking token as used:', error);
     }
   }, [token, session?.user?.id]);
 
@@ -118,17 +117,14 @@ function InvoiceAccessContent() {
 
       const data = await response.json();
       if (data.success) {
-        console.log('✅ [Invoice Access] Payable created for registered user');
         // Mark token as used and redirect to app
         await markTokenAsUsed();
         router.push('/dashboard/services/payables');
       } else {
-        console.error('❌ [Invoice Access] Failed to create payable:', data.message);
         // Still redirect to payables page
         router.push('/dashboard/services/payables');
       }
     } catch (error) {
-      console.error('❌ [Invoice Access] Error creating payable:', error);
       // Fallback: redirect to payables page
       router.push('/dashboard/services/payables');
     }
@@ -155,7 +151,6 @@ function InvoiceAccessContent() {
         setError(data.message || 'Invalid or expired access link');
       }
     } catch (error) {
-      console.error('Error validating token:', error);
       setError('Failed to validate access link');
     } finally {
       setLoading(false);
@@ -189,7 +184,6 @@ function InvoiceAccessContent() {
         redirect: true
       });
     } catch (error) {
-      console.error('Sign in error:', error);
     }
   };
 

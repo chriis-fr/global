@@ -13,7 +13,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('✅ [Mark Token Used] Marking token as used:', token);
 
     const db = await connectToDatabase();
     const accessTokensCollection = db.collection('invoice_access_tokens');
@@ -37,7 +36,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('✅ [Mark Token Used] Token marked as used successfully');
 
     return NextResponse.json({
       success: true,
@@ -45,7 +43,6 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('❌ [Mark Token Used] Error marking token as used:', error);
     return NextResponse.json(
       { 
         success: false, 

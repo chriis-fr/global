@@ -131,7 +131,6 @@ const useFormPersistence = (key: string, initialData: PayableFormData, setAutoSa
         const parsed = JSON.parse(saved);
         setFormData(parsed);
       } catch (error) {
-        console.error('Error parsing saved form data:', error);
       }
     }
   }, [key]);
@@ -146,7 +145,6 @@ const useFormPersistence = (key: string, initialData: PayableFormData, setAutoSa
         localStorage.setItem(key, JSON.stringify(updated));
         setTimeout(() => setAutoSaveStatus('saved'), 500);
       } catch (error) {
-        console.error('Error saving form data:', error);
         setAutoSaveStatus('error');
       }
       
@@ -240,7 +238,6 @@ export default function CreatePayablePage() {
         setVendors(data.data);
       }
     } catch (error) {
-      console.error('Error loading vendors:', error);
     }
   };
 
@@ -306,7 +303,6 @@ export default function CreatePayablePage() {
         setShowVendorCreation(false);
       }
     } catch (error) {
-      console.error('Error creating vendor:', error);
     }
   };
 
@@ -394,7 +390,6 @@ export default function CreatePayablePage() {
         router.push('/dashboard/services/payables');
       }
     } catch (error) {
-      console.error('Error saving draft:', error);
     } finally {
       setIsSubmitting(false);
     }
@@ -418,7 +413,6 @@ export default function CreatePayablePage() {
         router.push('/dashboard/services/payables');
       }
     } catch (error) {
-      console.error('Error submitting payable:', error);
     } finally {
       setIsSubmitting(false);
     }

@@ -3,7 +3,6 @@ import { testEmailConnection, sendTestEmail } from '@/lib/services/emailService'
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('🧪 [Email Test] Starting email service test...');
     
     // Test SMTP connection
     const connectionTest = await testEmailConnection();
@@ -26,7 +25,6 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    console.log('🧪 [Email Test] Sending test email to:', testEmail);
     
     // Send test email with timeout
     const emailResult = await Promise.race([
@@ -50,7 +48,6 @@ export async function GET(request: NextRequest) {
     }
     
   } catch (error) {
-    console.error('❌ [Email Test] Error:', error);
     return NextResponse.json(
       { success: false, message: 'Email test failed', error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

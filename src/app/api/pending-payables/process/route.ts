@@ -15,7 +15,6 @@ export async function POST() {
       );
     }
 
-    console.log('🔄 [Process Pending Payables] Processing for user:', session.user.email);
 
     const db = await connectToDatabase();
     const pendingPayablesCollection = db.collection('pending_payables');
@@ -28,7 +27,6 @@ export async function POST() {
     }).toArray();
 
     if (pendingPayables.length === 0) {
-      console.log('✅ [Process Pending Payables] No pending payables found');
       return NextResponse.json({
         success: true,
         message: 'No pending payables to process',
@@ -36,7 +34,6 @@ export async function POST() {
       });
     }
 
-    console.log(`📋 [Process Pending Payables] Found ${pendingPayables.length} pending payables`);
 
     let processedCount = 0;
 
@@ -49,7 +46,6 @@ export async function POST() {
         });
 
         if (existingPayable) {
-          console.log('✅ [Process Pending Payables] Payable already exists, marking as processed');
           await pendingPayablesCollection.updateOne(
             { _id: pendingPayable._id },
             { $set: { processed: true, processedAt: new Date() } }
@@ -99,7 +95,6 @@ export async function POST() {
 
         // Insert payable
         const result = await payablesCollection.insertOne(payableData);
-        console.log('✅ [Process Pending Payables] Payable created with ID:', result.insertedId);
 
         // Mark as processed
         await pendingPayablesCollection.updateOne(
@@ -112,20 +107,16 @@ export async function POST() {
           const { LedgerSyncService } = await import('@/lib/services/ledgerSyncService');
           const payableWithId = { _id: result.insertedId, ...payableData };
           await LedgerSyncService.syncPayableToLedger(payableWithId);
-          console.log('✅ [Process Pending Payables] Payable synced to ledger');
         } catch (syncError) {
-          console.error('⚠️ [Process Pending Payables] Failed to sync payable to ledger:', syncError);
         }
 
         processedCount++;
 
       } catch (error) {
-        console.error('❌ [Process Pending Payables] Error processing pending payable:', error);
         // Continue with other payables even if one fails
       }
     }
 
-    console.log(`✅ [Process Pending Payables] Successfully processed ${processedCount} payables`);
 
     return NextResponse.json({
       success: true,
@@ -134,7 +125,6 @@ export async function POST() {
     });
 
   } catch (error) {
-    console.error('❌ [Process Pending Payables] Error:', error);
     return NextResponse.json(
       { success: false, message: 'Failed to process pending payables' },
       { status: 500 }

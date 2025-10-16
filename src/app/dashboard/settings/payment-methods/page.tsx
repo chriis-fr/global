@@ -94,7 +94,6 @@ export default function PaymentMethodsPage() {
     const isKenya = userCountry === 'KE' || newPaymentMethod.currency === 'KES';
     
     // Debug logging
-    console.log('isKenyanUser check:', {
       userCountry,
       currency: newPaymentMethod.currency,
       isKenya,
@@ -113,7 +112,6 @@ export default function PaymentMethodsPage() {
         setPaymentMethods(data.paymentMethods);
       }
     } catch (error) {
-      console.error('Error loading payment methods:', error);
     } finally {
       setLoading(false);
     }
@@ -135,7 +133,6 @@ export default function PaymentMethodsPage() {
         alert(data.error || 'Failed to delete payment method');
       }
     } catch (error) {
-      console.error('Error deleting payment method:', error);
       alert('Failed to delete payment method');
     }
   };
@@ -428,7 +425,6 @@ export default function PaymentMethodsPage() {
                   loadPaymentMethods();
                 }
               } catch (error) {
-                console.error('Error adding payment method:', error);
               }
             }}>
               <div className="space-y-4">

@@ -100,7 +100,6 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('❌ [Debug API] Error:', error);
     return NextResponse.json(
       { success: false, message: 'Failed to fetch relationship data' },
       { status: 500 }

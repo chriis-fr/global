@@ -78,7 +78,6 @@ export async function GET() {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Error fetching pending approvals:', error);
     return NextResponse.json(
       { 
         success: false, 

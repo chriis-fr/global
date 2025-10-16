@@ -28,7 +28,6 @@ export async function GET(request: NextRequest) {
     // Get user from database using session email
     const user = await UserService.getUserByEmail(session.user.email);
     if (!user) {
-      console.error('❌ [Notifications API] User not found in database:', session.user.email);
       return NextResponse.json(
         { success: false, message: 'User not found' },
         { status: 404 }
@@ -60,7 +59,6 @@ export async function GET(request: NextRequest) {
       }
     });
   } catch (error) {
-    console.error('Error getting notifications:', error);
     return NextResponse.json(
       { success: false, message: 'Failed to get notifications' },
       { status: 500 }
@@ -108,7 +106,6 @@ export async function POST(request: NextRequest) {
     // Get user from database using session email
     const user = await UserService.getUserByEmail(session.user.email);
     if (!user) {
-      console.error('❌ [Notifications API] User not found in database:', session.user.email);
       return NextResponse.json(
         { success: false, message: 'User not found' },
         { status: 404 }
@@ -149,7 +146,6 @@ export async function POST(request: NextRequest) {
       message: 'Notification created successfully'
     });
   } catch (error) {
-    console.error('Error creating notification:', error);
     return NextResponse.json(
       { success: false, message: 'Failed to create notification' },
       { status: 500 }

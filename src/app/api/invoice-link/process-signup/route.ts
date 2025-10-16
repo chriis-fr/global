@@ -7,7 +7,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { userId, invoiceToken } = body;
 
-    console.log('🔗 [Invoice Signup] Processing signup for user:', userId, 'with token:', invoiceToken);
 
     if (!userId || !invoiceToken) {
       return NextResponse.json(
@@ -25,7 +24,6 @@ export async function POST(request: NextRequest) {
     });
 
     if (!invoice) {
-      console.log('❌ [Invoice Signup] Invoice not found:', invoiceToken);
       return NextResponse.json(
         { success: false, message: 'Invoice not found' },
         { status: 404 }
@@ -45,7 +43,6 @@ export async function POST(request: NextRequest) {
 
     const recipientEmail = invoice.clientDetails?.email || invoice.clientEmail;
     if (user.email !== recipientEmail) {
-      console.log('❌ [Invoice Signup] Email mismatch:', user.email, 'vs', recipientEmail);
       return NextResponse.json(
         { success: false, message: 'Email does not match invoice recipient' },
         { status: 400 }
@@ -55,7 +52,6 @@ export async function POST(request: NextRequest) {
     // Create payable record for the invoice
     await createPayableFromInvoice(userId, invoice);
 
-    console.log('✅ [Invoice Signup] Successfully processed signup for invoice:', invoiceToken);
 
     return NextResponse.json({
       success: true,
@@ -67,7 +63,6 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('❌ [Invoice Signup] Error processing signup:', error);
     return NextResponse.json(
       { 
         success: false, 
@@ -81,7 +76,6 @@ export async function POST(request: NextRequest) {
 
 async function createPayableFromInvoice(userId: string, invoice: Record<string, unknown>) {
   try {
-    console.log('💳 [Invoice Signup] Creating payable from invoice for user:', userId);
 
     const db = await connectToDatabase();
     const payablesCollection = db.collection('payables');
@@ -93,7 +87,6 @@ async function createPayableFromInvoice(userId: string, invoice: Record<string, 
     });
 
     if (existingPayable) {
-      console.log('✅ [Invoice Signup] Payable already exists for this invoice');
       return;
     }
 
@@ -138,21 +131,17 @@ async function createPayableFromInvoice(userId: string, invoice: Record<string, 
     };
 
     const result = await payablesCollection.insertOne(payableData);
-    console.log('✅ [Invoice Signup] Payable created with ID:', result.insertedId);
 
     // Also sync to financial ledger
     try {
       const { LedgerSyncService } = await import('@/lib/services/ledgerSyncService');
       const payableWithId = { _id: result.insertedId, ...payableData };
       await LedgerSyncService.syncPayableToLedger(payableWithId);
-      console.log('✅ [Invoice Signup] Payable synced to ledger');
     } catch (syncError) {
-      console.error('⚠️ [Invoice Signup] Failed to sync payable to ledger:', syncError);
       // Don't fail the request if sync fails
     }
 
   } catch (error) {
-    console.error('❌ [Invoice Signup] Error creating payable:', error);
     // Don't fail the signup if payable creation fails
   }
 }

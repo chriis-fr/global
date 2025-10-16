@@ -88,14 +88,12 @@ function POST() {
                         }).toArray()];
                 case 5:
                     invoicesToFix = _b.sent();
-                    console.log("\uD83D\uDD0D [Fix Invoice] Found ".concat(invoicesToFix.length, " invoices to fix for user: ").concat(user_1.email));
                     fixedCount = 0;
                     _i = 0, invoicesToFix_1 = invoicesToFix;
                     _b.label = 6;
                 case 6:
                     if (!(_i < invoicesToFix_1.length)) return [3 /*break*/, 9];
                     invoice = invoicesToFix_1[_i];
-                    console.log("\uD83D\uDD04 [Fix Invoice] Fixing invoice: ".concat(invoice.invoiceNumber));
                     return [4 /*yield*/, db.collection('invoices').updateOne({ _id: invoice._id }, {
                             $set: {
                                 organizationId: user_1.organizationId,
@@ -108,10 +106,8 @@ function POST() {
                     result = _b.sent();
                     if (result.modifiedCount > 0) {
                         fixedCount++;
-                        console.log("\u2705 [Fix Invoice] Fixed invoice: ".concat(invoice.invoiceNumber));
                     }
                     else {
-                        console.log("\u274C [Fix Invoice] Failed to fix invoice: ".concat(invoice.invoiceNumber));
                     }
                     _b.label = 8;
                 case 8:
@@ -130,7 +126,6 @@ function POST() {
                     })];
                 case 10:
                     error_1 = _b.sent();
-                    console.error('Error fixing owner invoices:', error_1);
                     return [2 /*return*/, server_1.NextResponse.json({
                             success: false,
                             message: 'Failed to fix invoices',

@@ -40,7 +40,6 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
         setPreferredCurrencyState('USD');
       }
     } catch (error) {
-      console.error('Error fetching currency preference:', error);
       setPreferredCurrencyState('USD');
     } finally {
       setIsLoading(false);

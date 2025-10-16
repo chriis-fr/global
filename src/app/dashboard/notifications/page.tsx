@@ -67,7 +67,6 @@ export default function NotificationsPage() {
         setStats(data.data.stats);
       }
     } catch (error) {
-      console.error('Error loading notifications:', error);
     } finally {
       setLoading(false);
     }
@@ -97,7 +96,6 @@ export default function NotificationsPage() {
         loadNotifications();
       }
     } catch (error) {
-      console.error('Error marking notification as read:', error);
     }
   };
 
@@ -119,7 +117,6 @@ export default function NotificationsPage() {
         loadNotifications();
       }
     } catch (error) {
-      console.error('Error deleting notification:', error);
     }
   };
 
@@ -143,7 +140,6 @@ export default function NotificationsPage() {
         loadNotifications();
       }
     } catch (error) {
-      console.error('Error marking all notifications as read:', error);
     }
   };
 
@@ -162,7 +158,6 @@ export default function NotificationsPage() {
         alert(`Failed to create test notification: ${error.message}`);
       }
     } catch (error) {
-      console.error('Error creating test notification:', error);
       alert('Failed to create test notification');
     }
   };

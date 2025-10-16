@@ -23,7 +23,6 @@ export async function POST(request: NextRequest) {
       try {
         user = await UserService.getUserById(userId);
       } catch {
-        console.error('Invalid user ID format:', userId);
       }
     }
     if (!user) {
@@ -84,7 +83,6 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Error updating onboarding step:', error);
     return NextResponse.json(
       { 
         success: false, 

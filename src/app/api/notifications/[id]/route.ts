@@ -47,7 +47,6 @@ export async function PUT(
       message: 'Notification marked as read'
     });
   } catch (error) {
-    console.error('Error marking notification as read:', error);
     return NextResponse.json(
       { success: false, message: 'Failed to mark notification as read' },
       { status: 500 }
@@ -98,7 +97,6 @@ export async function DELETE(
       message: 'Notification deleted successfully'
     });
   } catch (error) {
-    console.error('Error deleting notification:', error);
     return NextResponse.json(
       { success: false, message: 'Failed to delete notification' },
       { status: 500 }

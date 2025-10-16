@@ -10,7 +10,6 @@ export async function POST() {
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
 
-    console.log('🔧 [Data Repair] Starting paid status synchronization repair...');
 
     const db = await connectToDatabase();
     const payablesCollection = db.collection('payables');
@@ -22,7 +21,6 @@ export async function POST() {
       relatedInvoiceId: { $exists: true, $ne: null }
     }).toArray();
 
-    console.log(`🔍 [Data Repair] Found ${paidPayables.length} paid payables to check`);
 
     let repairedCount = 0;
     let errorCount = 0;
@@ -38,7 +36,6 @@ export async function POST() {
         if (relatedInvoice) {
           // Check if invoice status needs to be updated
           if (relatedInvoice.status !== 'paid') {
-            console.log(`🔧 [Data Repair] Repairing invoice ${relatedInvoice.invoiceNumber} (${relatedInvoice.status} → paid)`);
             
             // Update the invoice status to paid
             const updateResult = await invoicesCollection.updateOne(
@@ -63,7 +60,6 @@ export async function POST() {
                 newStatus: 'paid',
                 success: true
               });
-              console.log(`✅ [Data Repair] Successfully updated invoice ${relatedInvoice.invoiceNumber}`);
             } else {
               results.push({
                 payableId: payable._id,
@@ -77,7 +73,6 @@ export async function POST() {
               });
             }
           } else {
-            console.log(`✅ [Data Repair] Invoice ${relatedInvoice.invoiceNumber} already marked as paid`);
             results.push({
               payableId: payable._id,
               payableNumber: payable.payableNumber,
@@ -90,7 +85,6 @@ export async function POST() {
             });
           }
         } else {
-          console.log(`⚠️ [Data Repair] Related invoice not found for payable ${payable.payableNumber}`);
           results.push({
             payableId: payable._id,
             payableNumber: payable.payableNumber,
@@ -104,7 +98,6 @@ export async function POST() {
           errorCount++;
         }
       } catch (error) {
-        console.error(`❌ [Data Repair] Error processing payable ${payable.payableNumber}:`, error);
         results.push({
           payableId: payable._id,
           payableNumber: payable.payableNumber,
@@ -119,7 +112,6 @@ export async function POST() {
       }
     }
 
-    console.log(`✅ [Data Repair] Repair completed: ${repairedCount} invoices updated, ${errorCount} errors`);
 
     return NextResponse.json({
       success: true,
@@ -133,7 +125,6 @@ export async function POST() {
     });
 
   } catch (error) {
-    console.error('❌ [Data Repair] Error:', error);
     return NextResponse.json(
       { success: false, message: 'Failed to repair data synchronization' },
       { status: 500 }

@@ -133,7 +133,6 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Error processing invoice approval:', error);
     return NextResponse.json(
       { 
         success: false, 

@@ -56,7 +56,6 @@ export function LogoManager({ onLogoSelectAction, selectedLogoId, className = ''
         setMessage({ type: 'error', text: 'Failed to load logos' });
       }
     } catch (error) {
-      console.error('Error fetching logos:', error);
       setMessage({ type: 'error', text: 'Failed to load logos' });
     } finally {
       setLoading(false);
@@ -136,7 +135,6 @@ export function LogoManager({ onLogoSelectAction, selectedLogoId, className = ''
         throw new Error(saveResult.error || 'Failed to save logo');
       }
     } catch (error) {
-      console.error('Error uploading logo:', error);
       setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Upload failed' });
     } finally {
       setUploading(false);
@@ -172,7 +170,6 @@ export function LogoManager({ onLogoSelectAction, selectedLogoId, className = ''
         throw new Error(result.error || 'Failed to update logo');
       }
     } catch (error) {
-      console.error('Error updating logo:', error);
       setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Update failed' });
     }
   };
@@ -196,7 +193,6 @@ export function LogoManager({ onLogoSelectAction, selectedLogoId, className = ''
         throw new Error(result.error || 'Failed to delete logo');
       }
     } catch (error) {
-      console.error('Error deleting logo:', error);
       setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Delete failed' });
     }
   };
@@ -223,7 +219,6 @@ export function LogoManager({ onLogoSelectAction, selectedLogoId, className = ''
         throw new Error(result.error || 'Failed to update default logo');
       }
     } catch (error) {
-      console.error('Error setting default logo:', error);
       setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Failed to set default' });
     }
   };

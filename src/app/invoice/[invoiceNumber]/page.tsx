@@ -107,7 +107,6 @@ export default function InvoiceLinkPage() {
         setError(data.message || 'Invoice not found');
       }
     } catch (error) {
-      console.error('Error loading invoice:', error);
       setError('Failed to load invoice');
     } finally {
       setLoading(false);
@@ -129,7 +128,6 @@ export default function InvoiceLinkPage() {
         callbackUrl: `/invoice/${invoiceNumber}`,
       });
     } catch (error) {
-      console.error('Sign in error:', error);
     }
   };
 

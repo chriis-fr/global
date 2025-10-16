@@ -117,7 +117,6 @@ export default function PayableViewPage() {
         setError(data.message || 'Failed to load payable');
       }
     } catch (err) {
-      console.error('Error loading payable:', err);
       setError('Failed to load payable');
     } finally {
       setLoading(false);
@@ -178,11 +177,9 @@ export default function PayableViewPage() {
           sessionStorage.setItem('lastPaymentAction', Date.now().toString());
         }
       } else {
-        console.error('Failed to update status:', data.message);
         alert('Failed to update payable status. Please try again.');
       }
     } catch (err) {
-      console.error('Error updating status:', err);
     } finally {
       setUpdatingStatus(false);
     }
@@ -205,10 +202,8 @@ export default function PayableViewPage() {
       if (data.success) {
         router.push('/dashboard/services/payables?refresh=true');
       } else {
-        console.error('Failed to delete payable:', data.message);
       }
     } catch (err) {
-      console.error('Error deleting payable:', err);
     }
   };
 
@@ -218,7 +213,6 @@ export default function PayableViewPage() {
 
     try {
       setDownloadingReceipt(true);
-      console.log('📤 [Payables] Starting receipt download for payable:', payable.payableNumber);
 
       // Create a temporary container for receipt generation
       const receiptContainer = document.createElement('div');
@@ -370,9 +364,7 @@ export default function PayableViewPage() {
       const filename = `Receipt_${payable.payableNumber || 'payable'}_${payable.paymentDate ? new Date(payable.paymentDate).toLocaleDateString().replace(/\//g, '-') : new Date().toLocaleDateString().replace(/\//g, '-')}.pdf`;
       pdf.save(filename);
 
-      console.log('✅ [Payables] Receipt downloaded successfully');
     } catch (error) {
-      console.error('❌ [Payables] Error downloading receipt:', error);
       alert('Failed to download receipt. Please try again.');
     } finally {
       setDownloadingReceipt(false);

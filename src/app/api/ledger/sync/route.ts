@@ -10,12 +10,10 @@ export async function POST() {
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
 
-    console.log('🔄 [API Ledger Sync] Starting sync process...');
 
     // Sync all existing invoices and payables to the ledger
     const result = await LedgerSyncService.syncAllExistingData();
 
-    console.log('✅ [API Ledger Sync] Sync completed:', result);
 
     return NextResponse.json({
       success: true,
@@ -24,7 +22,6 @@ export async function POST() {
     });
 
   } catch (error) {
-    console.error('❌ [API Ledger Sync] Error syncing data:', error);
     
     return NextResponse.json(
       { 

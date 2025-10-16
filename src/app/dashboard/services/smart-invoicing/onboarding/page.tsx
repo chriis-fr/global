@@ -98,7 +98,6 @@ export default function SmartInvoicingOnboardingPage() {
             const data = await response.json();
             if (data.success && data.data) {
               const userProfile = data.data;
-              console.log('📋 [Onboarding] Loading user profile:', userProfile);
               
               // Pre-fill with complete user data
               setFormData(prev => ({
@@ -122,7 +121,6 @@ export default function SmartInvoicingOnboardingPage() {
             }
           }
         } catch (error) {
-          console.error('❌ [Onboarding] Error loading user profile:', error);
           // Fallback to session data only
           setFormData(prev => ({
             ...prev,
@@ -180,10 +178,8 @@ export default function SmartInvoicingOnboardingPage() {
                 invoiceTemplate: existingData.invoiceSettings?.invoiceTemplate || prev.invoiceSettings.invoiceTemplate
               }
             }));
-            console.log('✅ [Onboarding] Loaded existing onboarding data:', existingData);
           }
         } catch (error) {
-          console.error('Error loading existing onboarding data:', error);
         }
       }
     };
@@ -269,13 +265,10 @@ export default function SmartInvoicingOnboardingPage() {
 
       const data = await response.json();
       if (data.success) {
-        console.log('✅ [Onboarding] Service onboarding completed successfully');
         router.push('/dashboard/services/smart-invoicing?refresh=true');
       } else {
-        console.error('Failed to complete service onboarding:', data.message);
       }
     } catch (error) {
-      console.error('Error completing service onboarding:', error);
     } finally {
       setLoading(false);
     }

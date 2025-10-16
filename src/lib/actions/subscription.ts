@@ -75,8 +75,7 @@ export async function getCurrentMonthInvoiceCount(userId: string): Promise<numbe
     
     return currentMonthInvoices.length;
     
-  } catch (error) {
-    console.error('❌ [ServerAction] Error getting invoice count:', error);
+  } catch {
     return 0;
   }
 }
@@ -89,10 +88,8 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
 export async function clearSubscriptionCache(userId?: string): Promise<void> {
   if (userId) {
     subscriptionCache.delete(userId);
-    console.log('🗑️ [ServerAction] Cleared subscription cache for user:', userId);
   } else {
     subscriptionCache.clear();
-    console.log('🗑️ [ServerAction] Cleared all subscription cache');
   }
 }
 
@@ -113,13 +110,11 @@ export async function activate30DayTrial(userId: string): Promise<{ success: boo
     
     // Check if user already has a pro subscription (don't override)
     if (user.subscription && user.subscription.planId !== 'receivables-free' && user.subscription.status === 'active') {
-      console.log('✅ [Trial] User already has pro subscription, skipping trial activation');
       return { success: true };
     }
     
     // Check if user has already used their trial
     if (user.subscription?.hasUsedTrial) {
-      console.log('⚠️ [Trial] User has already used their 30-day trial');
       return { success: false, error: 'Trial already used' };
     }
     
@@ -151,23 +146,19 @@ export async function activate30DayTrial(userId: string): Promise<{ success: boo
     // Clear cache for this user
     clearSubscriptionCache(userId);
     
-    console.log('✅ [Trial] 30-day trial activated for user:', userId);
     return { success: true };
     
-  } catch (error) {
-    console.error('❌ [Trial] Failed to activate 30-day trial:', error);
+  } catch {
     return { success: false, error: 'Failed to activate trial' };
   }
 }
 
 export async function getUserSubscription(): Promise<SubscriptionData | null> {
-  console.log('🔍 [ServerAction] Getting user subscription');
   
   try {
     const session = await getServerSession(authOptions);
     
     if (!session?.user?.id) {
-      console.log('❌ [ServerAction] No session found');
       return null;
     }
 
@@ -177,7 +168,6 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
     const currentTime = Date.now();
     
     if (cached && (currentTime - cached.timestamp) < CACHE_DURATION) {
-      console.log('✅ [ServerAction] Using cached subscription data');
       return cached.data;
     }
     
@@ -187,20 +177,12 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
     // Get user data
     const user = await db.collection('users').findOne({ _id: userObjectId });
     if (!user) {
-      console.log('❌ [ServerAction] User not found in database');
       return null;
     }
     
-    console.log(' [ServerAction] User found:', {
-      userId: session.user.id,
-      email: user.email,
-      hasSubscription: !!user.subscription,
-      organizationId: user.organizationId
-    });
     
     // Check if user is a member of an organization
     if (user.organizationId) {
-      console.log('🏢 [ServerAction] User is organization member, using organization subscription');
       
       // Get organization details
       const organization = await db.collection('organizations').findOne({ _id: user.organizationId });

@@ -42,7 +42,6 @@ export async function GET(
       data: client
     });
   } catch (error) {
-    console.error('Error fetching client:', error);
     return NextResponse.json(
       { success: false, message: 'Failed to fetch client' },
       { status: 500 }
@@ -144,7 +143,6 @@ export async function PUT(
       message: 'Client updated successfully'
     });
   } catch (error) {
-    console.error('Error updating client:', error);
     return NextResponse.json(
       { success: false, message: 'Failed to update client' },
       { status: 500 }
@@ -190,7 +188,6 @@ export async function DELETE(
       message: 'Client deleted successfully'
     });
   } catch (error) {
-    console.error('Error deleting client:', error);
     return NextResponse.json(
       { success: false, message: 'Failed to delete client' },
       { status: 500 }

@@ -18,12 +18,10 @@ export async function initializeDatabaseConnection() {
     
     isInitialized = true;
   } catch (error) {
-    console.error('❌ [DB-Init] Failed to connect to MongoDB:', error);
     throw error;
   }
 }
 
 // Auto-initialize when this module is imported
 if (typeof window === 'undefined') { // Only run on server-side
-  initializeDatabaseConnection().catch(console.error);
 } 

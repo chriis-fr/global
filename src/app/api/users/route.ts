@@ -15,7 +15,6 @@ export async function GET() {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Error fetching users:', error);
     return NextResponse.json(
       { 
         success: false, 
@@ -64,7 +63,6 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString()
     }, { status: 201 });
   } catch (error) {
-    console.error('Error creating user:', error);
     return NextResponse.json(
       { 
         success: false, 

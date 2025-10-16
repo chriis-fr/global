@@ -122,7 +122,6 @@ export default function PayablesOnboardingPage() {
             const data = await response.json();
             if (data.success && data.data) {
               const userProfile = data.data;
-              console.log('📋 [Payables Onboarding] Loading user profile:', userProfile);
               
               // Pre-fill with complete user data
               setOnboardingData(prev => ({
@@ -145,7 +144,6 @@ export default function PayablesOnboardingPage() {
             }
           }
         } catch (error) {
-          console.error('❌ [Payables Onboarding] Error loading user profile:', error);
           // Fallback to session data only
           setOnboardingData(prev => ({
             ...prev,
@@ -227,7 +225,6 @@ export default function PayablesOnboardingPage() {
         router.push('/dashboard/services/payables?refresh=true');
       }
     } catch (error) {
-      console.error('Error completing onboarding:', error);
     } finally {
       setLoading(false);
     }

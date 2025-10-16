@@ -67,8 +67,7 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
             setLoading(false);
             return;
           }
-        } catch (err) {
-          console.error('Error parsing cached data:', err);
+        } catch {
           // If cache is corrupted, remove it and fetch fresh
           localStorage.removeItem(cacheKey);
         }
@@ -92,8 +91,7 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
         } else {
           setError(result.error || 'Failed to load stats');
         }
-      } catch (err) {
-        console.error('Error loading dashboard stats:', err);
+      } catch {
         setError('Failed to load stats');
       } finally {
         setLoading(false);

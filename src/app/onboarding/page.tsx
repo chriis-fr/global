@@ -121,7 +121,6 @@ export default function OnboardingPage() {
         services: session.user.services || {}
       };
       
-      console.log('🔍 [Onboarding] Session user data:', {
         id: session.user.id,
         userType: session.user.userType,
         email: session.user.email,
@@ -147,7 +146,6 @@ export default function OnboardingPage() {
         setCurrentStep(onboardingData.data.onboarding.currentStep);
       }
     } catch (error) {
-      console.error('Error loading onboarding data:', error);
     } finally {
       setLoading(false);
     }
@@ -169,7 +167,6 @@ export default function OnboardingPage() {
           const data = await response.json();
           
           if (data.success && data.data.onboarding.completed) {
-            console.log('✅ [Onboarding] User has already completed onboarding, redirecting to dashboard');
             window.location.href = '/dashboard';
             return;
           }
@@ -177,7 +174,6 @@ export default function OnboardingPage() {
           // If not completed, continue with normal flow
           loadUserAndServices();
         } catch (error) {
-          console.error('❌ [Onboarding] Error checking onboarding status:', error);
           // Continue with normal flow if check fails
           loadUserAndServices();
         }
@@ -211,7 +207,6 @@ export default function OnboardingPage() {
         setCurrentStep(step);
       }
     } catch (error) {
-      console.error('Error updating onboarding step:', error);
     } finally {
       setUpdating(false);
     }
@@ -239,7 +234,6 @@ export default function OnboardingPage() {
         setUser(prev => prev ? { ...prev, services: data.data.user.services } : null);
       }
     } catch (error) {
-      console.error('Error toggling service:', error);
     }
   };
 
@@ -448,7 +442,6 @@ export default function OnboardingPage() {
                       .map(([serviceKey, service]) => {
                         const Icon = iconMap[service.icon] || FileText; // Fallback to FileText if icon not found
                         if (!iconMap[service.icon]) {
-                          console.warn(`⚠️ [Onboarding] Missing icon for service ${serviceKey}: ${service.icon}`);
                         }
                         const isEnabled = user?.services?.[serviceKey] || false;
                         const isReady = service.ready || false;

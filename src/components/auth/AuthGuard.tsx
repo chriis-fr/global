@@ -26,7 +26,6 @@ export function AuthGuard({ children, fallback }: AuthGuardProps) {
         setIsAuthenticated(false);
       }
     } catch (error) {
-      console.error('Auth check failed:', error);
       setIsAuthenticated(false);
     } finally {
       setLoading(false);

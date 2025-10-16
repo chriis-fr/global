@@ -22,7 +22,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('🔐 [Access Token] Generating secure access token for invoice:', invoiceId);
 
     const db = await connectToDatabase();
     const invoicesCollection = db.collection('invoices');
@@ -69,7 +68,6 @@ export async function POST(request: NextRequest) {
     const baseUrl = frontendUrl.startsWith('http') ? frontendUrl : `https://${frontendUrl}`;
     const accessUrl = `${baseUrl}/invoice-access?token=${token}`;
 
-    console.log('✅ [Access Token] Generated secure access token:', {
       invoiceId,
       recipientEmail: tokenData.recipientEmail,
       expiresAt
@@ -86,7 +84,6 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('❌ [Access Token] Error generating access token:', error);
     return NextResponse.json(
       { 
         success: false, 

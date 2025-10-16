@@ -43,7 +43,6 @@ export default function DashboardPage() {
           }
         }
       } catch (error) {
-        console.error('Failed to fetch user data:', error);
       }
     };
 
@@ -54,12 +53,10 @@ export default function DashboardPage() {
     const loadStats = async () => {
       // Don't load data if no session
       if (!session?.user) {
-        console.log('Dashboard: No session user, skipping data load');
         return;
       }
 
       try {
-        console.log('Dashboard: Loading stats for user:', session.user.email);
         // setLoading(true); // Removed - stats load independently
         
         // Fetch data in parallel like the services pages do - without timeout
@@ -75,7 +72,6 @@ export default function DashboardPage() {
         const clientsData = await clientsResponse.json();
         const ledgerData = await ledgerResponse.json();
 
-        console.log('Dashboard: API responses:', {
           invoices: invoicesData.success,
           paidInvoices: paidInvoicesData.success,
           clients: clientsData.success,
@@ -118,7 +114,6 @@ export default function DashboardPage() {
           overdueCount: (ledgerStats?.overdueReceivables || 0) + (ledgerStats?.overduePayables || 0)
         });
 
-        console.log('✅ Dashboard: Stats loaded successfully', {
           totalRevenue,
           paidRevenue,
           pendingInvoices,
@@ -131,10 +126,8 @@ export default function DashboardPage() {
         setUsingFallbackData(false);
 
       } catch (error) {
-        console.error('Error loading dashboard stats:', error);
         
         // For any error, show fallback data
-        console.log('⚠️ Dashboard: Using fallback data due to API error');
         
         setStats({
           totalRevenue: 0,
@@ -200,7 +193,6 @@ export default function DashboardPage() {
   const isPaidUser = subscription?.plan?.planId && subscription.plan.planId !== 'receivables-free';
 
   // Debug logging
-  console.log('🔍 [Dashboard] Subscription debug:', {
     subscription: subscription?.plan,
     hasReceivablesAccess,
     hasPayablesAccess,

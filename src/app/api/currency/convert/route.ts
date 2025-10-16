@@ -56,7 +56,6 @@ export async function POST(request: NextRequest) {
       }
     });
   } catch (error) {
-    console.error('Error converting currency:', error);
     return NextResponse.json(
       { 
         success: false, 
@@ -99,7 +98,6 @@ export async function GET() {
       }
     });
   } catch (error) {
-    console.error('Error fetching user currency preference:', error);
     return NextResponse.json(
       { 
         success: false, 

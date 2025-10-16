@@ -81,16 +81,24 @@ export const authOptions: NextAuthOptions = {
             id: user._id!.toString(),
             email: user.email,
             name: user.name,
-            image: user.profilePicture || user.avatar,
-            userType: user.userType,
+            image: user.avatar,
             role: user.role,
-            address: user.address,
-            taxId: user.taxId,
-            onboarding: user.onboarding,
+            userType: 'individual', // Default value since property doesn't exist on User model
+            address: {
+              street: '',
+              city: '',
+              country: '',
+              postalCode: ''
+            }, // Default empty address object since property doesn't exist on User model
+            onboarding: {
+              completed: user.onboarding?.isCompleted || false,
+              currentStep: user.onboarding?.currentStep || 0,
+              completedSteps: user.onboarding?.completedSteps || [],
+              serviceOnboarding: user.onboarding?.data || {}
+            },
             services: user.services as unknown as Record<string, boolean>
           }
-        } catch (error) {
-          console.error('❌ [Auth] Error during credentials login:', error)
+        } catch {
           return null
         }
       }
@@ -268,16 +276,18 @@ export const authOptions: NextAuthOptions = {
           const dbUser = await UserService.getUserByEmail(token.email as string)
           if (dbUser) {
             token.organizationId = dbUser.organizationId?.toString()
-            token.userType = dbUser.userType
             token.role = dbUser.role
-            token.address = dbUser.address
-            token.taxId = dbUser.taxId
-            token.onboarding = dbUser.onboarding
+            token.onboarding = {
+              completed: dbUser.onboarding?.isCompleted || false,
+              currentStep: dbUser.onboarding?.currentStep || 0,
+              completedSteps: dbUser.onboarding?.completedSteps || [],
+              serviceOnboarding: dbUser.onboarding?.data || {}
+            }
             token.services = dbUser.services || createDefaultServices()
             token.mongoId = dbUser._id?.toString()
           }
-        } catch (error) {
-          console.error('❌ [Auth] Error fetching latest user data for JWT:', error)
+        } catch {
+          // Error fetching latest user data for JWT
         }
       }
       

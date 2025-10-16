@@ -37,20 +37,16 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
         
         // Check if cache is for the current user and still valid
         if (cachedUserId === userId && now - timestamp < CACHE_DURATION) {
-          console.log('📦 [SubscriptionContext] Using cached subscription data for user:', userId);
           return data;
         } else if (cachedUserId !== userId) {
-          console.log('🔄 [SubscriptionContext] Cache is for different user, clearing');
           localStorage.removeItem(CACHE_KEY);
           localStorage.removeItem(USER_CACHE_KEY);
         } else {
-          console.log('⏰ [SubscriptionContext] Cache expired, removing');
           localStorage.removeItem(CACHE_KEY);
           localStorage.removeItem(USER_CACHE_KEY);
         }
       }
-    } catch (error) {
-      console.error('❌ [SubscriptionContext] Error reading cache:', error);
+    } catch {
       localStorage.removeItem(CACHE_KEY);
       localStorage.removeItem(USER_CACHE_KEY);
     }
@@ -69,15 +65,13 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
         };
         localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
         localStorage.setItem(USER_CACHE_KEY, userId);
-        console.log('💾 [SubscriptionContext] Subscription data cached for user:', userId);
       } else {
         // Clear cache for organization members or when no subscription data
         localStorage.removeItem(CACHE_KEY);
         localStorage.removeItem(USER_CACHE_KEY);
-        console.log('🗑️ [SubscriptionContext] Cache cleared');
       }
-    } catch (error) {
-      console.error('❌ [SubscriptionContext] Error caching data:', error);
+    } catch {
+      // Error caching data
     }
   }, []);
 
@@ -85,7 +79,6 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     if (typeof window === 'undefined') return;
     localStorage.removeItem(CACHE_KEY);
     localStorage.removeItem(USER_CACHE_KEY);
-    console.log('🗑️ [SubscriptionContext] Cache cleared');
   }, []);
 
   const fetchSubscription = useCallback(async (forceRefresh = false) => {
@@ -105,7 +98,6 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
       }
     }
 
-    console.log('🔄 [SubscriptionContext] Fetching subscription data via server action...');
     setLoading(true);
     setError(null);
 
@@ -115,25 +107,16 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
       if (subscriptionData) {
         setSubscription(subscriptionData);
         setCachedData(subscriptionData, session.user.id);
-        console.log('✅ [SubscriptionContext] Subscription data received and cached:', {
-          planId: subscriptionData.plan?.planId,
-          status: subscriptionData.status,
-          canCreateInvoice: subscriptionData.canCreateInvoice,
-          canAccessPayables: subscriptionData.canAccessPayables
-        });
       } else {
-        console.log('⚠️ [SubscriptionContext] No subscription data returned, user may be organization member or not exist in database yet');
         // Don't throw error, just set loading to false and let the fallback handle it
         setLoading(false);
         return;
       }
     } catch (err) {
-      console.error('❌ [SubscriptionContext] Error fetching subscription:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch subscription');
       
       // Only provide fallback subscription for individual users, not organization members
       if (session?.user?.id) {
-        console.log('🔄 [SubscriptionContext] Checking if user is organization member before providing fallback');
         
         // Check if user is an organization member by making a quick API call
         try {
@@ -141,12 +124,10 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
           const orgData = await orgResponse.json();
           
           if (orgData.success && orgData.data.hasOrganization) {
-            console.log('🏢 [SubscriptionContext] User is organization member, not providing individual fallback subscription');
             // Organization members should not have individual subscriptions
             setSubscription(null);
             setCachedData(null);
           } else {
-            console.log('🔄 [SubscriptionContext] User is individual, providing fallback free plan subscription');
             const fallbackData = {
               plan: {
                 planId: 'receivables-free',
@@ -174,10 +155,8 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
             setSubscription(fallbackData);
             setCachedData(fallbackData, session.user.id);
           }
-        } catch (orgError) {
-          console.error('❌ [SubscriptionContext] Error checking organization status:', orgError);
+        } catch {
           // Fallback to individual subscription if we can't check organization status
-          console.log('🔄 [SubscriptionContext] Providing fallback free plan subscription due to error');
           const fallbackData = {
             plan: {
               planId: 'receivables-free',
@@ -232,7 +211,6 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
         if (cached) {
           const cacheAge = Date.now() - JSON.parse(localStorage.getItem(CACHE_KEY) || '{}').timestamp;
           if (cacheAge > 30 * 60 * 1000) { // 30 minutes
-            console.log('🔄 [SubscriptionContext] Window focused, cache is stale, refetching');
             fetchSubscription(true);
           }
         }
@@ -244,7 +222,6 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
   }, [fetchSubscription, getCachedData, session?.user?.id]);
 
   const refetch = useCallback(() => {
-    console.log('🔄 [SubscriptionContext] Manual refetch requested - clearing cache and fetching fresh data');
     clearCache();
     fetchSubscription(true);
   }, [fetchSubscription, clearCache]);

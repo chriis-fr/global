@@ -35,12 +35,10 @@ export class KRAService {
    * Verify KRA tax ID against the official KRA APIthe das
    */
   static async verifyTaxID(taxID: string): Promise<KRAVerificationResult> {
-    console.log('🔍 [KRA] Starting tax ID verification for:', taxID);
     
     try {
       // Validate input
       if (!taxID || taxID.trim().length === 0) {
-        console.log('❌ [KRA] Invalid tax ID provided');
         return {
           success: false,
           error: {
@@ -52,7 +50,6 @@ export class KRAService {
 
       // Clean the tax ID (remove spaces, dashes, etc.)
       const cleanTaxID = taxID.replace(/[\s\-_]/g, '').toUpperCase();
-      console.log('🧹 [KRA] Cleaned tax ID:', cleanTaxID);
 
       // Prepare request
       const requestBody: KRAVerificationRequest = {
@@ -62,7 +59,6 @@ export class KRAService {
 
       const authToken = Buffer.from(`${process.env.KRA_CLIENT_ID}:${process.env.KRA_CLIENT_SECRET}`).toString('base64');
 
-      console.log('📤 [KRA] Sending verification request:', {
         url: this.BASE_URL,
         taxpayerType: requestBody.TaxpayerType,
         taxpayerID: requestBody.TaxpayerID
@@ -78,14 +74,11 @@ export class KRAService {
         body: JSON.stringify(requestBody),
       });
 
-      console.log('📥 [KRA] Received response, status:', response.status);
 
       const responseData = await response.json();
-      console.log('📋 [KRA] Response data:', responseData);
 
       // Handle success response
       if (response.ok && responseData.TaxpayerPIN && responseData.TaxpayerName) {
-        console.log('✅ [KRA] Tax ID verification successful');
         return {
           success: true,
           data: {
@@ -101,7 +94,6 @@ export class KRAService {
       const errorMessage = errorResponse.ErrorMessage || errorResponse.errorMessage || 'Unknown error';
       const requestId = errorResponse.RequestId || errorResponse.requestId;
 
-      console.log('❌ [KRA] Tax ID verification failed:', {
         code: errorCode,
         message: errorMessage,
         requestId
@@ -117,8 +109,6 @@ export class KRAService {
       };
 
     } catch (error) {
-      console.error('❌ [KRA] Error during tax ID verification:', error);
-      console.error('🔍 [KRA] Error details:', {
         name: error instanceof Error ? error.name : 'Unknown',
         message: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : 'No stack trace'

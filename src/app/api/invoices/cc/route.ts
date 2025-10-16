@@ -166,7 +166,6 @@ export async function POST(request: NextRequest) {
         clientName: ccClient.name
       });
 
-      console.log('✅ [API CC Invoices] Created CC invoice:', {
         id: result.insertedId,
         invoiceNumber: ccInvoiceNumber,
         clientEmail: ccClient.email
@@ -193,12 +192,9 @@ export async function POST(request: NextRequest) {
         );
 
         if (emailResult.success) {
-          console.log('✅ [API CC Invoices] Email sent to CC recipient:', ccClient.email);
         } else {
-          console.error('❌ [API CC Invoices] Failed to send email to CC recipient:', ccClient.email);
         }
       } catch {
-        console.error('❌ [API CC Invoices] Error sending email to CC recipient:', ccClient.email);
       }
     }
 
@@ -214,7 +210,6 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    console.log('✅ [API CC Invoices] Created CC invoices successfully:', {
       primaryInvoiceId,
       ccInvoicesCount: ccInvoices.length,
       ccInvoices: ccInvoices.map(inv => inv.invoiceNumber)
@@ -227,7 +222,6 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('❌ [API CC Invoices] Error creating CC invoices:', error);
     return NextResponse.json(
       { success: false, message: 'Failed to create CC invoices' },
       { status: 500 }

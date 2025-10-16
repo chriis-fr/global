@@ -14,7 +14,6 @@ export async function GET() {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Error fetching services:', error);
     return NextResponse.json(
       { 
         success: false, 
@@ -107,7 +106,6 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Error updating services:', error);
     return NextResponse.json(
       { 
         success: false, 

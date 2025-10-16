@@ -14,7 +14,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('🔍 [Token Validation] Validating access token:', token);
 
     const db = await connectToDatabase();
     const accessTokensCollection = db.collection('invoice_access_tokens');
@@ -28,7 +27,6 @@ export async function POST(request: NextRequest) {
     });
 
     if (!tokenData) {
-      console.log('❌ [Token Validation] Invalid or expired token');
       return NextResponse.json(
         { success: false, message: 'Invalid or expired token' },
         { status: 404 }
@@ -41,7 +39,6 @@ export async function POST(request: NextRequest) {
     });
 
     if (!invoice) {
-      console.log('❌ [Token Validation] Invoice not found');
       return NextResponse.json(
         { success: false, message: 'Invoice not found' },
         { status: 404 }
@@ -56,10 +53,8 @@ export async function POST(request: NextRequest) {
       user = await UserService.getUserByEmail(tokenData.recipientEmail);
       isRegistered = !!user;
     } catch (error) {
-      console.error('❌ [Token Validation] Error checking user registration:', error);
     }
 
-    console.log('✅ [Token Validation] Token validated successfully:', {
       invoiceId: invoice._id,
       recipientEmail: tokenData.recipientEmail,
       isRegistered
@@ -108,7 +103,6 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('❌ [Token Validation] Error validating token:', error);
     return NextResponse.json(
       { 
         success: false, 

@@ -64,10 +64,8 @@ export default function VendorsPage() {
       if (result.success) {
         setVendors(result.data || []);
       } else {
-        console.error('❌ [Vendors] Failed to fetch vendors:', result.message);
       }
     } catch (error) {
-      console.error('❌ [Vendors] Error fetching vendors:', error);
     } finally {
       setLoading(false);
     }
@@ -108,11 +106,9 @@ export default function VendorsPage() {
         resetForm();
         fetchVendors();
       } else {
-        console.error('❌ [Vendors] Failed to save vendor:', result.message);
         alert(result.message || 'Failed to save vendor');
       }
     } catch (error) {
-      console.error('❌ [Vendors] Error saving vendor:', error);
       alert('Failed to save vendor');
     }
   };
@@ -132,11 +128,9 @@ export default function VendorsPage() {
       if (result.success) {
         fetchVendors();
       } else {
-        console.error('❌ [Vendors] Failed to delete vendor:', result.message);
         alert(result.message || 'Failed to delete vendor');
       }
     } catch (error) {
-      console.error('❌ [Vendors] Error deleting vendor:', error);
       alert('Failed to delete vendor');
     }
   };
