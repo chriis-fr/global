@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { getUserSubscription, SubscriptionData } from '@/lib/actions/subscription';
+import LoadingSpinner from '@/components/ui/LoadingSpinner';
 
 interface SubscriptionContextType {
   subscription: SubscriptionData | null;
@@ -228,7 +229,14 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
 
   return (
     <SubscriptionContext.Provider value={{ subscription, loading, error, refetch, clearCache }}>
-      {children}
+      {loading && session?.user?.id ? (
+        <LoadingSpinner 
+          fullScreen={true} 
+          message="Loading your subscription..." 
+        />
+      ) : (
+        children
+      )}
     </SubscriptionContext.Provider>
   )
 }

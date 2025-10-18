@@ -57,7 +57,6 @@ export async function GET(
       data: payable
     });
   } catch (error) {
-    console.error('Error fetching payable:', error);
     return NextResponse.json(
       { success: false, message: 'Failed to fetch payable' },
       { status: 500 }
@@ -188,7 +187,6 @@ export async function PUT(
       // Update the related invoice status to "paid" as well
       try {
         if (existingPayable.relatedInvoiceId) {
-          console.log('🔄 [Payable Update] Updating related invoice:', {
             payableId: id,
             relatedInvoiceId: existingPayable.relatedInvoiceId,
             payableStatus: 'paid'
@@ -208,7 +206,6 @@ export async function PUT(
           
         }
       } catch (invoiceUpdateError) {
-        console.error('⚠️ [Payable Update] Failed to update related invoice:', invoiceUpdateError);
         // Don't fail the payable update if invoice update fails
       }
 
@@ -236,7 +233,6 @@ export async function PUT(
         });
         
       } catch (notificationError) {
-        console.error('⚠️ [Payable Update] Failed to create payment notification:', notificationError);
       }
 
         // Update financial ledger for net balance calculation
@@ -255,7 +251,6 @@ export async function PUT(
             }
           );
         } catch (ledgerError) {
-          console.error('⚠️ [Payable Update] Failed to update financial ledger:', ledgerError);
         }
 
       return NextResponse.json({
@@ -290,7 +285,6 @@ export async function PUT(
       if (newStatus === 'paid') {
         try {
           if (currentPayable.relatedInvoiceId) {
-            console.log('🔄 [Payable Update] Updating related invoice via status change:', {
               payableId: id,
               relatedInvoiceId: currentPayable.relatedInvoiceId,
               newStatus: 'paid'
@@ -310,7 +304,6 @@ export async function PUT(
             
           }
         } catch (invoiceUpdateError) {
-          console.error('⚠️ [Payable Update] Failed to update related invoice via status change:', invoiceUpdateError);
           // Don't fail the payable update if invoice update fails
         }
 
@@ -330,7 +323,6 @@ export async function PUT(
             }
           );
         } catch (ledgerError) {
-          console.error('⚠️ [Payable Update] Failed to update financial ledger via status change:', ledgerError);
         }
       }
     }
@@ -442,7 +434,6 @@ export async function PUT(
       data: { _id: id, ...updateData }
     });
   } catch (error) {
-    console.error('Error updating payable:', error);
     return NextResponse.json(
       { success: false, message: 'Failed to update payable' },
       { status: 500 }
@@ -492,7 +483,6 @@ export async function DELETE(
       message: 'Payable deleted successfully'
     });
   } catch (error) {
-    console.error('Error deleting payable:', error);
     return NextResponse.json(
       { success: false, message: 'Failed to delete payable' },
       { status: 500 }

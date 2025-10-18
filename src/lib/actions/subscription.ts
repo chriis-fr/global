@@ -187,17 +187,11 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
       // Get organization details
       const organization = await db.collection('organizations').findOne({ _id: user.organizationId });
       if (organization) {
-        console.log('🏢 [ServerAction] User is organization member, getting subscription from owner');
         
         // Find the owner by matching billing email or by role
         let owner = organization.members.find((member: OrganizationMember) => member.role === 'owner');
         
         if (owner) {
-          console.log('✅ [ServerAction] Found owner by role:', { 
-            userId: owner.userId, 
-            email: owner.email, 
-            role: owner.role 
-          });
         }
         
         // If no owner role found, find by billing email match
@@ -206,60 +200,31 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
             member.email === organization.billingEmail
           );
           if (owner) {
-            console.log('🔍 [ServerAction] Found owner by billing email match:', { 
-              userId: owner.userId, 
-              email: owner.email, 
-              role: owner.role 
-            });
           }
         }
         
         if (!owner) {
-          console.log('❌ [ServerAction] No owner found in organization');
-          console.log('🔍 [ServerAction] Available members:', organization.members.map((m: OrganizationMember) => ({ role: m.role, email: m.email, userId: m.userId })));
-          console.log('🔍 [ServerAction] Billing email:', organization.billingEmail);
           return null;
         }
         
         // Get the owner's user record to access their subscription
-        console.log('🔍 [ServerAction] Looking for owner user with ID:', owner.userId);
         const ownerUser = await db.collection('users').findOne({ _id: new ObjectId(owner.userId) });
         if (!ownerUser) {
-          console.log('❌ [ServerAction] Owner user not found for ID:', owner.userId);
-          console.log('🔍 [ServerAction] Owner data:', { 
-            userId: owner.userId, 
-            email: owner.email, 
-            role: owner.role 
-          });
           return null;
         }
         
-        console.log('✅ [ServerAction] Found owner user:', { 
-          _id: ownerUser._id, 
-          email: ownerUser.email, 
-          hasSubscription: !!ownerUser.subscription 
-        });
         
         if (!ownerUser.subscription) {
-          console.log('❌ [ServerAction] Owner has no subscription');
           return null;
         }
 
-        console.log('🔍 [ServerAction] Owner subscription details:', {
-          planId: ownerUser.subscription.planId,
-          status: ownerUser.subscription.status,
-          updatedAt: ownerUser.subscription.updatedAt,
-          createdAt: ownerUser.subscription.createdAt
-        });
         
-        console.log('✅ [ServerAction] Using owner\'s subscription for organization member:', ownerUser.subscription.planId);
         
         // Check if organization has cached subscription and if it's up to date
         let orgSubscription = organization.subscription;
         let needsUpdate = false;
         
         if (!orgSubscription) {
-          console.log('🔄 [ServerAction] No cached subscription, using owner\'s subscription');
           orgSubscription = ownerUser.subscription;
           needsUpdate = true;
         } else {
@@ -268,11 +233,9 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
           const orgUpdatedAt = new Date(orgSubscription.updatedAt || orgSubscription.createdAt);
           
           if (ownerUpdatedAt > orgUpdatedAt) {
-            console.log('🔄 [ServerAction] Owner\'s subscription is newer, updating organization cache');
             orgSubscription = ownerUser.subscription;
             needsUpdate = true;
           } else {
-            console.log('✅ [ServerAction] Using cached organization subscription');
           }
         }
         
@@ -288,9 +251,7 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
                 }
               }
             );
-            console.log('✅ [ServerAction] Organization subscription cache updated');
-          } catch (error) {
-            console.error('❌ [ServerAction] Failed to update organization subscription cache:', error);
+          } catch {
             // Continue with owner's subscription even if cache update fails
           }
         }
@@ -345,28 +306,18 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
           }
         };
 
-        console.log('✅ [ServerAction] Returning subscription data for organization member:', {
-          planId: subscriptionData.plan?.planId,
-          status: subscriptionData.status,
-          canCreateInvoice: subscriptionData.canCreateInvoice,
-          canAccessPayables: subscriptionData.canAccessPayables,
-          canUseAdvancedFeatures: subscriptionData.canUseAdvancedFeatures
-        });
 
         // Cache the result for organization members too
         subscriptionCache.set(cacheKey, { data: subscriptionData, timestamp: currentTime });
-        console.log('💾 [ServerAction] Cached organization subscription data for user:', session.user.id);
 
         return subscriptionData;
       } else {
-        console.log('❌ [ServerAction] Organization not found for member');
         return null;
       }
     }
     
     // Check if user has a pending invitation before initializing subscription
     if (!user.subscription) {
-      console.log('🔍 [ServerAction] No subscription found, checking for pending invitations...');
       
       // Check if user has a pending invitation
       const pendingInvitation = await db.collection('invitation_tokens').findOne({
@@ -376,20 +327,12 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
       });
       
       if (pendingInvitation) {
-        console.log('⏳ [ServerAction] User has pending invitation, skipping subscription initialization');
-        console.log('📋 [ServerAction] Pending invitation details:', {
-          organizationId: pendingInvitation.organizationId,
-          role: pendingInvitation.role,
-          expiresAt: pendingInvitation.expiresAt
-        });
         return null; // Return null to indicate no subscription yet (will be set after invitation completion)
       }
       
       // Activate 30-day trial for new users
-      console.log('🎉 [ServerAction] No pending invitation found, activating 30-day trial for user');
       const trialResult = await activate30DayTrial(session.user.id);
       if (!trialResult.success) {
-        console.log('⚠️ [ServerAction] Failed to activate trial, falling back to free plan');
         await db.collection('users').updateOne(
           { _id: userObjectId },
           {
@@ -412,7 +355,6 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
       const hasUsedTrial = user.subscription.hasUsedTrial;
       
       if (!hasProSubscription && !hasUsedTrial) {
-        console.log('🎉 [ServerAction] Existing user eligible for 30-day trial, activating...');
         await activate30DayTrial(session.user.id);
       }
     }
@@ -431,7 +373,6 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
     
     // If trial has expired, downgrade to free plan
     if (subscription.status === 'trial' && trialEndDate && currentDate >= trialEndDate) {
-      console.log('⏰ [ServerAction] Trial expired, downgrading to free plan');
       await db.collection('users').updateOne(
         { _id: userObjectId },
         {
@@ -461,25 +402,13 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
     if (planId === 'trial-premium') {
       // Trial users get unlimited invoices
       canCreateInvoice = true;
-      console.log('🎉 [ServerAction] Trial user - unlimited invoices');
     } else if (planId === 'receivables-free') {
       // Free plan users can create invoices only if they haven't reached the monthly limit
       canCreateInvoice = currentMonthInvoiceCount < 5;
-      console.log('🔍 [ServerAction] Free plan invoice check:', {
-        currentCount: currentMonthInvoiceCount,
-        limit: 5,
-        canCreate: canCreateInvoice
-      });
     } else {
       // Paid plan users can create invoices based on their plan limits
       const planLimit = plan?.limits?.invoicesPerMonth || -1;
       canCreateInvoice = planLimit === -1 || currentMonthInvoiceCount < planLimit;
-      console.log('�� [ServerAction] Paid plan invoice check:', {
-        planId,
-        currentCount: currentMonthInvoiceCount,
-        planLimit,
-        canCreate: canCreateInvoice
-      });
     }
     
     const canUseAdvancedFeatures = Boolean(isTrialOrPro);
@@ -512,22 +441,13 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
       limits,
     };
     
-    console.log('✅ [ServerAction] Subscription data processed:', {
-      planId: result.plan?.planId,
-      status: result.status,
-      invoicesThisMonth: result.usage.invoicesThisMonth,
-      canCreateInvoice: result.canCreateInvoice,
-      limitReached: !result.canCreateInvoice
-    });
     
     // Cache the result
     subscriptionCache.set(cacheKey, { data: result, timestamp: currentTime });
-    console.log('💾 [ServerAction] Cached subscription data for user:', session.user.id);
     
     return result;
     
-  } catch (error) {
-    console.error('❌ [ServerAction] Error getting subscription:', error);
+  } catch {
     return null;
   }
 }
@@ -537,7 +457,6 @@ export async function canCreateInvoice(): Promise<{
   reason?: string;
   requiresUpgrade?: boolean;
 }> {
-  console.log('🔍 [ServerAction] Checking if user can create invoice');
   
   try {
     const subscription = await getUserSubscription();
@@ -567,11 +486,9 @@ export async function canCreateInvoice(): Promise<{
       }
     }
     
-    console.log('✅ [ServerAction] Invoice creation allowed');
     return { allowed: true };
     
-  } catch (error) {
-    console.error('❌ [ServerAction] Error checking invoice creation:', error);
+  } catch {
     return {
       allowed: false,
       reason: 'Unable to verify permissions',

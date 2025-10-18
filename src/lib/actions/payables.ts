@@ -342,14 +342,12 @@ export async function getPayablesStats(): Promise<{ success: boolean; data?: any
       payablesCollection.countDocuments({ ...baseQuery, status: 'overdue' })
     ]);
 
-    // Calculate total amount (only approved payables)
-    const totalAmountQuery = {
-      ...baseQuery,
-      status: { $in: ['approved', 'pending', 'pending_approval'] }
-    };
-    
-    const allPayables = await payablesCollection.find(totalAmountQuery).toArray();
-    const totalAmount = allPayables.reduce((sum, payable) => sum + (payable.total || payable.amount || 0), 0);
+    // Calculate total amount (only unpaid payables - exclude paid ones)
+    const allPayables = await payablesCollection.find(baseQuery).toArray();
+    const unpaidPayables = allPayables.filter(payable => 
+      payable.status !== 'paid'
+    );
+    const totalAmount = unpaidPayables.reduce((sum, payable) => sum + (payable.total || payable.amount || 0), 0);
 
     const total = await payablesCollection.countDocuments(baseQuery);
 

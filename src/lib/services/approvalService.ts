@@ -4,11 +4,26 @@ import {
   ApprovalSettings, 
   ApprovalWorkflow, 
   ApprovalStep, 
-  AuditLog,
-  OrganizationMemberWithApproval,
-  BillWithApproval
+  AuditLog
 } from '@/types/approval';
 import { NotificationService } from './notificationService';
+
+// Type definitions for database operations
+interface DatabaseWorkflow extends Omit<ApprovalWorkflow, '_id'> {
+  _id?: ObjectId;
+}
+
+interface DatabaseAuditLog extends Omit<AuditLog, '_id'> {
+  _id?: ObjectId;
+}
+
+interface OrganizationMember {
+  userId: string | ObjectId;
+  email: string;
+  role: string;
+  status: string;
+}
+
 
 export class ApprovalService {
   // Get organization approval settings
@@ -25,8 +40,7 @@ export class ApprovalService {
 
       // Return approval settings or default settings with organization email
       return organization.approvalSettings || this.getDefaultApprovalSettings(organization.billingEmail);
-    } catch (error) {
-      console.error('Error getting approval settings:', error);
+    } catch {
       return null;
     }
   }
@@ -50,8 +64,7 @@ export class ApprovalService {
       );
 
       return result.modifiedCount > 0;
-    } catch (error) {
-      console.error('Error updating approval settings:', error);
+    } catch {
       return false;
     }
   }
@@ -69,7 +82,6 @@ export class ApprovalService {
       // Get organization approval settings
       const settings = await this.getApprovalSettings(organizationId);
       if (!settings) {
-        console.error('No approval settings found for organization');
         return null;
       }
 
@@ -86,13 +98,12 @@ export class ApprovalService {
       });
 
       if (!organization) {
-        console.error('Organization not found');
         return null;
       }
 
       // Find approvers
-      const approvers = this.findApprovers(organization.members, settings);
-      const fallbackApprovers = this.findFallbackApprovers(organization.members, settings);
+      const approvers = this.findApprovers(organization.members);
+      const fallbackApprovers = this.findFallbackApprovers(organization.members);
       
       // Creating approval workflow
 
@@ -106,7 +117,7 @@ export class ApprovalService {
           if (approver) {
             approvalSteps.push({
               stepNumber: i + 1,
-              approverId: approver.userId,
+              approverId: approver.userId.toString(),
               approverEmail: approver.email,
               approverRole: approver.role,
               decision: 'pending',
@@ -128,8 +139,8 @@ export class ApprovalService {
         updatedAt: new Date(),
         createdBy,
         currentStep: autoApproved ? approvalSteps.length + 1 : 1,
-        assignedApprovers: approvers.map(a => a.userId),
-        fallbackApprovers: fallbackApprovers.map(a => a.userId),
+        assignedApprovers: approvers.map(a => a.userId.toString()),
+        fallbackApprovers: fallbackApprovers.map(a => a.userId.toString()),
         appliedRules: {
           amountThreshold,
           requiredApprovers,
@@ -139,7 +150,7 @@ export class ApprovalService {
       };
 
       // Save to database
-      const result = await db.collection('approval_workflows').insertOne(workflow);
+      const result = await db.collection('approval_workflows').insertOne(workflow as DatabaseWorkflow);
       
       // Approval workflow created successfully
       
@@ -161,8 +172,7 @@ export class ApprovalService {
       }
 
       return null;
-    } catch (error) {
-      console.error('Error creating approval workflow:', error);
+    } catch {
       return null;
     }
   }
@@ -183,7 +193,6 @@ export class ApprovalService {
       });
 
       if (!workflow) {
-        console.error('Approval workflow not found');
         return false;
       }
 
@@ -193,7 +202,6 @@ export class ApprovalService {
       );
 
       if (!currentStep) {
-        console.error('Current approval step not found');
         return false;
       }
 
@@ -202,12 +210,6 @@ export class ApprovalService {
       const approverIdStr = approverId.toString();
       
       if (currentApproverId !== approverIdStr) {
-        console.error('Approver mismatch:', {
-          currentApproverId,
-          approverIdStr,
-          currentStep: workflow.currentStep,
-          totalSteps: workflow.approvals.length
-        });
         return false;
       }
 
@@ -232,7 +234,7 @@ export class ApprovalService {
         newStatus = 'rejected';
       } else {
         // Check if this was the last approval step
-        const completedApprovals = updatedApprovals.filter(step => step.decision === 'approved').length;
+        const completedApprovals = updatedApprovals.filter((step: ApprovalStep) => step.decision === 'approved').length;
         const totalApprovals = workflow.approvals.length;
         
         if (completedApprovals >= totalApprovals) {
@@ -257,15 +259,6 @@ export class ApprovalService {
         }
       );
 
-      console.log('✅ [ApprovalService] Workflow updated:', {
-        workflowId,
-        decision,
-        newStatus,
-        nextStep,
-        completedApprovals: updatedApprovals.filter(step => step.decision === 'approved').length,
-        totalApprovals: workflow.approvals.length,
-        updated: result.modifiedCount > 0
-      });
 
       if (result.modifiedCount > 0) {
         // Log the approval action
@@ -290,8 +283,7 @@ export class ApprovalService {
       }
 
       return false;
-    } catch (error) {
-      console.error('Error processing approval decision:', error);
+    } catch {
       return false;
     }
   }
@@ -305,9 +297,8 @@ export class ApprovalService {
         billId
       });
 
-      return workflow;
-    } catch (error) {
-      console.error('Error getting approval workflow:', error);
+      return workflow as unknown as ApprovalWorkflow;
+    } catch {
       return null;
     }
   }
@@ -317,11 +308,6 @@ export class ApprovalService {
     try {
       const db = await getDatabase();
       
-      console.log('🔍 [ApprovalService] Updating workflow with bill ID:', {
-        workflowId,
-        billId,
-        billIdType: typeof billId
-      });
       
       const result = await db.collection('approval_workflows').updateOne(
         { _id: new ObjectId(workflowId) },
@@ -333,16 +319,9 @@ export class ApprovalService {
         }
       );
 
-      console.log('✅ [ApprovalService] Workflow bill ID update result:', {
-        workflowId,
-        billId,
-        modifiedCount: result.modifiedCount,
-        success: result.modifiedCount > 0
-      });
 
       return result.modifiedCount > 0;
-    } catch (error) {
-      console.error('Error updating workflow bill ID:', error);
+    } catch {
       return false;
     }
   }
@@ -351,11 +330,6 @@ export class ApprovalService {
   static async getPendingApprovals(userId: string): Promise<ApprovalWorkflow[]> {
     try {
       const db = await getDatabase();
-      
-      // Getting pending approvals
-      
-      // Get all approval workflows
-      const allWorkflows = await db.collection('approval_workflows').find({}).toArray();
       
       // Get all pending workflows where user is an approver
       // Handle both string and ObjectId user IDs
@@ -369,21 +343,20 @@ export class ApprovalService {
       }).toArray();
 
       // Filter to only include workflows where the user's step is current or past
-      const workflows = allPendingWorkflows.filter(workflow => {
-        const userApproval = workflow.approvals.find((approval: any) => {
+      const workflows = allPendingWorkflows.filter((workflow: unknown) => {
+        const userApproval = (workflow as ApprovalWorkflow).approvals.find((approval: ApprovalStep) => {
           // Handle both string and ObjectId comparisons
           const approverIdStr = approval.approverId?.toString();
           const userIdStr = userId.toString();
           return approverIdStr === userIdStr && approval.decision === 'pending';
         });
-        return userApproval && userApproval.stepNumber <= workflow.currentStep;
+        return userApproval && userApproval.stepNumber <= (workflow as ApprovalWorkflow).currentStep;
       });
 
       // Pending approvals found
 
-      return workflows;
-    } catch (error) {
-      console.error('Error getting pending approvals:', error);
+      return workflows as unknown as ApprovalWorkflow[];
+    } catch {
       return [];
     }
   }
@@ -396,7 +369,7 @@ export class ApprovalService {
     entityType: string,
     entityId: string,
     description: string,
-    metadata?: Record<string, any>
+    metadata?: Record<string, unknown>
   ): Promise<void> {
     try {
       const db = await getDatabase();
@@ -404,12 +377,11 @@ export class ApprovalService {
       // Get user details - handle both string and ObjectId userId
       const userQuery = typeof userId === 'string' && /^[0-9a-fA-F]{24}$/.test(userId) 
         ? { _id: new ObjectId(userId) }
-        : { _id: userId };
+        : { _id: new ObjectId(userId) };
       
       const user = await db.collection('users').findOne(userQuery);
 
       if (!user) {
-        console.error('User not found for audit log');
         return;
       }
 
@@ -419,7 +391,7 @@ export class ApprovalService {
         'members.userId': userId
       });
 
-      const member = organization?.members.find((m: any) => m.userId === userId);
+      const member = organization?.members.find((m: OrganizationMember) => m.userId === userId);
       const userRole = member?.role || 'unknown';
 
       const auditLog: AuditLog = {
@@ -427,8 +399,8 @@ export class ApprovalService {
         userId,
         userEmail: user.email,
         userRole,
-        action: action as any,
-        entityType: entityType as any,
+        action: action as 'create' | 'approve' | 'reject' | 'pay' | 'reconcile' | 'export' | 'settings_change',
+        entityType: entityType as 'approval' | 'bill' | 'payment' | 'organization' | 'member',
         entityId,
         details: {
           description,
@@ -437,9 +409,8 @@ export class ApprovalService {
         timestamp: new Date()
       };
 
-      await db.collection('audit_logs').insertOne(auditLog);
-    } catch (error) {
-      console.error('Error logging audit action:', error);
+      await db.collection('audit_logs').insertOne(auditLog as DatabaseAuditLog);
+    } catch {
     }
   }
 
@@ -504,14 +475,14 @@ export class ApprovalService {
     return false;
   }
 
-  private static findApprovers(members: any[], settings: ApprovalSettings): any[] {
-    return members.filter((member: any) => 
+  private static findApprovers(members: OrganizationMember[]): OrganizationMember[] {
+    return members.filter((member: OrganizationMember) => 
       member.role === 'approver' && member.status === 'active'
     );
   }
 
-  private static findFallbackApprovers(members: any[], settings: ApprovalSettings): any[] {
-    return members.filter((member: any) => 
+  private static findFallbackApprovers(members: OrganizationMember[]): OrganizationMember[] {
+    return members.filter((member: OrganizationMember) => 
       (member.role === 'admin' || member.role === 'owner') && member.status === 'active'
     );
   }
@@ -532,7 +503,6 @@ export class ApprovalService {
       });
 
       if (!payable) {
-        console.error('Payable not found for notification');
         return;
       }
 
@@ -542,31 +512,28 @@ export class ApprovalService {
       });
 
       if (!organization) {
-        console.error('Organization not found for notification');
         return;
       }
 
       // Get payable creator details
       const creatorQuery = typeof workflow.createdBy === 'string' && /^[0-9a-fA-F]{24}$/.test(workflow.createdBy) 
         ? { _id: new ObjectId(workflow.createdBy) }
-        : { _id: workflow.createdBy };
+        : { _id: new ObjectId(workflow.createdBy) };
       
       const creator = await db.collection('users').findOne(creatorQuery);
 
       if (!creator) {
-        console.error('Payable creator not found for notification');
         return;
       }
 
       // Get approver details
       const approverQuery = typeof approverId === 'string' && /^[0-9a-fA-F]{24}$/.test(approverId) 
         ? { _id: new ObjectId(approverId) }
-        : { _id: approverId };
+        : { _id: new ObjectId(approverId) };
       
       const approver = await db.collection('users').findOne(approverQuery);
 
       if (!approver) {
-        console.error('Approver not found for notification');
         return;
       }
 
@@ -576,11 +543,10 @@ export class ApprovalService {
         creator.name || creator.email,
         decision,
         {
-          type: 'bill',
-          number: payable.payableNumber || payable._id.toString(),
-          name: payable.payableName || payable.vendorName || 'Payable',
+          vendor: payable.vendorName || payable.vendor || 'Unknown Vendor',
           amount: payable.total || payable.amount,
-          currency: payable.currency
+          currency: payable.currency,
+          description: payable.payableName || payable.description || 'Payable'
         },
         approver.name || approver.email,
         comments,
@@ -607,8 +573,7 @@ export class ApprovalService {
         }
       }
 
-    } catch (error) {
-      console.error('Error sending approval notifications:', error);
+    } catch {
     }
   }
 }

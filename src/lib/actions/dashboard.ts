@@ -136,12 +136,16 @@ export async function getDashboardStats(): Promise<{ success: boolean; data?: Da
     // Get all payables first
     const allPayables = await payablesCollection.find(payablesQuery).toArray();
     
-    // Only sum approved payables (bills that are ready to be paid) - same logic as payables API
+    // Sum only unpaid payables (exclude paid ones)
+    const unpaidPayables = allPayables.filter(payable => 
+      payable.status !== 'paid'
+    );
+    const totalPayablesAmount = unpaidPayables.reduce((sum, payable) => sum + (payable.total || payable.amount || 0), 0);
+    
+    // Only count approved payables as bills ready to be paid
     const payableBills = allPayables.filter(payable => 
       payable.status === 'approved'
     );
-    
-    const totalPayablesAmount = payableBills.reduce((sum, payable) => sum + (payable.total || payable.amount || 0), 0);
 
 
     // Get ledger stats for net balance and overdue counts
@@ -184,7 +188,6 @@ export async function getDashboardStats(): Promise<{ success: boolean; data?: Da
     return { success: true, data: stats };
 
   } catch (error) {
-    console.error('Error fetching dashboard stats:', error);
     return { success: false, error: 'Failed to fetch dashboard stats' };
   }
 }
@@ -252,7 +255,6 @@ export async function getRecentInvoices(limit: number = 5): Promise<{ success: b
     return { success: true, data: recentInvoices };
 
   } catch (error) {
-    console.error('Error fetching recent invoices:', error);
     return { success: false, error: 'Failed to fetch recent invoices' };
   }
 }
@@ -320,7 +322,6 @@ export async function getRecentPayables(limit: number = 5): Promise<{ success: b
     return { success: true, data: recentPayables };
 
   } catch (error) {
-    console.error('Error fetching recent payables:', error);
     return { success: false, error: 'Failed to fetch recent payables' };
   }
 }
@@ -350,7 +351,6 @@ export async function getClientCount(): Promise<{ success: boolean; data?: numbe
     return { success: true, data: count };
 
   } catch (error) {
-    console.error('Error fetching client count:', error);
     return { success: false, error: 'Failed to fetch client count' };
   }
 }
@@ -393,7 +393,6 @@ export async function getOrganizationInfo(): Promise<{ success: boolean; data?: 
     return { success: true, data: orgInfo };
 
   } catch (error) {
-    console.error('Error fetching organization info:', error);
     return { success: false, error: 'Failed to fetch organization info' };
   }
 }

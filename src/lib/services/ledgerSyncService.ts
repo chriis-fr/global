@@ -84,14 +84,9 @@ export class LedgerSyncService {
       };
 
       const result = await ledgerCollection.insertOne(ledgerEntry);
-      
-        invoiceId: invoice._id,
-        ledgerEntryId: result.insertedId,
-        entryId: ledgerEntry.entryId
-      });
 
       return { _id: result.insertedId, ...ledgerEntry };
-    } catch (error) {
+    } catch {
       return null;
     }
   }
@@ -173,14 +168,9 @@ export class LedgerSyncService {
       };
 
       const result = await ledgerCollection.insertOne(ledgerEntry);
-      
-        payableId: payable._id,
-        ledgerEntryId: result.insertedId,
-        entryId: ledgerEntry.entryId
-      });
 
       return { _id: result.insertedId, ...ledgerEntry };
-    } catch (error) {
+    } catch {
       return null;
     }
   }
@@ -222,7 +212,7 @@ export class LedgerSyncService {
 
       const updatedEntry = await ledgerCollection.findOne({ _id: ledgerEntryId });
       return updatedEntry as FinancialLedgerEntry;
-    } catch (error) {
+    } catch {
       return null;
     }
   }
@@ -266,7 +256,7 @@ export class LedgerSyncService {
 
       const updatedEntry = await ledgerCollection.findOne({ _id: ledgerEntryId });
       return updatedEntry as FinancialLedgerEntry;
-    } catch (error) {
+    } catch {
       return null;
     }
   }
@@ -326,12 +316,9 @@ export class LedgerSyncService {
         if (result) payablesSynced++;
       }
 
-        invoicesSynced,
-        payablesSynced
-      });
 
       return { invoicesSynced, payablesSynced };
-    } catch (error) {
+    } catch {
       return { invoicesSynced: 0, payablesSynced: 0 };
     }
   }

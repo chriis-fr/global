@@ -159,7 +159,6 @@ export async function POST(request: NextRequest) {
       );
       
       if (existingPayable) {
-        console.log('⚠️ [API Payables] Provided payable number already exists, generating new one:', finalPayableNumber);
         finalPayableNumber = await generateSecurePayableNumber(
           db as unknown as Record<string, unknown>, 
           session.user.organizationId || '', 
@@ -175,14 +174,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('💾 [API Payables] Saving payable:', {
-      payableNumber: finalPayableNumber,
-      ownerType,
-      ownerId,
-      total,
-      requiresApproval,
-      initialStatus
-    });
 
     // Transform data to match PayableFormData structure
     const payableData = {
@@ -306,15 +297,12 @@ export async function POST(request: NextRequest) {
       throw new Error('Failed to insert payable - no result returned');
     }
     
-    console.log('✅ [API Payables] Payable saved successfully');
 
     // Sync to financial ledger
     try {
       const payableWithId = { _id: result.insertedId, ...payableData };
       await LedgerSyncService.syncPayableToLedger(payableWithId);
-      console.log('✅ [API Payables] Payable synced to ledger');
     } catch (syncError) {
-      console.error('⚠️ [API Payables] Failed to sync payable to ledger:', syncError);
       // Don't fail the request if sync fails
     }
 
@@ -325,7 +313,6 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('❌ [API Payables] Error saving payable:', error);
     
     let errorMessage = 'Failed to save payable';
     if (error instanceof Error) {
@@ -398,13 +385,6 @@ export async function GET(request: NextRequest) {
           ]
         };
 
-    console.log('🔍 [Payables API] Query details:', {
-      isOrganization,
-      userOrganizationId: session.user.organizationId,
-      userEmail: session.user.email,
-      userId: session.user.id,
-      query: query
-    });
 
     // Query built successfully
 
@@ -455,17 +435,6 @@ export async function GET(request: NextRequest) {
       .limit(limit)
       .toArray();
 
-    console.log('🔍 [Payables API] Found payables:', {
-      count: payables.length,
-      payables: payables.map(p => ({
-        _id: p._id,
-        payableNumber: p.payableNumber,
-        organizationId: p.organizationId,
-        userId: p.userId,
-        issuerId: p.issuerId,
-        status: p.status
-      }))
-    });
 
     // Payables fetched successfully
 
@@ -500,36 +469,21 @@ export async function GET(request: NextRequest) {
             { userId: session.user.email }
           ]
         };
-    console.log('🔍 [Payables API] Stats query:', {
-      statsIsOrganization,
-      organizationId: session.user.organizationId,
-      totalQuery
-    });
     
     const allPayables = await payablesCollection.find(totalQuery).toArray();
     
-    console.log('🔍 [Payables API] Total calculation:', {
-      totalPayables: allPayables.length,
-      payableStatuses: allPayables.map(p => ({ 
-        status: p.status, 
-        amount: p.total || p.amount,
-        payableNumber: p.payableNumber 
-      }))
-    });
     
-    // Only sum approved payables (bills that are ready to be paid)
+    // Sum only unpaid payables (exclude paid ones)
+    const unpaidPayables = allPayables.filter(payable => 
+      payable.status !== 'paid'
+    );
+    let totalAmount = unpaidPayables.reduce((sum, payable) => sum + (payable.total || payable.amount || 0), 0);
+    
+    // Only count approved payables as bills ready to be paid
     const payableBills = allPayables.filter(payable => 
       payable.status === 'approved'
     );
     
-    let totalAmount = payableBills.reduce((sum, payable) => sum + (payable.total || payable.amount || 0), 0);
-    
-    console.log('🔍 [Payables API] Bills to pay calculation:', {
-      payableBillsCount: payableBills.length,
-      totalAmount,
-      approvedCount: payableBills.length, // All payableBills are approved now
-      totalApprovedAmount: totalAmount
-    });
     
     // Convert total amount if currency conversion is requested
     if (convertToPreferred && allPayables.length > 0) {
@@ -566,7 +520,6 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error fetching payables:', error);
     return NextResponse.json(
       { success: false, message: 'Failed to fetch payables' },
       { status: 500 }

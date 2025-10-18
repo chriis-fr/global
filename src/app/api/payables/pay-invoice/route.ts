@@ -106,10 +106,8 @@ export async function POST(request: NextRequest) {
         );
 
         if (invoiceUpdateResult.modifiedCount > 0) {
-          console.log('✅ [Pay Invoice] Updated related invoice status to paid:', payable.relatedInvoiceId);
         }
       } catch (invoiceError) {
-        console.error('⚠️ [Pay Invoice] Failed to update related invoice:', invoiceError);
         // Don't fail the payment if invoice update fails
       }
     }
@@ -118,20 +116,10 @@ export async function POST(request: NextRequest) {
     try {
       const { syncPayableToLedger } = await import('@/lib/actions/payableStatusSync');
       await syncPayableToLedger(payableId, 'paid');
-      console.log('✅ [Pay Invoice] Payable synced to financial ledger');
     } catch (ledgerError) {
-      console.error('⚠️ [Pay Invoice] Failed to sync payable to ledger:', ledgerError);
       // Don't fail the payment if ledger sync fails
     }
 
-    console.log('✅ [Pay Invoice] Payable marked as paid:', {
-      payableId,
-      payableNumber: payable.payableNumber,
-      amount: payable.total,
-      currency: payable.currency,
-      paidBy: session.user.email,
-      organizationId: session.user.organizationId
-    });
 
     return NextResponse.json({
       success: true,
@@ -142,7 +130,6 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('❌ [Pay Invoice] Error:', error);
     return NextResponse.json(
       { success: false, message: 'Internal server error' },
       { status: 500 }
