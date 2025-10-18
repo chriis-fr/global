@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
-import { ApprovalWorkflow, ApprovalStep } from '@/types/approval';
+import { ObjectId } from 'mongodb';
+import { ApprovalWorkflow } from '@/types/approval';
 
 export class NotificationService {
   private static transporter: nodemailer.Transporter | null = null;
@@ -114,10 +115,8 @@ export class NotificationService {
       };
 
       await transporter.sendMail(mailOptions);
-      console.log('✅ [Notification] Invoice approval request sent to:', approverEmail);
       return true;
-    } catch (error) {
-      console.error('❌ [Notification] Failed to send invoice approval request:', error);
+    } catch {
       return false;
     }
   }
@@ -208,10 +207,8 @@ export class NotificationService {
       };
 
       await transporter.sendMail(mailOptions);
-      console.log(`✅ [Notification] Approval request sent to ${approverEmail}`);
       return true;
-    } catch (error) {
-      console.error('❌ [Notification] Error sending approval request:', error);
+    } catch {
       return false;
     }
   }
@@ -228,8 +225,8 @@ export class NotificationService {
       description: string;
     },
     approverName: string,
-    comments?: string,
-    organizationName: string
+    organizationName: string,
+    comments?: string
   ): Promise<boolean> {
     try {
       const transporter = await this.getTransporter();
@@ -315,10 +312,8 @@ export class NotificationService {
       };
 
       await transporter.sendMail(mailOptions);
-      console.log(`✅ [Notification] Approval decision sent to ${creatorEmail}`);
       return true;
-    } catch (error) {
-      console.error('❌ [Notification] Error sending approval decision:', error);
+    } catch {
       return false;
     }
   }
@@ -396,10 +391,8 @@ export class NotificationService {
       };
 
       await transporter.sendMail(mailOptions);
-      console.log(`✅ [Notification] Payment confirmation sent to ${recipientEmail}`);
       return true;
-    } catch (error) {
-      console.error('❌ [Notification] Error sending payment confirmation:', error);
+    } catch {
       return false;
     }
   }
@@ -472,11 +465,67 @@ export class NotificationService {
       };
 
       await transporter.sendMail(mailOptions);
-      console.log(`✅ [Notification] Organization invitation sent to ${inviteeEmail}`);
-      return true;
-    } catch (error) {
-      console.error('❌ [Notification] Error sending organization invitation:', error);
+        return true;
+    } catch {
       return false;
+    }
+  }
+
+  // Create in-app notification
+  static async createNotification(notificationData: {
+    userId: ObjectId;
+    organizationId?: ObjectId;
+    type: string;
+    title: string;
+    message: string;
+    priority?: 'low' | 'medium' | 'high' | 'urgent';
+    actionUrl?: string;
+    actionText?: string;
+    actionData?: Record<string, unknown>;
+    metadata?: Record<string, unknown>;
+    tags?: string[];
+    expiresAt?: Date;
+    relatedInvoiceId?: ObjectId;
+    relatedPaymentId?: ObjectId;
+    relatedUserId?: ObjectId;
+    relatedOrganizationId?: ObjectId;
+  }): Promise<{ _id: ObjectId } | null> {
+    try {
+      const { getDatabase } = await import('@/lib/database');
+      const db = await getDatabase();
+      
+      const notification = {
+        userId: notificationData.userId,
+        organizationId: notificationData.organizationId,
+        type: notificationData.type,
+        title: notificationData.title,
+        message: notificationData.message,
+        priority: notificationData.priority || 'medium',
+        status: 'unread' as const,
+        actionUrl: notificationData.actionUrl,
+        actionText: notificationData.actionText,
+        actionData: notificationData.actionData,
+        metadata: notificationData.metadata,
+        tags: notificationData.tags,
+        inAppDelivered: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        expiresAt: notificationData.expiresAt,
+        relatedInvoiceId: notificationData.relatedInvoiceId,
+        relatedPaymentId: notificationData.relatedPaymentId,
+        relatedUserId: notificationData.relatedUserId,
+        relatedOrganizationId: notificationData.relatedOrganizationId
+      };
+
+      const result = await db.collection('notifications').insertOne(notification);
+      
+      if (result.insertedId) {
+        return { _id: result.insertedId };
+      }
+      
+      return null;
+    } catch {
+      return null;
     }
   }
 } 

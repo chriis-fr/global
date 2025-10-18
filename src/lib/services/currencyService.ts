@@ -32,17 +32,16 @@ export class CurrencyService {
       const { UserService } = await import('./userService');
       const user = await UserService.getUserByEmail(userId);
       
-      if (user?.settings?.currencyPreference) {
+      if (user?.preferences?.currency) {
         return {
-          preferredCurrency: user.settings.currencyPreference,
-          displayCurrency: user.settings.currencyPreference,
+          preferredCurrency: user.preferences.currency,
+          displayCurrency: user.preferences.currency,
           autoConvert: true
         };
       }
       
       return defaultPreferences;
-    } catch (error) {
-      console.error('Error fetching user currency preferences:', error);
+    } catch {
       return defaultPreferences;
     }
   }
@@ -62,8 +61,7 @@ export class CurrencyService {
       const convertedAmount = amount * rate;
       // Round to 2 decimal places to avoid floating point precision issues
       return Math.round(convertedAmount * 100) / 100;
-    } catch (error) {
-      console.error('Error converting currency:', error);
+    } catch {
       return amount; // Return original amount if conversion fails
     }
   }
@@ -98,8 +96,7 @@ export class CurrencyService {
       } else {
         throw new Error('Exchange rate not found');
       }
-    } catch (error) {
-      console.error('Error fetching exchange rate:', error);
+    } catch {
       
       // Fallback to hardcoded rates for common currencies (CORRECTED RATES)
       const fallbackRates: Record<string, Record<string, number>> = {
@@ -208,8 +205,7 @@ export class CurrencyService {
         taxAmount: convertedTax, // Keep for backward compatibility
         conversionRate: convertedAmount / totalAmount
       };
-    } catch (error) {
-      console.error('Error converting invoice for reporting:', error);
+    } catch {
       return invoice;
     }
   }
@@ -259,8 +255,7 @@ export class CurrencyService {
         totalTax: convertedTax,
         conversionRate: convertedAmount / (payable.total as number)
       };
-    } catch (error) {
-      console.error('Error converting payable for reporting:', error);
+    } catch {
       return payable;
     }
   }

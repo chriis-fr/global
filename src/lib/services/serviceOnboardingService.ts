@@ -21,7 +21,7 @@ export class ServiceOnboardingService {
       }
 
       // For business users with organization, get data from organization
-      if (user.userType === 'business' && user.organizationId) {
+      if (user.role === 'admin' && user.organizationId) {
         const organization = await OrganizationService.getOrganizationById(user.organizationId.toString());
         if (!organization) {
           return null;
@@ -41,7 +41,7 @@ export class ServiceOnboardingService {
         };
       } else {
         // For individual users, get data from user record
-        const serviceOnboarding = user.onboarding.serviceOnboarding[serviceKey];
+        const serviceOnboarding = user.onboarding.data?.[serviceKey];
         const isCompleted = serviceOnboarding && 
           typeof serviceOnboarding === 'object' && 
           'completed' in serviceOnboarding ? 
@@ -54,7 +54,7 @@ export class ServiceOnboardingService {
           storageLocation: 'user'
         };
       }
-    } catch (error) {
+    } catch {
       return null;
     }
   }
@@ -75,7 +75,7 @@ export class ServiceOnboardingService {
       }
 
       // For business users with organization, get data from organization
-      if (user.userType === 'business' && user.organizationId) {
+      if (user.role === 'admin' && user.organizationId) {
         const organization = await OrganizationService.getOrganizationById(user.organizationId.toString());
         if (!organization) {
           return null;
@@ -89,12 +89,12 @@ export class ServiceOnboardingService {
       } else {
         // For individual users, get data from user record
         return {
-          serviceOnboarding: user.onboarding.serviceOnboarding,
+          serviceOnboarding: user.onboarding.data || {},
           services: user.services as unknown as Record<string, boolean>,
           storageLocation: 'user'
         };
       }
-    } catch (error) {
+    } catch {
       return null;
     }
   }
@@ -123,7 +123,7 @@ export class ServiceOnboardingService {
       }
 
       // For business users with organization, save to organization
-      if (user.userType === 'business' && user.organizationId) {
+      if (user.role === 'admin' && user.organizationId) {
         const organization = await OrganizationService.getOrganizationById(user.organizationId.toString());
         if (!organization) {
           return {
@@ -166,9 +166,9 @@ export class ServiceOnboardingService {
         };
       } else {
         // For individual users, save to user record
-        const currentServiceData = user.onboarding.serviceOnboarding[serviceKey] || {};
+        const currentServiceData = user.onboarding.data?.[serviceKey] || {};
         const updatedServiceOnboarding = {
-          ...user.onboarding.serviceOnboarding,
+          ...(user.onboarding.data || {}),
           [serviceKey]: {
             ...currentServiceData,
             ...serviceData,
@@ -198,7 +198,7 @@ export class ServiceOnboardingService {
           storageLocation: 'user'
         };
       }
-    } catch (error) {
+    } catch {
       return {
         success: false,
         message: 'Failed to save service onboarding data',

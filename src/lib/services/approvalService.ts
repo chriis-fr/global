@@ -549,8 +549,8 @@ export class ApprovalService {
           description: payable.payableName || payable.description || 'Payable'
         },
         approver.name || approver.email,
-        comments,
-        organization.name
+        organization.name,
+        comments
       );
 
       // If approved and there are more steps, notify next approver

@@ -1,7 +1,9 @@
 import { getDatabase } from '../database';
 import { Organization, CreateOrganizationInput, UpdateOrganizationInput, OrganizationMember } from '@/models';
 import { ObjectId } from 'mongodb';
-import { UserService } from './userService';
+
+// Use the existing PermissionSet from Organization model
+import { PermissionSet } from '@/models/Organization';
 
 export class OrganizationService {
   private static async getCollection() {
@@ -188,7 +190,7 @@ export class OrganizationService {
   }
 
   // Get user permissions in organization
-  static async getUserPermissions(organizationId: string, userId: string): Promise<any | null> {
+  static async getUserPermissions(organizationId: string, userId: string): Promise<PermissionSet | null> {
     const organization = await this.getOrganizationById(organizationId);
     if (!organization) return null;
     
@@ -219,7 +221,6 @@ export class OrganizationService {
   //     !member.email || !member.name || !member.joinedAt || !member.permissions
   //   );
 
-  //   console.log('🔍 [Migration] Organization members check:', {
   //     organizationId,
   //     needsMigration,
   //     memberCount: organization.members.length,
@@ -234,11 +235,9 @@ export class OrganizationService {
   //   });
 
   //   if (!needsMigration) {
-  //     console.log('✅ [Migration] Organization already migrated');
   //     return organization; // Already migrated
   //   }
 
-  //   console.log('🔄 [Migration] Migrating organization members:', organizationId);
 
   //   // Update members with new structure
   //   const updatedMembers = await Promise.all(
@@ -247,7 +246,6 @@ export class OrganizationService {
   //         // Get user data to fill missing fields
   //         const user = await UserService.getUserById(member.userId.toString());
   //         
-  //         console.log('🔍 [Migration] Processing member:', {
   //           userId: member.userId.toString(),
   //           role: member.role,
   //           hasEmail: !!member.email,
@@ -270,7 +268,6 @@ export class OrganizationService {
   //           permissions: member.permissions || this.getDefaultPermissionsForRole(member.role)
   //         };
   //       } catch (error) {
-  //         console.error('❌ [Migration] Error processing member:', member.userId.toString(), error);
   //         // Return member with fallback data
   //         return {
   //           _id: member._id,
@@ -300,7 +297,6 @@ export class OrganizationService {
   //     { returnDocument: 'after' }
   //   );
 
-  //   console.log('✅ [Migration] Organization members migrated successfully');
   //   return result;
   // }
 

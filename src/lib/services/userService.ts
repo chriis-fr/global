@@ -1,7 +1,11 @@
 import { getDatabase } from '../database';
 import { User, CreateUserInput, UpdateUserInput } from '@/models';
 import { ObjectId } from 'mongodb';
-import { createDefaultServices } from './serviceManager';
+
+interface UserServicesInput {
+  smartInvoicing?: boolean;
+  payables?: boolean;
+}
 
 export class UserService {
   private static async getCollection() {
@@ -15,42 +19,42 @@ export class UserService {
     
     const now = new Date();
     const newUser: User = {
+      _id: new ObjectId(),
       ...userData,
-      walletAddresses: userData.walletAddresses || [],
-      settings: {
-        currencyPreference: userData.settings?.currencyPreference || 'USD',
+      role: userData.role as 'user' | 'admin',
+      preferences: {
+        currency: userData.settings?.currencyPreference || 'USD',
+        timezone: 'UTC',
         notifications: {
           email: userData.settings?.notifications?.email ?? true,
-          sms: userData.settings?.notifications?.sms ?? false,
           push: userData.settings?.notifications?.push ?? false,
-          inApp: userData.settings?.notifications?.inApp ?? true,
-          invoiceCreated: userData.settings?.notifications?.invoiceCreated ?? true,
-          invoicePaid: userData.settings?.notifications?.invoicePaid ?? true,
-          invoiceOverdue: userData.settings?.notifications?.invoiceOverdue ?? true,
-          paymentReceived: userData.settings?.notifications?.paymentReceived ?? true,
-          paymentFailed: userData.settings?.notifications?.paymentFailed ?? true,
-          systemUpdates: userData.settings?.notifications?.systemUpdates ?? true,
-          securityAlerts: userData.settings?.notifications?.securityAlerts ?? true,
-          reminders: userData.settings?.notifications?.reminders ?? true,
-          approvals: userData.settings?.notifications?.approvals ?? true,
-          frequency: userData.settings?.notifications?.frequency ?? 'immediate',
-          quietHours: {
-            enabled: userData.settings?.notifications?.quietHours?.enabled ?? false,
-            start: userData.settings?.notifications?.quietHours?.start ?? '22:00',
-            end: userData.settings?.notifications?.quietHours?.end ?? '08:00',
-            timezone: userData.settings?.notifications?.quietHours?.timezone ?? 'UTC'
-          }
+          invoiceReminders: userData.settings?.notifications?.reminders ?? true,
+          paymentNotifications: userData.settings?.notifications?.paymentReceived ?? true
         }
       },
-      services: userData.services ? { ...createDefaultServices(), ...userData.services } : createDefaultServices(),
+      services: {
+        smartInvoicing: (userData.services as UserServicesInput)?.smartInvoicing ?? true,
+        payables: (userData.services as UserServicesInput)?.payables ?? true
+      },
       onboarding: {
-        completed: userData.onboarding?.completed ?? false,
+        isCompleted: userData.onboarding?.completed ?? false,
         currentStep: userData.onboarding?.currentStep ?? 1,
         completedSteps: userData.onboarding?.completedSteps ?? ['signup'],
-        serviceOnboarding: userData.onboarding?.serviceOnboarding ?? {}
+        data: userData.onboarding?.serviceOnboarding ?? {}
       },
-      status: 'pending',
-      emailVerified: false,
+      subscription: {
+        planId: 'receivables-free',
+        status: 'trial',
+        billingPeriod: 'monthly',
+        createdAt: now,
+        updatedAt: now
+      },
+      usage: {
+        invoicesThisMonth: 0,
+        monthlyVolume: 0,
+        lastResetDate: now
+      },
+      isEmailVerified: false,
       createdAt: now,
       updatedAt: now
     };

@@ -1,9 +1,9 @@
-import { OrganizationMember } from '@/types/organization';
+import { OrganizationMember } from '@/models/Organization';
 
 export interface Permission {
   action: string;
   resource: string;
-  conditions?: Record<string, any>;
+  conditions?: Record<string, unknown>;
 }
 
 export interface RolePermissions {
@@ -257,12 +257,11 @@ export class RBACService {
     member: OrganizationMember,
     action: string,
     resource: string,
-    conditions?: Record<string, any>
+    conditions?: Record<string, unknown>
   ): boolean {
     const rolePermissions = this.ROLE_PERMISSIONS[member.role];
     
     if (!rolePermissions) {
-      console.warn(`Unknown role: ${member.role}`);
       return false;
     }
 
@@ -362,7 +361,7 @@ export class RBACService {
     permission: Permission,
     action: string,
     resource: string,
-    conditions?: Record<string, any>
+    conditions?: Record<string, unknown>
   ): boolean {
     // Check action and resource
     if (permission.action !== action || permission.resource !== resource) {
