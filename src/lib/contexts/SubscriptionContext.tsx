@@ -232,7 +232,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
       {loading && session?.user?.id ? (
         <LoadingSpinner 
           fullScreen={true} 
-          message="Loading your subscription..." 
+          message="Logging you in..." 
         />
       ) : (
         children

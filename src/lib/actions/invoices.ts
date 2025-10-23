@@ -86,6 +86,7 @@ export interface InvoiceDetails {
   };
   taxes?: any;
   notes?: string;
+  sentVia?: 'email' | 'whatsapp';
   // Full data for detail view
 }
 
