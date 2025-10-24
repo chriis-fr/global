@@ -6,6 +6,15 @@ import { BILLING_PLANS } from '@/data/billingPlans';
 
 export async function POST(request: NextRequest) {
   try {
+    // Block subscriptions in production environment
+    if (process.env.NODE_ENV === 'production') {
+      console.log('🚫 [CheckoutSession] Subscriptions disabled in production environment');
+      return NextResponse.json(
+        { success: false, error: 'Subscriptions are currently disabled. All features are available for free during the trial period.' },
+        { status: 403 }
+      );
+    }
+
     const session = await getServerSession(authOptions);
     
     if (!session?.user?.id) {

@@ -14,6 +14,12 @@ const stripe = new Stripe(secret || '', {
 export async function POST(request: NextRequest) {
   console.log('🔔 [Webhook] Stripe webhook received')
   
+  // Block webhook processing in production environment
+  if (process.env.NODE_ENV === 'production') {
+    console.log('🚫 [Webhook] Webhook processing disabled in production environment');
+    return NextResponse.json({ received: true, message: 'Webhook processing disabled in production' });
+  }
+  
   const body = await request.text();
   let event: Stripe.Event;
 

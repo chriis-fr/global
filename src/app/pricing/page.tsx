@@ -39,6 +39,13 @@ export default function PricingPage() {
       userId: session?.user?.id
     })
 
+    // Block subscriptions in production environment
+    if (process.env.NODE_ENV === 'production') {
+      console.log('🚫 [Pricing] Subscriptions disabled in production environment')
+      alert('Subscriptions are currently disabled. All features are available for free during the trial period.')
+      return
+    }
+
     if (!session) {
       console.log('❌ [Pricing] User not authenticated, redirecting to auth')
       router.push('/auth')
@@ -141,6 +148,24 @@ export default function PricingPage() {
             >
               Start with a 10-day free trial. No credit card required for trial users.
             </motion.p>
+            
+            {/* Production Environment Banner */}
+            {process.env.NODE_ENV === 'production' && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="mt-8 bg-gradient-to-r from-green-500 to-blue-500 text-white rounded-xl p-6 max-w-4xl mx-auto"
+              >
+                <div className="flex items-center justify-center gap-3 mb-2">
+                  <CheckCircle className="h-6 w-6" />
+                  <h2 className="text-2xl font-bold">30-Day Free Trial Active</h2>
+                </div>
+                <p className="text-lg opacity-90">
+                  All features are available for free during the trial period. Subscriptions will be enabled soon.
+                </p>
+              </motion.div>
+            )}
           </div>
         </div>
       </div>
@@ -328,10 +353,12 @@ function PlanCard({
 
       <button
         onClick={() => onSubscribe(plan)}
-        disabled={loading || isCurrentPlan}
+        disabled={loading || isCurrentPlan || process.env.NODE_ENV === 'production'}
         className={`w-full py-3 px-6 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
           isCurrentPlan
             ? 'bg-green-100 text-green-700 cursor-not-allowed'
+            : process.env.NODE_ENV === 'production'
+            ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
             : plan.ctaVariant === 'primary'
             ? 'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-400'
             : plan.ctaVariant === 'secondary'
@@ -348,6 +375,11 @@ function PlanCard({
           <>
             <CheckCircle className="h-4 w-4" />
             <span>Current Plan</span>
+          </>
+        ) : process.env.NODE_ENV === 'production' ? (
+          <>
+            <CheckCircle className="h-4 w-4" />
+            <span>Available in Trial</span>
           </>
         ) : (
           plan.ctaText
