@@ -373,7 +373,6 @@ async function createPayableForRecipient(recipientEmail: string, invoice: Record
       _idType: typeof recipientUser._id
     });
 
-    const db = await connectToDatabase();
     const payablesCollection = db.collection('payables');
 
     // Check if payable already exists for this invoice and recipient

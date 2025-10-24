@@ -120,12 +120,6 @@ export default function OnboardingPage() {
         },
         services: session.user.services || {}
       };
-      
-        id: session.user.id,
-        userType: session.user.userType,
-        email: session.user.email,
-        name: session.user.name
-      });
       setUser(userObj);
       
       // Initialize tax ID from user data

@@ -7,10 +7,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { taxID } = body;
 
-      hasTaxID: !!taxID,
-      taxIDLength: taxID?.length || 0
-    });
-
     // Basic validation
     if (!taxID) {
       return NextResponse.json(

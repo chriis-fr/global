@@ -94,13 +94,6 @@ export async function GET(
       requiresAccountCreation
     };
 
-      invoiceNumber,
-      recipientEmail,
-      isRegistered,
-      requiresAccountCreation,
-      status: invoice.status
-    });
-
     return NextResponse.json({
       success: true,
       data: responseData

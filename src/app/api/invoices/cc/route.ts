@@ -206,11 +206,6 @@ export async function POST(request: NextRequest) {
       }
     );
 
-      primaryInvoiceId,
-      ccInvoicesCount: ccInvoices.length,
-      ccInvoices: ccInvoices.map(inv => inv.invoiceNumber)
-    });
-
     return NextResponse.json({
       success: true,
       message: 'CC invoices created successfully',
