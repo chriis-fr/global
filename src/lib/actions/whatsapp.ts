@@ -5,7 +5,6 @@ import { authOptions } from '@/lib/auth';
 import { WhatsAppService, type WhatsAppInvoiceData } from '@/lib/services/whatsappService';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
-import crypto from 'crypto';
 
 interface SendInvoiceWhatsAppResult {
   success: boolean;

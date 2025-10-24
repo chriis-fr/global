@@ -14,7 +14,7 @@ interface WhatsAppResponse {
 }
 
 class WhatsAppService {
-  private static readonly META_API_URL = process.env.META_WHATSAPP_API_URL || 'https://graph.facebook.com/v17.0';
+  private static readonly META_API_URL = process.env.META_WHATSAPP_API_URL ;
   private static readonly ACCESS_TOKEN = process.env.META_WHATSAPP_ACCESS_TOKEN;
   private static readonly PHONE_NUMBER_ID = process.env.META_WHATSAPP_PHONE_NUMBER_ID;
   private static readonly TEMPLATE_NAMESPACE = process.env.META_WHATSAPP_TEMPLATE_NAMESPACE;
