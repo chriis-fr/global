@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { OrganizationService } from '@/lib/services/organizationService';
-import { UserService } from '@/lib/services/userService';
 import { CreateOrganizationInput, UpdateOrganizationInput } from '@/models';
 import { getOrganizationData, createOrganization, updateOrganization } from '@/lib/actions/organization';
 

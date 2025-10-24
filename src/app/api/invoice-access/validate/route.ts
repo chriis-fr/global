@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     try {
       user = await UserService.getUserByEmail(tokenData.recipientEmail);
       isRegistered = !!user;
-    } catch (error) {
+    } catch {
       // User not found, isRegistered remains false
     }
 

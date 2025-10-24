@@ -212,7 +212,7 @@ export async function POST(request: NextRequest) {
       ccInvoices
     });
 
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Failed to create CC invoices' },
       { status: 500 }

@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { getDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
           name: organization?.name,
           approvalSettings: organization?.approvalSettings,
           memberCount: organization?.members?.length || 0,
-          approvers: organization?.members?.filter((m: any) => 
+          approvers: organization?.members?.filter((m: { role: string }) => 
             m.role === 'admin' || m.role === 'approver'
           ).length || 0
         },

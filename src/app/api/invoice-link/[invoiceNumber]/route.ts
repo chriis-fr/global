@@ -50,7 +50,7 @@ export async function GET(
       const existingUser = await UserService.getUserByEmail(recipientEmail);
       isRegistered = !!existingUser;
       requiresAccountCreation = !existingUser;
-    } catch (error) {
+    } catch {
       // If there's an error checking, assume user needs to be created
       requiresAccountCreation = true;
     }

@@ -34,7 +34,7 @@ export async function GET() {
       success: true,
       data: clients
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Failed to fetch clients' },
       { status: 500 }
@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
       success: true,
       data: { id: result.insertedId, ...clientData }
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Failed to create client' },
       { status: 500 }

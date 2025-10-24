@@ -9,7 +9,7 @@ import { ObjectId } from 'mongodb';
 import { BillWithApproval } from '@/types/approval';
 
 // GET /api/bills - Get bills for organization
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
       });
 
       if (organization) {
-        member = organization.members.find((m: any) => m.userId.toString() === user._id?.toString());
+        member = organization.members.find((m: { userId: string }) => m.userId.toString() === user._id?.toString());
       }
     }
 
@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { vendor, amount, currency, description, category, dueDate, invoiceNumber, reference } = body;
+    const { vendor, amount, currency, description, category, dueDate } = body;
 
     // Validate required fields
     if (!vendor || !amount || !description || !dueDate) {
@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
       });
 
       if (organization) {
-        member = organization.members.find((m: any) => m.userId.toString() === user._id?.toString());
+        member = organization.members.find((m: { userId: string }) => m.userId.toString() === user._id?.toString());
       }
     }
 
