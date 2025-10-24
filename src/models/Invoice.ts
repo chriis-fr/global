@@ -141,6 +141,9 @@ export interface Invoice {
   
   // Recipient type for conditional approval display
   recipientType?: 'individual' | 'organization';
+  
+  // Delivery method
+  sentVia?: 'email' | 'whatsapp';
 }
 
 export interface CreateInvoiceInput {

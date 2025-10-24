@@ -55,7 +55,7 @@ export async function GET() {
           name: user.name, // User's full name
           email: user.email,
           phone: user.phone || '',
-          currencyPreference: user.settings?.currencyPreference || 'USD',
+          currencyPreference: user.preferences?.currency || 'USD',
           profilePhoto: user.profilePicture || user.avatar || '',
           isGoogleUser: user.profilePicture ? true : false, // If user has profilePicture, they're likely a Google user
         },
@@ -63,7 +63,7 @@ export async function GET() {
           industry: user.industry || '',
           address: user.address,
         },
-        settings: user.settings,
+        settings: user.preferences,
       },
       timestamp: new Date().toISOString()
     });
@@ -117,9 +117,9 @@ export async function PUT(request: NextRequest) {
       updateData = {
         name: data.name,
         phone: data.phone,
-        settings: {
-          ...user.settings,
-          currencyPreference: data.currencyPreference || 'USD',
+        preferences: {
+          ...user.preferences,
+          currency: data.currencyPreference || 'USD',
         },
       };
     } else if (type === 'organization') {
@@ -129,8 +129,8 @@ export async function PUT(request: NextRequest) {
       };
     } else if (type === 'notifications') {
       updateData = {
-        settings: {
-          ...user.settings,
+        preferences: {
+          ...user.preferences,
           notifications: data.notifications,
         },
       };

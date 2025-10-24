@@ -29,6 +29,7 @@ export interface RecentInvoice {
   status: string;
   createdAt: string;
   recipientType?: 'individual' | 'organization';
+  sentVia?: 'email' | 'whatsapp';
 }
 
 // Recent Payable Interface (list view data only)
@@ -231,7 +232,8 @@ export async function getRecentInvoices(limit: number = 5): Promise<{ success: b
           currency: 1,
           status: 1,
           createdAt: 1,
-          recipientType: 1
+          recipientType: 1,
+          sentVia: 1
         }
       })
       .sort({ createdAt: -1 })
@@ -249,7 +251,8 @@ export async function getRecentInvoices(limit: number = 5): Promise<{ success: b
       currency: invoice.currency || 'USD',
       status: invoice.status || 'draft',
       createdAt: invoice.createdAt?.toISOString() || new Date().toISOString(),
-      recipientType: invoice.recipientType
+      recipientType: invoice.recipientType,
+      sentVia: invoice.sentVia
     }));
 
     return { success: true, data: recentInvoices };

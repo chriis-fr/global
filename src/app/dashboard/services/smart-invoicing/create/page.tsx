@@ -622,16 +622,12 @@ export default function CreateInvoicePage() {
 
   // Auto-select currency based on payment method
   const autoSelectCurrencyForPaymentMethod = (paymentMethod: string) => {
-    console.log('🔄 [Auto-Currency] Payment method changed to:', paymentMethod);
     
     if (paymentMethod === 'crypto') {
       // Auto-select USDT for crypto payments
-      console.log('🔍 [Auto-Currency] Looking for USDT in crypto currencies...', cryptoCurrencies.length);
       const usdtCurrency = cryptoCurrencies.find((c: { code: string }) => c.code === 'USDT');
-      console.log('💰 [Auto-Currency] USDT found:', usdtCurrency);
       
       if (usdtCurrency) {
-        console.log('✅ [Auto-Currency] Setting USDT as currency');
         setIsAutoSelectingCurrency(true);
         setFormData(prev => ({
           ...prev,
@@ -646,16 +642,12 @@ export default function CreateInvoicePage() {
         // Reset the flag after a short delay
         setTimeout(() => setIsAutoSelectingCurrency(false), 100);
       } else {
-        console.log('❌ [Auto-Currency] USDT not found in crypto currencies');
       }
     } else if (paymentMethod === 'fiat') {
       // Auto-select USD for fiat payments
-      console.log('🔍 [Auto-Currency] Looking for USD in fiat currencies...', fiatCurrencies.length);
       const usdCurrency = fiatCurrencies.find((c: { code: string }) => c.code === 'USD');
-      console.log('💵 [Auto-Currency] USD found:', usdCurrency);
       
       if (usdCurrency) {
-        console.log('✅ [Auto-Currency] Setting USD as currency');
         setIsAutoSelectingCurrency(true);
         setFormData(prev => ({
           ...prev,
@@ -670,7 +662,6 @@ export default function CreateInvoicePage() {
         // Reset the flag after a short delay
         setTimeout(() => setIsAutoSelectingCurrency(false), 100);
       } else {
-        console.log('❌ [Auto-Currency] USD not found in fiat currencies');
       }
     }
   };
@@ -920,11 +911,9 @@ export default function CreateInvoicePage() {
         
         // Only auto-switch payment method if this is NOT an auto-selection
         if (!isAutoSelectingCurrency) {
-          console.log('🔄 [Currency] Manual currency selection detected, checking type...');
           // Check if the selected currency is a cryptocurrency
           const selectedCurrency = getCurrencyByCode(value as string);
           if (selectedCurrency && selectedCurrency.type === 'crypto') {
-            console.log('🪙 [Currency] Crypto currency selected, switching to crypto payment method');
             // Automatically switch payment method to crypto for cryptocurrencies
             updated.paymentMethod = 'crypto';
             // Set the appropriate network for the cryptocurrency
@@ -936,14 +925,12 @@ export default function CreateInvoicePage() {
               }
             }
           } else if (selectedCurrency && selectedCurrency.type === 'fiat') {
-            console.log('💵 [Currency] Fiat currency selected, switching to fiat payment method');
             // Automatically switch payment method to fiat for fiat currencies
             updated.paymentMethod = 'fiat';
             // Clear the payment network for fiat currencies
             updated.paymentNetwork = '';
           }
         } else {
-          console.log('🤖 [Currency] Auto-selection in progress, skipping payment method switch');
         }
       }
       

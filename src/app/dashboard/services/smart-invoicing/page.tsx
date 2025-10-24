@@ -19,7 +19,8 @@ import {
   LayoutDashboard,
   AlertCircle,
   Lock,
-  CheckCircle
+  CheckCircle,
+  MessageCircle
 } from 'lucide-react';
 import { InvoiceService, InvoiceStats } from '@/lib/services/invoiceService';
 import { Invoice } from '@/models/Invoice';
@@ -644,6 +645,10 @@ export default function SmartInvoicingPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center space-x-2">
                       <p className="text-white font-medium text-sm sm:text-base truncate">{invoice.invoiceNumber || 'Invoice'}</p>
+                      {/* WhatsApp indicator */}
+                      {invoice.sentVia === 'whatsapp' && (
+                        <MessageCircle className="h-4 w-4 text-green-400 flex-shrink-0"  />
+                      )}
                       {/* Approval indicator - only for organization recipients */}
                       {(invoice.status === 'approved' || invoice.status === 'sent') && invoice.organizationId && invoice.recipientType === 'organization' && (
                         <div className="relative group">

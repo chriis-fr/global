@@ -31,15 +31,16 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
 
   const fetchUserCurrencyPreference = async () => {
     try {
-      const response = await fetch('/api/user/settings');
+      const response = await fetch('/api/currency/convert');
       const data = await response.json();
       
-      if (data.success && data.data.profile.currencyPreference) {
-        setPreferredCurrencyState(data.data.profile.currencyPreference);
+      if (data.success && data.data.preferredCurrency) {
+        setPreferredCurrencyState(data.data.preferredCurrency);
       } else {
         setPreferredCurrencyState('USD');
       }
     } catch (error) {
+      console.error('❌ [CurrencyContext] Error fetching currency preference:', error);
       setPreferredCurrencyState('USD');
     } finally {
       setIsLoading(false);

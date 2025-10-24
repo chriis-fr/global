@@ -88,7 +88,7 @@ export async function GET() {
       );
     }
 
-    const preferredCurrency = user.settings?.currencyPreference || 'USD';
+    const preferredCurrency = user.preferences?.currency || 'USD';
 
     return NextResponse.json({
       success: true,

@@ -52,6 +52,7 @@ export class CurrencyService {
     fromCurrency: string,
     toCurrency: string
   ): Promise<number> {
+
     if (fromCurrency === toCurrency) {
       return amount;
     }
@@ -59,9 +60,11 @@ export class CurrencyService {
     try {
       const rate = await this.getExchangeRate(fromCurrency, toCurrency);
       const convertedAmount = amount * rate;
-      // Round to 2 decimal places to avoid floating point precision issues
-      return Math.round(convertedAmount * 100) / 100;
-    } catch {
+      const finalAmount = Math.round(convertedAmount * 100) / 100;
+
+      return finalAmount;
+    } catch (error) {
+      console.error('❌ [CurrencyService] Conversion failed:', error);
       return amount; // Return original amount if conversion fails
     }
   }

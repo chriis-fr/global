@@ -679,22 +679,9 @@ export async function GET(request: NextRequest) {
     
     // Always convert total revenue to user's preferred currency for consistent display
     // The convertToPreferred parameter only affects individual invoice conversion, not total revenue
-    console.log('🔍 [Currency Debug] Converting total revenue:', {
-      userEmail: session.user.email,
-      preferredCurrency,
-      invoiceCount: allInvoices.length,
-      sampleInvoice: allInvoices[0] ? {
-        currency: allInvoices[0].currency,
-        totalAmount: allInvoices[0].totalAmount || allInvoices[0].total
-      } : null
-    });
     
     const totalRevenue = await CurrencyService.calculateTotalRevenue(allInvoices as { [key: string]: unknown }[], preferredCurrency);
     
-    console.log('🔍 [Currency Debug] Total revenue calculated:', {
-      totalRevenue,
-      preferredCurrency
-    });
 
     return NextResponse.json({
       success: true,

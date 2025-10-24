@@ -16,9 +16,10 @@ import {
   TrendingUp,
   Download,
   ArrowLeft,
-  CheckCircle
+  CheckCircle,
+  MessageCircle
 } from 'lucide-react';
-import FormattedNumberDisplay from '@/components/FormattedNumber';
+import CurrencyAmount from '@/components/CurrencyAmount';
 import FloatingActionButton from '@/components/dashboard/FloatingActionButton';
 import PendingInvoiceApprovals from '@/components/dashboard/PendingInvoiceApprovals';
 import { getInvoicesListMinimal, getFullInvoicesForExport, InvoiceDetails } from '@/lib/actions/invoices';
@@ -464,7 +465,11 @@ export default function InvoicesPage() {
             <div className="flex-1">
               <p className="text-blue-200 text-xs sm:text-sm font-medium">Total Revenue</p>
               <p className="text-lg sm:text-2xl font-bold text-white">
-                <FormattedNumberDisplay value={stats.totalRevenue} />
+                <CurrencyAmount 
+                  amount={stats.totalRevenue} 
+                  currency="USD"
+                  showOriginalCurrency={false}
+                />
               </p>
             </div>
             <div className="p-2 sm:p-3 bg-green-500/20 rounded-lg flex-shrink-0">
@@ -559,9 +564,15 @@ export default function InvoicesPage() {
                             className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                             onClick={(e) => e.stopPropagation()}
                           />
-                          <h3 className="text-white font-semibold text-sm truncate">
-                            {invoice.invoiceNumber || 'Invoice'}
-                          </h3>
+                          <div className="flex items-center space-x-2">
+                            <h3 className="text-white font-semibold text-sm truncate">
+                              {invoice.invoiceNumber || 'Invoice'}
+                            </h3>
+                            {/* WhatsApp indicator */}
+                            {invoice.sentVia === 'whatsapp' && (
+                              <MessageCircle className="h-4 w-4 text-green-400 flex-shrink-0"  />
+                            )}
+                          </div>
                           {/* Approval indicator - only for organization recipients */}
                           {(invoice.status === 'approved' || invoice.status === 'sent') && invoice.organizationId && invoice.recipientType === 'organization' && (
                             <div className="relative group">
@@ -580,9 +591,10 @@ export default function InvoicesPage() {
                       </div>
                       <div className="text-right flex-shrink-0 ml-3">
                         <p className="text-white font-semibold text-sm">
-                          <FormattedNumberDisplay 
-                            value={invoice.total || invoice.totalAmount || 0} 
-                            currency={invoice.currency === 'USD' ? '$' : invoice.currency === 'EUR' ? '€' : invoice.currency === 'GBP' ? '£' : '$'}
+                          <CurrencyAmount 
+                            amount={invoice.total || invoice.totalAmount || 0} 
+                            currency={invoice.currency || 'USD'}
+                            showOriginalCurrency={true}
                           />
                         </p>
                         <div className="flex items-center space-x-2">
@@ -706,9 +718,13 @@ export default function InvoicesPage() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div>
                           <div className="flex items-center space-x-2">
-                          <div className="text-sm font-semibold text-white">
-                            {invoice.invoiceNumber || 'Invoice'}
+                            <div className="text-sm font-semibold text-white">
+                              {invoice.invoiceNumber || 'Invoice'}
                             </div>
+                            {/* WhatsApp indicator */}
+                            {invoice.sentVia === 'whatsapp' && (
+                              <MessageCircle className="h-4 w-4 text-green-400 flex-shrink-0" />
+                            )}
                             {/* Approval indicator */}
                             {(invoice.status === 'approved' || invoice.status === 'sent') && (
                               <div className="relative group">
@@ -733,9 +749,10 @@ export default function InvoicesPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-semibold text-white">
-                          <FormattedNumberDisplay 
-                            value={invoice.totalAmount || 0} 
-                            currency={invoice.currency === 'USD' ? '$' : invoice.currency === 'EUR' ? '€' : invoice.currency === 'GBP' ? '£' : '$'}
+                          <CurrencyAmount 
+                            amount={invoice.totalAmount || 0} 
+                            currency={invoice.currency || 'USD'}
+                            showOriginalCurrency={true}
                           />
                         </div>
                       </td>
@@ -745,7 +762,7 @@ export default function InvoicesPage() {
                             {invoice.status === 'approved' ? 'Pending' :
                              invoice.status === 'sent' ? 'Pending' : 
                            invoice.status ? (invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)) : 'Draft'}
-                        </span>
+                          </span>
                           {/* WhatsApp indicator */}
                           {invoice.sentVia === 'whatsapp' && (
                             <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full">

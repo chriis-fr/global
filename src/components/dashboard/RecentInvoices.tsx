@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { FileText, Clock, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { FileText, Clock, CheckCircle, XCircle, AlertTriangle, MessageCircle } from 'lucide-react';
 import { getRecentInvoices, RecentInvoice } from '@/lib/actions/dashboard';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
 
@@ -183,7 +183,13 @@ export default function RecentInvoices({ className = '' }: RecentInvoicesProps) 
               <div className="flex items-center space-x-3">
                 {getStatusIcon(invoice.status)}
                 <div>
-                  <p className="font-medium text-white">{invoice.invoiceNumber}</p>
+                  <div className="flex items-center space-x-2">
+                    <p className="font-medium text-white">{invoice.invoiceNumber}</p>
+                    {/* WhatsApp indicator */}
+                    {invoice.sentVia === 'whatsapp' && (
+                      <MessageCircle className="h-4 w-4 text-green-400 flex-shrink-0"  />
+                    )}
+                  </div>
                   <p className="text-sm text-gray-400">{invoice.clientName}</p>
                 </div>
               </div>
