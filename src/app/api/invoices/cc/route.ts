@@ -166,10 +166,6 @@ export async function POST(request: NextRequest) {
         clientName: ccClient.name
       });
 
-        id: result.insertedId,
-        invoiceNumber: ccInvoiceNumber,
-        clientEmail: ccClient.email
-      });
 
       // Send email to CC recipient
       try {

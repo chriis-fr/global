@@ -53,12 +53,8 @@ export async function POST(request: NextRequest) {
       user = await UserService.getUserByEmail(tokenData.recipientEmail);
       isRegistered = !!user;
     } catch (error) {
+      // User not found, isRegistered remains false
     }
-
-      invoiceId: invoice._id,
-      recipientEmail: tokenData.recipientEmail,
-      isRegistered
-    });
 
     return NextResponse.json({
       success: true,

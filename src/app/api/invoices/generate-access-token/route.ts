@@ -68,11 +68,6 @@ export async function POST(request: NextRequest) {
     const baseUrl = frontendUrl.startsWith('http') ? frontendUrl : `https://${frontendUrl}`;
     const accessUrl = `${baseUrl}/invoice-access?token=${token}`;
 
-      invoiceId,
-      recipientEmail: tokenData.recipientEmail,
-      expiresAt
-    });
-
     return NextResponse.json({
       success: true,
       data: {

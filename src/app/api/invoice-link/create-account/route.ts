@@ -136,10 +136,6 @@ export async function POST(request: NextRequest) {
       }
     };
 
-      email: userData.email,
-      name: userData.name,
-      userType: userData.userType
-    });
 
     // Create the user
     const newUser = await UserService.createUser(userData);
@@ -223,11 +219,11 @@ async function createPayableFromInvoice(userId: string, invoiceData: InvoiceData
       const { LedgerSyncService } = await import('@/lib/services/ledgerSyncService');
       const payableWithId = { _id: result.insertedId, ...payableData };
       await LedgerSyncService.syncPayableToLedger(payableWithId);
-    } catch (syncError) {
+    } catch {
       // Don't fail the request if sync fails
     }
 
-  } catch (error) {
+  } catch {
     // Don't fail the account creation if payable creation fails
   }
 }
