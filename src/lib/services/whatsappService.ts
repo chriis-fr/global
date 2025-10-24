@@ -87,14 +87,17 @@ class WhatsAppService {
               parameters: [
                 {
                   type: 'text',
+                  parameter_name: 'client_name',
                   text: data.clientName
                 },
                 {
                   type: 'text',
+                  parameter_name: 'sender_name',
                   text: data.senderName
                 },
                 {
                   type: 'text',
+                  parameter_name: 'inv_number',
                   text: data.invoiceNumber
                 }
               ]

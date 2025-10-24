@@ -94,6 +94,7 @@ export default function PaymentMethodsPage() {
     const isKenya = userCountry === 'KE' || newPaymentMethod.currency === 'KES';
     
     // Debug logging
+    console.log('Payment method validation:', {
       userCountry,
       currency: newPaymentMethod.currency,
       isKenya,
