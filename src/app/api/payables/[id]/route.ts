@@ -32,21 +32,41 @@ export async function GET(
       ? { issuerId: new ObjectId(session.user.id) }
       : { issuerId: session.user.id };
     
-    const query: Record<string, unknown> = { _id: new ObjectId(id) };
+    let query: Record<string, unknown>;
     
     if (isOrganization) {
-      query.$or = [
-        { organizationId: session.user.organizationId },
-        { organizationId: new ObjectId(session.user.organizationId) }
-      ];
+      query = {
+        _id: new ObjectId(id),
+        $or: [
+          { organizationId: session.user.organizationId },
+          { organizationId: new ObjectId(session.user.organizationId) }
+        ]
+      };
     } else {
-      query.$or = [
-        issuerIdQuery,
-        { userId: session.user.email }
-      ];
+      query = {
+        _id: new ObjectId(id),
+        $or: [
+          issuerIdQuery,
+          { userId: session.user.email }
+        ]
+      };
     }
 
+    console.log('🔍 [Payable GET] Query details:', {
+      id,
+      isOrganization,
+      sessionUserId: session.user.id,
+      organizationId: session.user.organizationId,
+      query
+    });
+
     const payable = await collection.findOne(query);
+
+    console.log('🔍 [Payable GET] Query result:', {
+      found: !!payable,
+      payableId: payable?._id,
+      payableNumber: payable?.payableNumber
+    });
 
     if (!payable) {
       return NextResponse.json({ success: false, message: 'Payable not found' }, { status: 404 });
@@ -56,7 +76,7 @@ export async function GET(
       success: true,
       data: payable
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Failed to fetch payable' },
       { status: 500 }
@@ -135,18 +155,24 @@ export async function PUT(
       ? { issuerId: new ObjectId(session.user.id) }
       : { issuerId: session.user.id };
     
-    const query: Record<string, unknown> = { _id: new ObjectId(id) };
+    let query: Record<string, unknown>;
     
     if (isOrganization) {
-      query.$or = [
-        { organizationId: session.user.organizationId },
-        { organizationId: new ObjectId(session.user.organizationId) }
-      ];
+      query = {
+        _id: new ObjectId(id),
+        $or: [
+          { organizationId: session.user.organizationId },
+          { organizationId: new ObjectId(session.user.organizationId) }
+        ]
+      };
     } else {
-      query.$or = [
-        issuerIdQuery,
-        { userId: session.user.email }
-      ];
+      query = {
+        _id: new ObjectId(id),
+        $or: [
+          issuerIdQuery,
+          { userId: session.user.email }
+        ]
+      };
     }
 
     // Check if payable exists and user has access
@@ -187,13 +213,14 @@ export async function PUT(
       // Update the related invoice status to "paid" as well
       try {
         if (existingPayable.relatedInvoiceId) {
+          console.log('Updating related invoice:', {
             payableId: id,
             relatedInvoiceId: existingPayable.relatedInvoiceId,
             payableStatus: 'paid'
           });
           
           const invoicesCollection = db.collection('invoices');
-          const invoiceUpdateResult = await invoicesCollection.updateOne(
+          await invoicesCollection.updateOne(
             { _id: existingPayable.relatedInvoiceId },
             { 
               $set: { 
@@ -205,7 +232,7 @@ export async function PUT(
           );
           
         }
-      } catch (invoiceUpdateError) {
+      } catch {
         // Don't fail the payable update if invoice update fails
       }
 
@@ -232,8 +259,8 @@ export async function PUT(
           tags: ['payment', 'payable', 'expense']
         });
         
-      } catch (notificationError) {
-      }
+        } catch {
+        }
 
         // Update financial ledger for net balance calculation
         try {
@@ -250,7 +277,7 @@ export async function PUT(
               }
             }
           );
-        } catch (ledgerError) {
+        } catch {
         }
 
       return NextResponse.json({
@@ -285,13 +312,14 @@ export async function PUT(
       if (newStatus === 'paid') {
         try {
           if (currentPayable.relatedInvoiceId) {
+            console.log('Updating related invoice for status change:', {
               payableId: id,
               relatedInvoiceId: currentPayable.relatedInvoiceId,
               newStatus: 'paid'
             });
             
             const invoicesCollection = db.collection('invoices');
-            const invoiceUpdateResult = await invoicesCollection.updateOne(
+            await invoicesCollection.updateOne(
               { _id: currentPayable.relatedInvoiceId },
               { 
                 $set: { 
@@ -303,7 +331,7 @@ export async function PUT(
             );
             
           }
-        } catch (invoiceUpdateError) {
+        } catch {
           // Don't fail the payable update if invoice update fails
         }
 
@@ -322,7 +350,7 @@ export async function PUT(
               }
             }
           );
-        } catch (ledgerError) {
+        } catch {
         }
       }
     }
@@ -433,7 +461,7 @@ export async function PUT(
       message: 'Payable updated successfully',
       data: { _id: id, ...updateData }
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Failed to update payable' },
       { status: 500 }
@@ -461,15 +489,31 @@ export async function DELETE(
 
     // Build query based on user type
     const isOrganization = !!(session.user.organizationId && session.user.organizationId !== session.user.id);
-    const query: Record<string, unknown> = { _id: new ObjectId(id) };
+    
+    // Handle both MongoDB ObjectIds and OAuth IDs
+    const isObjectId = /^[0-9a-fA-F]{24}$/.test(session.user.id);
+    const issuerIdQuery = isObjectId 
+      ? { issuerId: new ObjectId(session.user.id) }
+      : { issuerId: session.user.id };
+    
+    let query: Record<string, unknown>;
     
     if (isOrganization) {
-      query.organizationId = session.user.organizationId;
+      query = {
+        _id: new ObjectId(id),
+        $or: [
+          { organizationId: session.user.organizationId },
+          { organizationId: new ObjectId(session.user.organizationId) }
+        ]
+      };
     } else {
-      query.$or = [
-        { issuerId: session.user.id },
-        { userId: session.user.email }
-      ];
+      query = {
+        _id: new ObjectId(id),
+        $or: [
+          issuerIdQuery,
+          { userId: session.user.email }
+        ]
+      };
     }
 
     const result = await collection.deleteOne(query);
@@ -482,7 +526,7 @@ export async function DELETE(
       success: true,
       message: 'Payable deleted successfully'
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Failed to delete payable' },
       { status: 500 }

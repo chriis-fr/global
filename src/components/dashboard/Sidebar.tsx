@@ -22,6 +22,7 @@ import {
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import Image from 'next/image';
 import { useSubscription } from '@/lib/contexts/SubscriptionContext';
+import { usePermissions } from '@/lib/contexts/PermissionContext';
 
 const SERVICE_LINKS = [
   {
@@ -90,6 +91,7 @@ const SETTINGS_LINKS = [
 export default function Sidebar() {
   const { data: session } = useSession();
   const { subscription } = useSubscription();
+  const { permissions } = usePermissions();
   const pathname = usePathname();
   // const enabledServices = session?.user?.services || {}; // Temporarily disabled to show all services
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -303,8 +305,8 @@ export default function Sidebar() {
             })}
           </div>
 
-          {/* Admin Navigation - Only for Business Users */}
-          {session?.user?.userType === 'business' && session?.user?.organizationId && (
+          {/* Admin Navigation - Only for users with approval permissions */}
+          {permissions.canApproveBills && session?.user?.organizationId && (
             <div className="mb-4">
               {(!isCollapsed || isAutoHidden) && (
                 <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wider mb-2 px-2">

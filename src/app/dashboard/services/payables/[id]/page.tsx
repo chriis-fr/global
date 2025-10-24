@@ -116,7 +116,7 @@ export default function PayableViewPage() {
       } else {
         setError(data.message || 'Failed to load payable');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to load payable');
     } finally {
       setLoading(false);
@@ -179,7 +179,7 @@ export default function PayableViewPage() {
       } else {
         alert('Failed to update payable status. Please try again.');
       }
-    } catch (err) {
+    } catch {
     } finally {
       setUpdatingStatus(false);
     }
@@ -203,7 +203,7 @@ export default function PayableViewPage() {
         router.push('/dashboard/services/payables?refresh=true');
       } else {
       }
-    } catch (err) {
+    } catch {
     }
   };
 
@@ -364,7 +364,7 @@ export default function PayableViewPage() {
       const filename = `Receipt_${payable.payableNumber || 'payable'}_${payable.paymentDate ? new Date(payable.paymentDate).toLocaleDateString().replace(/\//g, '-') : new Date().toLocaleDateString().replace(/\//g, '-')}.pdf`;
       pdf.save(filename);
 
-    } catch (error) {
+    } catch {
       alert('Failed to download receipt. Please try again.');
     } finally {
       setDownloadingReceipt(false);
