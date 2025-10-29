@@ -6,7 +6,7 @@ import { NotificationService } from '@/lib/services/notificationService';
 import { RBACService } from '@/lib/services/rbacService';
 import { getDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
-import { BillWithApproval } from '@/types/approval';
+import { BillWithApproval, ApprovalWorkflow } from '@/types/approval';
 
 // GET /api/bills - Get bills for organization
 export async function GET() {
@@ -204,12 +204,7 @@ export async function POST(request: NextRequest) {
       user.organizationId?.toString() || user._id?.toString()
     );
 
-    type ApprovalWorkflowLite = {
-      status: string;
-      approvals: Array<{ stepNumber: number; approverEmail: string }>;
-      currentStep: number;
-    } | null;
-    let workflow: ApprovalWorkflowLite = null;
+    let workflow: ApprovalWorkflow | null = null;
     let approvalStatus = 'draft';
 
     // If approval is required, create workflow
@@ -236,8 +231,8 @@ export async function POST(request: NextRequest) {
         );
 
         // Send approval notifications if workflow is pending
-        if (workflow && workflow.status === 'pending') {
-          const currentStep = workflow!.approvals.find(step => step.stepNumber === workflow!.currentStep);
+        if (workflow.status === 'pending') {
+          const currentStep = workflow.approvals.find(step => step.stepNumber === workflow.currentStep);
           if (currentStep) {
             // Get organization name for notifications
             const orgName = organization?.name || 'Your Organization';
@@ -253,7 +248,7 @@ export async function POST(request: NextRequest) {
                 description,
                 dueDate
               },
-              workflow!,
+              workflow,
               orgName
             );
           }
