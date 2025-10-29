@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { UserService } from '@/lib/services/userService';
+import { ServiceOnboarding } from '@/models/User';
 
 export async function POST(request: NextRequest) {
   try {
@@ -36,16 +37,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Update onboarding progress
+    const currentServiceOnboarding = (user.onboarding.data as { serviceOnboarding?: Record<string, unknown> })?.serviceOnboarding || {};
     const updatedOnboarding = {
       ...user.onboarding,
       currentStep: step,
       completedSteps: completedSteps || [...user.onboarding.completedSteps, step],
       serviceOnboarding: {
-        ...user.onboarding.serviceOnboarding,
+        ...currentServiceOnboarding,
         ...stepData
-      },
+      } as Partial<ServiceOnboarding>,
       // Mark onboarding as completed when user reaches step 4 (final step)
-      completed: step === 4 ? true : user.onboarding.completed
+      completed: step === 4 ? true : user.onboarding.isCompleted
     };
 
     if (!user._id) {
@@ -76,7 +78,6 @@ export async function POST(request: NextRequest) {
       success: true,
       data: {
         onboarding: updatedUser.onboarding,
-        userType: updatedUser.userType,
         services: updatedUser.services
       },
       message: 'Onboarding step completed successfully',

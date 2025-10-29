@@ -209,7 +209,11 @@ function validateApprovalSettings(settings: Record<string, unknown>): ApprovalSe
       return null;
     }
 
-    const { amountThresholds, requiredApprovers, fallbackApprovers, autoApprove } = settings.approvalRules;
+    const approvalRules = settings.approvalRules as Record<string, unknown>;
+    const amountThresholds = approvalRules.amountThresholds as Record<string, unknown> | undefined;
+    const requiredApprovers = approvalRules.requiredApprovers as Record<string, unknown> | undefined;
+    const fallbackApprovers = approvalRules.fallbackApprovers;
+    const autoApprove = approvalRules.autoApprove as Record<string, unknown> | undefined;
 
     // Validate amount thresholds
     if (!amountThresholds || 
@@ -237,23 +241,25 @@ function validateApprovalSettings(settings: Record<string, unknown>): ApprovalSe
       return null;
     }
 
-    if (!autoApprove.conditions ||
-        !Array.isArray(autoApprove.conditions.vendorWhitelist) ||
-        !Array.isArray(autoApprove.conditions.categoryWhitelist) ||
-        typeof autoApprove.conditions.amountLimit !== 'number') {
+    const conditions = autoApprove.conditions as Record<string, unknown> | undefined;
+    if (!conditions ||
+        !Array.isArray(conditions.vendorWhitelist) ||
+        !Array.isArray(conditions.categoryWhitelist) ||
+        typeof conditions.amountLimit !== 'number') {
       return null;
     }
 
     // Validate email settings
-    if (!settings.emailSettings ||
-        typeof settings.emailSettings.primaryEmail !== 'string' ||
-        !Array.isArray(settings.emailSettings.notificationEmails) ||
-        typeof settings.emailSettings.approvalNotifications !== 'boolean' ||
-        typeof settings.emailSettings.paymentNotifications !== 'boolean') {
+    const emailSettings = settings.emailSettings as Record<string, unknown> | undefined;
+    if (!emailSettings ||
+        typeof emailSettings.primaryEmail !== 'string' ||
+        !Array.isArray(emailSettings.notificationEmails) ||
+        typeof emailSettings.approvalNotifications !== 'boolean' ||
+        typeof emailSettings.paymentNotifications !== 'boolean') {
       return null;
     }
 
-    return settings as ApprovalSettings;
+    return settings as unknown as ApprovalSettings;
   } catch (error) {
     console.error('Error validating approval settings:', error);
     return null;

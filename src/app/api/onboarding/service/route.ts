@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { UserService } from '@/lib/services/userService';
 import { OrganizationService } from '@/lib/services/organizationService';
+import { ServiceOnboarding } from '@/models/User';
 
 export async function POST(request: NextRequest) {
   try {
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Determine where to store service onboarding data based on user type
-    if (user.userType === 'business' && user.organizationId) {
+    if (user.organizationId) {
       // For business users, store service onboarding data in the organization
       const organization = await OrganizationService.getOrganizationById(user.organizationId.toString());
       if (!organization) {
@@ -97,9 +98,10 @@ export async function POST(request: NextRequest) {
       });
     } else {
       // For individual users, store service onboarding data in the user record
-      const currentServiceData = user.onboarding.serviceOnboarding[serviceKey] || {};
+      const serviceOnboarding = (user.onboarding.data as { serviceOnboarding?: Record<string, unknown> })?.serviceOnboarding || {};
+      const currentServiceData = (serviceOnboarding as Record<string, unknown>)[serviceKey] as Record<string, unknown> || {};
       const updatedServiceOnboarding = {
-        ...user.onboarding.serviceOnboarding,
+        ...serviceOnboarding,
         [serviceKey]: {
           ...currentServiceData,
           ...serviceData,
@@ -112,7 +114,7 @@ export async function POST(request: NextRequest) {
       const updatedUser = await UserService.updateUser(user._id!.toString(), {
         onboarding: {
           ...user.onboarding,
-          serviceOnboarding: updatedServiceOnboarding
+          serviceOnboarding: updatedServiceOnboarding as Partial<ServiceOnboarding>
         }
       });
 
@@ -126,10 +128,12 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      const updatedServiceOnboardingData = (updatedUser.onboarding.data as { serviceOnboarding?: Record<string, unknown> })?.serviceOnboarding || (updatedUser.onboarding as unknown as { serviceOnboarding?: Record<string, unknown> }).serviceOnboarding || {};
+
       return NextResponse.json({
         success: true,
         data: {
-          serviceOnboarding: updatedUser.onboarding.serviceOnboarding,
+          serviceOnboarding: updatedServiceOnboardingData,
           message: `${serviceKey} service onboarding completed successfully`,
           storageLocation: 'user'
         },
@@ -178,7 +182,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Determine where to retrieve service onboarding data based on user type
-    if (user.userType === 'business' && user.organizationId) {
+    if (user.organizationId) {
       // For business users, retrieve service onboarding data from the organization
       const organization = await OrganizationService.getOrganizationById(user.organizationId.toString());
       if (!organization) {
@@ -212,7 +216,7 @@ export async function GET(request: NextRequest) {
       if (serviceKey) {
         // Return specific service onboarding status from organization
         const serviceOnboarding = completedServiceOnboarding[serviceKey];
-        const isServiceEnabled = organizationServices[serviceKey];
+        const isServiceEnabled = (organizationServices as unknown as Record<string, unknown>)[serviceKey];
         
         return NextResponse.json({
           success: true,
@@ -239,15 +243,17 @@ export async function GET(request: NextRequest) {
       }
     } else {
       // For individual users, retrieve service onboarding data from the user record
+      const serviceOnboarding = (user.onboarding.data as { serviceOnboarding?: Record<string, unknown> })?.serviceOnboarding || {};
+      
       if (serviceKey) {
         // Return specific service onboarding status from user
-        const serviceOnboarding = user.onboarding.serviceOnboarding[serviceKey];
+        const serviceOnboardingData = (serviceOnboarding as Record<string, unknown>)[serviceKey];
         return NextResponse.json({
           success: true,
           data: {
             serviceKey,
-            serviceOnboarding,
-            isCompleted: serviceOnboarding && typeof serviceOnboarding === 'object' && 'completed' in serviceOnboarding ? serviceOnboarding.completed : false,
+            serviceOnboarding: serviceOnboardingData,
+            isCompleted: serviceOnboardingData && typeof serviceOnboardingData === 'object' && 'completed' in serviceOnboardingData ? serviceOnboardingData.completed : false,
             storageLocation: 'user'
           },
           timestamp: new Date().toISOString()
@@ -257,7 +263,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
           success: true,
           data: {
-            serviceOnboarding: user.onboarding.serviceOnboarding,
+            serviceOnboarding: serviceOnboarding,
             services: user.services,
             storageLocation: 'user'
           },

@@ -5,6 +5,8 @@ import { sendInvoiceNotification } from '@/lib/services/emailService';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
 import { UserService } from '@/lib/services/userService';
+import { User } from '@/models/User';
+import { ApprovalWorkflow } from '@/types/approval';
 import crypto from 'crypto';
 
 export async function POST(request: NextRequest) {
@@ -329,6 +331,8 @@ async function createPayableForRecipient(recipientEmail: string, invoice: Record
   try {
     console.log('💳 [Auto Payable] Checking if recipient is registered:', recipientEmail);
 
+    const db = await connectToDatabase();
+    
     // Check if recipient has an account
     let recipientUser = await UserService.getUserByEmail(recipientEmail);
     
@@ -336,7 +340,6 @@ async function createPayableForRecipient(recipientEmail: string, invoice: Record
     if (!recipientUser) {
       console.log('📧 [Auto Payable] Recipient email not found, checking if it\'s an organization primary email:', recipientEmail);
       
-      const db = await connectToDatabase();
       const organization = await db.collection('organizations').findOne({
         billingEmail: recipientEmail
       });
@@ -347,9 +350,10 @@ async function createPayableForRecipient(recipientEmail: string, invoice: Record
         // Find the organization owner to use as the recipient user
         const owner = organization.members.find((member: { role: string }) => member.role === 'owner');
         if (owner) {
-          recipientUser = await db.collection('users').findOne({
+          const ownerUser = await db.collection('users').findOne({
             _id: new ObjectId(owner.userId)
           });
+          recipientUser = ownerUser as User | null;
           
           if (recipientUser) {
             console.log('✅ [Auto Payable] Using organization owner as recipient user:', recipientUser.email);
@@ -400,7 +404,6 @@ async function createPayableForRecipient(recipientEmail: string, invoice: Record
     let isOrganizationRecipient = false;
     
     // First, check if the recipient email belongs to an organization's primary email
-    const db = await connectToDatabase();
     const recipientOrganization = await db.collection('organizations').findOne({
       billingEmail: recipientEmail
     });
@@ -411,17 +414,30 @@ async function createPayableForRecipient(recipientEmail: string, invoice: Record
       
       try {
         const { ApprovalService } = await import('@/lib/services/approvalService');
-        const approvalSettings = await ApprovalService.getApprovalSettings(recipientOrganization._id.toString());
+        const approvalSettings = await ApprovalService.getApprovalSettings(recipientOrganization!._id.toString());
         
         if (approvalSettings?.requireApproval) {
           console.log('✅ [Auto Payable] Organization requires approval, creating workflow');
           
+          // Generate temporary payable ID for workflow creation (will be updated after payable is created)
+          const tempPayableId = new ObjectId().toString();
+          
           // Create approval workflow for the payable
+          const invoiceTotal = typeof invoice.total === 'number' 
+            ? invoice.total 
+            : typeof invoice.totalAmount === 'number' 
+              ? invoice.totalAmount 
+              : typeof invoice.total === 'string' 
+                ? parseFloat(invoice.total) 
+                : typeof invoice.totalAmount === 'string' 
+                  ? parseFloat(invoice.totalAmount) 
+                  : 0;
+          
           approvalWorkflow = await ApprovalService.createApprovalWorkflow(
-            null, // Will be set after payable creation
-            recipientOrganization._id.toString(),
+            tempPayableId, // Temporary ID, will be updated after payable creation
+            recipientOrganization!._id.toString(),
             recipientUser._id?.toString() || recipientUser.email,
-            parseFloat(invoice.total || invoice.totalAmount || 0) // Use consistent field name
+            invoiceTotal
           );
           
           if (approvalWorkflow) {
@@ -454,8 +470,8 @@ async function createPayableForRecipient(recipientEmail: string, invoice: Record
       // Organization/User identification
       issuerId: recipientIssuerId,
       userId: recipientEmail, // Use original recipient email, not organization owner's email
-      organizationId: isOrganizationRecipient ? recipientOrganization._id : (recipientUser.organizationId || null), // Use recipient organization if it's an org email
-      ownerId: isOrganizationRecipient ? recipientOrganization._id.toString() : (recipientUser.organizationId || recipientEmail), // Owner ID for ledger sync
+      organizationId: isOrganizationRecipient ? recipientOrganization?._id : (recipientUser.organizationId || null), // Use recipient organization if it's an org email
+      ownerId: isOrganizationRecipient ? recipientOrganization?._id.toString() : (recipientUser.organizationId || recipientEmail), // Owner ID for ledger sync
       ownerType: isOrganizationRecipient ? 'organization' : (recipientUser.organizationId ? 'organization' : 'individual'), // Owner type for ledger sync
       
       // Dates and timing
@@ -520,9 +536,6 @@ async function createPayableForRecipient(recipientEmail: string, invoice: Record
       
       // System tracking
       attachedFiles: [],
-      issuerId: recipientIssuerId,
-      userId: recipientUser.email, // Add userId field for query compatibility
-      organizationId: isOrganizationRecipient ? recipientOrganization._id : (recipientUser.organizationId ? new ObjectId(recipientUser.organizationId) : null),
       relatedInvoiceId: new ObjectId(invoice._id as unknown as string),
       
       // Ledger integration
@@ -563,7 +576,7 @@ async function createPayableForRecipient(recipientEmail: string, invoice: Record
     // Send approval notifications if payable requires approval
     if (approvalStatus === 'pending_approval' && approvalWorkflow) {
       try {
-        await sendPayableApprovalNotifications(approvalWorkflow, payableData, recipientUser);
+        await sendPayableApprovalNotifications(approvalWorkflow as unknown as Record<string, unknown>, payableData, recipientUser as unknown as Record<string, unknown>);
         console.log('✅ [Auto Payable] Approval notifications sent');
       } catch (notificationError) {
         console.error('⚠️ [Auto Payable] Failed to send approval notifications:', notificationError);
@@ -604,8 +617,8 @@ async function createPayableForRecipient(recipientEmail: string, invoice: Record
                 payableNumber: memberPayableNumber,
                 issuerId: new ObjectId(member.userId),
                 userId: memberUser.email,
-                organizationId: recipientOrganization._id,
-                ownerId: recipientOrganization._id.toString(),
+                organizationId: recipientOrganization!._id,
+                ownerId: recipientOrganization!._id.toString(),
                 ownerType: 'organization',
                 // Inherit the same approval status as the main payable
                 status: payableStatus,
@@ -699,7 +712,7 @@ async function sendPayableApprovalNotifications(
     
     // Get organization details
     const organization = await db.collection('organizations').findOne({
-      _id: new ObjectId(recipientUser.organizationId)
+      _id: new ObjectId(String(recipientUser.organizationId))
     });
     
     if (!organization) {
@@ -748,13 +761,13 @@ async function sendPayableApprovalNotifications(
           approverUser.email,
           approverUser.name || approverUser.email,
           {
-            vendor: payableData.vendorName || payableData.companyName,
-            amount: payableData.total,
-            currency: payableData.currency,
-            description: `Invoice payment: ${payableData.payableName}`,
-            dueDate: payableData.dueDate
+            vendor: String(payableData.vendorName || payableData.companyName || ''),
+            amount: typeof payableData.total === 'number' ? payableData.total : typeof payableData.total === 'string' ? parseFloat(payableData.total) : 0,
+            currency: String(payableData.currency || 'USD'),
+            description: String(payableData.payableName || ''),
+            dueDate: payableData.dueDate instanceof Date ? payableData.dueDate.toISOString() : String(payableData.dueDate || '')
           },
-          workflow,
+          workflow as unknown as ApprovalWorkflow,
           organization.name
         );
         

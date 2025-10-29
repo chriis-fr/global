@@ -38,7 +38,6 @@ export async function GET() {
       success: true,
       data: {
         onboarding: onboardingData,
-        userType: user.userType,
         services: user.services
       },
       timestamp: new Date().toISOString()

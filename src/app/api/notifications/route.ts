@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { NotificationService } from '@/lib/services/notificationService';
 import { UserService } from '@/lib/services/userService';
+import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
 
 // GET /api/notifications - Get user notifications
@@ -36,15 +37,46 @@ export async function GET(request: NextRequest) {
 
     const userId = new ObjectId(user._id);
 
-    // Build filters
-    const filters: Record<string, string | string[]> = {};
-    if (type) filters.type = type.split(',');
-    if (priority) filters.priority = priority.split(',');
-    if (status) filters.status = status.split(',');
-    if (search) filters.search = search;
+    // Build query
+    const db = await connectToDatabase();
+    const query: Record<string, unknown> = { userId: userId };
+    
+    if (type) {
+      const typeArray = type.split(',');
+      query.type = { $in: typeArray };
+    }
+    if (priority) {
+      const priorityArray = priority.split(',');
+      query.priority = { $in: priorityArray };
+    }
+    if (status) {
+      const statusArray = status.split(',');
+      query.status = { $in: statusArray };
+    }
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { message: { $regex: search, $options: 'i' } }
+      ];
+    }
 
-    const notifications = await NotificationService.getNotifications(userId, filters, limit, offset);
-    const stats = await NotificationService.getNotificationStats(userId);
+    // Get notifications with pagination
+    const notifications = await db.collection('notifications')
+      .find(query)
+      .sort({ createdAt: -1 })
+      .skip(offset)
+      .limit(limit)
+      .toArray();
+
+    // Get total count
+    const total = await db.collection('notifications').countDocuments(query);
+
+    // Get stats
+    const stats = {
+      total,
+      unread: await db.collection('notifications').countDocuments({ ...query, status: { $ne: 'read' } }),
+      read: await db.collection('notifications').countDocuments({ ...query, status: 'read' })
+    };
 
     return NextResponse.json({
       success: true,
