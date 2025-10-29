@@ -204,7 +204,12 @@ export async function POST(request: NextRequest) {
       user.organizationId?.toString() || user._id?.toString()
     );
 
-    let workflow = null;
+    type ApprovalWorkflowLite = {
+      status: string;
+      approvals: Array<{ stepNumber: number; approverEmail: string }>;
+      currentStep: number;
+    } | null;
+    let workflow: ApprovalWorkflowLite = null;
     let approvalStatus = 'draft';
 
     // If approval is required, create workflow
