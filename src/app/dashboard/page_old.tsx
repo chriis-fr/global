@@ -104,14 +104,6 @@ export default function DashboardPage() {
           overdueCount: (ledgerStats?.overdueReceivables || 0) + (ledgerStats?.overduePayables || 0)
         });
 
-          totalRevenue,
-          paidRevenue,
-          pendingInvoices,
-          paidInvoices,
-          totalClients: clients.length,
-          netBalance: netBalance
-        });
-
         // Reset fallback data flag if we successfully loaded data
         setUsingFallbackData(false);
 
@@ -183,6 +175,7 @@ export default function DashboardPage() {
   const isPaidUser = subscription?.plan?.planId && subscription.plan.planId !== 'receivables-free';
 
   // Debug logging
+  console.log({
     subscription: subscription?.plan,
     hasReceivablesAccess,
     hasPayablesAccess,

@@ -268,7 +268,7 @@ export default function SmartInvoicingOnboardingPage() {
         router.push('/dashboard/services/smart-invoicing?refresh=true');
       } else {
       }
-    } catch (error) {
+    } catch {
     } finally {
       setLoading(false);
     }

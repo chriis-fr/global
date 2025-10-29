@@ -141,12 +141,7 @@ export async function getDashboardStats(): Promise<{ success: boolean; data?: Da
     );
     const totalPayablesAmount = unpaidPayables.reduce((sum, payable) => sum + (payable.total || payable.amount || 0), 0);
     
-    // Only count approved payables as bills ready to be paid
-    const approvedPayables = allPayables.filter(payable => 
-      payable.status === 'approved'
-    );
-
-
+    // Only count approved payables as bills ready to be paid (not needed in this response)
     // Get ledger stats for net balance and overdue counts
     // Net balance should only include PAID receivables and APPROVED payables
     const ledgerStats = await ledgerCollection.aggregate([

@@ -157,7 +157,7 @@ export default function NotificationsPage() {
         const error = await response.json();
         alert(`Failed to create test notification: ${error.message}`);
       }
-    } catch (error) {
+    } catch {
       alert('Failed to create test notification');
     }
   };

@@ -4,7 +4,6 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
 import type { Collection, Document } from 'mongodb';
-import { CurrencyService } from '@/lib/services/currencyService';
 import { getDashboardStats } from './dashboard';
 
 export interface StatsData {
@@ -78,9 +77,7 @@ export async function getStatsData(): Promise<{ success: boolean; data?: StatsDa
 
     const baseQuery = getBaseQuery(session);
 
-    // Get user's preferred currency
-    const userPreferences = await CurrencyService.getUserPreferredCurrency(session.user.email);
-    const preferredCurrency = userPreferences.preferredCurrency;
+  // Preferred currency not required for current stats aggregation
 
     // Get additional stats for charts
     const [totalInvoices, totalPayables] = await Promise.all([
@@ -272,7 +269,10 @@ async function getMonthlyData(collection: Collection<Document>, baseQuery: Recor
       ...(status === 'paid' ? { paidAt: { $gte: startOfMonth, $lte: endOfMonth } } : {})
     }).toArray();
 
-    const monthAmount = monthData.reduce((sum: number, item: Document) => sum + (((item as any).total) || ((item as any).amount) || 0), 0);
+    const monthAmount = monthData.reduce((sum: number, item: Document) => {
+      const doc = item as unknown as { total?: number; amount?: number };
+      return sum + (doc.total ?? doc.amount ?? 0);
+    }, 0);
     monthlyData.push({ month: monthLabel, amount: monthAmount });
   }
 
@@ -295,11 +295,14 @@ async function getTopClients(collection: Collection<Document>, baseQuery: Record
 
   const result = await collection.aggregate(pipeline).toArray();
 
-  return result.map((item: Document) => ({
-    name: (item as any)._id || 'Unknown Client',
-    amount: (item as any).totalAmount || 0,
-    count: (item as any).count || 0
-  }));
+  return result.map((item: Document) => {
+    const doc = item as unknown as { _id?: string; totalAmount?: number; count?: number };
+    return {
+      name: doc._id || 'Unknown Client',
+      amount: doc.totalAmount || 0,
+      count: doc.count || 0
+    };
+  });
 }
 
 async function getPaymentMethodsDistribution(
@@ -312,23 +315,25 @@ async function getPaymentMethodsDistribution(
   // Get invoice payment methods
   const invoices = await invoicesCollection.find({ ...baseQuery, status: 'paid' }).toArray();
   invoices.forEach((invoice: Document) => {
-    const method = (invoice as any).paymentMethod || 'unknown';
+    const inv = invoice as unknown as { paymentMethod?: string; total?: number };
+    const method = inv.paymentMethod || 'unknown';
     if (!methods[method]) {
       methods[method] = { count: 0, amount: 0 };
     }
     methods[method].count++;
-    methods[method].amount += (invoice as any).total || 0;
+    methods[method].amount += inv.total || 0;
   });
 
   // Get payable payment methods
   const payables = await payablesCollection.find({ ...baseQuery, status: 'paid' }).toArray();
   payables.forEach((payable: Document) => {
-    const method = (payable as any).paymentMethod || 'unknown';
+    const pay = payable as unknown as { paymentMethod?: string; total?: number; amount?: number };
+    const method = pay.paymentMethod || 'unknown';
     if (!methods[method]) {
       methods[method] = { count: 0, amount: 0 };
     }
     methods[method].count++;
-    methods[method].amount += (payable as any).total || (payable as any).amount || 0;
+    methods[method].amount += pay.total || pay.amount || 0;
   });
 
   return Object.entries(methods).map(([method, data]) => ({

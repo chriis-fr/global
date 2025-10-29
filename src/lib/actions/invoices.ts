@@ -84,7 +84,7 @@ export interface InvoiceDetails {
     cryptoNetwork?: string;
     walletAddress?: string;
   };
-  taxes?: any;
+  taxes?: unknown;
   notes?: string;
   sentVia?: 'email' | 'whatsapp';
   // Full data for detail view

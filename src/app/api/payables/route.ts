@@ -312,19 +312,9 @@ export async function POST(request: NextRequest) {
       payable: { _id: result.insertedId, ...payableData }
     });
 
-  } catch (error) {
-    
-    let errorMessage = 'Failed to save payable';
-    if (error instanceof Error) {
-      errorMessage = error.message;
-    }
-    
+  } catch {
     return NextResponse.json(
-      { 
-        success: false, 
-        message: errorMessage,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      },
+      { success: false, message: 'Failed to save payable' },
       { status: 500 }
     );
   }
@@ -479,12 +469,7 @@ export async function GET(request: NextRequest) {
     );
     let totalAmount = unpaidPayables.reduce((sum, payable) => sum + (payable.total || payable.amount || 0), 0);
     
-    // Only count approved payables as bills ready to be paid
-    const payableBills = allPayables.filter(payable => 
-      payable.status === 'approved'
-    );
-    
-    // Note: payableBills is calculated but not used in response
+    // Only count approved payables as bills ready to be paid (not used in response)
     
     
     // Convert total amount if currency conversion is requested
@@ -521,7 +506,7 @@ export async function GET(request: NextRequest) {
       }
     });
 
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Failed to fetch payables' },
       { status: 500 }

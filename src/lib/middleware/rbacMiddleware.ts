@@ -95,7 +95,7 @@ export class RBACMiddleware {
   static withPermission(options: RBACOptions) {
     return async function middleware(
       request: NextRequest,
-      handler: (request: NextRequest, context: any) => Promise<NextResponse>
+      handler: (request: NextRequest, context: Record<string, unknown>) => Promise<NextResponse>
     ) {
       const permissionCheck = await RBACMiddleware.checkPermission(request, options);
       

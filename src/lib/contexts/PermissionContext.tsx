@@ -103,7 +103,7 @@ export function PermissionProvider({ children }: PermissionProviderProps) {
     } finally {
       setLoading(false);
     }
-  }, [session?.user?.email]);
+  }, [session?.user?.email, CACHE_DURATION]);
 
   const refreshPermissions = async () => {
     await fetchPermissions(true); // Force refresh
