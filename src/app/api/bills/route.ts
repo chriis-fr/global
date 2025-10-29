@@ -184,7 +184,10 @@ export async function POST(request: NextRequest) {
       createdBy: user._id!.toString()
     };
 
-    const result = await db.collection('bills').insertOne(billData);
+    // Ensure we don't pass a string _id to Mongo; let Mongo generate one
+    const billToInsert: Omit<BillWithApproval, '_id'> = { ...billData };
+    delete (billToInsert as { _id?: unknown })._id;
+    const result = await db.collection('bills').insertOne(billToInsert as unknown as Record<string, unknown>);
     
     if (!result.insertedId) {
       return NextResponse.json(
