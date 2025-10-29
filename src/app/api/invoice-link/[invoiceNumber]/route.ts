@@ -99,12 +99,12 @@ export async function GET(
       data: responseData
     });
 
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { 
         success: false, 
         message: 'Failed to process invoice link',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: 'Unknown error'
       },
       { status: 500 }
     );

@@ -223,7 +223,7 @@ export interface AuditLog {
   action: string;
   resource: string;
   resourceId: ObjectId;
-  details: Record<string, any>;
+  details: Record<string, unknown>;
   ipAddress?: string;
   userAgent?: string;
   createdAt: Date;

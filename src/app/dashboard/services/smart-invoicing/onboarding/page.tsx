@@ -120,7 +120,7 @@ export default function SmartInvoicingOnboardingPage() {
               }));
             }
           }
-        } catch (error) {
+        } catch {
           // Fallback to session data only
           setFormData(prev => ({
             ...prev,
@@ -179,7 +179,7 @@ export default function SmartInvoicingOnboardingPage() {
               }
             }));
           }
-        } catch (error) {
+        } catch {
         }
       }
     };

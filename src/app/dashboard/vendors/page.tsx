@@ -65,7 +65,7 @@ export default function VendorsPage() {
         setVendors(result.data || []);
       } else {
       }
-    } catch (error) {
+    } catch {
     } finally {
       setLoading(false);
     }
@@ -108,7 +108,7 @@ export default function VendorsPage() {
       } else {
         alert(result.message || 'Failed to save vendor');
       }
-    } catch (error) {
+    } catch {
       alert('Failed to save vendor');
     }
   };
@@ -130,7 +130,7 @@ export default function VendorsPage() {
       } else {
         alert(result.message || 'Failed to delete vendor');
       }
-    } catch (error) {
+    } catch {
       alert('Failed to delete vendor');
     }
   };

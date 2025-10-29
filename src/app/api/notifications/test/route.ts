@@ -64,7 +64,7 @@ export async function POST() {
       data: notification,
       message: 'Test notification created successfully'
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Failed to create test notification' },
       { status: 500 }

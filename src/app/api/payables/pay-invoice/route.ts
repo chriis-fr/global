@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
 
         if (invoiceUpdateResult.modifiedCount > 0) {
         }
-      } catch (invoiceError) {
+      } catch {
         // Don't fail the payment if invoice update fails
       }
     }
@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
     try {
       const { syncPayableToLedger } = await import('@/lib/actions/payableStatusSync');
       await syncPayableToLedger(payableId, 'paid');
-    } catch (ledgerError) {
+    } catch {
       // Don't fail the payment if ledger sync fails
     }
 
@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
       paymentDate: new Date().toISOString()
     });
 
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Internal server error' },
       { status: 500 }

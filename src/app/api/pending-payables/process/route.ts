@@ -107,12 +107,13 @@ export async function POST() {
           const { LedgerSyncService } = await import('@/lib/services/ledgerSyncService');
           const payableWithId = { _id: result.insertedId, ...payableData };
           await LedgerSyncService.syncPayableToLedger(payableWithId);
-        } catch (syncError) {
+        } catch {
+          // Don't fail the request if sync fails
         }
 
         processedCount++;
 
-      } catch (error) {
+      } catch {
         // Continue with other payables even if one fails
       }
     }
@@ -124,7 +125,7 @@ export async function POST() {
       processedCount
     });
 
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Failed to process pending payables' },
       { status: 500 }

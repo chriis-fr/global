@@ -21,7 +21,7 @@ export default function DashboardPage() {
   const { data: session } = useSession();
   const { subscription, loading: subscriptionLoading } = useSubscription();
   const router = useRouter();
-  const [usingFallbackData, setUsingFallbackData] = useState(false);
+  const [usingFallbackData] = useState(false);
   const [userName, setUserName] = useState<string>('');
   const [organizationName, setOrganizationName] = useState<string>('');
 

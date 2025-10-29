@@ -106,7 +106,7 @@ export default function InvoiceLinkPage() {
       } else {
         setError(data.message || 'Invoice not found');
       }
-    } catch (error) {
+    } catch {
       setError('Failed to load invoice');
     } finally {
       setLoading(false);
@@ -127,7 +127,7 @@ export default function InvoiceLinkPage() {
         email: invoiceData.recipientEmail,
         callbackUrl: `/invoice/${invoiceNumber}`,
       });
-    } catch (error) {
+    } catch {
     }
   };
 

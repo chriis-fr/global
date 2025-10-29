@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useRef, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { OrganizationMember } from '@/types/organization';
 
@@ -48,7 +48,7 @@ export function PermissionProvider({ children }: PermissionProviderProps) {
   const lastFetchTime = useRef(0);
   const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours - only refresh on logout/login
 
-  const fetchPermissions = async (forceRefresh = false) => {
+  const fetchPermissions = useCallback(async (forceRefresh = false) => {
     if (!session?.user?.email) {
       setLoading(false);
       return;
@@ -70,7 +70,7 @@ export function PermissionProvider({ children }: PermissionProviderProps) {
           setLoading(false);
           return;
         }
-      } catch (err) {
+      } catch {
         // If cache is corrupted, remove it and fetch fresh
         localStorage.removeItem(cacheKey);
       }
@@ -103,7 +103,7 @@ export function PermissionProvider({ children }: PermissionProviderProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [session?.user?.email]);
 
   const refreshPermissions = async () => {
     await fetchPermissions(true); // Force refresh
@@ -138,7 +138,7 @@ export function PermissionProvider({ children }: PermissionProviderProps) {
       });
       setMember(null);
     }
-  }, [status]);
+  }, [status, fetchPermissions]);
 
   const value: PermissionContextType = {
     permissions,

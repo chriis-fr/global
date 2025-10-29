@@ -99,7 +99,7 @@ export async function GET(request: NextRequest) {
       data: result
     });
 
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Failed to fetch relationship data' },
       { status: 500 }

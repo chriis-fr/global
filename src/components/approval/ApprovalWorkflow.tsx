@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, Clock, User, MessageSquare, Calendar } from 'lucide-react';
-import { ApprovalWorkflow as ApprovalWorkflowType, ApprovalStep } from '@/types/approval';
+import React, { useState } from 'react';
+import { CheckCircle, XCircle, Clock } from 'lucide-react';
+import { ApprovalWorkflow as ApprovalWorkflowType } from '@/types/approval';
 
 interface ApprovalWorkflowProps {
   workflow: ApprovalWorkflowType;
@@ -56,12 +56,7 @@ export function ApprovalWorkflow({
     return workflow.approvals.find(step => step.stepNumber === workflow.currentStep);
   };
 
-  const isCurrentUserApprover = () => {
-    const currentStep = getCurrentStep();
-    const currentApproverId = currentStep?.approverId?.toString();
-    const userIdStr = currentUserId?.toString();
-    return currentStep && currentApproverId === userIdStr;
-  };
+  // Removed unused helper to satisfy linting (covered by canCurrentUserApprove)
 
   const canCurrentUserApprove = () => {
     const currentStep = getCurrentStep();
@@ -196,7 +191,7 @@ export function ApprovalWorkflow({
             </div>
             {step.comments && (
               <div className="mt-2 text-sm text-gray-300">
-                "{step.comments}"
+                &quot;{step.comments}&quot;
               </div>
             )}
           </div>

@@ -1,8 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { getDatabase } from '@/lib/database';
-import { ObjectId } from 'mongodb';
 
 // POST /api/organization/fix-existing - Fix existing organizations with subscription and name issues
 export async function POST() {
@@ -31,7 +30,7 @@ export async function POST() {
       console.log(`🔍 [Fix Organizations] Processing organization: ${org.name}`);
       
       // Find the owner of this organization
-      const owner = org.members.find((member: any) => member.role === 'owner');
+      const owner = org.members.find((member: { role: string }) => member.role === 'owner');
       if (!owner) {
         console.log(`⚠️ [Fix Organizations] No owner found for organization: ${org.name}`);
         continue;
@@ -45,7 +44,7 @@ export async function POST() {
       }
       
       let needsUpdate = false;
-      const updates: any = {};
+      const updates: Record<string, unknown> = {};
       
     // Check if organization has no subscription but owner has one
     if (!org.subscription && ownerUser.subscription) {

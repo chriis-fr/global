@@ -1,12 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { RBACService } from '@/lib/services/rbacService';
 import { getDatabase } from '@/lib/database';
-import { ObjectId } from 'mongodb';
 
 // GET /api/user/permissions - Get user permissions
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     
@@ -65,7 +64,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const member = organization.members.find((m: any) => m.userId.toString() === user._id?.toString());
+    const member = organization.members.find((m: { userId: string }) => m.userId.toString() === user._id?.toString());
     if (!member) {
       return NextResponse.json(
         { success: false, message: 'User not found in organization' },

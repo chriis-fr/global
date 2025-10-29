@@ -34,7 +34,7 @@ export interface InvoiceDetails {
     name: string;
     email: string;
     phone?: string;
-    address?: any;
+    address?: Record<string, unknown>;
     logo?: string;
     taxNumber?: string;
     addressLine1?: string;
@@ -48,7 +48,7 @@ export interface InvoiceDetails {
     email: string;
     phone?: string;
     companyName?: string;
-    address?: any;
+    address?: Record<string, unknown>;
     firstName?: string;
     lastName?: string;
     addressLine1?: string;
@@ -187,7 +187,7 @@ export async function getInvoicesList(
           { 'clientDetails.name': { $regex: searchQuery, $options: 'i' } },
           { 'clientDetails.companyName': { $regex: searchQuery, $options: 'i' } }
         ]
-      } as typeof query & { $or: any[] };
+      } as typeof query & { $or: Array<Record<string, unknown>> };
     }
 
     // Get total count
@@ -256,7 +256,7 @@ export async function getInvoicesList(
     };
     
     const allInvoices = await invoicesCollection.find(revenueQuery).toArray();
-    const totalRevenue = await CurrencyService.calculateTotalRevenue(allInvoices as { [key: string]: unknown }[], preferredCurrency);
+    const totalRevenue = await CurrencyService.calculateTotalRevenue(allInvoices as Record<string, unknown>[], preferredCurrency);
 
     const response: InvoiceListResponse = {
       invoices: invoiceList,
@@ -429,7 +429,7 @@ export async function getInvoicesListMinimal(
     };
     
     const allInvoices = await invoicesCollection.find(revenueQuery).toArray();
-    const totalRevenue = await CurrencyService.calculateTotalRevenue(allInvoices as { [key: string]: unknown }[], preferredCurrency);
+    const totalRevenue = await CurrencyService.calculateTotalRevenue(allInvoices as Record<string, unknown>[], preferredCurrency);
 
     // Calculate status counts
     const statusCounts = await invoicesCollection.aggregate([

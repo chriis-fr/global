@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { getDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
     const session = await getServerSession(authOptions);
     
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Find owner
-    const owner = organization.members.find((member: any) => member.role === 'owner');
+    const owner = organization.members.find((member: { role: string }) => member.role === 'owner');
     if (!owner) {
       return NextResponse.json(
         { success: false, message: 'Owner not found' },

@@ -33,7 +33,7 @@ export async function GET() {
       );
     }
 
-    let organization = await OrganizationService.getOrganizationById(user.organizationId.toString());
+    const organization = await OrganizationService.getOrganizationById(user.organizationId.toString());
     
     if (!organization) {
       return NextResponse.json(

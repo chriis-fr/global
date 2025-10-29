@@ -54,22 +54,6 @@ export default function RoleSelector({
     }
   };
 
-  const getRoleBadgeColor = (role: RoleKey) => {
-    switch (role) {
-      case 'owner':
-        return 'bg-yellow-600/20 text-yellow-300 border-yellow-500/50';
-      case 'admin':
-        return 'bg-blue-600/20 text-blue-300 border-blue-500/50';
-      case 'financeManager':
-        return 'bg-green-600/20 text-green-300 border-green-500/50';
-      case 'accountant':
-        return 'bg-purple-600/20 text-purple-300 border-purple-500/50';
-      case 'approver':
-        return 'bg-orange-600/20 text-orange-300 border-orange-500/50';
-      default:
-        return 'bg-gray-600/20 text-gray-300 border-gray-500/50';
-    }
-  };
 
   const getPermissionSummary = (role: RoleKey) => {
     const permissions = REQUEST_FINANCE_ROLES[role].permissions;

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Plus, FileText, DollarSign, Calendar, Eye, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Plus, FileText, Calendar, Eye, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { BillCreationForm } from '@/components/approval/BillCreationForm';
 import { ApprovalWorkflow } from '@/components/approval/ApprovalWorkflow';
 import DashboardFloatingButton from '@/components/DashboardFloatingButton';
@@ -19,7 +19,15 @@ interface Bill {
   approvalStatus: 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'paid' | 'cancelled';
   paymentStatus: 'pending' | 'scheduled' | 'completed' | 'failed';
   createdAt: string;
-  approvalWorkflow?: any;
+  approvalWorkflow?: {
+    steps: Array<{
+      stepNumber: number;
+      approverId: string;
+      approverEmail: string;
+      approverRole: string;
+      decision: string;
+    }>;
+  };
 }
 
 export default function BillsPage() {
@@ -85,7 +93,7 @@ export default function BillsPage() {
       <div className="max-w-6xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-white mb-2">Bills</h1>
-          <p className="text-blue-200">Manage your organization's bills and payments</p>
+          <p className="text-blue-200">Manage your organization&apos;s bills and payments</p>
         </div>
         <div className="space-y-4">
           {[1, 2, 3].map((i) => (
@@ -107,7 +115,7 @@ export default function BillsPage() {
       <div className="max-w-6xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-white mb-2">Bills</h1>
-          <p className="text-blue-200">Manage your organization's bills and payments</p>
+          <p className="text-blue-200">Manage your organization&apos;s bills and payments</p>
         </div>
         <div className="bg-red-600/10 border border-red-500/30 rounded-xl p-6">
           <div className="flex items-center space-x-3">
@@ -153,7 +161,7 @@ export default function BillsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-white mb-2">Bills</h1>
-            <p className="text-blue-200">Manage your organization's bills and payments</p>
+            <p className="text-blue-200">Manage your organization&apos;s bills and payments</p>
           </div>
           <BillCreationGuard>
             <button

@@ -32,7 +32,7 @@ export async function GET() {
       success: true,
       data: vendors
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Failed to fetch vendors' },
       { status: 500 }
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
       success: true,
       data: { id: result.insertedId, ...vendorData }
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Failed to create vendor' },
       { status: 500 }

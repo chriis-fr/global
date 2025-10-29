@@ -94,7 +94,7 @@ export async function GET() {
       }
     });
 
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Failed to check synchronization status' },
       { status: 500 }

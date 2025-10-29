@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Clock, Eye, CheckCircle } from 'lucide-react';
 import { usePermissions } from '@/lib/contexts/PermissionContext';
 import { ApprovalWorkflow } from '@/types/approval';
@@ -26,7 +26,7 @@ export function PendingApprovalsWidget({ limit = 3 }: PendingApprovalsWidgetProp
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchPendingApprovals = async () => {
+  const fetchPendingApprovals = useCallback(async () => {
     if (!permissions.canApproveBills) {
       setLoading(false);
       return;
@@ -44,17 +44,17 @@ export function PendingApprovalsWidget({ limit = 3 }: PendingApprovalsWidgetProp
       } else {
         setError(data.message || 'Failed to fetch pending approvals');
       }
-    } catch (err) {
-      console.error('Error fetching pending approvals:', err);
+    } catch {
+      console.error('Error fetching pending approvals');
       setError('Failed to fetch pending approvals');
     } finally {
       setLoading(false);
     }
-  };
+  }, [permissions.canApproveBills, limit]);
 
   useEffect(() => {
     fetchPendingApprovals();
-  }, [permissions.canApproveBills]);
+  }, [fetchPendingApprovals]);
 
   if (!permissions.canApproveBills) {
     return null; // Don't show widget if user can't approve

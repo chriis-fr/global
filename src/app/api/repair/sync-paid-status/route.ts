@@ -124,7 +124,7 @@ export async function POST() {
       }
     });
 
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Failed to repair data synchronization' },
       { status: 500 }

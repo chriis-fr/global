@@ -42,7 +42,7 @@ export async function GET(
       success: true,
       data: vendor
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Failed to fetch vendor' },
       { status: 500 }
@@ -143,7 +143,7 @@ export async function PUT(
       message: 'Vendor updated successfully',
       data: { _id: id, ...updateData }
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Failed to update vendor' },
       { status: 500 }
@@ -189,7 +189,7 @@ export async function DELETE(
       success: true,
       message: 'Vendor deleted successfully'
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Failed to delete vendor' },
       { status: 500 }

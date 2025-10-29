@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       message: `Service ${serviceKey} enabled successfully`
     });
 
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 } 

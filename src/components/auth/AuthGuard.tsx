@@ -25,7 +25,7 @@ export function AuthGuard({ children, fallback }: AuthGuardProps) {
       } else {
         setIsAuthenticated(false);
       }
-    } catch (error) {
+    } catch {
       setIsAuthenticated(false);
     } finally {
       setLoading(false);

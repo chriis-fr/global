@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   console.log('🧪 [TestWebhook] Testing webhook endpoint');
   
   // Simulate a checkout.session.completed event

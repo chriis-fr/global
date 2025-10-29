@@ -35,7 +35,7 @@ export default function RecentPayables({ className = '' }: RecentPayablesProps) 
             setLoading(false);
             return;
           }
-        } catch (err) {
+        } catch {
           // If cache is corrupted, remove it and fetch fresh
           localStorage.removeItem(cacheKey);
         }
@@ -59,8 +59,8 @@ export default function RecentPayables({ className = '' }: RecentPayablesProps) 
         } else {
           setError(result.error || 'Failed to load recent payables');
         }
-      } catch (err) {
-        console.error('Error loading recent payables:', err);
+      } catch {
+        console.error('Error loading recent payables');
         setError('Failed to load recent payables');
       } finally {
         setLoading(false);
@@ -71,7 +71,7 @@ export default function RecentPayables({ className = '' }: RecentPayablesProps) 
       hasInitialized.current = true;
       loadRecentPayables();
     }
-  }, []);
+  }, [CACHE_DURATION]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {

@@ -45,7 +45,7 @@ export async function GET(
       success: true,
       data: entry
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Failed to fetch ledger entry' },
       { status: 500 }
@@ -155,7 +155,7 @@ export async function PUT(
       message: 'Ledger entry updated successfully',
       data: { _id: id, ...updateData }
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Failed to update ledger entry' },
       { status: 500 }
@@ -204,7 +204,7 @@ export async function DELETE(
       success: true,
       message: 'Ledger entry deleted successfully'
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Failed to delete ledger entry' },
       { status: 500 }

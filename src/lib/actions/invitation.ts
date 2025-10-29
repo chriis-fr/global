@@ -57,7 +57,7 @@ export async function sendInvitation(email: string, role: RoleKey): Promise<{
 
     console.log('✅ [Invitation] Organization found:', organization.name);
 
-    const userMember = organization.members.find((m: any) => 
+    const userMember = organization.members.find((m: { userId: { toString: () => string } }) => 
       m.userId.toString() === user._id!.toString()
     );
 
@@ -74,7 +74,7 @@ export async function sendInvitation(email: string, role: RoleKey): Promise<{
     console.log('✅ [Invitation] User has permission to invite members');
 
     // Check if email is already a member
-    const existingMember = organization.members.find((m: any) => 
+    const existingMember = organization.members.find((m: { email: string }) => 
       m.email.toLowerCase() === email.toLowerCase()
     );
 
@@ -274,7 +274,7 @@ export async function acceptInvitation(token: string): Promise<{
     console.log('✅ [Accept Invitation] Email matches invitation');
 
     // Get or create user
-    let user = await UserService.getUserByEmail(session.user.email);
+    const user = await UserService.getUserByEmail(session.user.email);
     
     if (!user) {
       return { success: false, error: 'User not found. Please create an account first.' };
@@ -536,7 +536,7 @@ export async function completeInvitationAcceptance(token: string): Promise<{
 
     // Update user to link to organization and set status to active
     // Only remove individual subscription if user is NOT the owner
-    const updates: any = {
+    const updates: Record<string, unknown> = {
       organizationId: invitation.organizationId,
       userType: 'business',
       status: 'active'
@@ -641,7 +641,7 @@ export async function getPendingInvitations(): Promise<{
       return { success: false, error: 'Organization not found' };
     }
 
-    const userMember = organization.members.find((m: any) => 
+    const userMember = organization.members.find((m: { userId: { toString: () => string } }) => 
       m.userId.toString() === user._id!.toString()
     );
 
@@ -810,7 +810,7 @@ export async function deleteInvitation(invitationId: string): Promise<{
       return { success: false, error: 'Organization not found' };
     }
 
-    const userMember = organization.members.find((m: any) => 
+    const userMember = organization.members.find((m: { userId: { toString: () => string } }) => 
       m.userId.toString() === user._id!.toString()
     );
 

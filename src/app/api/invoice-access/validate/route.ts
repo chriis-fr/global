@@ -98,12 +98,12 @@ export async function POST(request: NextRequest) {
       }
     });
 
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { 
         success: false, 
         message: 'Failed to validate token',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: 'Unknown error'
       },
       { status: 500 }
     );

@@ -3,7 +3,7 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
-import { ObjectId } from 'mongodb';
+import type { Collection, Document } from 'mongodb';
 import { CurrencyService } from '@/lib/services/currencyService';
 import { getDashboardStats } from './dashboard';
 
@@ -45,7 +45,7 @@ export interface TransactionGraphData {
 }
 
 // Helper to get base query for user/organization
-const getBaseQuery = (session: any) => {
+const getBaseQuery = (session: { user: { organizationId?: string; id: string; email: string } }) => {
   const isOrganization = !!session.user.organizationId;
   return isOrganization
     ? { organizationId: session.user.organizationId }
@@ -89,16 +89,16 @@ export async function getStatsData(): Promise<{ success: boolean; data?: StatsDa
     ]);
 
     // Get monthly revenue data (last 12 months)
-    const monthlyRevenue = await getMonthlyData(invoicesCollection, baseQuery, 'paid', preferredCurrency);
+    const monthlyRevenue = await getMonthlyData(invoicesCollection, baseQuery, 'paid');
 
     // Get monthly expenses data (last 12 months)
-    const monthlyExpenses = await getMonthlyData(payablesCollection, baseQuery, 'paid', preferredCurrency);
+    const monthlyExpenses = await getMonthlyData(payablesCollection, baseQuery, 'paid');
 
     // Get top clients
-    const topClients = await getTopClients(invoicesCollection, baseQuery, preferredCurrency);
+    const topClients = await getTopClients(invoicesCollection, baseQuery);
 
     // Get payment methods distribution
-    const paymentMethods = await getPaymentMethodsDistribution(invoicesCollection, payablesCollection, baseQuery, preferredCurrency);
+    const paymentMethods = await getPaymentMethodsDistribution(invoicesCollection, payablesCollection, baseQuery);
 
     const stats: StatsData = {
       totalRevenue: dashboardStats.totalPaidRevenue, // Use dashboard's accurate paid revenue
@@ -255,7 +255,7 @@ export async function getTransactionGraphData(): Promise<{ success: boolean; dat
 }
 
 // Helper functions
-async function getMonthlyData(collection: any, baseQuery: any, status: string, preferredCurrency: string) {
+async function getMonthlyData(collection: Collection<Document>, baseQuery: Record<string, unknown>, status: string) {
   const monthlyData: Array<{ month: string; amount: number }> = [];
 
   for (let i = 11; i >= 0; i--) {
@@ -272,14 +272,14 @@ async function getMonthlyData(collection: any, baseQuery: any, status: string, p
       ...(status === 'paid' ? { paidAt: { $gte: startOfMonth, $lte: endOfMonth } } : {})
     }).toArray();
 
-    const monthAmount = monthData.reduce((sum: number, item: any) => sum + (item.total || item.amount || 0), 0);
+    const monthAmount = monthData.reduce((sum: number, item: Document) => sum + (((item as any).total) || ((item as any).amount) || 0), 0);
     monthlyData.push({ month: monthLabel, amount: monthAmount });
   }
 
   return monthlyData;
 }
 
-async function getTopClients(collection: any, baseQuery: any, preferredCurrency: string) {
+async function getTopClients(collection: Collection<Document>, baseQuery: Record<string, unknown>) {
   const pipeline = [
     { $match: { ...baseQuery, status: 'paid' } },
     {
@@ -295,36 +295,40 @@ async function getTopClients(collection: any, baseQuery: any, preferredCurrency:
 
   const result = await collection.aggregate(pipeline).toArray();
 
-  return result.map((item: any) => ({
-    name: item._id || 'Unknown Client',
-    amount: item.totalAmount || 0,
-    count: item.count || 0
+  return result.map((item: Document) => ({
+    name: (item as any)._id || 'Unknown Client',
+    amount: (item as any).totalAmount || 0,
+    count: (item as any).count || 0
   }));
 }
 
-async function getPaymentMethodsDistribution(invoicesCollection: any, payablesCollection: any, baseQuery: any, preferredCurrency: string) {
+async function getPaymentMethodsDistribution(
+  invoicesCollection: Collection<Document>,
+  payablesCollection: Collection<Document>,
+  baseQuery: Record<string, unknown>
+) {
   const methods: { [key: string]: { count: number; amount: number } } = {};
 
   // Get invoice payment methods
   const invoices = await invoicesCollection.find({ ...baseQuery, status: 'paid' }).toArray();
-  invoices.forEach((invoice: any) => {
-    const method = invoice.paymentMethod || 'unknown';
+  invoices.forEach((invoice: Document) => {
+    const method = (invoice as any).paymentMethod || 'unknown';
     if (!methods[method]) {
       methods[method] = { count: 0, amount: 0 };
     }
     methods[method].count++;
-    methods[method].amount += invoice.total || 0;
+    methods[method].amount += (invoice as any).total || 0;
   });
 
   // Get payable payment methods
   const payables = await payablesCollection.find({ ...baseQuery, status: 'paid' }).toArray();
-  payables.forEach((payable: any) => {
-    const method = payable.paymentMethod || 'unknown';
+  payables.forEach((payable: Document) => {
+    const method = (payable as any).paymentMethod || 'unknown';
     if (!methods[method]) {
       methods[method] = { count: 0, amount: 0 };
     }
     methods[method].count++;
-    methods[method].amount += payable.total || payable.amount || 0;
+    methods[method].amount += (payable as any).total || (payable as any).amount || 0;
   });
 
   return Object.entries(methods).map(([method, data]) => ({

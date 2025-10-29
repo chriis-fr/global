@@ -50,7 +50,7 @@ export async function GET(
       data: paymentMethod
     });
 
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, error: 'Failed to fetch payment method' },
       { status: 500 }
@@ -105,7 +105,7 @@ export async function PUT(
       data: paymentMethod
     });
 
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, error: 'Failed to update payment method' },
       { status: 500 }
@@ -157,7 +157,7 @@ export async function DELETE(
       message: 'Payment method deleted successfully'
     });
 
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, error: 'Failed to delete payment method' },
       { status: 500 }

@@ -48,7 +48,7 @@ export async function PUT() {
       success: true,
       message: 'All notifications marked as read'
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Failed to mark all notifications as read' },
       { status: 500 }

@@ -41,7 +41,7 @@ export async function GET() {
       logoSource: defaultLogo ? 'user_logos' : null
     });
 
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
       logo: newLogo
     });
 
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -174,7 +174,7 @@ export async function PUT(request: NextRequest) {
       logo: currentLogos[logoIndex]
     });
 
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -230,7 +230,7 @@ export async function DELETE(request: NextRequest) {
       message: 'Logo deleted successfully'
     });
 
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 } 

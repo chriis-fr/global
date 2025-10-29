@@ -143,7 +143,7 @@ export default function PayablesOnboardingPage() {
               }));
             }
           }
-        } catch (error) {
+        } catch {
           // Fallback to session data only
           setOnboardingData(prev => ({
             ...prev,
@@ -224,7 +224,7 @@ export default function PayablesOnboardingPage() {
       if (response.ok) {
         router.push('/dashboard/services/payables?refresh=true');
       }
-    } catch (error) {
+    } catch {
     } finally {
       setLoading(false);
     }

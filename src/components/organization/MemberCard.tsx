@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { User, Crown, Shield, DollarSign, Calculator, CheckCircle, Edit, Trash2, Mail, Clock } from 'lucide-react';
+import { User, Crown, Shield, DollarSign, Calculator, CheckCircle, Edit, Trash2, Clock } from 'lucide-react';
 import Image from 'next/image';
 import { OrganizationMember } from '@/models/Organization';
 import { type RoleKey } from '@/lib/utils/roles';

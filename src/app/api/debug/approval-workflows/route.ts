@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
         billId: w.billId,
         currentStep: w.currentStep,
         createdBy: w.createdBy,
-        approvals: w.approvals?.map((a: any) => ({
+          approvals: w.approvals?.map((a: { stepNumber: number; approverId: string; approverEmail: string; approverRole: string; decision: string }) => ({
           stepNumber: a.stepNumber,
           approverId: a.approverId,
           approverEmail: a.approverEmail,
@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
       });
 
       if (organization) {
-        const member = organization.members.find((m: any) => 
+        const member = organization.members.find((m: { userId: string }) => 
           m.userId.toString() === user._id?.toString()
         );
 
@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
 
         // Find workflows where this user is an approver
         const userWorkflows = allWorkflows.filter(w => 
-          w.approvals?.some((a: any) => a.approverId === user._id?.toString())
+          w.approvals?.some((a: { approverId: string }) => a.approverId === user._id?.toString())
         );
 
         console.log('🔍 [Debug Approval Workflows] Workflows where user is approver:', {
@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
             status: w.status,
             billId: w.billId,
             currentStep: w.currentStep,
-            userApprovalStep: w.approvals?.find((a: any) => a.approverId === user._id?.toString())
+            userApprovalStep: w.approvals?.find((a: { approverId: string }) => a.approverId === user._id?.toString())
           }))
         });
       }
@@ -127,7 +127,7 @@ export async function GET(request: NextRequest) {
           billId: w.billId,
           currentStep: w.currentStep,
           createdBy: w.createdBy,
-          approvals: w.approvals?.map((a: any) => ({
+          approvals: w.approvals?.map((a: { stepNumber: number; approverId: string; approverEmail: string; approverRole: string; decision: string }) => ({
             stepNumber: a.stepNumber,
             approverId: a.approverId,
             approverEmail: a.approverEmail,

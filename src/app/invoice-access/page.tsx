@@ -95,7 +95,7 @@ function InvoiceAccessContent() {
           userId: session?.user?.id 
         }),
       });
-    } catch (error) {
+    } catch {
     }
   }, [token, session?.user?.id]);
 
@@ -124,7 +124,7 @@ function InvoiceAccessContent() {
         // Still redirect to payables page
         router.push('/dashboard/services/payables');
       }
-    } catch (error) {
+    } catch {
       // Fallback: redirect to payables page
       router.push('/dashboard/services/payables');
     }
@@ -150,7 +150,7 @@ function InvoiceAccessContent() {
       } else {
         setError(data.message || 'Invalid or expired access link');
       }
-    } catch (error) {
+    } catch {
       setError('Failed to validate access link');
     } finally {
       setLoading(false);
@@ -183,7 +183,7 @@ function InvoiceAccessContent() {
         callbackUrl: `/invoice-access?token=${token}`,
         redirect: true
       });
-    } catch (error) {
+    } catch {
     }
   };
 

@@ -22,7 +22,7 @@ async function syncPayableToLedger(payableId: string, status: string) {
     }
     
     // Check if ledger entry already exists
-    let ledgerEntry = await db.collection('financial_ledger').findOne({
+    const ledgerEntry = await db.collection('financial_ledger').findOne({
       relatedPayableId: new ObjectId(payableId)
     });
     
@@ -86,7 +86,7 @@ async function syncPayableToLedger(payableId: string, status: string) {
 }
 
 // GET /api/organization/approvals - Get pending approvals for user
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     
@@ -121,7 +121,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const member = organization.members.find((m: any) => m.userId.toString() === user._id?.toString());
+    const member = organization.members.find((m: { userId: string }) => m.userId.toString() === user._id?.toString());
     if (!member) {
       return NextResponse.json(
         { success: false, message: 'User not found in organization' },
@@ -245,7 +245,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const member = organization.members.find((m: any) => m.userId.toString() === user._id?.toString());
+    const member = organization.members.find((m: { userId: string }) => m.userId.toString() === user._id?.toString());
     if (!member) {
       return NextResponse.json(
         { success: false, message: 'User not found in organization' },

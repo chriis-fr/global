@@ -62,7 +62,7 @@ export default function NotificationBadge() {
         setPreviousCount(newCount);
         setUnreadCount(newCount);
       }
-    } catch (error) {
+    } catch {
       if (loading) {
       }
     } finally {

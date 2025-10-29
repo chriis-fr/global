@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Clock, User, DollarSign, Calendar, Eye, CheckCircle, XCircle } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Clock, User, Calendar, Eye, CheckCircle, XCircle } from 'lucide-react';
 import { ApprovalWorkflow } from '@/types/approval';
 import { ApprovalWorkflow as ApprovalWorkflowComponent } from './ApprovalWorkflow';
 import { useSession } from 'next-auth/react';
@@ -31,7 +31,7 @@ export function PendingApprovalsList({ onApprovalDecision }: PendingApprovalsLis
   const [selectedApproval, setSelectedApproval] = useState<EnrichedApproval | null>(null);
   const hasInitialized = useRef(false);
 
-  const fetchPendingApprovals = async (forceRefresh = false) => {
+  const fetchPendingApprovals = useCallback(async (forceRefresh = false) => {
     try {
       setLoading(true);
       setError(null);
@@ -51,7 +51,7 @@ export function PendingApprovalsList({ onApprovalDecision }: PendingApprovalsLis
             setLoading(false);
             return;
           }
-        } catch (err) {
+        } catch {
           // If cache is corrupted, remove it and fetch fresh
           localStorage.removeItem(cacheKey);
         }
@@ -72,13 +72,13 @@ export function PendingApprovalsList({ onApprovalDecision }: PendingApprovalsLis
       } else {
         setError(data.message || 'Failed to fetch pending approvals');
       }
-    } catch (err) {
-      console.error('Error fetching pending approvals:', err);
+    } catch {
+      console.error('Error fetching pending approvals');
       setError('Failed to fetch pending approvals');
     } finally {
       setLoading(false);
     }
-  };
+  }, [session?.user?.email]);
 
   const handleApprovalDecision = async (workflowId: string, decision: 'approved' | 'rejected', comments?: string) => {
     try {
@@ -127,7 +127,7 @@ export function PendingApprovalsList({ onApprovalDecision }: PendingApprovalsLis
       hasInitialized.current = true;
       fetchPendingApprovals();
     }
-  }, []);
+  }, [fetchPendingApprovals]);
 
   if (loading) {
     return (

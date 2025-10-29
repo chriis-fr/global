@@ -345,7 +345,7 @@ async function createPayableForRecipient(recipientEmail: string, invoice: Record
         console.log('🏢 [Auto Payable] Found organization with this primary email, using organization owner:', organization.name);
         
         // Find the organization owner to use as the recipient user
-        const owner = organization.members.find((member: any) => member.role === 'owner');
+        const owner = organization.members.find((member: { role: string }) => member.role === 'owner');
         if (owner) {
           recipientUser = await db.collection('users').findOne({
             _id: new ObjectId(owner.userId)
@@ -709,14 +709,14 @@ async function sendPayableApprovalNotifications(
     
     // Get ALL approvers in the organization (not just current step)
     const organizationMembers = organization.members || [];
-    const approvers = organizationMembers.filter((member: any) => 
+    const approvers = organizationMembers.filter((member: { role: string }) => 
       member.role === 'admin' || member.role === 'approver' || member.role === 'owner'
     );
     
     console.log('📧 [Payable Approval] Found approvers in organization:', {
       totalMembers: organizationMembers.length,
       approvers: approvers.length,
-      approverRoles: approvers.map((a: any) => a.role)
+      approverRoles: approvers.map((a: { role: string }) => a.role)
     });
     
     if (approvers.length === 0) {
@@ -725,7 +725,7 @@ async function sendPayableApprovalNotifications(
     }
     
     // Send notification to ALL approvers (except the recipient email)
-    const notificationPromises = approvers.map(async (approver: any) => {
+    const notificationPromises = approvers.map(async (approver: { userId: string; role: string }) => {
       try {
         // Get approver user details
         const approverUser = await db.collection('users').findOne({

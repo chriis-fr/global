@@ -302,7 +302,7 @@ export async function POST(request: NextRequest) {
     try {
       const payableWithId = { _id: result.insertedId, ...payableData };
       await LedgerSyncService.syncPayableToLedger(payableWithId);
-    } catch (syncError) {
+    } catch {
       // Don't fail the request if sync fails
     }
 
@@ -483,6 +483,8 @@ export async function GET(request: NextRequest) {
     const payableBills = allPayables.filter(payable => 
       payable.status === 'approved'
     );
+    
+    // Note: payableBills is calculated but not used in response
     
     
     // Convert total amount if currency conversion is requested

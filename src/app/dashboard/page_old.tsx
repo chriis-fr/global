@@ -72,16 +72,6 @@ export default function DashboardPage() {
         const clientsData = await clientsResponse.json();
         const ledgerData = await ledgerResponse.json();
 
-          invoices: invoicesData.success,
-          paidInvoices: paidInvoicesData.success,
-          clients: clientsData.success,
-          ledger: ledgerData.success,
-          invoicesStatus: invoicesResponse.status,
-          paidInvoicesStatus: paidInvoicesResponse.status,
-          clientsStatus: clientsResponse.status,
-          ledgerStatus: ledgerResponse.status
-        });
-
         const clients = clientsData.success ? clientsData.data : [];
         
         // Use total revenue from API stats (includes all invoices, not just paginated ones)

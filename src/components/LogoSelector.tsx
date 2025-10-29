@@ -47,7 +47,7 @@ export function LogoSelector({ onLogoSelectAction, selectedLogoId, className = '
           onLogoSelectAction(defaultLogo);
         }
       }
-    } catch (error) {
+    } catch {
     } finally {
       setLoading(false);
     }

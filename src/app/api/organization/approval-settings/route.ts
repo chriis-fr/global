@@ -4,11 +4,10 @@ import { authOptions } from '@/lib/auth';
 import { ApprovalService } from '@/lib/services/approvalService';
 import { RBACService } from '@/lib/services/rbacService';
 import { getDatabase } from '@/lib/database';
-import { ObjectId } from 'mongodb';
 import { ApprovalSettings } from '@/types/approval';
 
 // GET /api/organization/approval-settings - Get approval settings
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     
@@ -43,7 +42,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const member = organization.members.find((m: any) => m.userId.toString() === user._id?.toString());
+    const member = organization.members.find((m: { userId: string }) => m.userId.toString() === user._id?.toString());
     if (!member) {
       return NextResponse.json(
         { success: false, message: 'User not found in organization' },
@@ -127,7 +126,7 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const member = organization.members.find((m: any) => m.userId.toString() === user._id?.toString());
+    const member = organization.members.find((m: { userId: string }) => m.userId.toString() === user._id?.toString());
     if (!member) {
       return NextResponse.json(
         { success: false, message: 'User not found in organization' },
@@ -198,7 +197,7 @@ export async function PUT(request: NextRequest) {
 }
 
 // Validate approval settings
-function validateApprovalSettings(settings: any): ApprovalSettings | null {
+function validateApprovalSettings(settings: Record<string, unknown>): ApprovalSettings | null {
   try {
     // Basic validation
     if (typeof settings.requireApproval !== 'boolean') {

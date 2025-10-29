@@ -43,7 +43,6 @@ export default function BarChart({ data, height = 200, showLabels = true }: BarC
     const labelHeight = 60; // Extra space for rotated labels
     const chartWidth = rect.width - (padding * 2);
     const chartHeight = height - (padding * 2) - labelHeight;
-    const barSpacing = 8;
     const maxValue = Math.max(...data.datasets.flatMap(dataset => dataset.data));
 
     // Draw grid lines
@@ -62,7 +61,7 @@ export default function BarChart({ data, height = 200, showLabels = true }: BarC
     const dynamicBarSpacing = data.labels.length > 6 ? 4 : 8;
     const barWidth = Math.max(20, (chartWidth - (dynamicBarSpacing * (maxBars - 1))) / maxBars);
     
-    data.datasets.forEach((dataset, datasetIndex) => {
+    data.datasets.forEach((dataset) => {
       dataset.data.slice(0, maxBars).forEach((value, index) => {
         const barHeight = (value / maxValue) * chartHeight;
         const x = padding + index * (barWidth + dynamicBarSpacing);
@@ -123,7 +122,7 @@ export default function BarChart({ data, height = 200, showLabels = true }: BarC
     ctx.font = '10px Inter, sans-serif';
     ctx.textAlign = 'center';
     
-    data.datasets.forEach((dataset, datasetIndex) => {
+    data.datasets.forEach((dataset) => {
       dataset.data.slice(0, maxBars).forEach((value, index) => {
         if (value > 0) {
           const barHeight = (value / maxValue) * chartHeight;
@@ -137,7 +136,7 @@ export default function BarChart({ data, height = 200, showLabels = true }: BarC
       });
     });
 
-  }, [data, height]);
+  }, [data, height, showLabels]);
 
   return (
     <div className="w-full">

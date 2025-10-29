@@ -108,9 +108,9 @@ export interface AuditLog {
   // Action metadata
   details: {
     description: string;
-    previousValue?: any;
-    newValue?: any;
-    metadata?: Record<string, any>;
+    previousValue?: unknown;
+    newValue?: unknown;
+    metadata?: Record<string, unknown>;
   };
   
   // Timestamps

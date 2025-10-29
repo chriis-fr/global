@@ -288,7 +288,53 @@ const generateInvoicePDF = async (invoiceId: string): Promise<string | null> => 
 };
 
 // Generate the exact same HTML structure as the create page
-const generateInvoiceHTML = (invoice: any): string => {
+interface InvoiceData {
+  invoiceNumber?: string;
+  invoiceName?: string;
+  issueDate?: string;
+  createdAt?: string;
+  dueDate: string;
+  currency: string;
+  total: number;
+  subtotal?: number;
+  totalTax?: number;
+  items?: Array<{
+    description?: string;
+    name?: string;
+    quantity?: number;
+    rate?: number;
+    price?: number;
+    amount?: number;
+    discount?: number;
+    tax?: number;
+  }>;
+  companyDetails?: {
+    name?: string;
+    address?: string;
+    email?: string;
+    phone?: string;
+    logo?: string;
+  };
+  companyName?: string;
+  clientDetails?: {
+    companyName?: string;
+    firstName?: string;
+    lastName?: string;
+    address?: string;
+    email?: string;
+    phone?: string;
+  };
+  clientName?: string;
+  clientEmail?: string;
+  paymentSettings?: {
+    method?: string;
+    cryptoNetwork?: string;
+    walletAddress?: string;
+  };
+  memo?: string;
+}
+
+const generateInvoiceHTML = (invoice: InvoiceData): string => {
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -311,8 +357,8 @@ const generateInvoiceHTML = (invoice: any): string => {
   };
 
   // Check if there are any discounts or taxes
-  const hasAnyDiscounts = invoice.items?.some((item: any) => item.discount > 0);
-  const hasAnyTaxes = invoice.items?.some((item: any) => item.tax > 0);
+  const hasAnyDiscounts = invoice.items?.some((item) => (item.discount || 0) > 0);
+  const hasAnyTaxes = invoice.items?.some((item) => (item.tax || 0) > 0);
 
   return `
     <div style="border-bottom: 1px solid #e5e7eb; padding-bottom: 32px; margin-bottom: 32px;">
@@ -410,13 +456,13 @@ const generateInvoiceHTML = (invoice: any): string => {
           </tr>
         </thead>
         <tbody>
-          ${invoice.items?.map((item: any) => `
+          ${invoice.items?.map((item) => `
             <tr style="border-bottom: 1px solid #e5e7eb;">
               <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.description || item.name || 'Item description'}</td>
               <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.quantity || 1}</td>
               <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${getCurrencySymbol()}${(item.rate || item.price || 0).toFixed(2)}</td>
-              ${hasAnyDiscounts ? `<td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.discount > 0 ? `${item.discount}%` : ''}</td>` : ''}
-              ${hasAnyTaxes ? `<td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.tax > 0 ? `${item.tax}%` : ''}</td>` : ''}
+              ${hasAnyDiscounts ? `<td style="padding: 12px 16px; font-size: 14px; color: #111827;">${(item.discount || 0) > 0 ? `${item.discount}%` : ''}</td>` : ''}
+              ${hasAnyTaxes ? `<td style="padding: 12px 16px; font-size: 14px; color: #111827;">${(item.tax || 0) > 0 ? `${item.tax}%` : ''}</td>` : ''}
               <td style="padding: 12px 16px; font-size: 14px; font-weight: 500; color: #111827;">${getCurrencySymbol()}${(item.amount || (item.quantity || 1) * (item.rate || item.price || 0)).toFixed(2)}</td>
             </tr>
           `).join('') || `

@@ -9,7 +9,7 @@ export async function approveInvoice(invoiceId: string): Promise<{
   success: boolean;
   message: string;
   fullyApproved?: boolean;
-  invoiceData?: any;
+  invoiceData?: Record<string, unknown>;
 }> {
   try {
     const session = await getServerSession(authOptions);
@@ -39,7 +39,7 @@ export async function approveInvoice(invoiceId: string): Promise<{
         return { success: false, message: 'Organization not found' };
       }
 
-      const userMember = organization.members.find((member: any) => 
+      const userMember = organization.members.find((member: { userId: { toString: () => string } }) => 
         member.userId.toString() === session.user.id
       );
 
@@ -59,7 +59,7 @@ export async function approveInvoice(invoiceId: string): Promise<{
       // Check if owner can approve their own invoice based on organization size
       if (userMember.role === 'owner' && invoice.issuerId === session.user.id) {
         // Count total approvers (admins + approvers)
-        const totalApprovers = organization.members.filter((member: any) => 
+        const totalApprovers = organization.members.filter((member: { role: string }) => 
           member.role === 'admin' || member.role === 'approver'
         ).length;
         
@@ -93,7 +93,7 @@ export async function approveInvoice(invoiceId: string): Promise<{
            const currentApprovals = invoice.approvals || [];
            
            // Check if user has already approved this invoice
-           const alreadyApproved = currentApprovals.some((approval: any) => 
+           const alreadyApproved = currentApprovals.some((approval: { approverId: string }) => 
              approval.approverId === session.user.id
            );
 
@@ -244,7 +244,7 @@ export async function rejectInvoice(invoiceId: string, reason?: string): Promise
         return { success: false, message: 'Organization not found' };
       }
 
-      const userMember = organization.members.find((member: any) => 
+      const userMember = organization.members.find((member: { userId: { toString: () => string } }) => 
         member.userId.toString() === session.user.id
       );
 
@@ -264,7 +264,7 @@ export async function rejectInvoice(invoiceId: string, reason?: string): Promise
       // Check if owner can reject their own invoice based on organization size
       if (userMember.role === 'owner' && invoice.issuerId === session.user.id) {
         // Count total approvers (admins + approvers)
-        const totalApprovers = organization.members.filter((member: any) => 
+        const totalApprovers = organization.members.filter((member: { role: string }) => 
           member.role === 'admin' || member.role === 'approver'
         ).length;
         
@@ -309,7 +309,7 @@ export async function rejectInvoice(invoiceId: string, reason?: string): Promise
 
 export async function getPendingApprovals(): Promise<{
   success: boolean;
-  data?: any[];
+  data?: Record<string, unknown>[];
   message?: string;
 }> {
   try {

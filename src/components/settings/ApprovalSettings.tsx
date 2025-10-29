@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Settings, Toggle, DollarSign, Users, Mail, Save, AlertCircle, ChevronDown, X } from 'lucide-react';
+import { Settings, DollarSign, Users, Mail, Save, AlertCircle, ChevronDown, X } from 'lucide-react';
 import { ApprovalSettings } from '@/types/approval';
 import { SettingsGuard } from '@/components/PermissionGuard';
 import { OrganizationMember } from '@/types/organization';
@@ -48,7 +48,7 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [organizationMembers, setOrganizationMembers] = useState<OrganizationMember[]>([]);
-  const [organizationData, setOrganizationData] = useState<any>(null);
+  const [organizationData, setOrganizationData] = useState<Record<string, unknown> | null>(null);
 
   const fetchSettings = async () => {
     try {
@@ -140,7 +140,7 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
     }
   };
 
-  const handleInputChange = (path: string, value: any) => {
+  const handleInputChange = (path: string, value: unknown) => {
     setSettings(prev => {
       const newSettings = { ...prev };
       const keys = path.split('.');

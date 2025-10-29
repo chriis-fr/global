@@ -112,7 +112,7 @@ export default function PaymentMethodsPage() {
       if (data.success) {
         setPaymentMethods(data.paymentMethods);
       }
-    } catch (error) {
+    } catch {
     } finally {
       setLoading(false);
     }
@@ -133,7 +133,7 @@ export default function PaymentMethodsPage() {
       } else {
         alert(data.error || 'Failed to delete payment method');
       }
-    } catch (error) {
+    } catch {
       alert('Failed to delete payment method');
     }
   };
@@ -425,7 +425,7 @@ export default function PaymentMethodsPage() {
                   });
                   loadPaymentMethods();
                 }
-              } catch (error) {
+                } catch {
               }
             }}>
               <div className="space-y-4">

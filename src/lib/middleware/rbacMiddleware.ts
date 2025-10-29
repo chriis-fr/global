@@ -3,12 +3,11 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { RBACService } from '@/lib/services/rbacService';
 import { getDatabase } from '@/lib/database';
-import { ObjectId } from 'mongodb';
 
 export interface RBACOptions {
   action: string;
   resource: string;
-  conditions?: Record<string, any>;
+  conditions?: Record<string, unknown>;
   allowOwner?: boolean;
   allowAdmin?: boolean;
 }
@@ -18,7 +17,7 @@ export class RBACMiddleware {
   static async checkPermission(
     request: NextRequest,
     options: RBACOptions
-  ): Promise<{ allowed: boolean; user?: any; member?: any; organization?: any; error?: string }> {
+  ): Promise<{ allowed: boolean; user?: Record<string, unknown>; member?: Record<string, unknown>; organization?: Record<string, unknown>; error?: string }> {
     try {
       const session = await getServerSession(authOptions);
       
@@ -53,7 +52,7 @@ export class RBACMiddleware {
         return { allowed: false, error: 'Organization not found' };
       }
 
-      const member = organization.members.find((m: any) => m.userId.toString() === user._id?.toString());
+      const member = organization.members.find((m: { userId: { toString: () => string } }) => m.userId.toString() === user._id?.toString());
       if (!member) {
         return { allowed: false, error: 'User not found in organization' };
       }
@@ -111,9 +110,9 @@ export class RBACMiddleware {
       }
 
       // Add user context to request
-      (request as any).user = permissionCheck.user;
-      (request as any).member = permissionCheck.member;
-      (request as any).organization = permissionCheck.organization;
+      (request as unknown as Record<string, unknown>).user = permissionCheck.user;
+      (request as unknown as Record<string, unknown>).member = permissionCheck.member;
+      (request as unknown as Record<string, unknown>).organization = permissionCheck.organization;
 
       return handler(request, { user: permissionCheck.user, member: permissionCheck.member, organization: permissionCheck.organization });
     };
@@ -179,7 +178,7 @@ export class RBACMiddleware {
 
 // Helper function to create permission-checked API handlers
 export function withRBAC(options: RBACOptions) {
-  return function(handler: (request: NextRequest, context: any) => Promise<NextResponse>) {
+  return function(handler: (request: NextRequest, context: Record<string, unknown>) => Promise<NextResponse>) {
     return RBACMiddleware.withPermission(options)(handler);
   };
 }

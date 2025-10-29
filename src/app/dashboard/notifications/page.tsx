@@ -66,7 +66,7 @@ export default function NotificationsPage() {
         setNotifications(data.data.notifications);
         setStats(data.data.stats);
       }
-    } catch (error) {
+    } catch {
     } finally {
       setLoading(false);
     }
@@ -95,7 +95,7 @@ export default function NotificationsPage() {
         // Reload stats
         loadNotifications();
       }
-    } catch (error) {
+    } catch {
     }
   };
 
@@ -116,7 +116,7 @@ export default function NotificationsPage() {
         // Reload stats
         loadNotifications();
       }
-    } catch (error) {
+    } catch {
     }
   };
 
@@ -139,7 +139,7 @@ export default function NotificationsPage() {
         // Reload stats
         loadNotifications();
       }
-    } catch (error) {
+    } catch {
     }
   };
 

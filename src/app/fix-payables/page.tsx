@@ -5,7 +5,7 @@ import { CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 
 export default function FixPayablesPage() {
   const [isRunning, setIsRunning] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
 
   const runFix = async () => {
@@ -54,7 +54,7 @@ export default function FixPayablesPage() {
               <li>Update payable statuses based on workflow status</li>
               <li>Sync invoice statuses for approved/rejected payables</li>
               <li>Sync all payables to financial ledger for dashboard counts</li>
-              <li>Mark related invoices as "paid" when payables are paid (two-way sync)</li>
+              <li>Mark related invoices as &quot;paid&quot; when payables are paid (two-way sync)</li>
             </ul>
           </div>
 

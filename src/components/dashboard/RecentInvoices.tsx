@@ -35,7 +35,7 @@ export default function RecentInvoices({ className = '' }: RecentInvoicesProps) 
             setLoading(false);
             return;
           }
-        } catch (err) {
+        } catch {
           // If cache is corrupted, remove it and fetch fresh
           localStorage.removeItem(cacheKey);
         }
@@ -59,8 +59,8 @@ export default function RecentInvoices({ className = '' }: RecentInvoicesProps) 
         } else {
           setError(result.error || 'Failed to load recent invoices');
         }
-      } catch (err) {
-        console.error('Error loading recent invoices:', err);
+      } catch {
+        console.error('Error loading recent invoices');
         setError('Failed to load recent invoices');
       } finally {
         setLoading(false);
@@ -71,7 +71,7 @@ export default function RecentInvoices({ className = '' }: RecentInvoicesProps) 
       hasInitialized.current = true;
       loadRecentInvoices();
     }
-  }, []);
+  }, [CACHE_DURATION]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {

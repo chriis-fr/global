@@ -37,7 +37,7 @@ export function UserProfile() {
         await update() // Refresh session
         setIsEditing(false)
       }
-    } catch (error) {
+    } catch {
     } finally {
       setLoading(false)
     }

@@ -139,7 +139,7 @@ export default function OnboardingPage() {
       if (onboardingData.success) {
         setCurrentStep(onboardingData.data.onboarding.currentStep);
       }
-    } catch (error) {
+    } catch {
     } finally {
       setLoading(false);
     }
@@ -167,7 +167,7 @@ export default function OnboardingPage() {
           
           // If not completed, continue with normal flow
           loadUserAndServices();
-        } catch (error) {
+        } catch {
           // Continue with normal flow if check fails
           loadUserAndServices();
         }
@@ -200,7 +200,7 @@ export default function OnboardingPage() {
         setUser(prev => prev ? { ...prev, onboarding: data.data.onboarding } : null);
         setCurrentStep(step);
       }
-    } catch (error) {
+    } catch {
     } finally {
       setUpdating(false);
     }
@@ -227,7 +227,7 @@ export default function OnboardingPage() {
       if (data.success) {
         setUser(prev => prev ? { ...prev, services: data.data.user.services } : null);
       }
-    } catch (error) {
+    } catch {
     }
   };
 

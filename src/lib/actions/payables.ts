@@ -29,13 +29,13 @@ export interface PayableDetails {
     name: string;
     email: string;
     phone?: string;
-    address?: any;
+    address?: Record<string, unknown>;
   };
   vendorDetails: {
     name: string;
     email: string;
     phone?: string;
-    address?: any;
+    address?: Record<string, unknown>;
   };
   currency: string;
   items: Array<{
@@ -126,7 +126,7 @@ export async function getPayablesList(
           { payableNumber: { $regex: searchQuery, $options: 'i' } },
           { vendorName: { $regex: searchQuery, $options: 'i' } }
         ]
-      } as typeof query & { $or: any[] };
+      } as typeof query & { $or: Array<Record<string, unknown>> };
     }
 
     // Get total count
@@ -306,7 +306,19 @@ export async function getPayableDetails(payableId: string): Promise<{ success: b
 /**
  * Get payables statistics - only counts and totals
  */
-export async function getPayablesStats(): Promise<{ success: boolean; data?: any; error?: string }> {
+interface PayablesStatsData {
+  totalAmount: number;
+  totalPayables: number;
+  statusCounts: {
+    draft: number;
+    pending: number;
+    approved: number;
+    paid: number;
+    overdue: number;
+  };
+}
+
+export async function getPayablesStats(): Promise<{ success: boolean; data?: PayablesStatsData; error?: string }> {
   try {
     const session = await getServerSession(authOptions);
     

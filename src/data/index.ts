@@ -23,7 +23,7 @@ export const getBanksForCountry = async (countryCode: string): Promise<Bank[]> =
       default:
         return [];
     }
-  } catch (error) {
+  } catch {
     return [];
   }
 };

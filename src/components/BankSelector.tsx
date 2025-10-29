@@ -39,7 +39,7 @@ export default function BankSelector({
         setBanks(data.data.banks);
         setFilteredBanks(data.data.banks);
       }
-    } catch (error) {
+    } catch {
       setBanks([]);
       setFilteredBanks([]);
     } finally {

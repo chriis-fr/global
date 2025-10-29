@@ -52,7 +52,7 @@ export async function GET() {
       hasOrganization: !!user.organizationId
     });
 
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -159,7 +159,7 @@ export async function POST(request: NextRequest) {
       logo: newLogo
     });
 
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -276,7 +276,7 @@ export async function PUT(request: NextRequest) {
       logo: currentLogos[logoIndex]
     });
 
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -370,7 +370,7 @@ export async function DELETE(request: NextRequest) {
       message: 'Logo deleted from user'
     });
 
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 } 

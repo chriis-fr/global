@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
     const session = await getServerSession(authOptions);
     
@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     }
 
     const organization = await db.collection('organizations').findOne({ _id: user.organizationId });
-    const member = organization?.members.find((m: any) => m.userId.toString() === session.user.id);
+    const member = organization?.members.find((m: { userId: string; role: string }) => m.userId.toString() === session.user.id);
     
     if (!member || (member.role !== 'owner' && member.role !== 'admin')) {
       return NextResponse.json({ success: false, message: 'Only owners and admins can run this fix' }, { status: 403 });

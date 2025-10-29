@@ -4,7 +4,6 @@ import { Users, Plus, Mail, Clock, Shield } from 'lucide-react';
 import DashboardFloatingButton from '@/components/DashboardFloatingButton';
 import RoleSelector from '@/components/organization/RoleSelector';
 import MemberCard from '@/components/organization/MemberCard';
-import PermissionMatrix from '@/components/organization/PermissionMatrix';
 import { getOrganizationData, getOrganizationMembers } from '@/lib/actions/organization';
 import { sendInvitation, getPendingInvitations, resendInvitation, deleteInvitation } from '@/lib/actions/invitation';
 import { type RoleKey } from '@/lib/utils/roles';
@@ -19,17 +18,17 @@ interface OrganizationInfo {
     [key: string]: unknown;
   };
   userRole?: string;
-  userPermissions?: any;
+  userPermissions?: Record<string, unknown>;
 }
 
 export default function OrganizationMembersPage() {
   const [orgInfo, setOrgInfo] = useState<OrganizationInfo | null>(null);
-  const [members, setMembers] = useState<any[]>([]);
-  const [pendingInvitations, setPendingInvitations] = useState<any[]>([]);
+  const [members, setMembers] = useState<Record<string, unknown>[]>([]);
+  const [pendingInvitations, setPendingInvitations] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [editingMember, setEditingMember] = useState<any | null>(null);
+  const [editingMember, setEditingMember] = useState<{ userId: string; role: string } | null>(null);
   const [adding, setAdding] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [resending, setResending] = useState<string | null>(null);

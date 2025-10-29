@@ -137,11 +137,11 @@ async function createPayableFromInvoice(userId: string, invoice: Record<string, 
       const { LedgerSyncService } = await import('@/lib/services/ledgerSyncService');
       const payableWithId = { _id: result.insertedId, ...payableData };
       await LedgerSyncService.syncPayableToLedger(payableWithId);
-    } catch (syncError) {
+    } catch {
       // Don't fail the request if sync fails
     }
 
-  } catch (error) {
+  } catch {
     // Don't fail the signup if payable creation fails
   }
 }

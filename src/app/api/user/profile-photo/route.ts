@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
 }
 
 // DELETE /api/user/profile-photo - Remove profile photo
-export async function DELETE(request: NextRequest) {
+export async function DELETE() {
   try {
     const session = await getServerSession(authOptions);
     

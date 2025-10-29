@@ -60,7 +60,7 @@ export default function PendingInvoiceApprovals() {
             setLoading(false);
             return;
           }
-        } catch (err) {
+        } catch {
           localStorage.removeItem(cacheKey);
         }
       }
@@ -78,7 +78,7 @@ export default function PendingInvoiceApprovals() {
       } else {
         setPendingInvoices([]);
       }
-    } catch (error) {
+    } catch {
       console.error('Error fetching pending invoice approvals:', error);
       setPendingInvoices([]);
     } finally {

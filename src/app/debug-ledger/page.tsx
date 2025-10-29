@@ -1,11 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 
 export default function DebugLedgerPage() {
   const [isLoading, setIsLoading] = useState(false);
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = async () => {
@@ -93,7 +93,7 @@ export default function DebugLedgerPage() {
               <div className="p-4 bg-purple-900/20 border border-purple-500/30 rounded-lg">
                 <h3 className="text-purple-300 font-semibold mb-2">Ledger Entries ({data.ledgerEntries.length})</h3>
                 <div className="text-sm text-purple-200 space-y-1 max-h-60 overflow-y-auto">
-                  {data.ledgerEntries.map((entry: any, index: number) => (
+                  {data.ledgerEntries.map((entry: { type: string; status: string; amount: number; organizationId?: string; ownerId?: string; relatedPayableId?: string }, index: number) => (
                     <div key={index} className="border-b border-purple-700/30 pb-2 mb-2">
                       <p>Type: {entry.type} | Status: {entry.status} | Amount: {entry.amount}</p>
                       <p>Org ID: {entry.organizationId || 'None'} | Owner ID: {entry.ownerId || 'None'}</p>
@@ -106,7 +106,7 @@ export default function DebugLedgerPage() {
               <div className="p-4 bg-yellow-900/20 border border-yellow-500/30 rounded-lg">
                 <h3 className="text-yellow-300 font-semibold mb-2">Payables ({data.payables.length})</h3>
                 <div className="text-sm text-yellow-200 space-y-1 max-h-60 overflow-y-auto">
-                  {data.payables.map((payable: any, index: number) => (
+                  {data.payables.map((payable: { payableNumber?: string; status: string; amount: number; organizationId?: string; ledgerEntryId?: string; relatedInvoiceId?: string }, index: number) => (
                     <div key={index} className="border-b border-yellow-700/30 pb-2 mb-2">
                       <p>Number: {payable.payableNumber || 'N/A'} | Status: {payable.status} | Amount: {payable.amount}</p>
                       <p>Org ID: {payable.organizationId || 'None'} | Ledger Entry: {payable.ledgerEntryId || 'None'}</p>
