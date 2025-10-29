@@ -9,7 +9,8 @@ import {
   AlertTriangle,
   Clock,
   Crown,
-  Lock
+  Lock,
+  TrendingUp
 } from 'lucide-react';
 import DashboardSkeleton from '@/components/ui/DashboardSkeleton';
 import { useSubscription } from '@/lib/contexts/SubscriptionContext';
@@ -42,7 +43,7 @@ export default function DashboardPage() {
             setOrganizationName(data.data.organization.name);
           }
         }
-      } catch (error) {
+      } catch {
       }
     };
 
@@ -60,15 +61,13 @@ export default function DashboardPage() {
         // setLoading(true); // Removed - stats load independently
         
         // Fetch data in parallel like the services pages do - without timeout
-        const [invoicesResponse, paidInvoicesResponse, clientsResponse, ledgerResponse] = await Promise.all([
+        const [invoicesResponse, clientsResponse, ledgerResponse] = await Promise.all([
           fetch('/api/invoices?limit=1&convertToPreferred=false'), // Keep original amounts
-          fetch('/api/invoices?status=paid&convertToPreferred=false'), // Get only paid invoices - keep original amounts
           fetch('/api/clients'),
           fetch('/api/ledger')
         ]);
 
         const invoicesData = await invoicesResponse.json();
-        const paidInvoicesData = await paidInvoicesResponse.json();
         const clientsData = await clientsResponse.json();
         const ledgerData = await ledgerResponse.json();
 
@@ -77,8 +76,8 @@ export default function DashboardPage() {
         // Use total revenue from API stats (includes all invoices, not just paginated ones)
         const totalRevenue = invoicesData.success ? invoicesData.data.stats?.totalRevenue || 0 : 0;
         
-        // Calculate paid revenue from paid invoices only
-        const paidRevenue = paidInvoicesData.success ? paidInvoicesData.data.stats?.totalRevenue || 0 : 0;
+        // Calculate paid revenue from paid invoices only (not used here)
+        // const paidRevenue = 0;
 
         const statusCounts = invoicesData.success ? invoicesData.data.stats?.statusCounts || {} : {};
         const pendingInvoices = (statusCounts.sent || 0) + (statusCounts.pending || 0);
@@ -107,7 +106,7 @@ export default function DashboardPage() {
         // Reset fallback data flag if we successfully loaded data
         setUsingFallbackData(false);
 
-      } catch (error) {
+      } catch {
         
         // For any error, show fallback data
         
