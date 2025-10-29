@@ -63,7 +63,7 @@ export async function GET() {
           submittedBy: submittedBy ? {
             name: submittedBy.name,
             email: submittedBy.email,
-            profilePicture: submittedBy.profilePicture || submittedBy.avatar
+            profilePicture: submittedBy.avatar
           } : null
         };
       })

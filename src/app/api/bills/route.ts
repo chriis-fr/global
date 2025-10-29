@@ -217,7 +217,8 @@ export async function POST(request: NextRequest) {
       );
 
       if (workflow) {
-        approvalStatus = workflow.status === 'approved' ? 'approved' : 'pending_approval';
+        const activeWorkflow = workflow; // Store in const for proper type narrowing
+        approvalStatus = activeWorkflow.status === 'approved' ? 'approved' : 'pending_approval';
         
         // Update bill with approval status
         await db.collection('bills').updateOne(
@@ -231,8 +232,9 @@ export async function POST(request: NextRequest) {
         );
 
         // Send approval notifications if workflow is pending
-        if (workflow.status === 'pending') {
-          const currentStep = workflow.approvals.find(step => step.stepNumber === workflow.currentStep);
+        if (activeWorkflow.status === 'pending') {
+          const currentStepNumber = activeWorkflow.currentStep;
+          const currentStep = activeWorkflow.approvals.find(step => step.stepNumber === currentStepNumber);
           if (currentStep) {
             // Get organization name for notifications
             const orgName = organization?.name || 'Your Organization';
@@ -248,7 +250,7 @@ export async function POST(request: NextRequest) {
                 description,
                 dueDate
               },
-              workflow,
+              activeWorkflow,
               orgName
             );
           }

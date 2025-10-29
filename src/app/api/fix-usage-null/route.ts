@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
+import { ObjectId } from 'mongodb';
 
 export async function POST() {
   try {
@@ -13,13 +14,33 @@ export async function POST() {
 
     // Only allow owners/admins to run this fix
     const db = await connectToDatabase();
-    const user = await db.collection('users').findOne({ _id: session.user.id });
+    // Check if session.user.id is a valid ObjectId string and convert
+    let user;
+    if (/^[0-9a-fA-F]{24}$/.test(session.user.id)) {
+      user = await db.collection('users').findOne({ _id: new ObjectId(session.user.id) });
+    } else if (session.user.email) {
+      // Fallback to email if ID is not a valid ObjectId
+      user = await db.collection('users').findOne({ email: session.user.email });
+    } else {
+      return NextResponse.json({ success: false, message: 'Invalid user session' }, { status: 401 });
+    }
     
     if (!user?.organizationId) {
       return NextResponse.json({ success: false, message: 'Only organization members can run this fix' }, { status: 403 });
     }
 
-    const organization = await db.collection('organizations').findOne({ _id: user.organizationId });
+    // Convert organizationId to ObjectId if needed
+    const orgId = user.organizationId instanceof ObjectId 
+      ? user.organizationId 
+      : /^[0-9a-fA-F]{24}$/.test(String(user.organizationId))
+        ? new ObjectId(String(user.organizationId))
+        : null;
+    
+    if (!orgId) {
+      return NextResponse.json({ success: false, message: 'Invalid organization ID' }, { status: 400 });
+    }
+    
+    const organization = await db.collection('organizations').findOne({ _id: orgId });
     const member = organization?.members.find((m: { userId: string; role: string }) => m.userId.toString() === session.user.id);
     
     if (!member || (member.role !== 'owner' && member.role !== 'admin')) {
