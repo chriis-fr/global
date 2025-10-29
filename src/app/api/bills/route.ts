@@ -236,8 +236,8 @@ export async function POST(request: NextRequest) {
         );
 
         // Send approval notifications if workflow is pending
-        if (workflow.status === 'pending') {
-          const currentStep = workflow.approvals.find(step => step.stepNumber === workflow.currentStep);
+        if (workflow && workflow.status === 'pending') {
+          const currentStep = workflow!.approvals.find(step => step.stepNumber === workflow!.currentStep);
           if (currentStep) {
             // Get organization name for notifications
             const orgName = organization?.name || 'Your Organization';
@@ -253,7 +253,7 @@ export async function POST(request: NextRequest) {
                 description,
                 dueDate
               },
-              workflow,
+              workflow!,
               orgName
             );
           }
