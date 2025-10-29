@@ -4,10 +4,11 @@ import { validateInvitationToken, acceptInvitation, declineInvitation } from '@/
 // GET /api/invite/[token] - Validate invitation token
 export async function GET(
   request: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
   try {
-    const result = await validateInvitationToken(params.token);
+    const { token } = await params;
+    const result = await validateInvitationToken(token);
     
     if (result.success) {
       return NextResponse.json({
@@ -40,10 +41,11 @@ export async function GET(
 // POST /api/invite/[token]/accept - Accept invitation
 export async function POST(
   request: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
   try {
-    const result = await acceptInvitation(params.token);
+    const { token } = await params;
+    const result = await acceptInvitation(token);
     
     if (result.success) {
       return NextResponse.json({
@@ -77,10 +79,11 @@ export async function POST(
 // DELETE /api/invite/[token] - Decline invitation
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
   try {
-    const result = await declineInvitation(params.token);
+    const { token } = await params;
+    const result = await declineInvitation(token);
     
     if (result.success) {
       return NextResponse.json({
