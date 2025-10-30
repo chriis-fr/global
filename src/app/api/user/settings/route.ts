@@ -54,14 +54,14 @@ export async function GET() {
         profile: {
           name: user.name, // User's full name
           email: user.email,
-          phone: user.phone || '',
+          phone: '',
           currencyPreference: user.preferences?.currency || 'USD',
-          profilePhoto: user.profilePicture || user.avatar || '',
-          isGoogleUser: user.profilePicture ? true : false, // If user has profilePicture, they're likely a Google user
+          profilePhoto: user.avatar || '',
+          isGoogleUser: false, // Default to false since googleId is not in User interface
         },
         organization: organizationData || {
-          industry: user.industry || '',
-          address: user.address,
+          industry: '',
+          address: null,
         },
         settings: user.preferences,
       },

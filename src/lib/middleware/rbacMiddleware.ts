@@ -179,6 +179,6 @@ export class RBACMiddleware {
 // Helper function to create permission-checked API handlers
 export function withRBAC(options: RBACOptions) {
   return function(handler: (request: NextRequest, context: Record<string, unknown>) => Promise<NextResponse>) {
-    return RBACMiddleware.withPermission(options)(handler);
+    return (request: NextRequest) => RBACMiddleware.withPermission(options)(request, handler);
   };
 }

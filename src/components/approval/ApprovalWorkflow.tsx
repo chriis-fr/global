@@ -17,6 +17,16 @@ export function ApprovalWorkflow({
   canApprove = false, 
   currentUserId 
 }: ApprovalWorkflowProps) {
+  const wf = workflow as unknown as ApprovalWorkflowType & {
+    bill?: {
+      vendor?: string;
+      amount?: number;
+      currency?: string;
+      description?: string;
+      dueDate?: string;
+      category?: string;
+    };
+  };
   const [comments, setComments] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -80,32 +90,32 @@ export function ApprovalWorkflow({
       </div>
 
       {/* Payable Details */}
-      {workflow.bill && (
+      {wf.bill && (
         <div className="mb-6 p-4 bg-green-600/10 border border-green-500/30 rounded-lg">
           <h4 className="text-green-300 font-medium mb-3">Payable Details</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
             <div>
               <span className="text-green-200">Vendor:</span>
-              <span className="text-white ml-2 font-medium">{workflow.bill.vendor || 'Unknown'}</span>
+              <span className="text-white ml-2 font-medium">{wf.bill.vendor || 'Unknown'}</span>
             </div>
             <div>
               <span className="text-green-200">Amount:</span>
-              <span className="text-white ml-2 font-medium">{workflow.bill.currency} {workflow.bill.amount?.toLocaleString() || '0'}</span>
+              <span className="text-white ml-2 font-medium">{wf.bill.currency} {wf.bill.amount?.toLocaleString() || '0'}</span>
             </div>
             <div className="md:col-span-2">
               <span className="text-green-200">Description:</span>
-              <span className="text-white ml-2">{workflow.bill.description || 'No description'}</span>
+              <span className="text-white ml-2">{wf.bill.description || 'No description'}</span>
             </div>
-            {workflow.bill.dueDate && (
+            {wf.bill.dueDate && (
               <div>
                 <span className="text-green-200">Due Date:</span>
-                <span className="text-white ml-2">{new Date(workflow.bill.dueDate).toLocaleDateString()}</span>
+                <span className="text-white ml-2">{new Date(wf.bill.dueDate).toLocaleDateString()}</span>
               </div>
             )}
-            {workflow.bill.category && (
+            {wf.bill.category && (
               <div>
                 <span className="text-green-200">Category:</span>
-                <span className="text-white ml-2">{workflow.bill.category}</span>
+                <span className="text-white ml-2">{wf.bill.category}</span>
               </div>
             )}
           </div>

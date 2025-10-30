@@ -67,11 +67,11 @@ export default function PendingInvoiceApprovals() {
 
       const result = await getPendingApprovals();
       if (result.success && result.data) {
-        setPendingInvoices(result.data);
+        setPendingInvoices(result.data as unknown as PendingInvoice[]);
         
         // Cache in localStorage
         const cacheData = {
-          invoices: result.data,
+          invoices: result.data as unknown as PendingInvoice[],
           timestamp: Date.now()
         };
         localStorage.setItem(cacheKey, JSON.stringify(cacheData));
@@ -79,7 +79,7 @@ export default function PendingInvoiceApprovals() {
         setPendingInvoices([]);
       }
     } catch {
-      console.error('Error fetching pending invoice approvals:', error);
+      console.error('Error fetching pending invoice approvals');
       setPendingInvoices([]);
     } finally {
       setLoading(false);
@@ -100,7 +100,7 @@ export default function PendingInvoiceApprovals() {
                  alert('✅ Invoice approved! Generating PDF and sending to recipient...');
                  
                  // Auto-send the invoice with PDF
-                 const autoSendResult = await autoSendApprovedInvoice(result.invoiceData);
+                const autoSendResult = await autoSendApprovedInvoice(result.invoiceData as unknown as { _id: string; invoiceNumber: string; clientEmail: string; greetingName: string; total: number; currency: string; dueDate: string; companyName: string; clientName: string; paymentMethods: string[] });
                  
                  if (autoSendResult.success) {
                    alert(`🎉 ${autoSendResult.message}`);

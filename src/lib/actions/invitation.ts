@@ -94,11 +94,12 @@ export async function sendInvitation(email: string, role: RoleKey): Promise<{
     console.log('✅ [Invitation] Expires at:', expiresAt.toISOString());
 
     // Create invitation token
+    const tokenRole: 'admin' | 'financeManager' | 'accountant' | 'approver' = role === 'owner' ? 'admin' : role;
     const invitationToken: InvitationToken = {
       token,
       organizationId: new ObjectId(user.organizationId.toString()),
       email: email.toLowerCase(),
-      role,
+      role: tokenRole,
       permissions: getRolePermissions(role),
       invitedBy: user._id!,
       expiresAt,
@@ -224,7 +225,7 @@ export async function validateInvitationToken(token: string): Promise<{
         role: invitation.role,
         permissions: invitation.permissions,
         email: invitation.email,
-        expiresAt: invitation.expiresAt.toISOString()
+        expiresAt: invitation.expiresAt
       }
     };
   } catch (error) {
@@ -316,10 +317,10 @@ export async function acceptInvitation(token: string): Promise<{
     // Update organization with new member
     await db.collection('organizations').updateOne(
       { _id: invitation.organizationId },
-      { 
-        $push: { members: newMember },
+      ({ 
+        $push: { members: { $each: [newMember] } },
         $set: { updatedAt: new Date() }
-      }
+      } as unknown as import('mongodb').UpdateFilter<import('mongodb').Document>)
     );
 
     // Update user to link to organization
@@ -476,12 +477,12 @@ export async function completeInvitationAcceptance(token: string): Promise<{
       // Remove user from current organization
       await db.collection('organizations').updateOne(
         { _id: user.organizationId },
-        { $pull: { members: { userId: user._id } } }
+        ({ $pull: { members: { userId: user._id } } } as unknown as import('mongodb').UpdateFilter<import('mongodb').Document>)
       );
       
       // Clear user's organization ID
       await UserService.updateUser(user._id!.toString(), {
-        organizationId: null
+        organizationId: undefined
       });
       
       console.log('✅ [Complete Invitation] User removed from previous organization');
@@ -528,10 +529,10 @@ export async function completeInvitationAcceptance(token: string): Promise<{
     // Update organization with new member
     await db.collection('organizations').updateOne(
       { _id: invitation.organizationId },
-      { 
-        $push: { members: newMember },
+      ({ 
+        $push: { members: { $each: [newMember] } },
         $set: { updatedAt: new Date() }
-      }
+      } as unknown as import('mongodb').UpdateFilter<import('mongodb').Document>)
     );
 
     // Update user to link to organization and set status to active
@@ -543,7 +544,7 @@ export async function completeInvitationAcceptance(token: string): Promise<{
     };
 
     // Only remove individual subscription for non-owners
-    if (invitation.role !== 'owner') {
+    if ((invitation.role as unknown as string) !== 'owner') {
       updates.subscription = null; // Remove individual subscription - will inherit organization's
       updates.usage = null; // Remove individual usage tracking - will use organization's
     }
@@ -681,7 +682,7 @@ export async function getPendingInvitations(): Promise<{
 
     return {
       success: true,
-      data: serializedInvitations
+      data: serializedInvitations as unknown as InvitationToken[]
     };
   } catch (error) {
     console.error('Error fetching pending invitations:', error);

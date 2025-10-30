@@ -1,3 +1,4 @@
+import { OrganizationMember } from '@/models/Organization';
 // Approval Workflow Types
 export interface ApprovalSettings {
   // Main approval toggle

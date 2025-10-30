@@ -278,11 +278,20 @@ export async function POST(request: NextRequest) {
                              workflow.status === 'rejected' ? 'rejected' : 
                              'pending_approval';
         
+        // Check if the payable is actually paid (this would come from payment processing)
+        const payable = workflow.billId ? await db.collection('payables').findOne({
+          _id: new ObjectId(workflow.billId)
+        }) : await db.collection('payables').findOne({
+          approvalWorkflowId: workflow._id
+        });
+        
+        const actualPayableStatus = payable?.status || payableStatus;
+        
         console.log('🔍 [Approval] Attempting to update payable:', {
           workflowId,
           workflowBillId: workflow.billId,
           workflowBillIdType: typeof workflow.billId,
-          payableStatus
+          payableStatus: actualPayableStatus
         });
 
         let payableUpdate = { modifiedCount: 0 };
@@ -336,7 +345,7 @@ export async function POST(request: NextRequest) {
           workflowId,
           billId: workflow.billId,
           workflowStatus: workflow.status,
-          payableStatus,
+          payableStatus: actualPayableStatus,
           updated: payableUpdate.modifiedCount > 0
         });
 
@@ -354,7 +363,7 @@ export async function POST(request: NextRequest) {
           }
           
           // Two-way sync: if payable is paid, mark related invoice as paid
-          if (payableStatus === 'paid') {
+          if (actualPayableStatus === 'paid') {
             try {
               let payable;
               if (workflow.billId) {
@@ -409,8 +418,8 @@ export async function POST(request: NextRequest) {
 
           if (payable && payable.relatedInvoiceId) {
             try {
-              const { syncInvoiceStatusWithPayable } = await import('@/lib/actions/payableStatusSync');
-              await syncInvoiceStatusWithPayable(payable._id.toString(), workflow.status, comments);
+              const { syncInvoiceWhenPayablePaid } = await import('@/lib/actions/payableStatusSync');
+              await syncInvoiceWhenPayablePaid(payable._id.toString());
               console.log('✅ [Approval] Invoice status synced for payable:', workflow.status);
             } catch (syncError) {
               console.error('Failed to sync invoice status:', syncError);

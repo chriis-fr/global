@@ -73,9 +73,9 @@ export async function POST(request: NextRequest) {
     const profilePhotoUrl = `/uploads/profile-photos/${fileName}`;
 
     // Remove old profile photo if it exists
-    if (user.profilePicture && user.profilePicture.startsWith('/uploads/profile-photos/')) {
+    if (user.avatar && user.avatar.startsWith('/uploads/profile-photos/')) {
       try {
-        const oldFilePath = join(process.cwd(), 'public', user.profilePicture);
+        const oldFilePath = join(process.cwd(), 'public', user.avatar);
         if (existsSync(oldFilePath)) {
           await unlink(oldFilePath);
         }
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
 
     // Update user record
     await UserService.updateUser(user._id!.toString(), {
-      profilePicture: profilePhotoUrl
+      avatar: profilePhotoUrl
     });
 
     return NextResponse.json({
@@ -132,9 +132,9 @@ export async function DELETE() {
     }
 
     // Remove profile photo file if it exists
-    if (user.profilePicture && user.profilePicture.startsWith('/uploads/profile-photos/')) {
+    if (user.avatar && user.avatar.startsWith('/uploads/profile-photos/')) {
       try {
-        const filePath = join(process.cwd(), 'public', user.profilePicture);
+        const filePath = join(process.cwd(), 'public', user.avatar);
         if (existsSync(filePath)) {
           await unlink(filePath);
         }
@@ -145,7 +145,7 @@ export async function DELETE() {
 
     // Update user record to remove profile photo
     await UserService.updateUser(user._id!.toString(), {
-      profilePicture: undefined
+      avatar: undefined
     });
 
     return NextResponse.json({

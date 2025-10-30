@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { UserService } from '@/lib/services/userService';
-import { SERVICE_DEFINITIONS, ServiceKey, enableService, disableService, getEnabledServices } from '@/lib/services/serviceManager';
+import { SERVICE_DEFINITIONS, ServiceKey, enableService, disableService, getEnabledServices, createDefaultServices } from '@/lib/services/serviceManager';
 
 // GET /api/services - Get all available services
 export async function GET() {
@@ -75,9 +75,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Update services
+    const currentServices = user.services ? { ...createDefaultServices(), ...user.services } : createDefaultServices();
     const updatedServices = action === 'enable' 
-      ? enableService(user.services, serviceKey as ServiceKey)
-      : disableService(user.services, serviceKey as ServiceKey);
+      ? enableService(currentServices, serviceKey as ServiceKey)
+      : disableService(currentServices, serviceKey as ServiceKey);
 
     // Update user
     const updatedUser = await UserService.updateUser(userId, { services: updatedServices });
@@ -92,7 +93,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const enabledServices = getEnabledServices(updatedUser.services);
+    const enabledServices = getEnabledServices(updatedUser.services ? { ...createDefaultServices(), ...updatedUser.services } : createDefaultServices());
     
     return NextResponse.json({
       success: true,

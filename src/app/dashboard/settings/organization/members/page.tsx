@@ -4,27 +4,23 @@ import { Users, Plus, Mail, Clock, Shield } from 'lucide-react';
 import DashboardFloatingButton from '@/components/DashboardFloatingButton';
 import RoleSelector from '@/components/organization/RoleSelector';
 import MemberCard from '@/components/organization/MemberCard';
+import { type OrganizationMember } from '@/models/Organization';
 import { getOrganizationData, getOrganizationMembers } from '@/lib/actions/organization';
 import { sendInvitation, getPendingInvitations, resendInvitation, deleteInvitation } from '@/lib/actions/invitation';
 import { type RoleKey } from '@/lib/utils/roles';
 
 interface OrganizationInfo {
-  userType: 'individual' | 'business';
+  userType: string;
   hasOrganization: boolean;
-  organization?: {
-    _id: string;
-    name: string;
-    type: string;
-    [key: string]: unknown;
-  };
+  organization?: Record<string, unknown>;
   userRole?: string;
   userPermissions?: Record<string, unknown>;
 }
 
 export default function OrganizationMembersPage() {
   const [orgInfo, setOrgInfo] = useState<OrganizationInfo | null>(null);
-  const [members, setMembers] = useState<Record<string, unknown>[]>([]);
-  const [pendingInvitations, setPendingInvitations] = useState<Record<string, unknown>[]>([]);
+  const [members, setMembers] = useState<unknown[]>([]);
+  const [pendingInvitations, setPendingInvitations] = useState<unknown[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -43,7 +39,7 @@ export default function OrganizationMembersPage() {
       const result = await getOrganizationData();
       
       if (result.success && result.data) {
-        setOrgInfo(result.data);
+        setOrgInfo(result.data as unknown as OrganizationInfo);
         if (result.data.hasOrganization) {
           await fetchMembers();
           await fetchPendingInvitations();
@@ -404,19 +400,21 @@ export default function OrganizationMembersPage() {
                <span>Pending Invitations</span>
              </h2>
              
-             <div className="space-y-3">
-               {pendingInvitations.map((invitation) => (
-                 <div key={invitation._id} className="flex items-center justify-between p-4 bg-white/5 rounded-lg">
+            <div className="space-y-3">
+              {(pendingInvitations as Array<Record<string, unknown>>).map((invitation) => {
+                const inv = invitation as { _id: string; email?: string; role?: string; expiresAt?: string };
+                return (
+                <div key={inv._id} className="flex items-center justify-between p-4 bg-white/5 rounded-lg">
                    <div className="flex items-center space-x-3">
                      <div className="w-10 h-10 bg-orange-600 rounded-full flex items-center justify-center">
                        <Mail className="h-5 w-5 text-white" />
                      </div>
                      <div>
-                       <h3 className="text-white font-medium">{invitation.email}</h3>
-                       <p className="text-blue-200 text-sm">Invited as {invitation.role}</p>
+                      <h3 className="text-white font-medium">{inv.email}</h3>
+                      <p className="text-blue-200 text-sm">Invited as {inv.role}</p>
                        <div className="flex items-center space-x-1 text-gray-400 text-xs mt-1">
                          <Clock className="h-3 w-3" />
-                         <span>Expires {new Date(invitation.expiresAt).toLocaleDateString()}</span>
+                        <span>Expires {inv.expiresAt ? new Date(inv.expiresAt).toLocaleDateString() : ''}</span>
                        </div>
                      </div>
                    </div>
@@ -427,11 +425,11 @@ export default function OrganizationMembersPage() {
                      </div>
                      
                      <button
-                       onClick={() => handleResendInvitation(invitation._id)}
-                       disabled={resending === invitation._id}
+                      onClick={() => handleResendInvitation(inv._id)}
+                      disabled={resending === inv._id}
                        className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-1 disabled:opacity-50 text-sm"
                      >
-                       {resending === invitation._id ? (
+                      {resending === inv._id ? (
                          <>
                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
                            <span>Resending...</span>
@@ -445,11 +443,11 @@ export default function OrganizationMembersPage() {
                      </button>
                      
                      <button
-                       onClick={() => handleDeleteInvitation(invitation._id)}
-                       disabled={deleting === invitation._id}
+                      onClick={() => handleDeleteInvitation(inv._id)}
+                      disabled={deleting === inv._id}
                        className="px-3 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center space-x-1 disabled:opacity-50 text-sm"
                      >
-                       {deleting === invitation._id ? (
+                      {deleting === inv._id ? (
                          <>
                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
                            <span>Deleting...</span>
@@ -462,8 +460,9 @@ export default function OrganizationMembersPage() {
                        )}
                      </button>
                    </div>
-                 </div>
-               ))}
+                </div>
+                );
+              })}
              </div>
            </div>
          )}
@@ -479,10 +478,12 @@ export default function OrganizationMembersPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {members.map((member) => (
+              {(members as Array<Record<string, unknown>>).map((m) => {
+                const member = m as { userId: string } & Record<string, unknown>;
+                return (
                 <MemberCard
                   key={member.userId}
-                  member={member}
+                  member={member as unknown as OrganizationMember}
                   currentUserRole={orgInfo?.userRole || 'member'}
                   onEditRole={(userId, newRole) => {
                     setEditingMember({ userId, role: newRole });
@@ -492,7 +493,8 @@ export default function OrganizationMembersPage() {
                   isEditing={editingMember?.userId === member.userId}
                   isUpdating={updating}
                 />
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

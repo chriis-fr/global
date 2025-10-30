@@ -278,7 +278,7 @@ export default function InvoicesPage() {
           `"${itemsDescription}"`,
           `"${totalQuantity}"`,
           `"${invoice.subtotal?.toFixed(2) || '0.00'}"`,
-          `"${invoice.taxes?.reduce((sum: number, tax: { amount?: number }) => sum + (tax.amount || 0), 0).toFixed(2) || '0.00'}"`,
+          `"${(Array.isArray(invoice.taxes) ? invoice.taxes.reduce((sum: number, tax: { amount?: number }) => sum + (tax.amount || 0), 0) : 0).toFixed(2)}"`,
           `"${invoice.totalAmount?.toFixed(2) || '0.00'}"`,
           `"${invoice.currency || 'N/A'}"`,
           `"${paymentMethod}"`,

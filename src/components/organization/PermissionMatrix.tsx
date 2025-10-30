@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { ChevronDown, ChevronRight, Shield, DollarSign, Users, Settings, FileText, CheckCircle, XCircle } from 'lucide-react';
-import { PermissionSet, type RoleKey } from '@/models/Organization';
-import { REQUEST_FINANCE_ROLES } from '@/lib/utils/roles';
+import { PermissionSet } from '@/models/Organization';
+import { REQUEST_FINANCE_ROLES, type RoleKey } from '@/lib/utils/roles';
 
 interface PermissionMatrixProps {
   role: RoleKey;

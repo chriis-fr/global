@@ -156,7 +156,7 @@ export function PendingApprovalsList({ onApprovalDecision }: PendingApprovalsLis
           </div>
         </div>
         <button
-          onClick={fetchPendingApprovals}
+          onClick={() => fetchPendingApprovals()}
           className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
         >
           Retry

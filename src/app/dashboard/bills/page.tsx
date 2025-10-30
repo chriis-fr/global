@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, FileText, Calendar, Eye, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { BillCreationForm } from '@/components/approval/BillCreationForm';
-import { ApprovalWorkflow } from '@/components/approval/ApprovalWorkflow';
+import { ApprovalWorkflow as ApprovalWorkflowComponent } from '@/components/approval/ApprovalWorkflow';
+import { ApprovalWorkflow as ApprovalWorkflowType } from '@/types/approval';
 import DashboardFloatingButton from '@/components/DashboardFloatingButton';
 import { BillCreationGuard } from '@/components/PermissionGuard';
 import { usePermissions } from '@/lib/contexts/PermissionContext';
@@ -19,15 +20,7 @@ interface Bill {
   approvalStatus: 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'paid' | 'cancelled';
   paymentStatus: 'pending' | 'scheduled' | 'completed' | 'failed';
   createdAt: string;
-  approvalWorkflow?: {
-    steps: Array<{
-      stepNumber: number;
-      approverId: string;
-      approverEmail: string;
-      approverRole: string;
-      decision: string;
-    }>;
-  };
+  approvalWorkflow?: ApprovalWorkflowType;
 }
 
 export default function BillsPage() {
@@ -146,7 +139,7 @@ export default function BillsPage() {
           <span>← Back to Bills</span>
         </button>
         {selectedBill.approvalWorkflow && (
-          <ApprovalWorkflow
+          <ApprovalWorkflowComponent
             workflow={selectedBill.approvalWorkflow}
             canApprove={permissions.canApproveBills}
           />

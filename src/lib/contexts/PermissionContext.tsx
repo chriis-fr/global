@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useRef, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
-import { OrganizationMember } from '@/types/organization';
+import { OrganizationMember } from '@/models/Organization';
 
 interface PermissionContextType {
   permissions: {

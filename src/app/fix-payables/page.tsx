@@ -5,7 +5,7 @@ import { CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 
 export default function FixPayablesPage() {
   const [isRunning, setIsRunning] = useState(false);
-  const [result, setResult] = useState<unknown>(null);
+  const [result, setResult] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const runFix = async () => {
@@ -82,22 +82,22 @@ export default function FixPayablesPage() {
             </div>
           )}
 
-          {result && (
+          {result && (() => { const r = result as { data: { fixedWorkflows: number; updatedPayables: number; syncedInvoices: number; syncedToLedger: number; syncedInvoicesToPaid: number; totalWorkflows: number } }; return (
             <div className="mt-4 p-4 bg-green-900/20 border border-green-500/30 rounded-lg">
               <div className="flex items-center space-x-2 mb-2">
                 <CheckCircle className="h-4 w-4 text-green-400" />
                 <span className="text-green-300 font-semibold">Fix completed successfully!</span>
               </div>
               <div className="text-sm text-green-200 space-y-1 ml-6">
-                <p>• Fixed {result.data.fixedWorkflows} workflows with null billId</p>
-                <p>• Updated {result.data.updatedPayables} payable statuses</p>
-                <p>• Synced {result.data.syncedInvoices} invoice statuses</p>
-                <p>• Synced {result.data.syncedToLedger} payables to financial ledger</p>
-                <p>• Synced {result.data.syncedInvoicesToPaid} invoices to paid status</p>
-                <p>• Total workflows processed: {result.data.totalWorkflows}</p>
+                <p>• Fixed {r.data.fixedWorkflows} workflows with null billId</p>
+                <p>• Updated {r.data.updatedPayables} payable statuses</p>
+                <p>• Synced {r.data.syncedInvoices} invoice statuses</p>
+                <p>• Synced {r.data.syncedToLedger} payables to financial ledger</p>
+                <p>• Synced {r.data.syncedInvoicesToPaid} invoices to paid status</p>
+                <p>• Total workflows processed: {r.data.totalWorkflows}</p>
               </div>
             </div>
-          )}
+          ); })()}
         </div>
       </div>
     </div>

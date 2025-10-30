@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+import { motion, type Variants } from "framer-motion";
 
 const variants = {
   initial: {
@@ -15,7 +15,7 @@ const variants = {
       ease: "circIn",
     },
   },
-};
+} as unknown as Variants;
 
 const BarLoader = () => {
   return (

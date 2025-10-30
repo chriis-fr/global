@@ -5,7 +5,7 @@ import { usePermissions } from '@/lib/contexts/PermissionContext';
 
 interface PermissionGuardProps {
   children: ReactNode;
-  permission: keyof ReturnType<typeof usePermissions>['permissions'];
+  permission?: keyof ReturnType<typeof usePermissions>['permissions'];
   fallback?: ReactNode;
   requireAll?: boolean; // If true, requires ALL permissions to be true
   permissions?: Array<keyof ReturnType<typeof usePermissions>['permissions']>;

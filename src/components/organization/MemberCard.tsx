@@ -92,9 +92,9 @@ export default function MemberCard({
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-3">
           <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
-            {member.profilePicture ? (
+            {(member as unknown as { avatar?: string }).avatar ? (
               <Image 
-                src={member.profilePicture} 
+                src={(member as unknown as { avatar?: string }).avatar as string} 
                 alt={member.name}
                 width={40}
                 height={40}

@@ -99,7 +99,7 @@ export async function getPayablesList(
 
     // Build query - Organization members should always see organization's payables
     const isOrganization = !!session.user.organizationId;
-    let query = isOrganization 
+    let query: Record<string, unknown> = isOrganization 
       ? { 
           $or: [
             { organizationId: session.user.organizationId },
@@ -115,7 +115,7 @@ export async function getPayablesList(
 
     // Add status filter
     if (status) {
-      query = { ...query, status } as typeof query & { status: string };
+      query = { ...query, status };
     }
 
     // Add search filter
@@ -126,7 +126,7 @@ export async function getPayablesList(
           { payableNumber: { $regex: searchQuery, $options: 'i' } },
           { vendorName: { $regex: searchQuery, $options: 'i' } }
         ]
-      } as typeof query & { $or: Array<Record<string, unknown>> };
+      } as Record<string, unknown>;
     }
 
     // Get total count

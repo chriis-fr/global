@@ -5,8 +5,14 @@ import { AlertCircle, Loader2 } from 'lucide-react';
 
 export default function DebugLedgerPage() {
   const [isLoading, setIsLoading] = useState(false);
-  const [data, setData] = useState<unknown>(null);
+  const [data, setData] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const d = data as unknown as {
+    user?: { id: string; email: string; organizationId?: string };
+    organization?: { _id: string; name: string; billingEmail?: string };
+    ledgerEntries?: Array<{ type: string; status: string; amount: number; organizationId?: string; ownerId?: string; relatedPayableId?: string }>;
+    payables?: Array<{ payableNumber?: string; status: string; amount: number; organizationId?: string; ledgerEntryId?: string; relatedInvoiceId?: string }>;
+  };
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -73,27 +79,27 @@ export default function DebugLedgerPage() {
               <div className="p-4 bg-green-900/20 border border-green-500/30 rounded-lg">
                 <h3 className="text-green-300 font-semibold mb-2">User Info</h3>
                 <div className="text-sm text-green-200 space-y-1">
-                  <p>ID: {data.user.id}</p>
-                  <p>Email: {data.user.email}</p>
-                  <p>Organization ID: {data.user.organizationId || 'None'}</p>
+                  <p>ID: {d.user?.id}</p>
+                  <p>Email: {d.user?.email}</p>
+                  <p>Organization ID: {d.user?.organizationId || 'None'}</p>
                 </div>
               </div>
 
-              {data.organization && (
+              {d.organization && (
                 <div className="p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg">
                   <h3 className="text-blue-300 font-semibold mb-2">Organization Info</h3>
                   <div className="text-sm text-blue-200 space-y-1">
-                    <p>ID: {data.organization._id}</p>
-                    <p>Name: {data.organization.name}</p>
-                    <p>Billing Email: {data.organization.billingEmail}</p>
+                    <p>ID: {d.organization._id}</p>
+                    <p>Name: {d.organization.name}</p>
+                    <p>Billing Email: {d.organization.billingEmail}</p>
                   </div>
                 </div>
               )}
 
               <div className="p-4 bg-purple-900/20 border border-purple-500/30 rounded-lg">
-                <h3 className="text-purple-300 font-semibold mb-2">Ledger Entries ({data.ledgerEntries.length})</h3>
+                <h3 className="text-purple-300 font-semibold mb-2">Ledger Entries ({d.ledgerEntries?.length || 0})</h3>
                 <div className="text-sm text-purple-200 space-y-1 max-h-60 overflow-y-auto">
-                  {data.ledgerEntries.map((entry: { type: string; status: string; amount: number; organizationId?: string; ownerId?: string; relatedPayableId?: string }, index: number) => (
+                  {d.ledgerEntries?.map((entry: { type: string; status: string; amount: number; organizationId?: string; ownerId?: string; relatedPayableId?: string }, index: number) => (
                     <div key={index} className="border-b border-purple-700/30 pb-2 mb-2">
                       <p>Type: {entry.type} | Status: {entry.status} | Amount: {entry.amount}</p>
                       <p>Org ID: {entry.organizationId || 'None'} | Owner ID: {entry.ownerId || 'None'}</p>
@@ -104,9 +110,9 @@ export default function DebugLedgerPage() {
               </div>
 
               <div className="p-4 bg-yellow-900/20 border border-yellow-500/30 rounded-lg">
-                <h3 className="text-yellow-300 font-semibold mb-2">Payables ({data.payables.length})</h3>
+                <h3 className="text-yellow-300 font-semibold mb-2">Payables ({d.payables?.length || 0})</h3>
                 <div className="text-sm text-yellow-200 space-y-1 max-h-60 overflow-y-auto">
-                  {data.payables.map((payable: { payableNumber?: string; status: string; amount: number; organizationId?: string; ledgerEntryId?: string; relatedInvoiceId?: string }, index: number) => (
+                  {d.payables?.map((payable: { payableNumber?: string; status: string; amount: number; organizationId?: string; ledgerEntryId?: string; relatedInvoiceId?: string }, index: number) => (
                     <div key={index} className="border-b border-yellow-700/30 pb-2 mb-2">
                       <p>Number: {payable.payableNumber || 'N/A'} | Status: {payable.status} | Amount: {payable.amount}</p>
                       <p>Org ID: {payable.organizationId || 'None'} | Ledger Entry: {payable.ledgerEntryId || 'None'}</p>

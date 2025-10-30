@@ -297,7 +297,7 @@ function AuthContent() {
     console.log('🚀 [Auth] Form submitted, mode:', isLogin ? 'login' : 'signup')
     console.log('📋 [Auth] Form data:', {
       email: formData.email,
-      name: formData.name,
+      name: formData.fullName,
       userType: formData.userType,
       hasPassword: !!formData.password,
       hasAddress: !!formData.address
@@ -349,7 +349,7 @@ function AuthContent() {
         }
         
         // Check if this is an organization invitation
-        const isInvitationSignup = !!localStorage.getItem('invitationData')
+        const isInvitationSignup = !!!!localStorage.getItem('invitationData')
         
         const signupData = {
           email: formData.email,
@@ -408,7 +408,7 @@ function AuthContent() {
                 // Fallback: store user data and redirect anyway
                 localStorage.setItem('user', JSON.stringify(data.data))
                 // If this was an organization invitation, go to dashboard
-                if (localStorage.getItem('invitationData')) {
+                if (!!localStorage.getItem('invitationData')) {
                   window.location.href = '/dashboard'
                 } else {
                   window.location.href = '/onboarding'
@@ -507,7 +507,7 @@ function AuthContent() {
               console.error('❌ [Auth] Error during automatic login:', loginError)
               // Fallback: store user data and redirect anyway
               localStorage.setItem('user', JSON.stringify(data.data))
-              if (localStorage.getItem('invitationData')) {
+              if (!!localStorage.getItem('invitationData')) {
                 window.location.href = '/dashboard'
               } else {
                 window.location.href = '/onboarding'
@@ -517,7 +517,7 @@ function AuthContent() {
             // Fallback if no autoLogin data
             console.log('⚠️ [Auth] No autoLogin data, using fallback...')
             localStorage.setItem('user', JSON.stringify(data.data))
-            if (localStorage.getItem('invitationData')) {
+            if (!!localStorage.getItem('invitationData')) {
               window.location.href = '/dashboard'
             } else {
               // Try org-based routing
@@ -620,7 +620,7 @@ function AuthContent() {
           )}
 
           {/* Organization Invitation Notice */}
-          {isEmailLocked && localStorage.getItem('invitationData') && (
+          {isEmailLocked && !!localStorage.getItem('invitationData') && (
             <div className="mb-6 p-4 bg-green-900/20 border border-green-500/30 rounded-lg">
               <div className="flex items-center space-x-2 mb-2">
                 <UserCheck className="h-5 w-5 text-green-400" />
@@ -648,7 +648,7 @@ function AuthContent() {
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-blue-100">
                       Account Type
-                      {isEmailLocked && localStorage.getItem('invitationData') && (
+                      {isEmailLocked && !!localStorage.getItem('invitationData') && (
                         <span className="ml-2 text-xs text-green-300 bg-green-900/30 px-2 py-1 rounded">
                           Business Only
                         </span>
@@ -658,11 +658,11 @@ function AuthContent() {
                       <button
                         type="button"
                         onClick={() => setFormData(prev => ({ ...prev, userType: 'individual' }))}
-                        disabled={isEmailLocked && localStorage.getItem('invitationData')} // Disable for organization invitations
+                        disabled={isEmailLocked && !!!!localStorage.getItem('invitationData')} // Disable for organization invitations
                         className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
                           formData.userType === 'individual'
                             ? 'bg-blue-600 text-white'
-                            : isEmailLocked && localStorage.getItem('invitationData')
+                            : isEmailLocked && !!!!localStorage.getItem('invitationData')
                             ? 'bg-white/5 text-blue-300 cursor-not-allowed'
                             : 'bg-white/10 text-blue-200 hover:bg-white/20'
                         }`}
@@ -716,9 +716,9 @@ function AuthContent() {
                           name="companyName"
                           value={formData.companyName}
                           onChange={handleInputChange}
-                          disabled={isEmailLocked && localStorage.getItem('invitationData')} // Disable for organization invitations
+                          disabled={isEmailLocked && !!localStorage.getItem('invitationData')} // Disable for organization invitations
                           className={`w-full pl-10 pr-4 py-3 border rounded-lg text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                            isEmailLocked && localStorage.getItem('invitationData')
+                            isEmailLocked && !!localStorage.getItem('invitationData')
                               ? 'bg-white/5 border-white/10 text-blue-200 cursor-not-allowed' 
                               : 'bg-white/10 border-white/20'
                           }`}
@@ -818,9 +818,9 @@ function AuthContent() {
                         <button
                           type="button"
                           onClick={() => setShowIndustryDropdown(!showIndustryDropdown)}
-                          disabled={isEmailLocked && localStorage.getItem('invitationData')} // Disable for organization invitations
+                          disabled={isEmailLocked && !!localStorage.getItem('invitationData')} // Disable for organization invitations
                           className={`w-full pl-10 pr-10 py-3 border rounded-lg text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-left flex items-center justify-between ${
-                            isEmailLocked && localStorage.getItem('invitationData')
+                            isEmailLocked && !!localStorage.getItem('invitationData')
                               ? 'bg-white/5 border-white/10 text-blue-200 cursor-not-allowed' 
                               : 'bg-white/10 border-white/20'
                           }`}
@@ -973,7 +973,7 @@ function AuthContent() {
                     Locked to invoice recipient
                   </span>
                 )}
-                {isEmailLocked && localStorage.getItem('invitationData') && (
+                {isEmailLocked && !!localStorage.getItem('invitationData') && (
                   <span className="ml-2 text-xs text-green-300 bg-green-900/30 px-2 py-1 rounded">
                     From invitation
                   </span>
@@ -994,7 +994,7 @@ function AuthContent() {
                   placeholder={
                     isEmailLocked && searchParams.get('invoiceToken') 
                       ? "Email locked to invoice recipient" 
-                      : isEmailLocked && localStorage.getItem('invitationData')
+                      : isEmailLocked && !!localStorage.getItem('invitationData')
                       ? "Email from invitation"
                       : "Enter your email"
                   }

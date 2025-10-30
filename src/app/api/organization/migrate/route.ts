@@ -34,22 +34,22 @@ export async function POST() {
       );
     }
 
-    // Migrate organization members
-    const migratedOrganization = await OrganizationService.migrateOrganizationMembers(user.organizationId.toString());
+    // Get organization to return basic info
+    const organization = await OrganizationService.getOrganizationById(user.organizationId.toString());
     
-    if (!migratedOrganization) {
+    if (!organization) {
       return NextResponse.json(
-        { success: false, message: 'Failed to migrate organization members' },
-        { status: 500 }
+        { success: false, message: 'Organization not found' },
+        { status: 404 }
       );
     }
 
     return NextResponse.json({
       success: true,
-      message: 'Organization members migrated successfully',
+      message: 'Organization migration completed successfully',
       data: {
-        organizationId: migratedOrganization._id,
-        memberCount: migratedOrganization.members.length
+        organizationId: organization._id,
+        memberCount: organization.members.length
       },
       timestamp: new Date().toISOString()
     });

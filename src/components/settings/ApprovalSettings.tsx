@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Settings, DollarSign, Users, Mail, Save, AlertCircle, ChevronDown, X } from 'lucide-react';
 import { ApprovalSettings } from '@/types/approval';
 import { SettingsGuard } from '@/components/PermissionGuard';
-import { OrganizationMember } from '@/types/organization';
+import { OrganizationMember } from '@/models/Organization';
 
 interface ApprovalSettingsProps {
   onSave?: (settings: ApprovalSettings) => void;
@@ -144,13 +144,13 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
     setSettings(prev => {
       const newSettings = { ...prev };
       const keys = path.split('.');
-      let current = newSettings;
+      let current = newSettings as unknown as Record<string, unknown>;
       
       for (let i = 0; i < keys.length - 1; i++) {
-        current = current[keys[i]];
+        current = current[keys[i]] as Record<string, unknown>;
       }
       
-      current[keys[keys.length - 1]] = value;
+      (current as Record<string, unknown>)[keys[keys.length - 1]] = value as unknown;
       return newSettings;
     });
   };
@@ -227,7 +227,7 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
         ...prev,
         emailSettings: {
           ...prev.emailSettings,
-          primaryEmail: organizationData.billingEmail
+          primaryEmail: String(organizationData.billingEmail)
         }
       }));
     }
@@ -584,10 +584,10 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
                   <div className="relative">
                     <input
                       type="email"
-                      value={settings.emailSettings.primaryEmail || organizationData?.billingEmail || ''}
+                      value={settings.emailSettings.primaryEmail || String(organizationData?.billingEmail || '')}
                       readOnly
                       className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white cursor-not-allowed"
-                      placeholder={organizationData?.billingEmail || "Loading organization email..."}
+                      placeholder={String(organizationData?.billingEmail || "Loading organization email...")}
                     />
                     <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
                       <span className="text-blue-400 text-xs bg-blue-600/20 px-2 py-1 rounded">

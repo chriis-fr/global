@@ -6,7 +6,6 @@ export * from './Invoice';
 export * from './Payment';
 export * from './Expense';
 export * from './Transaction';
-export * from './AuditLog';
 
 // Re-export common types
 export type { Address } from './Organization';

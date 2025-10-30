@@ -212,6 +212,16 @@ export interface UpdateUserInput {
   address?: Address;
   taxId?: string;
   settings?: Partial<UserSettings>;
+  preferences?: {
+    currency?: string;
+    timezone?: string;
+    notifications?: {
+      email?: boolean;
+      push?: boolean;
+      invoiceReminders?: boolean;
+      paymentNotifications?: boolean;
+    };
+  };
   services?: Partial<UserServices>;
   onboarding?: {
     completed?: boolean;

@@ -107,9 +107,9 @@ export async function getOrganizationData(): Promise<{
         return {
           success: true,
           data: {
-            userType: user.userType,
+            userType: user.organizationId ? 'business' : 'individual',
             hasOrganization: true,
-            organization: organizationData,
+            organization: organizationData as unknown as Organization,
             userRole,
             userPermissions
           }
@@ -121,7 +121,7 @@ export async function getOrganizationData(): Promise<{
     return {
       success: true,
       data: {
-        userType: user.userType,
+        userType: user.organizationId ? 'business' : 'individual',
         hasOrganization: false,
         organization: undefined,
         userRole: undefined,
@@ -288,12 +288,12 @@ export async function updateOrganization(updateData: UpdateOrganizationInput): P
     // Update organization
     const updatedOrg = await db.collection<Organization>('organizations').findOneAndUpdate(
       { _id: new ObjectId(user.organizationId.toString()) },
-      { 
+      ({ 
         $set: {
           ...updateData,
           updatedAt: new Date()
         }
-      },
+      } as unknown as import('mongodb').UpdateFilter<Organization>),
       { returnDocument: 'after' }
     );
 
@@ -358,7 +358,7 @@ export async function getOrganizationMembers(): Promise<{
 
     return {
       success: true,
-      data: serializedMembers
+      data: serializedMembers as unknown as OrganizationMember[]
     };
   } catch (error) {
     console.error('Error fetching organization members:', error);

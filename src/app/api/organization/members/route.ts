@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { OrganizationService } from '@/lib/services/organizationService';
 import { UserService } from '@/lib/services/userService';
-import { OrganizationMember } from '@/models';
+import { OrganizationMember, PermissionSet } from '@/models';
 
 // GET /api/organization/members - Get organization members
 export async function GET() {
@@ -105,7 +105,7 @@ export async function GET() {
           role: member.role,
           name: member.name || memberUser?.name || 'Unknown User',
           email: member.email || memberUser?.email || 'unknown@email.com',
-          profilePicture: memberUser?.profilePicture || memberUser?.avatar,
+          profilePicture: memberUser?.avatar,
           joinedAt: member.joinedAt ? new Date(member.joinedAt).toISOString() : new Date().toISOString(),
           lastActiveAt: member.lastActiveAt ? new Date(member.lastActiveAt).toISOString() : new Date().toISOString(),
           status: member.status || 'active',
@@ -207,7 +207,57 @@ export async function POST(request: NextRequest) {
     // Add member to organization
     const memberData: OrganizationMember = {
       userId: newMember._id!,
-      role
+      email: newMember.email,
+      name: newMember.name,
+      role: role as 'owner' | 'admin' | 'financeManager' | 'accountant' | 'approver',
+      permissions: {
+        // Treasury Control (Admin Only)
+        canAddPaymentMethods: role === 'admin',
+        canModifyPaymentMethods: role === 'admin',
+        canManageTreasury: role === 'admin',
+        
+        // Team Management (Admin Only)
+        canManageTeam: role === 'admin',
+        canInviteMembers: role === 'admin',
+        canRemoveMembers: role === 'admin',
+        
+        // Company Settings (Admin Only)
+        canManageCompanyInfo: role === 'admin',
+        canManageSettings: role === 'admin',
+        
+        // Invoice Management
+        canCreateInvoices: true,
+        canSendInvoices: true,
+        canManageInvoices: role === 'admin' || role === 'financeManager',
+        
+        // Payables Management
+        canCreateBills: true,
+        canApproveBills: role === 'admin' || role === 'approver',
+        canExecutePayments: role === 'admin' || role === 'financeManager',
+        canManagePayables: role === 'admin' || role === 'financeManager',
+        
+        // Accounting & Reporting
+        canViewAllData: role === 'admin' || role === 'financeManager' || role === 'accountant',
+        canExportData: role === 'admin' || role === 'financeManager' || role === 'accountant',
+        canReconcileTransactions: role === 'admin' || role === 'financeManager',
+        
+        // Financial Controls
+        canViewFinancials: role === 'admin' || role === 'financeManager' || role === 'accountant',
+        canManageBudgets: role === 'admin' || role === 'financeManager',
+        canApproveExpenses: role === 'admin' || role === 'approver',
+        
+        // System Access
+        canAccessReports: role === 'admin' || role === 'financeManager' || role === 'accountant',
+        canManageIntegrations: role === 'admin',
+        canViewAuditLogs: role === 'admin',
+        
+        // Additional required fields
+        canManageAccounting: role === 'admin' || role === 'financeManager' || role === 'accountant',
+        canApproveDocuments: role === 'admin' || role === 'approver',
+        canManageApprovalPolicies: role === 'admin'
+      } as PermissionSet,
+      status: 'active',
+      joinedAt: new Date()
     };
 
     const updatedOrganization = await OrganizationService.addMember(user.organizationId.toString(), memberData);
@@ -233,7 +283,7 @@ export async function POST(request: NextRequest) {
           role,
           name: newMember.name,
           email: newMember.email,
-          profilePicture: newMember.profilePicture || newMember.avatar
+          profilePicture: newMember.avatar
         }
       },
       message: 'Member added successfully',

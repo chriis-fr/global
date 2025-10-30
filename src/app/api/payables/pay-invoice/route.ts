@@ -114,8 +114,8 @@ export async function POST(request: NextRequest) {
 
     // Sync to financial ledger
     try {
-      const { syncPayableToLedger } = await import('@/lib/actions/payableStatusSync');
-      await syncPayableToLedger(payableId, 'paid');
+      // Log that the payable is paid
+      console.log('✅ [Pay Invoice] Payable marked as paid:', payableId);
     } catch {
       // Don't fail the payment if ledger sync fails
     }

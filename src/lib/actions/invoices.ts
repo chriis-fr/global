@@ -164,7 +164,7 @@ export async function getInvoicesList(
 
     // Build query - Organization members should always see organization's invoices
     const isOrganization = !!session.user.organizationId;
-    let query = isOrganization 
+    let query: Record<string, unknown> = isOrganization 
       ? { organizationId: session.user.organizationId }
       : { 
           $or: [
@@ -175,7 +175,7 @@ export async function getInvoicesList(
 
     // Add status filter
     if (status) {
-      query = { ...query, status } as typeof query & { status: string };
+      query = { ...query, status };
     }
 
     // Add search filter
@@ -187,7 +187,7 @@ export async function getInvoicesList(
           { 'clientDetails.name': { $regex: searchQuery, $options: 'i' } },
           { 'clientDetails.companyName': { $regex: searchQuery, $options: 'i' } }
         ]
-      } as typeof query & { $or: Array<Record<string, unknown>> };
+      } as Record<string, unknown>;
     }
 
     // Get total count
@@ -314,7 +314,7 @@ export async function getInvoicesListMinimal(
 
     // Build query - Organization members should always see organization's invoices
     const isOrganization = !!session.user.organizationId;
-    let query = isOrganization 
+    let query: Record<string, unknown> = isOrganization 
       ? { organizationId: session.user.organizationId }
       : {
           $or: [
@@ -341,7 +341,7 @@ export async function getInvoicesListMinimal(
           { 'clientDetails.email': searchRegex },
           { status: searchRegex }
         ]
-      };
+      } as Record<string, unknown>;
     }
 
     // Get total count
@@ -502,7 +502,7 @@ export async function getFullInvoicesForExport(
 
     // Build query - Organization members should always see organization's invoices
     const isOrganization = !!session.user.organizationId;
-    let query = isOrganization 
+    let query: Record<string, unknown> = isOrganization 
       ? { organizationId: session.user.organizationId }
       : {
           $or: [
@@ -529,7 +529,7 @@ export async function getFullInvoicesForExport(
           { 'clientDetails.email': searchRegex },
           { status: searchRegex }
         ]
-      };
+      } as Record<string, unknown>;
     }
 
     // Get ALL invoices with full data for export

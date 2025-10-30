@@ -25,6 +25,16 @@ export default function DashboardPage() {
   const [usingFallbackData, setUsingFallbackData] = useState(false);
   const [userName, setUserName] = useState<string>('');
   const [organizationName, setOrganizationName] = useState<string>('');
+  const [stats, setStats] = useState({
+    totalRevenue: 0,
+    totalExpenses: 0,
+    pendingInvoices: 0,
+    paidInvoices: 0,
+    totalClients: 0,
+    netBalance: 0,
+    totalPayables: 0,
+    overdueCount: 0
+  });
 
   // Fetch current user name and organization name
   useEffect(() => {
@@ -123,7 +133,7 @@ export default function DashboardPage() {
         
         setUsingFallbackData(true);
       } finally {
-        setLoading(false);
+        // Stats load independently; no global loading state here
       }
     };
 
