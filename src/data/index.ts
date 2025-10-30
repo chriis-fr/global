@@ -23,8 +23,7 @@ export const getBanksForCountry = async (countryCode: string): Promise<Bank[]> =
       default:
         return [];
     }
-  } catch (error) {
-    console.error(`Error loading banks for country ${countryCode}:`, error);
+  } catch {
     return [];
   }
 };

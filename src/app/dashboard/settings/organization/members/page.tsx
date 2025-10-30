@@ -1,55 +1,51 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { Users, Plus, Edit, Trash2, User, Shield, Crown } from 'lucide-react';
-import Image from 'next/image';
+import { Users, Plus, Mail, Clock, Shield } from 'lucide-react';
 import DashboardFloatingButton from '@/components/DashboardFloatingButton';
-
-interface Member {
-  userId: string;
-  role: string;
-  name: string;
-  email: string;
-  profilePicture?: string;
-}
+import RoleSelector from '@/components/organization/RoleSelector';
+import MemberCard from '@/components/organization/MemberCard';
+import { type OrganizationMember } from '@/models/Organization';
+import { getOrganizationData, getOrganizationMembers } from '@/lib/actions/organization';
+import { sendInvitation, getPendingInvitations, resendInvitation, deleteInvitation } from '@/lib/actions/invitation';
+import { type RoleKey } from '@/lib/utils/roles';
 
 interface OrganizationInfo {
-  userType: 'individual' | 'business';
+  userType: string;
   hasOrganization: boolean;
-  organization: {
-    _id: string;
-    name: string;
-    type: string;
-    [key: string]: unknown;
-  };
-  userRole: string | null;
+  organization?: Record<string, unknown>;
+  userRole?: string;
+  userPermissions?: Record<string, unknown>;
 }
 
 export default function OrganizationMembersPage() {
   const [orgInfo, setOrgInfo] = useState<OrganizationInfo | null>(null);
-  const [members, setMembers] = useState<Member[]>([]);
+  const [members, setMembers] = useState<unknown[]>([]);
+  const [pendingInvitations, setPendingInvitations] = useState<unknown[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [editingMember, setEditingMember] = useState<Member | null>(null);
+  const [editingMember, setEditingMember] = useState<{ userId: string; role: string } | null>(null);
   const [adding, setAdding] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [resending, setResending] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     email: '',
-    role: 'member'
+    role: 'financeManager' as RoleKey
   });
 
   const fetchOrganizationData = useCallback(async () => {
     try {
-      const response = await fetch('/api/organization');
-      const data = await response.json();
+      const result = await getOrganizationData();
       
-      if (data.success) {
-        setOrgInfo(data.data);
-        if (data.data.hasOrganization) {
+      if (result.success && result.data) {
+        setOrgInfo(result.data as unknown as OrganizationInfo);
+        if (result.data.hasOrganization) {
           await fetchMembers();
+          await fetchPendingInvitations();
         }
       } else {
-        setMessage({ type: 'error', text: 'Failed to load organization data' });
+        setMessage({ type: 'error', text: result.error || 'Failed to load organization data' });
       }
     } catch (error) {
       console.error('Error fetching organization data:', error);
@@ -65,17 +61,61 @@ export default function OrganizationMembersPage() {
 
   const fetchMembers = async () => {
     try {
-      const response = await fetch('/api/organization/members');
-      const data = await response.json();
+      const result = await getOrganizationMembers();
       
-      if (data.success) {
-        setMembers(data.data.members);
+      if (result.success && result.data) {
+        setMembers(result.data);
+        console.log('✅ [Members Page] Members loaded:', result.data.length);
       } else {
-        setMessage({ type: 'error', text: 'Failed to load members' });
+        console.error('❌ [Members Page] Failed to load members:', result.error);
+        setMessage({ type: 'error', text: result.error || 'Failed to load members' });
       }
     } catch (error) {
       console.error('Error fetching members:', error);
       setMessage({ type: 'error', text: 'Failed to load members' });
+    }
+  };
+
+  // MIGRATION FUNCTION - COMMENTED OUT (No longer needed)
+  // All existing organizations have been migrated, new organizations use proper structure
+  
+  // Force migration function
+  // const forceMigration = async () => {
+  //   try {
+  //     const response = await fetch('/api/organization/force-migrate', {
+  //       method: 'POST',
+  //       headers: {
+  //         'Content-Type': 'application/json',
+  //       },
+  //     });
+
+  //     const data = await response.json();
+
+  //     if (data.success) {
+  //       setMessage({ type: 'success', text: 'Migration completed successfully! Refreshing members...' });
+  //       await fetchMembers();
+  //     } else {
+  //       setMessage({ type: 'error', text: data.message || 'Failed to migrate organization' });
+  //     }
+  //   } catch (error) {
+  //     console.error('Error force migrating:', error);
+  //     setMessage({ type: 'error', text: 'Failed to migrate organization' });
+  //   }
+  // };
+
+  const fetchPendingInvitations = async () => {
+    try {
+      const result = await getPendingInvitations();
+      
+      if (result.success && result.data) {
+        setPendingInvitations(result.data);
+      } else {
+        console.warn('Failed to fetch pending invitations:', result.error);
+        // Don't show error to user, just log it
+      }
+    } catch (error) {
+      console.error('Error fetching pending invitations:', error);
+      // Don't show error to user, just log it
     }
   };
 
@@ -85,29 +125,29 @@ export default function OrganizationMembersPage() {
       return;
     }
 
+    console.log('📧 [Members Page] Starting invitation process...');
+    console.log('📧 [Members Page] Email:', formData.email);
+    console.log('📧 [Members Page] Role:', formData.role);
+
     setAdding(true);
     try {
-      const response = await fetch('/api/organization/members', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
+      console.log('📧 [Members Page] Calling sendInvitation server action...');
+      const result = await sendInvitation(formData.email, formData.role);
+      console.log('📧 [Members Page] Server action result:', result);
 
-      const data = await response.json();
-
-      if (data.success) {
-        setMessage({ type: 'success', text: 'Member added successfully!' });
+      if (result.success) {
+        console.log('✅ [Members Page] Invitation sent successfully');
+        setMessage({ type: 'success', text: `Invitation sent to ${formData.email}! They will receive an email with instructions to join.` });
         setShowAddForm(false);
-        setFormData({ email: '', role: 'member' });
-        await fetchMembers();
+        setFormData({ email: '', role: 'financeManager' });
+        await fetchPendingInvitations();
       } else {
-        setMessage({ type: 'error', text: data.message || 'Failed to add member' });
+        console.log('❌ [Members Page] Invitation failed:', result.error);
+        setMessage({ type: 'error', text: result.error || 'Failed to send invitation' });
       }
     } catch (error) {
-      console.error('Error adding member:', error);
-      setMessage({ type: 'error', text: 'Failed to add member. Please try again.' });
+      console.error('❌ [Members Page] Error sending invitation:', error);
+      setMessage({ type: 'error', text: 'Failed to send invitation. Please try again.' });
     } finally {
       setAdding(false);
     }
@@ -165,27 +205,47 @@ export default function OrganizationMembersPage() {
     }
   };
 
-  const getRoleIcon = (role: string) => {
-    switch (role) {
-      case 'owner':
-        return <Crown className="h-4 w-4 text-yellow-500" />;
-      case 'admin':
-        return <Shield className="h-4 w-4 text-blue-500" />;
-      default:
-        return <User className="h-4 w-4 text-gray-400" />;
+  const handleResendInvitation = async (invitationId: string) => {
+    setResending(invitationId);
+    try {
+      const result = await resendInvitation(invitationId);
+
+      if (result.success) {
+        setMessage({ type: 'success', text: 'Invitation resent successfully!' });
+      } else {
+        setMessage({ type: 'error', text: result.error || 'Failed to resend invitation' });
+      }
+    } catch (error) {
+      console.error('Error resending invitation:', error);
+      setMessage({ type: 'error', text: 'Failed to resend invitation. Please try again.' });
+    } finally {
+      setResending(null);
     }
   };
 
-  const getRoleBadgeColor = (role: string) => {
-    switch (role) {
-      case 'owner':
-        return 'bg-yellow-600/20 text-yellow-300 border-yellow-500/50';
-      case 'admin':
-        return 'bg-blue-600/20 text-blue-300 border-blue-500/50';
-      default:
-        return 'bg-gray-600/20 text-gray-300 border-gray-500/50';
+  const handleDeleteInvitation = async (invitationId: string) => {
+    if (!confirm('Are you sure you want to delete this invitation?')) {
+      return;
+    }
+
+    setDeleting(invitationId);
+    try {
+      const result = await deleteInvitation(invitationId);
+
+      if (result.success) {
+        setMessage({ type: 'success', text: 'Invitation deleted successfully!' });
+        await fetchPendingInvitations();
+      } else {
+        setMessage({ type: 'error', text: result.error || 'Failed to delete invitation' });
+      }
+    } catch (error) {
+      console.error('Error deleting invitation:', error);
+      setMessage({ type: 'error', text: 'Failed to delete invitation. Please try again.' });
+    } finally {
+      setDeleting(null);
     }
   };
+
 
   if (loading) {
     return (
@@ -247,86 +307,165 @@ export default function OrganizationMembersPage() {
       )}
 
       <div className="space-y-6">
-        {/* Add Member Section */}
-        {isAdmin && (
-          <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-white">Add New Member</h2>
-              {!showAddForm && (
-                <button
-                  onClick={() => setShowAddForm(true)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
-                >
-                  <Plus className="h-4 w-4" />
-                  <span>Add Member</span>
-                </button>
-              )}
-            </div>
+         {/* Add Member Section */}
+         {isAdmin && (
+           <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 relative z-10">
+             <div className="flex items-center justify-between mb-4">
+               <h2 className="text-xl font-semibold text-white">Add New Member</h2>
+               <div className="flex space-x-2">
+                 {/* MIGRATION BUTTON - COMMENTED OUT (No longer needed) */}
+                 {/* <button
+                   onClick={forceMigration}
+                   className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors flex items-center space-x-2"
+                 >
+                   <Shield className="h-4 w-4" />
+                   <span>Force Migration</span>
+                 </button> */}
+                 {!showAddForm && (
+                   <button
+                     onClick={() => setShowAddForm(true)}
+                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+                   >
+                     <Plus className="h-4 w-4" />
+                     <span>Add Member</span>
+                   </button>
+                 )}
+               </div>
+             </div>
 
-            {showAddForm && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-blue-300 text-sm font-medium mb-2">
-                      Email Address *
-                    </label>
-                    <input
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                      className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Enter member's email"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-blue-300 text-sm font-medium mb-2">
-                      Role *
-                    </label>
-                    <select
-                      value={formData.role}
-                      onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value }))}
-                      className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="member">Member</option>
-                      <option value="admin">Admin</option>
-                    </select>
-                  </div>
-                </div>
+             {showAddForm && (
+               <div className="space-y-4 relative z-20">
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   <div>
+                     <label className="block text-blue-300 text-sm font-medium mb-2">
+                       Email Address *
+                     </label>
+                     <input
+                       type="email"
+                       value={formData.email}
+                       onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                       className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                       placeholder="Enter member's email"
+                     />
+                   </div>
+                   
+                   <div className="relative z-30">
+                     <RoleSelector
+                       selectedRole={formData.role}
+                       onRoleChange={(role) => setFormData(prev => ({ ...prev, role }))}
+                       showPermissions={true}
+                     />
+                   </div>
+                 </div>
 
-                <div className="flex justify-end space-x-3">
-                  <button
-                    onClick={() => {
-                      setShowAddForm(false);
-                      setFormData({ email: '', role: 'member' });
-                    }}
-                    className="px-4 py-2 text-blue-300 hover:text-white transition-colors"
-                    disabled={adding}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleAddMember}
-                    disabled={adding}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 disabled:opacity-50"
-                  >
-                    {adding ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        <span>Adding...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Plus className="h-4 w-4" />
-                        <span>Add Member</span>
-                      </>
-                    )}
-                  </button>
+                 <div className="flex justify-end space-x-3">
+                   <button
+                     onClick={() => {
+                       setShowAddForm(false);
+                       setFormData({ email: '', role: 'financeManager' });
+                     }}
+                     className="px-4 py-2 text-blue-300 hover:text-white transition-colors"
+                     disabled={adding}
+                   >
+                     Cancel
+                   </button>
+                   <button
+                     onClick={handleAddMember}
+                     disabled={adding}
+                     className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 disabled:opacity-50"
+                   >
+                     {adding ? (
+                       <>
+                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                         <span>Sending...</span>
+                       </>
+                     ) : (
+                       <>
+                         <Plus className="h-4 w-4" />
+                         <span>Send Invitation</span>
+                       </>
+                     )}
+                   </button>
+                 </div>
+               </div>
+             )}
+           </div>
+         )}
+
+         {/* Pending Invitations */}
+         {pendingInvitations.length > 0 && (
+           <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
+             <h2 className="text-xl font-semibold text-white mb-6 flex items-center space-x-2">
+               <Mail className="h-5 w-5" />
+               <span>Pending Invitations</span>
+             </h2>
+             
+            <div className="space-y-3">
+              {(pendingInvitations as Array<Record<string, unknown>>).map((invitation) => {
+                const inv = invitation as { _id: string; email?: string; role?: string; expiresAt?: string };
+                return (
+                <div key={inv._id} className="flex items-center justify-between p-4 bg-white/5 rounded-lg">
+                   <div className="flex items-center space-x-3">
+                     <div className="w-10 h-10 bg-orange-600 rounded-full flex items-center justify-center">
+                       <Mail className="h-5 w-5 text-white" />
+                     </div>
+                     <div>
+                      <h3 className="text-white font-medium">{inv.email}</h3>
+                      <p className="text-blue-200 text-sm">Invited as {inv.role}</p>
+                       <div className="flex items-center space-x-1 text-gray-400 text-xs mt-1">
+                         <Clock className="h-3 w-3" />
+                        <span>Expires {inv.expiresAt ? new Date(inv.expiresAt).toLocaleDateString() : ''}</span>
+                       </div>
+                     </div>
+                   </div>
+                   
+                   <div className="flex items-center space-x-2">
+                     <div className="px-2 py-1 bg-orange-600/20 text-orange-300 border border-orange-500/50 rounded-full text-xs">
+                       Pending
+                     </div>
+                     
+                     <button
+                      onClick={() => handleResendInvitation(inv._id)}
+                      disabled={resending === inv._id}
+                       className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-1 disabled:opacity-50 text-sm"
+                     >
+                      {resending === inv._id ? (
+                         <>
+                           <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                           <span>Resending...</span>
+                         </>
+                       ) : (
+                         <>
+                           <Mail className="h-3 w-3" />
+                           <span>Resend</span>
+                         </>
+                       )}
+                     </button>
+                     
+                     <button
+                      onClick={() => handleDeleteInvitation(inv._id)}
+                      disabled={deleting === inv._id}
+                       className="px-3 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center space-x-1 disabled:opacity-50 text-sm"
+                     >
+                      {deleting === inv._id ? (
+                         <>
+                           <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                           <span>Deleting...</span>
+                         </>
+                       ) : (
+                         <>
+                           <Shield className="h-3 w-3" />
+                           <span>Delete</span>
+                         </>
+                       )}
+                     </button>
+                   </div>
                 </div>
-              </div>
-            )}
-          </div>
-        )}
+                );
+              })}
+             </div>
+           </div>
+         )}
 
         {/* Members List */}
         <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
@@ -339,83 +478,23 @@ export default function OrganizationMembersPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {members.map((member) => (
-                <div key={member.userId} className="flex items-center justify-between p-4 bg-white/5 rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
-                      {member.profilePicture ? (
-                        <Image 
-                          src={member.profilePicture} 
-                          alt={member.name}
-                          width={40}
-                          height={40}
-                          className="w-10 h-10 rounded-full object-cover"
-                        />
-                      ) : (
-                        <User className="h-5 w-5 text-white" />
-                      )}
-                    </div>
-                    <div>
-                      <h3 className="text-white font-medium">{member.name}</h3>
-                      <p className="text-blue-200 text-sm">{member.email}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center space-x-3">
-                    <div className={`px-3 py-1 rounded-full border text-sm flex items-center space-x-1 ${getRoleBadgeColor(member.role)}`}>
-                      {getRoleIcon(member.role)}
-                      <span className="capitalize">{member.role}</span>
-                    </div>
-                    
-                    {isAdmin && member.role !== 'owner' && (
-                      <div className="flex space-x-2">
-                        {editingMember?.userId === member.userId ? (
-                          <div className="flex items-center space-x-2">
-                            <select
-                              value={editingMember.role}
-                              onChange={(e) => setEditingMember(prev => prev ? { ...prev, role: e.target.value } : null)}
-                              className="px-2 py-1 bg-white/10 border border-white/20 rounded text-white text-sm"
-                            >
-                              <option value="member">Member</option>
-                              <option value="admin">Admin</option>
-                            </select>
-                            <button
-                              onClick={() => handleUpdateMemberRole(member.userId, editingMember.role)}
-                              disabled={updating}
-                              className="px-2 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:opacity-50"
-                            >
-                              Save
-                            </button>
-                            <button
-                              onClick={() => setEditingMember(null)}
-                              className="px-2 py-1 bg-gray-600 text-white rounded text-sm hover:bg-gray-700"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        ) : (
-                          <>
-                            <button
-                              onClick={() => setEditingMember(member)}
-                              className="p-1 text-blue-300 hover:text-white transition-colors"
-                              title="Edit role"
-                            >
-                              <Edit className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => handleRemoveMember(member.userId)}
-                              className="p-1 text-red-300 hover:text-red-400 transition-colors"
-                              title="Remove member"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
+              {(members as Array<Record<string, unknown>>).map((m) => {
+                const member = m as { userId: string } & Record<string, unknown>;
+                return (
+                <MemberCard
+                  key={member.userId}
+                  member={member as unknown as OrganizationMember}
+                  currentUserRole={orgInfo?.userRole || 'member'}
+                  onEditRole={(userId, newRole) => {
+                    setEditingMember({ userId, role: newRole });
+                    handleUpdateMemberRole(userId, newRole);
+                  }}
+                  onRemoveMember={handleRemoveMember}
+                  isEditing={editingMember?.userId === member.userId}
+                  isUpdating={updating}
+                />
+                );
+              })}
             </div>
           )}
         </div>

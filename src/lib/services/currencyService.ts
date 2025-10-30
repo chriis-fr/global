@@ -32,17 +32,16 @@ export class CurrencyService {
       const { UserService } = await import('./userService');
       const user = await UserService.getUserByEmail(userId);
       
-      if (user?.settings?.currencyPreference) {
+      if (user?.preferences?.currency) {
         return {
-          preferredCurrency: user.settings.currencyPreference,
-          displayCurrency: user.settings.currencyPreference,
+          preferredCurrency: user.preferences.currency,
+          displayCurrency: user.preferences.currency,
           autoConvert: true
         };
       }
       
       return defaultPreferences;
-    } catch (error) {
-      console.error('Error fetching user currency preferences:', error);
+    } catch {
       return defaultPreferences;
     }
   }
@@ -53,15 +52,19 @@ export class CurrencyService {
     fromCurrency: string,
     toCurrency: string
   ): Promise<number> {
+
     if (fromCurrency === toCurrency) {
       return amount;
     }
 
     try {
       const rate = await this.getExchangeRate(fromCurrency, toCurrency);
-      return amount * rate;
+      const convertedAmount = amount * rate;
+      const finalAmount = Math.round(convertedAmount * 100) / 100;
+
+      return finalAmount;
     } catch (error) {
-      console.error('Error converting currency:', error);
+      console.error('❌ [CurrencyService] Conversion failed:', error);
       return amount; // Return original amount if conversion fails
     }
   }
@@ -96,40 +99,51 @@ export class CurrencyService {
       } else {
         throw new Error('Exchange rate not found');
       }
-    } catch (error) {
-      console.error('Error fetching exchange rate:', error);
+    } catch {
       
-      // Fallback to hardcoded rates for common currencies
+      // Fallback to hardcoded rates for common currencies (CORRECTED RATES)
       const fallbackRates: Record<string, Record<string, number>> = {
         'USD': {
-          'EUR': 0.85,
-          'GBP': 0.73,
-          'KES': 150.0,
-          'GHS': 12.0
+          'EUR': 0.86,  // 1 USD = 0.86 EUR
+          'GBP': 0.78,  // 1 USD = 0.78 GBP
+          'KES': 129.0, // 1 USD = 129 KES (CORRECTED)
+          'GHS': 12.0,
+          'NGN': 1500.0
         },
         'EUR': {
-          'USD': 1.18,
-          'GBP': 0.86,
-          'KES': 177.0,
-          'GHS': 14.0
+          'USD': 1.16,  // 1 EUR = 1.16 USD
+          'GBP': 0.85,  // 1 EUR = 0.85 GBP
+          'KES': 150.0, // 1 EUR = 150 KES (CORRECTED)
+          'GHS': 14.0,
+          'NGN': 1750.0
         },
         'GBP': {
-          'USD': 1.37,
-          'EUR': 1.16,
-          'KES': 205.0,
-          'GHS': 16.0
+          'USD': 1.28,  // 1 GBP = 1.28 USD
+          'EUR': 1.18,  // 1 GBP = 1.18 EUR
+          'KES': 165.0, // 1 GBP = 165 KES
+          'GHS': 15.0,
+          'NGN': 1920.0
         },
         'KES': {
-          'USD': 0.0067,
-          'EUR': 0.0056,
-          'GBP': 0.0049,
-          'GHS': 0.08
+          'USD': 0.0078,  // 1 KES = 0.0078 USD (1/129)
+          'EUR': 0.0067,  // 1 KES = 0.0067 EUR (1/150)
+          'GBP': 0.0061,  // 1 KES = 0.0061 GBP (1/165)
+          'GHS': 0.093,   // 1 KES = 0.093 GHS
+          'NGN': 11.6     // 1 KES = 11.6 NGN
         },
         'GHS': {
           'USD': 0.083,
           'EUR': 0.071,
-          'GBP': 0.0625,
-          'KES': 12.5
+          'GBP': 0.067,
+          'KES': 10.7,   // 1 GHS = 10.7 KES
+          'NGN': 125.0
+        },
+        'NGN': {
+          'USD': 0.00067, // 1 NGN = 0.00067 USD
+          'EUR': 0.00057, // 1 NGN = 0.00057 EUR
+          'GBP': 0.00052, // 1 NGN = 0.00052 GBP
+          'KES': 0.086,   // 1 NGN = 0.086 KES
+          'GHS': 0.008
         }
       };
 
@@ -148,9 +162,14 @@ export class CurrencyService {
     preferredCurrency: string
   ): Promise<{ [key: string]: unknown }> {
     // Type guard to check if invoice has required properties
-    if (!invoice || typeof invoice !== 'object' || !('currency' in invoice) || !('totalAmount' in invoice)) {
+    if (!invoice || typeof invoice !== 'object' || !('currency' in invoice)) {
       return invoice;
     }
+
+    // Use consistent field names - prefer 'total' over 'totalAmount'
+    const totalAmount = (invoice.total as number) || (invoice.totalAmount as number) || 0;
+    const subtotalAmount = (invoice.subtotal as number) || 0;
+    const taxAmount = (invoice.totalTax as number) || (invoice.taxAmount as number) || 0;
 
     if (invoice.currency === preferredCurrency) {
       return invoice;
@@ -158,19 +177,19 @@ export class CurrencyService {
 
     try {
       const convertedAmount = await this.convertCurrency(
-        invoice.totalAmount as number,
+        totalAmount,
         invoice.currency as string,
         preferredCurrency
       );
 
       const convertedSubtotal = await this.convertCurrency(
-        invoice.subtotal as number,
+        subtotalAmount,
         invoice.currency as string,
         preferredCurrency
       );
 
       const convertedTax = await this.convertCurrency(
-        invoice.taxAmount as number,
+        taxAmount,
         invoice.currency as string,
         preferredCurrency
       );
@@ -178,18 +197,69 @@ export class CurrencyService {
       return {
         ...invoice,
         originalCurrency: invoice.currency,
-        originalTotalAmount: invoice.totalAmount as number,
-        originalSubtotal: invoice.subtotal as number,
-        originalTaxAmount: invoice.taxAmount as number,
+        originalTotalAmount: totalAmount,
+        originalSubtotal: subtotalAmount,
+        originalTaxAmount: taxAmount,
         currency: preferredCurrency,
-        totalAmount: convertedAmount,
+        total: convertedAmount, // Use consistent field name
+        totalAmount: convertedAmount, // Keep for backward compatibility
         subtotal: convertedSubtotal,
-        taxAmount: convertedTax,
-        conversionRate: convertedAmount / (invoice.totalAmount as number)
+        totalTax: convertedTax, // Use consistent field name
+        taxAmount: convertedTax, // Keep for backward compatibility
+        conversionRate: convertedAmount / totalAmount
       };
-    } catch (error) {
-      console.error('Error converting invoice for reporting:', error);
+    } catch {
       return invoice;
+    }
+  }
+
+  // Convert payable amounts to preferred currency for reporting
+  static async convertPayableForReporting(
+    payable: { [key: string]: unknown },
+    preferredCurrency: string
+  ): Promise<{ [key: string]: unknown }> {
+    // Type guard to check if payable has required properties
+    if (!payable || typeof payable !== 'object' || !('currency' in payable) || !('total' in payable)) {
+      return payable;
+    }
+
+    if (payable.currency === preferredCurrency) {
+      return payable;
+    }
+
+    try {
+      const convertedAmount = await this.convertCurrency(
+        payable.total as number,
+        payable.currency as string,
+        preferredCurrency
+      );
+
+      const convertedSubtotal = await this.convertCurrency(
+        payable.subtotal as number,
+        payable.currency as string,
+        preferredCurrency
+      );
+
+      const convertedTax = await this.convertCurrency(
+        payable.totalTax as number,
+        payable.currency as string,
+        preferredCurrency
+      );
+
+      return {
+        ...payable,
+        originalCurrency: payable.currency,
+        originalTotal: payable.total as number,
+        originalSubtotal: payable.subtotal as number,
+        originalTotalTax: payable.totalTax as number,
+        currency: preferredCurrency,
+        total: convertedAmount,
+        subtotal: convertedSubtotal,
+        totalTax: convertedTax,
+        conversionRate: convertedAmount / (payable.total as number)
+      };
+    } catch {
+      return payable;
     }
   }
 
@@ -218,15 +288,21 @@ export class CurrencyService {
 
     for (const invoice of invoices) {
       // Type guard to check if invoice has required properties
-      if (!invoice || typeof invoice !== 'object' || !('currency' in invoice) || !('totalAmount' in invoice)) {
+      if (!invoice || typeof invoice !== 'object' || !('currency' in invoice)) {
+        continue;
+      }
+
+      // Get the total amount - could be totalAmount or total
+      const amount = (invoice.totalAmount || invoice.total) as number;
+      if (!amount) {
         continue;
       }
 
       if (invoice.currency === preferredCurrency) {
-        total += invoice.totalAmount as number;
+        total += amount;
       } else {
         const converted = await this.convertCurrency(
-          invoice.totalAmount as number,
+          amount,
           invoice.currency as string,
           preferredCurrency
         );
@@ -234,6 +310,7 @@ export class CurrencyService {
       }
     }
 
-    return total;
+    // Round to 2 decimal places to avoid floating point precision issues
+    return Math.round(total * 100) / 100;
   }
 } 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { NotificationService } from '@/lib/services/notificationService';
+import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
 
 // PUT /api/notifications/[id] - Mark notification as read
@@ -33,11 +33,21 @@ export async function PUT(
 
     const userId = new ObjectId(user.data._id);
 
-    const success = await NotificationService.markAsRead(notificationId, userId);
+    // Update notification directly in database
+    const db = await connectToDatabase();
+    const result = await db.collection('notifications').updateOne(
+      { _id: notificationId, userId: userId },
+      { 
+        $set: { 
+          status: 'read',
+          readAt: new Date()
+        }
+      }
+    );
 
-    if (!success) {
+    if (result.matchedCount === 0) {
       return NextResponse.json(
-        { success: false, message: 'Failed to mark notification as read' },
+        { success: false, message: 'Notification not found' },
         { status: 404 }
       );
     }
@@ -46,8 +56,7 @@ export async function PUT(
       success: true,
       message: 'Notification marked as read'
     });
-  } catch (error) {
-    console.error('Error marking notification as read:', error);
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Failed to mark notification as read' },
       { status: 500 }
@@ -84,11 +93,15 @@ export async function DELETE(
 
     const userId = new ObjectId(user.data._id);
 
-    const success = await NotificationService.deleteNotification(notificationId, userId);
+    // Delete notification directly from database
+    const db = await connectToDatabase();
+    const result = await db.collection('notifications').deleteOne(
+      { _id: notificationId, userId: userId }
+    );
 
-    if (!success) {
+    if (result.deletedCount === 0) {
       return NextResponse.json(
-        { success: false, message: 'Failed to delete notification' },
+        { success: false, message: 'Notification not found' },
         { status: 404 }
       );
     }
@@ -97,8 +110,7 @@ export async function DELETE(
       success: true,
       message: 'Notification deleted successfully'
     });
-  } catch (error) {
-    console.error('Error deleting notification:', error);
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Failed to delete notification' },
       { status: 500 }

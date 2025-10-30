@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { UserService } from '@/lib/services/userService';
-import { enableService } from '@/lib/services/serviceManager';
+import { enableService, createDefaultServices } from '@/lib/services/serviceManager';
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,7 +23,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Enable the service
-    const updatedServices = enableService(user.services || {}, serviceKey);
+    const currentServices = user.services ? { ...createDefaultServices(), ...user.services } : createDefaultServices();
+    const updatedServices = enableService(currentServices, serviceKey);
 
     // Update user in database
     await UserService.updateUser(user._id!.toString(), {
@@ -36,8 +37,7 @@ export async function POST(request: NextRequest) {
       message: `Service ${serviceKey} enabled successfully`
     });
 
-  } catch (error) {
-    console.error('Error enabling service:', error);
+  } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 } 

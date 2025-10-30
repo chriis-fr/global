@@ -63,7 +63,7 @@ export async function GET() {
           submittedBy: submittedBy ? {
             name: submittedBy.name,
             email: submittedBy.email,
-            profilePicture: submittedBy.profilePicture || submittedBy.avatar
+            profilePicture: submittedBy.avatar
           } : null
         };
       })
@@ -78,7 +78,6 @@ export async function GET() {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Error fetching pending approvals:', error);
     return NextResponse.json(
       { 
         success: false, 

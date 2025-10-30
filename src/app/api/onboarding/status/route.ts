@@ -28,11 +28,16 @@ export async function GET() {
       );
     }
 
+    // If user belongs to an organization, mark onboarding as completed
+    const onboardingData = user.organizationId ? {
+      ...user.onboarding,
+      completed: true
+    } : user.onboarding;
+
     return NextResponse.json({
       success: true,
       data: {
-        onboarding: user.onboarding,
-        userType: user.userType,
+        onboarding: onboardingData,
         services: user.services
       },
       timestamp: new Date().toISOString()

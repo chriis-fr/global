@@ -81,16 +81,24 @@ export const authOptions: NextAuthOptions = {
             id: user._id!.toString(),
             email: user.email,
             name: user.name,
-            image: user.profilePicture || user.avatar,
-            userType: user.userType,
+            image: user.avatar,
             role: user.role,
-            address: user.address,
-            taxId: user.taxId,
-            onboarding: user.onboarding,
+            userType: 'individual', // Default value since property doesn't exist on User model
+            address: {
+              street: '',
+              city: '',
+              country: '',
+              postalCode: ''
+            }, // Default empty address object since property doesn't exist on User model
+            onboarding: {
+              completed: user.onboarding?.isCompleted || false,
+              currentStep: user.onboarding?.currentStep || 0,
+              completedSteps: user.onboarding?.completedSteps || [],
+              serviceOnboarding: user.onboarding?.data || {}
+            },
             services: user.services as unknown as Record<string, boolean>
           }
-        } catch (error) {
-          console.error('❌ [Auth] Error during credentials login:', error)
+        } catch {
           return null
         }
       }
@@ -119,6 +127,17 @@ export const authOptions: NextAuthOptions = {
               avatar: user.image || undefined,
               lastLoginAt: new Date()
             })
+            
+            // Check if existing user should get 30-day trial
+            const { activate30DayTrial } = await import('@/lib/actions/subscription');
+            const hasProSubscription = existingUser.subscription && existingUser.subscription.planId !== 'receivables-free' && existingUser.subscription.status === 'active';
+            const hasUsedTrial = existingUser.subscription?.hasUsedTrial;
+            
+            if (!hasProSubscription && !hasUsedTrial) {
+              console.log('🎉 [Auth] Existing user eligible for 30-day trial, activating...');
+              await activate30DayTrial(existingUser._id!.toString());
+            }
+            
             console.log('✅ [Auth] Existing user updated successfully')
             return true
           }
@@ -202,8 +221,8 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (session.user) {
-        // Use token data to avoid database calls
-        session.user.id = token.sub!
+        // Use MongoDB ObjectId if available, otherwise fall back to JWT subject
+        session.user.id = (token.mongoId as string) || token.sub!
         session.user.name = token.name as string
         session.user.email = token.email as string
         session.user.image = token.picture as string
@@ -237,7 +256,41 @@ export const authOptions: NextAuthOptions = {
         token.onboarding = user.onboarding
         token.services = user.services || createDefaultServices()
         token.organizationId = user.organizationId
+        
+        // For OAuth users, we need to get the MongoDB ObjectId from the database
+        if (user.email && !token.mongoId) {
+          try {
+            const dbUser = await UserService.getUserByEmail(user.email)
+            if (dbUser?._id) {
+              token.mongoId = dbUser._id.toString()
+            }
+          } catch (error) {
+            console.error('❌ [Auth] Error fetching user for JWT:', error)
+          }
+        }
       }
+      
+      // Always fetch the latest user data from database to ensure organizationId is up to date
+      if (token.email) {
+        try {
+          const dbUser = await UserService.getUserByEmail(token.email as string)
+          if (dbUser) {
+            token.organizationId = dbUser.organizationId?.toString()
+            token.role = dbUser.role
+            token.onboarding = {
+              completed: dbUser.onboarding?.isCompleted || false,
+              currentStep: dbUser.onboarding?.currentStep || 0,
+              completedSteps: dbUser.onboarding?.completedSteps || [],
+              serviceOnboarding: dbUser.onboarding?.data || {}
+            }
+            token.services = dbUser.services || createDefaultServices()
+            token.mongoId = dbUser._id?.toString()
+          }
+        } catch {
+          // Error fetching latest user data for JWT
+        }
+      }
+      
       return token
     }
   },

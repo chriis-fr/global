@@ -56,7 +56,6 @@ export async function POST(request: NextRequest) {
       }
     });
   } catch (error) {
-    console.error('Error converting currency:', error);
     return NextResponse.json(
       { 
         success: false, 
@@ -89,7 +88,7 @@ export async function GET() {
       );
     }
 
-    const preferredCurrency = user.settings?.currencyPreference || 'USD';
+    const preferredCurrency = user.preferences?.currency || 'USD';
 
     return NextResponse.json({
       success: true,
@@ -99,7 +98,6 @@ export async function GET() {
       }
     });
   } catch (error) {
-    console.error('Error fetching user currency preference:', error);
     return NextResponse.json(
       { 
         success: false, 

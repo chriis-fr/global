@@ -4,6 +4,9 @@ import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId, Db } from 'mongodb';
 import { CurrencyService } from '@/lib/services/currencyService';
+import { LedgerSyncService } from '@/lib/services/ledgerSyncService';
+import { SubscriptionService } from '@/lib/services/subscriptionService';
+import { canCreateInvoice } from '@/lib/actions/subscription';
 
 // Secure invoice number generation function
 const generateSecureInvoiceNumber = async (db: Db, organizationId: string, ownerId: string, excludeNumber?: string): Promise<string> => {
@@ -17,10 +20,10 @@ const generateSecureInvoiceNumber = async (db: Db, organizationId: string, owner
     secureId = organizationId.slice(-4);
   } else {
     // For individual users, create a unique identifier from email
-    // Remove dots and special chars, take first 4 chars of username + last 2 of domain
+    // Take first 4 chars of username + first 2 chars of domain (more readable)
     const emailParts = ownerId.split('@');
     const username = emailParts[0].replace(/[^a-zA-Z0-9]/g, '').slice(0, 4);
-    const domain = emailParts[1]?.replace(/[^a-zA-Z0-9]/g, '').slice(-2) || 'XX';
+    const domain = emailParts[1]?.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2) || 'XX';
     secureId = `${username}${domain}`.toUpperCase();
   }
   
@@ -97,6 +100,23 @@ const generateSecureInvoiceNumber = async (db: Db, organizationId: string, owner
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
+    
+    if (!session?.user?.id) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Check if user can create invoice using server action
+    const canCreate = await canCreateInvoice();
+    
+    if (!canCreate.allowed) {
+      console.log('❌ [API Invoices] Invoice creation blocked:', canCreate.reason);
+      return NextResponse.json({
+        success: false,
+        error: canCreate.reason,
+        requiresUpgrade: canCreate.requiresUpgrade
+      }, { status: 403 });
+    }
+
     if (!session?.user?.email) {
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
@@ -137,39 +157,85 @@ export async function POST(request: NextRequest) {
       clientPhone
     } = body;
 
+    // Amount validation and logging
+    console.log('📊 [API Invoices] Received invoice amounts:', {
+      subtotal,
+      totalTax,
+      total,
+      currency
+    });
+
     await connectToDatabase();
 
-    // Get user details for approval workflow
-    // const user = await UserService.getUserByEmail(session.user.email); // This line was removed as per the new_code
-    // if (!user) {
-    //   return NextResponse.json({ success: false, message: 'User not found' }, { status: 404 });
-    // }
-
     // Determine if user is individual or organization
-    const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
+    // For organization owners, they should create organization invoices
+    const isOrganization = !!session.user.organizationId;
     const ownerId = isOrganization ? session.user.organizationId : session.user.email;
     const ownerType = isOrganization ? 'organization' : 'individual';
 
-    // Check if approval is required
+    // Connect to database
+    const db = await connectToDatabase();
+
+    // Check if approval is required based on organization settings
     let requiresApproval = false;
     let initialStatus = status || 'pending';
+    let organization = null;
 
-    if (isOrganization && ownerId) { // ownerId is now available
-      // Check if user is admin/owner
-      // const isAdmin = await OrganizationService.isUserAdmin( // This line was removed as per the new_code
-      //   user.organizationId.toString(), 
-      //   user._id!.toString()
-      // );
-      
-      // if (!isAdmin) {
-        // Non-admin users need approval
+    if (isOrganization && ownerId) {
+      // Get organization approval settings
+      organization = await db.collection('organizations').findOne({
+        _id: new ObjectId(ownerId)
+      });
+
+      console.log('🔍 [Approval Check] Organization approval settings:', {
+        hasApprovalSettings: !!organization?.approvalSettings,
+        requireApproval: organization?.approvalSettings?.requireApproval,
+        amountThresholds: organization?.approvalSettings?.approvalRules?.amountThresholds,
+        invoiceAmount: parseFloat(total) || 0
+      });
+
+      if (organization?.approvalSettings?.requireApproval) {
+        // Check if user is owner/admin (can bypass approval)
+        const userMember = organization.members.find((member: { userId: ObjectId; role: string }) => 
+          member.userId.toString() === session.user.id && 
+          (member.role === 'owner' || member.role === 'admin')
+        );
+
+        console.log('🔍 [Approval Check] User member details:', {
+          isOwnerOrAdmin: !!userMember,
+          userRole: userMember?.role,
+          userId: session.user.id
+        });
+
+        // ALL users (including owners) need approval when approval is enabled
+        // This ensures proper oversight and prevents owners from bypassing approval
         requiresApproval = true;
         initialStatus = 'pending_approval';
-      // }
+        console.log('⏳ [Approval Check] Approval required for all users (including owners) when approval is enabled');
+      } else {
+        console.log('ℹ️ [Approval Check] Approval not required for this organization');
+      }
+    }
+
+    // Check if recipient is an organization
+    let recipientType = 'individual';
+    let recipientOrganization = null;
+    
+    if (clientEmail) {
+      // Check if the recipient email belongs to an organization's primary email
+      recipientOrganization = await db.collection('organizations').findOne({
+        billingEmail: clientEmail
+      });
+      
+      if (recipientOrganization) {
+        recipientType = 'organization';
+        console.log('🏢 [Invoice Creation] Recipient is organization:', recipientOrganization.name);
+      } else {
+        console.log('👤 [Invoice Creation] Recipient is individual user');
+      }
     }
 
     // Generate secure invoice number if not provided or if provided number already exists
-    const db = await connectToDatabase();
     let finalInvoiceNumber = invoiceNumber;
     
     if (finalInvoiceNumber) {
@@ -202,7 +268,9 @@ export async function POST(request: NextRequest) {
       ownerId,
       total,
       requiresApproval,
-      initialStatus
+      initialStatus,
+      isOrganization,
+      approvalSettings: organization?.approvalSettings ? 'enabled' : 'disabled'
     });
 
     // Transform data to match InvoiceFormData structure exactly
@@ -281,9 +349,28 @@ export async function POST(request: NextRequest) {
       // Approval workflow
       approvalWorkflow: requiresApproval ? {
         requiresApproval: true,
-        submittedBy: session.user.id, // Changed to session.user.id
+        submittedBy: session.user.id,
         submittedAt: new Date()
       } : undefined,
+      
+      // Approval tracking
+      approvals: [], // Array of approval objects
+      approvalCount: 0, // Current number of approvals
+      requiredApprovals: requiresApproval ? (() => {
+        // Calculate required approvals based on amount and settings
+        if (organization?.approvalSettings) {
+          const amount = parseFloat(total) || 0;
+          const settings = organization.approvalSettings.approvalRules;
+          if (amount >= settings.amountThresholds.high) {
+            return settings.requiredApprovers.high;
+          } else if (amount >= settings.amountThresholds.medium) {
+            return settings.requiredApprovers.medium;
+          } else {
+            return settings.requiredApprovers.low;
+          }
+        }
+        return 1; // Default
+      })() : 0,
       
       // Backward compatibility - keep nested structure for existing code
       type: invoiceType || 'regular',
@@ -319,6 +406,7 @@ export async function POST(request: NextRequest) {
         amount: totalTax
       }],
       totalAmount: total,
+      
       paymentSettings: {
         method: paymentMethod,
         currency,
@@ -334,7 +422,10 @@ export async function POST(request: NextRequest) {
       },
       notes: memo,
       pdfUrl: '',
-      isTemplate: false
+      isTemplate: false,
+      
+      // Recipient type for conditional approval display
+      recipientType: recipientType
     };
 
     // Use MongoDB directly since the model structure is complex
@@ -379,11 +470,87 @@ export async function POST(request: NextRequest) {
     
     console.log('✅ [API Invoices] Invoice saved successfully');
 
-    return NextResponse.json({
-      success: true,
-      message: 'Invoice saved successfully',
-      invoice: { _id: result.insertedId, ...invoiceData }
-    });
+    // Sync to financial ledger
+    try {
+      const invoiceWithId = { _id: result.insertedId, ...invoiceData };
+      await LedgerSyncService.syncInvoiceToLedger(invoiceWithId);
+      console.log('✅ [API Invoices] Invoice synced to ledger');
+    } catch (syncError) {
+      console.error('⚠️ [API Invoices] Failed to sync invoice to ledger:', syncError);
+      // Don't fail the request if sync fails
+    }
+
+           // After successful invoice creation, increment usage:
+           await SubscriptionService.incrementInvoiceUsage(
+             new ObjectId(session.user.id)
+           );
+
+           // Send approval notifications if invoice requires approval
+           if (requiresApproval && organization) {
+             try {
+               const { NotificationService } = await import('@/lib/services/notificationService');
+               
+               // Get all admins, approvers, and owners who can approve
+               const approvers = organization.members.filter((member: { role: string; userId: ObjectId }) => 
+                 (member.role === 'owner' || member.role === 'admin' || member.role === 'approver') && 
+                 member.userId.toString() !== session.user.id // Don't notify the creator
+               );
+
+               console.log('📧 [Approval Notifications] Found approvers:', {
+                 totalApprovers: approvers.length,
+                 approverRoles: approvers.map((a: { role: string }) => a.role),
+                 creatorId: session.user.id,
+                 organizationMembers: organization.members.map((m: { role: string; userId: ObjectId }) => ({ role: m.role, userId: m.userId.toString() }))
+               });
+
+               // Send notification to each approver
+               for (const approver of approvers) {
+                 const approverUser = await db.collection('users').findOne({
+                   _id: new ObjectId(approver.userId)
+                 });
+
+                 if (approverUser?.email) {
+                   console.log('📧 [Approval Notifications] Sending notification to:', {
+                     email: approverUser.email,
+                     name: approverUser.name || approverUser.email,
+                     role: approver.role
+                   });
+                   
+                   await NotificationService.sendInvoiceApprovalRequest(
+                     approverUser.email,
+                     approverUser.name || approverUser.email,
+                     {
+                       invoiceNumber: finalInvoiceNumber,
+                       invoiceName: invoiceName || 'Invoice',
+                       amount: parseFloat(total) || 0,
+                       currency: currency || 'USD',
+                       clientName: clientName || 'Unknown Client',
+                       clientEmail: clientEmail || '',
+                       dueDate: dueDate
+                     },
+                     organization.name,
+                     session.user.name || session.user.email || 'Unknown User'
+                   );
+                 } else {
+                   console.log('⚠️ [Approval Notifications] Approver user not found:', {
+                     userId: approver.userId.toString(),
+                     role: approver.role
+                   });
+                 }
+               }
+
+               console.log('✅ [API Invoices] Approval notifications sent to', approvers.length, 'approvers');
+             } catch (notificationError) {
+               console.error('⚠️ [API Invoices] Failed to send approval notifications:', notificationError);
+               // Don't fail the request if notifications fail
+             }
+           }
+
+           return NextResponse.json({
+             success: true,
+             message: 'Invoice saved successfully',
+             invoice: { _id: result.insertedId, ...invoiceData }
+           });
 
   } catch (error) {
     console.error('❌ [API Invoices] Error saving invoice:', error);
@@ -431,8 +598,8 @@ export async function GET(request: NextRequest) {
     const userPreferences = await CurrencyService.getUserPreferredCurrency(session.user.email);
     const preferredCurrency = userPreferences.preferredCurrency;
 
-    // Build query
-    const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
+    // Build query - Organization members should always see organization's invoices
+    const isOrganization = !!session.user.organizationId;
     let query = isOrganization 
       ? { organizationId: session.user.organizationId }
       : { 
@@ -491,8 +658,9 @@ export async function GET(request: NextRequest) {
       invoices = convertedInvoices as typeof invoices;
     }
 
-    // Calculate total revenue in preferred currency (always include all invoices regardless of status filter)
-    const revenueQuery = isOrganization 
+    // Calculate total revenue in preferred currency
+    // Only include approved invoices (approved, sent, paid) - exclude pending_approval, rejected, draft, cancelled
+    const baseRevenueQuery = isOrganization 
       ? { organizationId: session.user.organizationId }
       : { 
           $or: [
@@ -500,8 +668,20 @@ export async function GET(request: NextRequest) {
             { userId: session.user.email }
           ]
         };
+    
+    // Add status filter to only include approved invoices
+    const revenueQuery = {
+      ...baseRevenueQuery,
+      status: { $in: ['approved', 'sent', 'paid'] }
+    };
+    
     const allInvoices = await invoicesCollection.find(revenueQuery).toArray();
+    
+    // Always convert total revenue to user's preferred currency for consistent display
+    // The convertToPreferred parameter only affects individual invoice conversion, not total revenue
+    
     const totalRevenue = await CurrencyService.calculateTotalRevenue(allInvoices as { [key: string]: unknown }[], preferredCurrency);
+    
 
     return NextResponse.json({
       success: true,

@@ -35,8 +35,7 @@ export async function GET() {
       paymentMethods: paymentMethods
     });
 
-  } catch (error) {
-    console.error('Error fetching payment methods:', error);
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Failed to fetch payment methods' },
       { status: 500 }
@@ -95,8 +94,7 @@ export async function POST(request: NextRequest) {
       warnings: validation.warnings
     });
 
-  } catch (error) {
-    console.error('Error creating payment method:', error);
+  } catch {
     return NextResponse.json(
       { success: false, error: 'Failed to create payment method' },
       { status: 500 }

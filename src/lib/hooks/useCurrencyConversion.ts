@@ -49,6 +49,7 @@ export function useCurrencyConversion(
 
     // Convert currency
     const convertCurrency = async () => {
+      
       setResult(prev => ({ ...prev, isLoading: true, error: null }));
       
       try {
@@ -65,6 +66,7 @@ export function useCurrencyConversion(
         });
 
         const data = await response.json();
+        
         
         if (data.success) {
           setResult({

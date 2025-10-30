@@ -14,7 +14,7 @@ export interface InvoiceTax {
   amount: number;
 }
 
-export type InvoiceStatus = 'draft' | 'sent' | 'pending' | 'paid' | 'overdue' | 'cancelled' | 'pending_approval' | 'rejected';
+export type InvoiceStatus = 'draft' | 'sent' | 'pending' | 'paid' | 'overdue' | 'cancelled' | 'pending_approval' | 'approved' | 'rejected';
 export type PaymentMethod = 'crypto' | 'fiat';
 export type InvoiceType = 'regular' | 'recurring';
 export type RecurringFrequency = 'weekly' | 'monthly' | 'quarterly' | 'yearly';
@@ -56,6 +56,7 @@ export interface PaymentSettings {
   cryptoNetwork?: string;
   cryptoCurrency?: string;
   walletAddress?: string;
+  tokenAddress?: string; // Contract address for the crypto token
   bankAccount?: {
     accountNumber: string;
     routingNumber: string;
@@ -97,7 +98,8 @@ export interface Invoice {
   items: InvoiceItem[];
   taxes: InvoiceTax[];
   subtotal: number;
-  totalAmount: number;
+  total: number; // Primary total field
+  totalAmount: number; // Backward compatibility
   
   // Payment Settings
   paymentSettings: PaymentSettings;
@@ -136,6 +138,12 @@ export interface Invoice {
   // Template Information (for saving as template)
   isTemplate: boolean;
   templateName?: string;
+  
+  // Recipient type for conditional approval display
+  recipientType?: 'individual' | 'organization';
+  
+  // Delivery method
+  sentVia?: 'email' | 'whatsapp';
 }
 
 export interface CreateInvoiceInput {

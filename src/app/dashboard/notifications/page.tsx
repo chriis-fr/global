@@ -66,8 +66,7 @@ export default function NotificationsPage() {
         setNotifications(data.data.notifications);
         setStats(data.data.stats);
       }
-    } catch (error) {
-      console.error('Error loading notifications:', error);
+    } catch {
     } finally {
       setLoading(false);
     }
@@ -96,8 +95,7 @@ export default function NotificationsPage() {
         // Reload stats
         loadNotifications();
       }
-    } catch (error) {
-      console.error('Error marking notification as read:', error);
+    } catch {
     }
   };
 
@@ -118,8 +116,7 @@ export default function NotificationsPage() {
         // Reload stats
         loadNotifications();
       }
-    } catch (error) {
-      console.error('Error deleting notification:', error);
+    } catch {
     }
   };
 
@@ -142,8 +139,7 @@ export default function NotificationsPage() {
         // Reload stats
         loadNotifications();
       }
-    } catch (error) {
-      console.error('Error marking all notifications as read:', error);
+    } catch {
     }
   };
 
@@ -161,8 +157,7 @@ export default function NotificationsPage() {
         const error = await response.json();
         alert(`Failed to create test notification: ${error.message}`);
       }
-    } catch (error) {
-      console.error('Error creating test notification:', error);
+    } catch {
       alert('Failed to create test notification');
     }
   };

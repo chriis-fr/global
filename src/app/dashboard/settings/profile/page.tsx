@@ -1,11 +1,12 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { LogoManager } from '@/components/LogoManager';
-import { Image, ChevronDown } from 'lucide-react';
+import { ChevronDown, Crown, ArrowRight, Upload, User } from 'lucide-react';
 import NextImage from 'next/image';
 import DashboardFloatingButton from '@/components/DashboardFloatingButton';
 import { fiatCurrencies } from '@/data/currencies';
 import { useCurrency } from '@/lib/contexts/CurrencyContext';
+import { useSubscription } from '@/lib/contexts/SubscriptionContext';
+import { useRouter } from 'next/navigation';
 
 interface ProfileData {
   name: string;
@@ -22,17 +23,14 @@ interface ProfileData {
   };
   taxId?: string;
   currencyPreference?: string;
+  profilePhoto?: string;
+  isGoogleUser?: boolean;
 }
 
-interface Logo {
-  id: string;
-  name: string;
-  url: string;
-  isDefault: boolean;
-  createdAt: Date;
-}
 
 export default function ProfileSettingsPage() {
+  const router = useRouter();
+  const { subscription } = useSubscription();
   const [formData, setFormData] = useState<ProfileData>({
     name: '',
     email: '',
@@ -52,7 +50,8 @@ export default function ProfileSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [selectedLogo, setSelectedLogo] = useState<Logo | null>(null);
+  const [profilePhoto, setProfilePhoto] = useState<string>('');
+  const [isGoogleUser, setIsGoogleUser] = useState<boolean>(false);
   const [showCurrencyDropdown, setShowCurrencyDropdown] = useState(false);
   const [currencySearch, setCurrencySearch] = useState('');
   const { setPreferredCurrency } = useCurrency();
@@ -69,6 +68,8 @@ export default function ProfileSettingsPage() {
       
       if (data.success) {
         setFormData(data.data.profile);
+        setProfilePhoto(data.data.profile.profilePhoto || '');
+        setIsGoogleUser(data.data.profile.isGoogleUser || false);
       } else {
         setMessage({ type: 'error', text: 'Failed to load profile data' });
       }
@@ -131,6 +132,93 @@ export default function ProfileSettingsPage() {
     }
   };
 
+  // Get plan display name
+  const getPlanDisplayName = () => {
+    if (!subscription?.plan) return 'Free Plan';
+    
+    const planId = subscription.plan.planId;
+    if (planId === 'receivables-free') return 'Receivables Free';
+    if (planId === 'receivables-basic') return 'Receivables Basic';
+    if (planId === 'receivables-pro') return 'Receivables Pro';
+    if (planId === 'payables-basic') return 'Payables Basic';
+    if (planId === 'payables-pro') return 'Payables Pro';
+    if (planId === 'combined-basic') return 'Combined Basic';
+    if (planId === 'combined-pro') return 'Combined Pro';
+    
+    return 'Pro Plan';
+  };
+
+  // Handle upgrade
+  const handleUpgrade = () => {
+    router.push('/pricing');
+  };
+
+  const handleProfilePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setMessage({ type: 'error', text: 'Please select a valid image file' });
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setMessage({ type: 'error', text: 'Image size must be less than 5MB' });
+      return;
+    }
+
+    try {
+      setSaving(true);
+      
+      // Create FormData for file upload
+      const formData = new FormData();
+      formData.append('profilePhoto', file);
+
+      const response = await fetch('/api/user/profile-photo', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setProfilePhoto(data.data.profilePhoto);
+        setMessage({ type: 'success', text: 'Profile photo updated successfully!' });
+      } else {
+        setMessage({ type: 'error', text: data.message || 'Failed to update profile photo' });
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to update profile photo' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRemoveProfilePhoto = async () => {
+    try {
+      setSaving(true);
+
+      const response = await fetch('/api/user/profile-photo', {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setProfilePhoto('');
+        setMessage({ type: 'success', text: 'Profile photo removed successfully!' });
+      } else {
+        setMessage({ type: 'error', text: data.message || 'Failed to remove profile photo' });
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to remove profile photo' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="max-w-4xl mx-auto">
@@ -176,7 +264,7 @@ export default function ProfileSettingsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-white mb-2">
-                {formData.userType === 'business' ? 'Organization Name' : 'Full Name'}
+                Full Name
               </label>
               <input
                 type="text"
@@ -184,7 +272,7 @@ export default function ProfileSettingsPage() {
                 value={formData.name}
                 onChange={handleInputChange}
                 className="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                placeholder={formData.userType === 'business' ? 'Enter organization name' : 'Enter your full name'}
+                placeholder="Enter your full name"
                 required
               />
             </div>
@@ -368,45 +456,121 @@ export default function ProfileSettingsPage() {
         </div>
       </form>
 
-      {/* Logo Management Section */}
-      <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
+      {/* Subscription Plan Section */}
+      <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 mb-8">
         <div className="flex items-center space-x-3 mb-6">
-          <Image className="h-6 w-6 text-blue-400" aria-label="Logo management icon" />
-          <h2 className="text-xl font-semibold text-white">Logo Management</h2>
+          <Crown className="h-6 w-6 text-blue-400" />
+          <h2 className="text-xl font-semibold text-white">Subscription Plan</h2>
         </div>
-        <p className="text-blue-200 text-sm mb-6">
-          Upload and manage your logos for use in invoices and other business documents. 
-          You can have multiple logos for different occasions and set one as your default.
-        </p>
-
-        <LogoManager 
-          onLogoSelectAction={setSelectedLogo}
-          selectedLogoId={selectedLogo?.id}
-        />
-
-        {selectedLogo && (
-          <div className="mt-6 p-4 bg-blue-600/10 border border-blue-500/30 rounded-lg">
-            <h3 className="text-blue-300 font-medium mb-2">Selected Logo:</h3>
-            <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center overflow-hidden">
-                <NextImage
-                  src={selectedLogo.url}
-                  alt={selectedLogo.name}
-                  width={48}
-                  height={48}
-                  className="object-contain"
-                />
-              </div>
-              <div>
-                <p className="text-white font-medium">{selectedLogo.name}</p>
-                <p className="text-blue-200 text-sm">
-                  {selectedLogo.isDefault ? 'Default Logo' : 'Custom Logo'}
+        
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-blue-500/20 rounded-lg">
+              <Crown className="h-5 w-5 text-blue-400" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-white text-sm sm:text-base">Current Plan</h3>
+              <p className="text-blue-200 text-xs sm:text-sm">{getPlanDisplayName()}</p>
+              {subscription?.plan?.planId === 'receivables-free' && (
+                <p className="text-blue-300 text-xs mt-1">
+                  {subscription.isTrialActive 
+                    ? `${subscription.trialDaysRemaining} days left in trial`
+                    : 'Trial expired'
+                  }
                 </p>
+              )}
+            </div>
+          </div>
+          
+          <button
+            onClick={handleUpgrade}
+            className="flex items-center space-x-2 px-4 py-2 sm:px-6 sm:py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all shadow-sm font-medium"
+          >
+            <Crown className="h-4 w-4" />
+            <span>Upgrade Plan</span>
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Profile Photo Section */}
+      {!isGoogleUser && (
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
+          <div className="flex items-center space-x-3 mb-6">
+            <User className="h-6 w-6 text-blue-400" aria-label="Profile photo icon" />
+            <h2 className="text-xl font-semibold text-white">Profile Photo</h2>
+          </div>
+          <p className="text-blue-200 text-sm mb-6">
+            Upload a profile photo to personalize your account. This will be displayed in your profile and communications.
+          </p>
+
+          <div className="flex items-center space-x-6">
+            {/* Current Profile Photo */}
+            <div className="flex-shrink-0">
+              <div className="w-20 h-20 bg-white/10 rounded-full flex items-center justify-center overflow-hidden border-2 border-white/20">
+                {profilePhoto ? (
+                  <NextImage
+                    src={profilePhoto}
+                    alt="Profile Photo"
+                    width={80}
+                    height={80}
+                    className="object-cover w-full h-full"
+                  />
+                ) : (
+                  <User className="h-10 w-10 text-blue-300" />
+                )}
+              </div>
+            </div>
+
+            {/* Upload Section */}
+            <div className="flex-1">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">
+                    Upload Profile Photo
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleProfilePhotoUpload}
+                    className="hidden"
+                    id="profile-photo-upload"
+                  />
+                  <label
+                    htmlFor="profile-photo-upload"
+                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer"
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Choose Photo
+                  </label>
+                </div>
+                
+                {profilePhoto && (
+                  <button
+                    onClick={handleRemoveProfilePhoto}
+                    className="text-red-400 hover:text-red-300 text-sm transition-colors"
+                  >
+                    Remove Photo
+                  </button>
+                )}
               </div>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* Google User Notice */}
+      {isGoogleUser && (
+        <div className="bg-blue-600/10 border border-blue-500/30 rounded-xl p-6">
+          <div className="flex items-center space-x-3 mb-4">
+            <User className="h-6 w-6 text-blue-400" />
+            <h2 className="text-xl font-semibold text-white">Profile Photo</h2>
+          </div>
+          <p className="text-blue-200 text-sm">
+            Your profile photo is managed through your Google account. To change it, please update your photo in your Google profile settings.
+          </p>
+        </div>
+      )}
 
       <DashboardFloatingButton />
     </div>

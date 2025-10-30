@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { NotificationService } from '@/lib/services/notificationService';
+import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
 
 // PUT /api/notifications/mark-all-read - Mark all notifications as read
@@ -19,7 +19,6 @@ export async function PUT() {
     // Get user ID from session
     const userResponse = await fetch(`${process.env.NEXTAUTH_URL}/api/users/profile`);
     if (!userResponse.ok) {
-      console.error('❌ [Mark All Read API] Failed to fetch user profile:', userResponse.status, userResponse.statusText);
       return NextResponse.json(
         { success: false, message: 'Failed to get user profile' },
         { status: 500 }
@@ -28,7 +27,6 @@ export async function PUT() {
     
     const user = await userResponse.json();
     if (!user.success) {
-      console.error('❌ [Mark All Read API] User profile response indicates failure:', user);
       return NextResponse.json(
         { success: false, message: 'User not found' },
         { status: 404 }
@@ -37,12 +35,22 @@ export async function PUT() {
 
     const userId = new ObjectId(user.data._id);
 
-    const success = await NotificationService.markAllAsRead(userId);
+    // Mark all notifications as read directly in database
+    const db = await connectToDatabase();
+    const result = await db.collection('notifications').updateMany(
+      { userId: userId, status: { $ne: 'read' } },
+      { 
+        $set: { 
+          status: 'read',
+          readAt: new Date()
+        }
+      }
+    );
 
-    if (!success) {
+    if (result.modifiedCount === 0 && result.matchedCount === 0) {
       return NextResponse.json(
-        { success: false, message: 'Failed to mark all notifications as read' },
-        { status: 500 }
+        { success: false, message: 'No notifications found to mark as read' },
+        { status: 404 }
       );
     }
 
@@ -50,8 +58,7 @@ export async function PUT() {
       success: true,
       message: 'All notifications marked as read'
     });
-  } catch (error) {
-    console.error('Error marking all notifications as read:', error);
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Failed to mark all notifications as read' },
       { status: 500 }

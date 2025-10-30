@@ -19,7 +19,6 @@ export async function POST() {
     // Get user ID from session
     const userResponse = await fetch(`${process.env.NEXTAUTH_URL}/api/users/profile`);
     if (!userResponse.ok) {
-      console.error('❌ [Test Notifications API] Failed to fetch user profile:', userResponse.status, userResponse.statusText);
       return NextResponse.json(
         { success: false, message: 'Failed to get user profile' },
         { status: 500 }
@@ -28,7 +27,6 @@ export async function POST() {
     
     const user = await userResponse.json();
     if (!user.success) {
-      console.error('❌ [Test Notifications API] User profile response indicates failure:', user);
       return NextResponse.json(
         { success: false, message: 'User not found' },
         { status: 404 }
@@ -66,8 +64,7 @@ export async function POST() {
       data: notification,
       message: 'Test notification created successfully'
     });
-  } catch (error) {
-    console.error('Error creating test notification:', error);
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Failed to create test notification' },
       { status: 500 }

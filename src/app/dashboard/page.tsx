@@ -1,196 +1,238 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import { 
-  TrendingUp, 
-  TrendingDown, 
   FileText, 
-  Users
+  Users,
+  Receipt,
+  Clock,
+  Crown,
+  Lock,
+  BarChart3
 } from 'lucide-react';
-import FormattedNumberDisplay from '@/components/FormattedNumber';
-
-interface DashboardStats {
-  totalRevenue: number;
-  totalExpenses: number;
-  pendingInvoices: number;
-  paidInvoices: number;
-  totalClients: number;
-}
+import DashboardSkeleton from '@/components/ui/DashboardSkeleton';
+import { useSubscription } from '@/lib/contexts/SubscriptionContext';
+import StatsCards from '@/components/dashboard/StatsCards';
+import RecentInvoices from '@/components/dashboard/RecentInvoices';
+import RecentPayables from '@/components/dashboard/RecentPayables';
 
 export default function DashboardPage() {
   const { data: session } = useSession();
-  const [stats, setStats] = useState<DashboardStats>({
-    totalRevenue: 0,
-    totalExpenses: 0,
-    pendingInvoices: 0,
-    paidInvoices: 0,
-    totalClients: 0
-  });
-  const [loading, setLoading] = useState(true);
+  const { subscription, loading: subscriptionLoading } = useSubscription();
+  const router = useRouter();
+  // const [usingFallbackData, setUsingFallbackData] = useState(false); // Not needed with independent loading
+  const [userName, setUserName] = useState<string>('');
+  const [organizationName, setOrganizationName] = useState<string>('');
 
+  // Fetch current user name and organization name
   useEffect(() => {
-    const loadStats = async () => {
+    const fetchUserData = async () => {
+      if (!session?.user?.email) return;
+      
       try {
-        // Fetch real data from API with currency conversion
-        const [invoicesResponse, clientsResponse] = await Promise.all([
-          fetch('/api/invoices?convertToPreferred=true'),
-          fetch('/api/clients')
-        ]);
-
-        const invoicesData = await invoicesResponse.json();
-        const clientsData = await clientsResponse.json();
-
-        // Use converted revenue from API
-        const invoices = invoicesData.success ? invoicesData.data.invoices || [] : [];
-        const clients = clientsData.success ? clientsData.data : [];
+        const response = await fetch('/api/user/settings');
+        const data = await response.json();
         
-        // Use total revenue from API (which includes all invoices, not just paid ones)
-        const totalRevenue = invoicesData.success ? invoicesData.data.stats?.totalRevenue || 0 : 0;
-
-        const totalExpenses = 0; // Will be implemented when expenses service is ready
-
-        const pendingInvoices = invoices.filter((inv: { status: string }) => inv.status === 'sent' || inv.status === 'pending').length;
-        const paidInvoices = invoices.filter((inv: { status: string }) => inv.status === 'paid').length;
-
-        setStats({
-          totalRevenue,
-          totalExpenses,
-          pendingInvoices,
-          paidInvoices,
-          totalClients: clients.length
-        });
+        if (data.success) {
+          if (data.data.profile.name) {
+            setUserName(data.data.profile.name);
+          }
+          if (data.data.organization?.name) {
+            setOrganizationName(data.data.organization.name);
+          }
+        }
       } catch (error) {
-        console.error('Error loading dashboard stats:', error);
-      } finally {
-        setLoading(false);
+        console.error('Failed to fetch user data:', error);
       }
     };
 
-    loadStats();
-  }, []);
+    fetchUserData();
+  }, [session?.user?.email]);
 
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Dashboard</h1>
-            <p className="text-blue-200">Welcome back, {session?.user?.name || 'User'}!</p>
-          </div>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="bg-white/10 backdrop-blur-sm rounded-xl p-6 animate-pulse">
-              <div className="h-4 bg-white/20 rounded mb-4"></div>
-              <div className="h-8 bg-white/20 rounded"></div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
+  // Show loading only if subscription is loading (stats load independently)
+  if (subscriptionLoading) {
+    return <DashboardSkeleton />;
   }
+
+  const getPlanDisplayName = () => {
+    if (!subscription?.plan) return 'Free Plan';
+    
+    const { type, tier } = subscription.plan;
+    const typeName = type.charAt(0).toUpperCase() + type.slice(1);
+    const tierName = tier.charAt(0).toUpperCase() + tier.slice(1);
+    
+    return `${typeName} ${tierName}`;
+  };
+
+  const getRemainingInvoices = () => {
+    if (!subscription) return 0;
+    
+    if (subscription.limits.invoicesPerMonth === -1) return '∞';
+    return Math.max(0, subscription.limits.invoicesPerMonth - subscription.usage.invoicesThisMonth);
+  };
+
+  const getUsageText = () => {
+    if (!subscription) return '';
+    
+    return `${subscription.usage.invoicesThisMonth} / ${subscription.limits.invoicesPerMonth === -1 ? '∞' : subscription.limits.invoicesPerMonth}`;
+  };
+
+  // Check subscription type and access
+  const isPayablesOnly = subscription?.plan?.type === 'payables';
+  const isReceivablesOnly = subscription?.plan?.type === 'receivables';
+  const isCombined = subscription?.plan?.type === 'combined';
+  const isFreePlan = subscription?.plan?.planId === 'receivables-free';
+  
+  // Check if user has access to receivables (receivables plans, combined plans, or free plan)
+  const hasReceivablesAccess = isReceivablesOnly || isCombined || isFreePlan;
+  
+  // Check if user has access to payables (payables plans or combined plans)
+  const hasPayablesAccess = (isPayablesOnly || isCombined) && subscription?.canAccessPayables;
+  
+  // Check if user is on a paid plan
+  const isPaidUser = subscription?.plan?.planId && subscription.plan.planId !== 'receivables-free';
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Dashboard</h1>
-          <p className="text-blue-200">Welcome back, {session?.user?.name || 'User'}!</p>
+            <h1 className="text-2xl md:text-3xl font-bold text-white mb-2 flex items-center gap-2">
+              {organizationName && (
+                <span className="text-blue-300 font-medium">
+                  {organizationName} • 
+                </span>
+              )}
+              Overview
+              {isPaidUser && (
+                <span className="bg-gradient-to-r from-yellow-400 to-orange-500 text-black text-xs font-bold px-2 py-1 rounded-full">
+                  PRO
+                </span>
+              )}
+            </h1>
+            <p className="text-blue-200">Welcome back, {userName || session?.user?.name || 'User'}!</p>
+            {/* Fallback data warning removed - components handle their own loading states */}
         </div>
         <div className="text-right">
-          <p className="text-sm text-blue-200">Last updated</p>
-          <p className="text-sm text-white">{new Date().toLocaleDateString()}</p>
+            <p className="text-sm text-blue-300">Last updated</p>
+            <p className="text-sm text-white">{new Date().toLocaleDateString()}</p>
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/10">
+      {/* Plan Status Banner - Only show for receivables free users */}
+      {subscription && subscription.plan?.planId === 'receivables-free' && hasReceivablesAccess && (
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-3 md:p-4">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-blue-200 text-sm font-medium">Total Revenue</p>
-              <p className="text-2xl font-bold text-white">
-                <FormattedNumberDisplay value={stats.totalRevenue} />
+            <div className="flex items-center space-x-2 md:space-x-3">
+              {subscription.isTrialActive ? (
+                <Clock className="h-4 w-4 md:h-5 md:w-5 text-yellow-400" />
+              ) : (
+                <Crown className="h-4 w-4 md:h-5 md:w-5 text-blue-400" />
+              )}
+              <div>
+                <h3 className="font-semibold text-white text-sm md:text-base">{getPlanDisplayName()}</h3>
+                <p className="text-xs md:text-sm text-blue-200">
+                  {subscription.isTrialActive 
+                    ? `${subscription.trialDaysRemaining} days left in trial`
+                    : subscription.status === 'active' 
+                      ? 'Active subscription'
+                      : 'Trial expired'
+                  }
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-xs md:text-sm text-blue-200">Invoices this month</p>
+              <p className="text-sm md:text-lg font-semibold text-white">
+                {getUsageText()}
               </p>
-            </div>
-            <div className="p-3 bg-green-500/20 rounded-lg">
-              <TrendingUp className="h-6 w-6 text-green-400" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/10">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-blue-200 text-sm font-medium">Total Expenses</p>
-              <p className="text-2xl font-bold text-white">${stats.totalExpenses.toLocaleString()}</p>
-            </div>
-            <div className="p-3 bg-red-500/20 rounded-lg">
-              <TrendingDown className="h-6 w-6 text-red-400" />
+              {subscription.limits.invoicesPerMonth !== -1 && (
+                <p className="text-xs text-blue-300">
+                  {getRemainingInvoices()} remaining
+                </p>
+              )}
             </div>
           </div>
         </div>
+      )}
 
-        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/10">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-blue-200 text-sm font-medium">Pending Invoices</p>
-              <p className="text-2xl font-bold text-white">{stats.pendingInvoices}</p>
-            </div>
-            <div className="p-3 bg-yellow-500/20 rounded-lg">
-              <FileText className="h-6 w-6 text-yellow-400" />
-            </div>
+      {/* Stats Cards - Independent Loading */}
+      <StatsCards />
+
+      {/* Quick Actions & Alerts */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Quick Actions */}
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Quick Actions</h3>
+          <div className="flex flex-col space-y-3">
+            {/* Show Create Invoice only for receivables plans */}
+            {hasReceivablesAccess && (
+              <button
+                onClick={() => router.push('/dashboard/services/smart-invoicing/create')}
+                disabled={!subscription?.canCreateInvoice}
+                className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+                  subscription?.canCreateInvoice
+                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                    : 'bg-gray-500 text-gray-300 cursor-not-allowed'
+                }`}
+              >
+                <FileText className="h-5 w-5" />
+                <span>Create Invoice</span>
+                {!subscription?.canCreateInvoice && (
+                  <>
+                    <span className="text-xs ml-auto">Limit Reached</span>
+                    <Lock className="h-4 w-4" />
+                  </>
+                )}
+              </button>
+            )}
+            
+            {/* Show Create Payable only for payables plans */}
+            {hasPayablesAccess && (
+              <button
+                onClick={() => router.push('/dashboard/services/payables/create')}
+                className="flex items-center space-x-3 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Receipt className="h-5 w-5" />
+                <span>Create Payable</span>
+              </button>
+            )}
+
           </div>
         </div>
 
-        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/10">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-blue-200 text-sm font-medium">Total Clients</p>
-              <p className="text-2xl font-bold text-white">{stats.totalClients}</p>
+        {/* Alerts & Status */}
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Status</h3>
+          <div className="space-y-3">
+            <div className="flex items-center space-x-3 p-3 bg-green-500/20 border border-green-500/30 rounded-lg">
+              <Users className="h-5 w-5 text-blue-400" />
+              <div>
+                <p className="text-blue-400 font-medium">System Active</p>
+                <p className="text-blue-300 text-sm">All services running</p>
+              </div>
             </div>
-            <div className="p-3 bg-blue-500/20 rounded-lg">
-              <Users className="h-6 w-6 text-blue-400" />
-            </div>
+            
+            <button
+              onClick={() => router.push('/dashboard/stats')}
+              className="flex items-center space-x-3 p-3 bg-blue-500/20 border border-blue-500/30 rounded-lg hover:bg-blue-500/30 transition-colors w-full"
+            >
+              <BarChart3 className="h-5 w-5 text-blue-400" />
+              <div className="text-left">
+                <p className="text-blue-400 font-medium">View Statistics</p>
+                <p className="text-blue-300 text-sm">Financial overview & analytics</p>
+              </div>
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Recent Activity */}
-      <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/10">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-white">Recent Activity</h2>
-          <button className="text-blue-400 hover:text-blue-300 text-sm font-medium transition-colors">
-            View all
-          </button>
-        </div>
-        
-        <div className="space-y-4">
-          <div className="flex items-center space-x-4 p-3 rounded-lg bg-white/5">
-            <div className="p-2 bg-green-500/20 rounded-lg">
-              <FileText className="h-4 w-4 text-green-400" />
-            </div>
-            <div className="flex-1">
-              <p className="text-white text-sm font-medium">Smart Invoicing service active</p>
-              <p className="text-blue-200 text-xs">Service • Just now</p>
-            </div>
-            <span className="text-green-400 text-sm font-medium">Active</span>
-          </div>
-          
-          <div className="flex items-center space-x-4 p-3 rounded-lg bg-white/5">
-            <div className="p-2 bg-blue-500/20 rounded-lg">
-              <Users className="h-4 w-4 text-blue-400" />
-            </div>
-            <div className="flex-1">
-              <p className="text-white text-sm font-medium">Account created</p>
-              <p className="text-blue-200 text-xs">System • {new Date().toLocaleDateString()}</p>
-            </div>
-            <span className="text-blue-400 text-sm font-medium">Welcome!</span>
-          </div>
-        </div>
+      {/* Recent Activity - Independent Loading */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <RecentInvoices />
+        <RecentPayables />
       </div>
     </div>
   );
-} 
+}

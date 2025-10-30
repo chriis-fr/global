@@ -39,18 +39,15 @@ export function LogoSelector({ onLogoSelectAction, selectedLogoId, className = '
           const singleLogo = logos[0];
           setSelectedLogo(singleLogo);
           onLogoSelectAction(singleLogo);
-          console.log('✅ [LogoSelector] Auto-selected single logo:', singleLogo);
         }
         // Set default logo if no logo is selected and there are multiple logos
         else if (!selectedLogoId && logos.length > 0) {
           const defaultLogo = logos.find((logo: Logo) => logo.isDefault) || logos[0];
           setSelectedLogo(defaultLogo);
           onLogoSelectAction(defaultLogo);
-          console.log('✅ [LogoSelector] Selected default logo:', defaultLogo);
         }
       }
-    } catch (error) {
-      console.error('Error fetching logos:', error);
+    } catch {
     } finally {
       setLoading(false);
     }

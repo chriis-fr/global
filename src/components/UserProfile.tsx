@@ -37,8 +37,7 @@ export function UserProfile() {
         await update() // Refresh session
         setIsEditing(false)
       }
-    } catch (error) {
-      console.error('Error updating profile:', error)
+    } catch {
     } finally {
       setLoading(false)
     }

@@ -16,11 +16,13 @@ import {
   ChevronRight,
   CreditCard,
   ImageIcon,
-  CheckCircle
+  CheckCircle,
+  Receipt
 } from 'lucide-react';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
-import NotificationBadge from './NotificationBadge';
 import Image from 'next/image';
+import { useSubscription } from '@/lib/contexts/SubscriptionContext';
+import { usePermissions } from '@/lib/contexts/PermissionContext';
 
 const SERVICE_LINKS = [
   {
@@ -28,6 +30,12 @@ const SERVICE_LINKS = [
     label: 'Smart Invoicing',
     icon: FileText,
     href: '/dashboard/services/smart-invoicing',
+  },
+  {
+    key: 'accountsPayable',
+    label: 'Pay',
+    icon: Receipt,
+    href: '/dashboard/services/payables',
   },
   // Add more services as they become ready
 ];
@@ -82,6 +90,8 @@ const SETTINGS_LINKS = [
 
 export default function Sidebar() {
   const { data: session } = useSession();
+  const { subscription } = useSubscription();
+  const { permissions } = usePermissions();
   const pathname = usePathname();
   // const enabledServices = session?.user?.services || {}; // Temporarily disabled to show all services
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -213,7 +223,7 @@ export default function Sidebar() {
       {/* Fixed Header */}
       <div className="p-6 border-b border-white/10 flex-shrink-0">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
+          <Link href="/dashboard" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
             <Image
                   src="/chainsnobg.png"
@@ -224,20 +234,18 @@ export default function Sidebar() {
                 />
             </div>
             {(!isCollapsed || isAutoHidden) && (
-              <span className="text-white text-xl font-bold whitespace-nowrap">Global</span>
+              <span className="text-white text-lg font-bold whitespace-nowrap">Global Finance</span>
             )}
-          </div>
+          </Link>
           
           {/* Notifications Bell Icon */}
           <div className="flex items-center space-x-2">
             <Link
               href="/dashboard/notifications"
-              onClick={closeMobileMenu}
               className="relative p-2 text-white/70 hover:text-white hover:bg-blue-900/50 rounded-lg transition-colors"
               title="Notifications"
             >
               <Bell className="h-5 w-5" />
-              <NotificationBadge />
             </Link>
             
             {/* Mobile Close Button */}
@@ -263,37 +271,42 @@ export default function Sidebar() {
                 Services
               </h3>
             )}
-            {SERVICE_LINKS.map(link => {
-           const active = pathname.startsWith(link.href);
+            {SERVICE_LINKS.filter(link => {
+              // Hide Payables service if user doesn't have access to payables
+              if (link.key === 'accountsPayable') {
+                return subscription?.canAccessPayables || false;
+              }
+              // Hide Smart Invoicing service if user only has payables access (payables-only plans)
+              if (link.key === 'smartInvoicing') {
+                // Show Smart Invoicing for receivables plans, combined plans, or free plan
+                const isPayablesOnly = subscription?.plan?.type === 'payables';
+                return !isPayablesOnly;
+              }
+              return true;
+            }).map(link => {
+              const active = pathname.startsWith(link.href);
               return (
                 <Link
                   key={link.key}
                   href={link.href}
                   onClick={closeMobileMenu}
                   className={`flex items-center px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation ${
-                    active 
-                      ? 'bg-blue-800 text-white' 
-                      : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
+                    active
+                      ? 'bg-blue-600 text-white'
+                      : 'text-white/70 hover:text-white hover:bg-white/10'
                   }`}
-                  style={{ textDecoration: 'none' }}
-                  title={isCollapsed && !isAutoHidden ? link.label : undefined}
                 >
-                  <link.icon className="h-4 w-4 mr-3 flex-shrink-0" />
+                  <link.icon className={`h-5 w-5 ${isCollapsed && !isAutoHidden ? 'mx-auto' : 'mr-3'} flex-shrink-0`} />
                   {(!isCollapsed || isAutoHidden) && (
-                    <span className="whitespace-nowrap">{link.label}</span>
-                  )}
-                  {isCollapsed && !isAutoHidden && (
-                    <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
-                      {link.label}
-                    </div>
+                    <span className="truncate">{link.label}</span>
                   )}
                 </Link>
               );
             })}
           </div>
 
-          {/* Admin Navigation - Only for Business Users */}
-          {session?.user?.userType === 'business' && session?.user?.organizationId && (
+          {/* Admin Navigation - Only for users with approval permissions */}
+          {permissions.canApproveBills && session?.user?.organizationId && (
             <div className="mb-4">
               {(!isCollapsed || isAutoHidden) && (
                 <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wider mb-2 px-2">
@@ -569,10 +582,15 @@ export default function Sidebar() {
       {/* Mobile Menu Button */}
       <button
         onClick={toggleMobileMenu}
-        className="lg:hidden fixed top-4 left-4 z-50 p-3 bg-blue-900/80 backdrop-blur-sm rounded-lg text-white hover:bg-blue-800/90 transition-colors shadow-lg touch-manipulation active:scale-95"
+        className={`lg:hidden fixed top-4 right-4 z-50 p-3 
+          rounded-xl text-white transition-all duration-300 ease-out shadow-xl touch-manipulation active:scale-95
+          backdrop-blur-xl bg-gradient-to-br from-white/10 to-blue-900/20
+          border border-white/20 hover:from-white/20 hover:to-blue-900/30
+          hover:shadow-2xl hover:shadow-blue-500/10
+          ${isMobileMenuOpen ? 'hidden' : 'block'}`}
         aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
       >
-        {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        <Menu className="h-5 w-5" />
       </button>
 
       {/* Mobile Sidebar Overlay */}
@@ -585,7 +603,7 @@ export default function Sidebar() {
 
       {/* Mobile Sidebar */}
       <aside 
-        className={`lg:hidden fixed left-0 top-0 h-full w-80 sm:w-80 bg-blue-950 border-r border-white/10 z-50 transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col ${
+        className={`lg:hidden fixed  left-0 top-0 h-full w-80 sm:w-80 bg-blue-950 border-r border-white/10 z-50 transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col ${
           isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
         onTouchStart={onTouchStart}

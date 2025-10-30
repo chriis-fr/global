@@ -14,7 +14,6 @@ process.setMaxListeners(20);
 export async function connectToDatabase(): Promise<Db> {
   // If we already have a connection, return it
   if (db) {
-    // console.log('✅ [Database] Using existing database connection');
     return db;
   }
 
@@ -65,12 +64,6 @@ async function createConnection(): Promise<Db> {
     
     return db;
   } catch (error) {
-    console.error('❌ [Database] Failed to connect to MongoDB:', error);
-    console.error('🔍 [Database] Connection error details:', {
-      uri: MONGODB_URI.replace(/\/\/[^:]+:[^@]+@/, '//***:***@'),
-      dbName: DB_NAME,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
     
     // Clean up on error
     if (client) {
@@ -108,13 +101,11 @@ function initializeShutdownHandlers(): void {
   
   // Graceful shutdown
   process.on('SIGINT', async () => {
-    console.log('🔄 [Database] Received SIGINT, closing database connection...');
     await closeDatabase();
     process.exit(0);
   });
 
   process.on('SIGTERM', async () => {
-    console.log('🔄 [Database] Received SIGTERM, closing database connection...');
     await closeDatabase();
     process.exit(0);
   });

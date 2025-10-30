@@ -10,7 +10,7 @@ export interface Currency {
 }
 
 export const fiatCurrencies: Currency[] = [
-  { id: 'usd', code: 'USD', name: 'US Dollar', symbol: '$', type: 'fiat', logo: '/currencies/usd.png' },
+  { id: 'usd', code: 'USD', name: 'US Dollar', symbol: '$', type: 'fiat', logo: '/currency-flags/usd.png' },
   { id: 'eur', code: 'EUR', name: 'Euro', symbol: '€', type: 'fiat', logo: '/currencies/eur.png' },
   { id: 'gbp', code: 'GBP', name: 'British Pound', symbol: '£', type: 'fiat', logo: '/currencies/gbp.png' },
   { id: 'jpy', code: 'JPY', name: 'Japanese Yen', symbol: '¥', type: 'fiat', logo: '/currencies/jpy.png' },
@@ -48,14 +48,29 @@ export const fiatCurrencies: Currency[] = [
 ];
 
 export const cryptoCurrencies: Currency[] = [
+  // Major Cryptocurrencies
   { id: 'btc', code: 'BTC', name: 'Bitcoin', symbol: '₿', type: 'crypto', logo: '/currencies/btc.png', network: 'Bitcoin', decimals: 8 },
   { id: 'eth', code: 'ETH', name: 'Ethereum', symbol: 'Ξ', type: 'crypto', logo: '/currencies/eth.png', network: 'Ethereum', decimals: 18 },
+  
+  // Major Stablecoins
   { id: 'usdt', code: 'USDT', name: 'Tether', symbol: '₮', type: 'crypto', logo: '/currencies/usdt.png', network: 'Ethereum', decimals: 6 },
   { id: 'usdc', code: 'USDC', name: 'USD Coin', symbol: '$', type: 'crypto', logo: '/currencies/usdc.png', network: 'Ethereum', decimals: 6 },
+  { id: 'dai', code: 'DAI', name: 'Dai', symbol: 'DAI', type: 'crypto', logo: '/currencies/dai.png', network: 'Ethereum', decimals: 18 },
+  { id: 'usdp', code: 'USDP', name: 'Pax Dollar', symbol: 'USDP', type: 'crypto', logo: '/currencies/usdp.png', network: 'Ethereum', decimals: 18 },
+  { id: 'tusd', code: 'TUSD', name: 'TrueUSD', symbol: 'TUSD', type: 'crypto', logo: '/currencies/tusd.png', network: 'Ethereum', decimals: 18 },
+  
+  // Celo Ecosystem (Your Priority)
+  { id: 'celo', code: 'CELO', name: 'Celo', symbol: 'CELO', type: 'crypto', logo: '/currencies/celo.png', network: 'Celo', decimals: 18 },
+  { id: 'cusd', code: 'CUSD', name: 'Celo Dollar', symbol: 'cUSD', type: 'crypto', logo: '/currencies/cusd.png', network: 'Celo', decimals: 18 },
+  { id: 'ceur', code: 'CEUR', name: 'Celo Euro', symbol: 'cEUR', type: 'crypto', logo: '/currencies/ceur.png', network: 'Celo', decimals: 18 },
+  
+  // Scroll Ecosystem (Your Priority)
+  { id: 'scr', code: 'SCR', name: 'Scroll', symbol: 'SCR', type: 'crypto', logo: '/currencies/scr.png', network: 'Scroll', decimals: 18 },
+  
+  // Other Major Cryptocurrencies
   { id: 'bnb', code: 'BNB', name: 'BNB', symbol: 'BNB', type: 'crypto', logo: '/currencies/bnb.png', network: 'BNB Smart Chain', decimals: 18 },
   { id: 'sol', code: 'SOL', name: 'Solana', symbol: '◎', type: 'crypto', logo: '/currencies/sol.png', network: 'Solana', decimals: 9 },
   { id: 'ada', code: 'ADA', name: 'Cardano', symbol: '₳', type: 'crypto', logo: '/currencies/ada.png', network: 'Cardano', decimals: 6 },
-  { id: 'doge', code: 'DOGE', name: 'Dogecoin', symbol: 'Ð', type: 'crypto', logo: '/currencies/doge.png', network: 'Dogecoin', decimals: 8 },
   { id: 'dot', code: 'DOT', name: 'Polkadot', symbol: '●', type: 'crypto', logo: '/currencies/dot.png', network: 'Polkadot', decimals: 10 },
   { id: 'matic', code: 'MATIC', name: 'Polygon', symbol: 'MATIC', type: 'crypto', logo: '/currencies/matic.png', network: 'Polygon', decimals: 18 },
   { id: 'link', code: 'LINK', name: 'Chainlink', symbol: 'LINK', type: 'crypto', logo: '/currencies/link.png', network: 'Ethereum', decimals: 18 },
@@ -68,6 +83,8 @@ export const cryptoCurrencies: Currency[] = [
   { id: 'ftm', code: 'FTM', name: 'Fantom', symbol: 'FTM', type: 'crypto', logo: '/currencies/ftm.png', network: 'Fantom', decimals: 18 },
   { id: 'near', code: 'NEAR', name: 'NEAR Protocol', symbol: 'NEAR', type: 'crypto', logo: '/currencies/near.png', network: 'NEAR', decimals: 24 },
   { id: 'algo', code: 'ALGO', name: 'Algorand', symbol: 'ALGO', type: 'crypto', logo: '/currencies/algo.png', network: 'Algorand', decimals: 6 },
+  
+  // Removed Dogecoin as it's not typically used in business invoicing
 ];
 
 export const allCurrencies = [...fiatCurrencies, ...cryptoCurrencies];

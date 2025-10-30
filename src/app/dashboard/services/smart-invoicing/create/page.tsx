@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import { sendInvoiceWhatsApp } from '@/lib/actions/whatsapp';
 
 import Image from 'next/image';
 import { 
@@ -26,7 +27,9 @@ import {
   Mail,
   File,
   ChevronDown as ChevronDownIcon,
-  Smartphone
+  Smartphone,
+  Lock,
+  CheckCircle
 } from 'lucide-react';
 import { fiatCurrencies, cryptoCurrencies, getCurrencyByCode } from '@/data/currencies';
 import { countries, getTaxRatesByCountry } from '@/data/countries';
@@ -35,10 +38,10 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import InvoicePdfView from '@/components/invoicing/InvoicePdfView';
 import { LogoSelector } from '@/components/LogoSelector';
-import { setCriticalOperation } from '@/components/dashboard/NotificationBadge';
 import BankSelector from '@/components/BankSelector';
 import { Bank } from '@/data';
 import FloatingActionButton from '@/components/dashboard/FloatingActionButton';
+import { useSubscription } from '@/lib/contexts/SubscriptionContext';
 
 interface Client {
   _id: string;
@@ -80,6 +83,8 @@ interface InvoiceFormData {
     zipCode: string;
     country: string;
   };
+  // WhatsApp sending options
+  sendViaWhatsapp: boolean;
   currency: string;
   paymentMethod: 'fiat' | 'crypto';
   fiatPaymentSubtype?: 'bank' | 'mpesa_paybill' | 'mpesa_till';
@@ -152,6 +157,8 @@ const defaultInvoiceData: InvoiceFormData = {
     zipCode: '',
     country: 'US'
   },
+  // WhatsApp sending options
+  sendViaWhatsapp: false,
   currency: 'USD',
   paymentMethod: 'fiat',
   fiatPaymentSubtype: 'bank',
@@ -375,6 +382,7 @@ export default function CreateInvoicePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session } = useSession();
+  const { subscription } = useSubscription();
   
   // Auto-save status state
   const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null);
@@ -396,6 +404,88 @@ export default function CreateInvoicePage() {
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [sendingInvoice, setSendingInvoice] = useState(false);
   
+  // Phone formatting and validation functions
+  const formatPhoneForWhatsApp = (phone: string, countryCode: string = '+1') => {
+    if (!phone) return phone;
+    
+    // Remove all non-digit characters
+    const digits = phone.replace(/\D/g, '');
+    
+    // If starts with 0, remove it and add country code
+    if (digits.startsWith('0')) {
+      const withoutZero = digits.substring(1);
+      return `${countryCode}${withoutZero}`;
+    }
+    
+    // If already has country code, return as is
+    if (phone.startsWith('+')) {
+      return phone;
+    }
+    
+    // If no leading 0 and no country code, add it
+    return `${countryCode}${digits}`;
+  };
+
+  // Extract country code from phone number
+  const extractCountryCodeFromPhone = (phone: string) => {
+    if (!phone || !phone.startsWith('+')) return null;
+    
+    // Common country codes mapping
+    const countryCodeMap: { [key: string]: string } = {
+      '+1': 'US', '+7': 'RU', '+20': 'EG', '+27': 'ZA', '+30': 'GR', '+31': 'NL', '+32': 'BE',
+      '+33': 'FR', '+34': 'ES', '+39': 'IT', '+40': 'RO', '+41': 'CH', '+43': 'AT', '+44': 'GB',
+      '+45': 'DK', '+46': 'SE', '+47': 'NO', '+48': 'PL', '+49': 'DE', '+51': 'PE', '+52': 'MX',
+      '+53': 'CU', '+54': 'AR', '+55': 'BR', '+56': 'CL', '+57': 'CO', '+58': 'VE', '+60': 'MY',
+      '+61': 'AU', '+62': 'ID', '+63': 'PH', '+64': 'NZ', '+65': 'SG', '+66': 'TH', '+81': 'JP',
+      '+82': 'KR', '+84': 'VN', '+86': 'CN', '+90': 'TR', '+91': 'IN', '+92': 'PK', '+93': 'AF',
+      '+94': 'LK', '+95': 'MM', '+98': 'IR', '+212': 'MA', '+213': 'DZ', '+216': 'TN', '+218': 'LY',
+      '+220': 'GM', '+221': 'SN', '+222': 'MR', '+223': 'ML', '+224': 'GN', '+225': 'CI', '+226': 'BF',
+      '+227': 'NE', '+228': 'TG', '+229': 'BJ', '+230': 'MU', '+231': 'LR', '+232': 'SL', '+233': 'GH',
+      '+234': 'NG', '+235': 'TD', '+236': 'CF', '+237': 'CM', '+238': 'CV', '+239': 'ST', '+240': 'GQ',
+      '+241': 'GA', '+242': 'CG', '+243': 'CD', '+244': 'AO', '+245': 'GW', '+246': 'IO', '+248': 'SC',
+      '+249': 'SD', '+250': 'RW', '+251': 'ET', '+252': 'SO', '+253': 'DJ', '+254': 'KE', '+255': 'TZ',
+      '+256': 'UG', '+257': 'BI', '+258': 'MZ', '+260': 'ZM', '+261': 'MG', '+262': 'RE', '+263': 'ZW',
+      '+264': 'NA', '+265': 'MW', '+266': 'LS', '+267': 'BW', '+268': 'SZ', '+269': 'KM', '+290': 'SH',
+      '+291': 'ER', '+297': 'AW', '+298': 'FO', '+299': 'GL', '+350': 'GI', '+351': 'PT', '+352': 'LU',
+      '+353': 'IE', '+354': 'IS', '+355': 'AL', '+356': 'MT', '+357': 'CY', '+358': 'FI', '+359': 'BG',
+      '+370': 'LT', '+371': 'LV', '+372': 'EE', '+373': 'MD', '+374': 'AM', '+375': 'BY', '+376': 'AD',
+      '+377': 'MC', '+378': 'SM', '+380': 'UA', '+381': 'RS', '+382': 'ME', '+383': 'XK', '+385': 'HR',
+      '+386': 'SI', '+387': 'BA', '+389': 'MK', '+420': 'CZ', '+421': 'SK', '+423': 'LI', '+500': 'FK',
+      '+501': 'BZ', '+502': 'GT', '+503': 'SV', '+504': 'HN', '+505': 'NI', '+506': 'CR', '+507': 'PA',
+      '+508': 'PM', '+509': 'HT', '+590': 'GP', '+591': 'BO', '+592': 'GY', '+593': 'EC', '+594': 'GF',
+      '+595': 'PY', '+596': 'MQ', '+597': 'SR', '+598': 'UY', '+599': 'AN', '+670': 'TL', '+672': 'NF',
+      '+673': 'BN', '+674': 'NR', '+675': 'PG', '+676': 'TO', '+677': 'SB', '+678': 'VU', '+679': 'FJ',
+      '+680': 'PW', '+681': 'WF', '+682': 'CK', '+683': 'NU', '+684': 'AS', '+685': 'WS', '+686': 'KI',
+      '+687': 'NC', '+688': 'TV', '+689': 'PF', '+690': 'TK', '+691': 'FM', '+692': 'MH', '+850': 'KP',
+      '+852': 'HK', '+853': 'MO', '+855': 'KH', '+856': 'LA', '+880': 'BD', '+886': 'TW', '+960': 'MV',
+      '+961': 'LB', '+962': 'JO', '+963': 'SY', '+964': 'IQ', '+965': 'KW', '+966': 'SA', '+967': 'YE',
+      '+968': 'OM', '+970': 'PS', '+971': 'AE', '+972': 'IL', '+973': 'BH', '+974': 'QA', '+975': 'BT',
+      '+976': 'MN', '+977': 'NP', '+992': 'TJ', '+993': 'TM', '+994': 'AZ', '+995': 'GE', '+996': 'KG',
+      '+998': 'UZ'
+    };
+    
+    // Try to match country code (longest first)
+    const sortedCodes = Object.keys(countryCodeMap).sort((a, b) => b.length - a.length);
+    for (const code of sortedCodes) {
+      if (phone.startsWith(code)) {
+        return countryCodeMap[code];
+      }
+    }
+    
+    return null;
+  };
+
+  const validatePhoneForWhatsApp = (phone: string) => {
+    if (!phone) return false;
+    
+    // Remove all non-digit characters except +
+    const cleaned = phone.replace(/[^\d+]/g, '');
+    
+    // Must start with + and have at least 10 digits after country code
+    const phoneRegex = /^\+\d{10,15}$/;
+    return phoneRegex.test(cleaned);
+  };
+  
   // CC Clients state
   const [showCcClientSelector, setShowCcClientSelector] = useState(false);
   const [showCcClientCreationModal, setShowCcClientCreationModal] = useState(false);
@@ -411,9 +501,170 @@ export default function CreateInvoicePage() {
            formData.currency === 'KES';
   };
 
+  // Helper function to get currency icon
+  const getCurrencyIcon = (currencyCode: string) => {
+    // Map of currency codes to their actual file names
+    const currencyIconMap: { [key: string]: string } = {
+      // Fiat Currencies
+      'USD': 'usd.png',
+      'EUR': 'euro.png',
+      'GBP': 'gbp.png',
+      'JPY': 'jpy.png',
+      'CAD': 'cad.jpeg',
+      'AUD': 'usd.png', // Fallback to USD until aud.png is added
+      'CHF': 'chf.png',
+      'CNY': 'cny.jpeg',
+      'INR': 'inr.png',
+      'BRL': 'brl.png',
+      'MXN': 'mxn.png',
+      'SGD': 'sgd.png',
+      'HKD': 'hkd.png',
+      'NZD': 'nzd.png',
+      'SEK': 'sek.png',
+      'NOK': 'nok.png',
+      'DKK': 'dkk.png',
+      'PLN': 'pln.png',
+      'CZK': 'czk.png',
+      'HUF': 'huf.png',
+      'RUB': 'rub.png',
+      'TRY': 'try.png',
+      'KRW': 'krw.png',
+      'THB': 'thb.jpeg',
+      'MYR': 'myr.png',
+      'IDR': 'idr.png',
+      'PHP': 'php.png',
+      'VND': 'vnd.png',
+      'EGP': 'egp.png',
+      'ZAR': 'zar.png',
+      'NGN': 'ngn.png',
+      'KES': 'kes.png',
+      'GHS': 'ghs.png',
+      'UGX': 'ugx.png',
+      'TZS': 'tzs.png',
+      
+      // Cryptocurrencies
+      'BTC': 'btc.png',
+      'ETH': 'eth.png',
+      'USDT': 'usdt.png',
+      'USDC': 'usdc.png',
+      'DAI': 'dai.png',
+      'USDP': 'usdp.png',
+      'TUSD': 'tusd.png',
+      'CELO': 'celo.png', // You have this file
+      'CUSD': 'cusd.png',
+      'CEUR': 'ceur.png',
+      'SCR': 'scroll.png', // You have this file
+      'BNB': 'bnb.png',
+      'SOL': 'sol.png',
+      'ADA': 'ada.png',
+      'DOT': 'chainsnobg.png', // Fallback to app logo - you need dot.png
+      'MATIC': 'chainsnobg.png', // Fallback to app logo - you need matic.png
+      'LINK': 'chainsnobg.png', // Fallback to app logo - you need link.png
+      'UNI': 'chainsnobg.png', // Fallback to app logo - you need uni.png
+      'LTC': 'chainsnobg.png', // Fallback to app logo - you need ltc.png
+      'BCH': 'chainsnobg.png', // Fallback to app logo - you need bch.png
+      'XRP': 'chainsnobg.png', // Fallback to app logo - you need xrp.png
+      'AVAX': 'chainsnobg.png', // Fallback to app logo - you need avax.png
+      'ATOM': 'chainsnobg.png', // Fallback to app logo - you need atom.png
+      'FTM': 'chainsnobg.png', // Fallback to app logo - you need ftm.png
+      'NEAR': 'chainsnobg.png', // Fallback to app logo - you need near.png
+      'ALGO': 'chainsnobg.png', // Fallback to app logo - you need algo.png
+    };
+
+    const iconFile = currencyIconMap[currencyCode.toUpperCase()];
+    if (iconFile) {
+      return `/currencies/${iconFile}`;
+    }
+    
+    // Ultimate fallback - use app logo
+    return '/chainsnobg.png';
+  };
+
+  // Helper function to get network icon
+  const getNetworkIcon = (networkId: string) => {
+    // Map of network IDs to their actual file names
+    const networkIconMap: { [key: string]: string } = {
+      'ethereum': 'ethereum.png', // You have this file
+      'polygon': 'chainsnobg.png', // Fallback to app logo - you need polygon.png
+      'bsc': 'chainsnobg.png', // Fallback to app logo - you need bsc.png
+      'solana': 'chainsnobg.png', // Fallback to app logo - you need solana.png
+      'avalanche': 'chainsnobg.png', // Fallback to app logo - you need avalanche.png
+      'fantom': 'chainsnobg.png', // Fallback to app logo - you need fantom.png
+      'arbitrum': 'chainsnobg.png', // Fallback to app logo - you need arbitrum.png
+      'optimism': 'chainsnobg.png', // Fallback to app logo - you need optimism.png
+      'base': 'chainsnobg.png', // Fallback to app logo - you need base.png
+      'cardano': 'chainsnobg.png', // Fallback to app logo - you need cardano.png
+      'polkadot': 'chainsnobg.png', // Fallback to app logo - you need polkadot.png
+      'cosmos': 'chainsnobg.png', // Fallback to app logo - you need cosmos.png
+      'near': 'chainsnobg.png', // Fallback to app logo - you need near.png
+      'algorand': 'chainsnobg.png', // Fallback to app logo - you need algorand.png
+      'bitcoin': 'chainsnobg.png', // Fallback to app logo - you need bitcoin.png
+      'litecoin': 'chainsnobg.png', // Fallback to app logo - you need litecoin.png
+      'ripple': 'chainsnobg.png', // Fallback to app logo - you need ripple.png
+      'celo': 'celo.png', // You have this file
+      'scroll': 'scroll.png', // You have this file
+    };
+
+    const iconFile = networkIconMap[networkId.toLowerCase()];
+    if (iconFile) {
+      return `/networks/${iconFile}`;
+    }
+    
+    // Ultimate fallback - use app logo
+    return '/chainsnobg.png';
+  };
+
   // Currency dropdown state
   const [showCurrencyDropdown, setShowCurrencyDropdown] = useState(false);
   const [currencySearch, setCurrencySearch] = useState('');
+  const [userHasSelectedCurrency, setUserHasSelectedCurrency] = useState(false);
+  const [isAutoSelectingCurrency, setIsAutoSelectingCurrency] = useState(false);
+
+  // Auto-select currency based on payment method
+  const autoSelectCurrencyForPaymentMethod = (paymentMethod: string) => {
+    
+    if (paymentMethod === 'crypto') {
+      // Auto-select USDT for crypto payments
+      const usdtCurrency = cryptoCurrencies.find((c: { code: string }) => c.code === 'USDT');
+      
+      if (usdtCurrency) {
+        setIsAutoSelectingCurrency(true);
+        setFormData(prev => ({
+          ...prev,
+          currency: usdtCurrency.code,
+          currencySymbol: usdtCurrency.symbol,
+          currencyName: usdtCurrency.name,
+          currencyLogo: usdtCurrency.logo,
+          currencyType: usdtCurrency.type,
+          currencyNetwork: usdtCurrency.network
+        }));
+        setUserHasSelectedCurrency(true);
+        // Reset the flag after a short delay
+        setTimeout(() => setIsAutoSelectingCurrency(false), 100);
+      } else {
+      }
+    } else if (paymentMethod === 'fiat') {
+      // Auto-select USD for fiat payments
+      const usdCurrency = fiatCurrencies.find((c: { code: string }) => c.code === 'USD');
+      
+      if (usdCurrency) {
+        setIsAutoSelectingCurrency(true);
+        setFormData(prev => ({
+          ...prev,
+          currency: usdCurrency.code,
+          currencySymbol: usdCurrency.symbol,
+          currencyName: usdCurrency.name,
+          currencyLogo: usdCurrency.logo,
+          currencyType: usdCurrency.type,
+          currencyNetwork: usdCurrency.network
+        }));
+        setUserHasSelectedCurrency(true);
+        // Reset the flag after a short delay
+        setTimeout(() => setIsAutoSelectingCurrency(false), 100);
+      } else {
+      }
+    }
+  };
   
   // Network dropdown state
   const [showNetworkDropdown, setShowNetworkDropdown] = useState(false);
@@ -462,6 +713,13 @@ export default function CreateInvoicePage() {
       const data = await response.json();
       
       if (data.success && data.data) {
+        // Security check: Only allow editing draft invoices
+        if (data.data.status !== 'draft') {
+          console.warn('🚫 [Security] Attempted to edit non-draft invoice:', data.data.status);
+          router.push(`/dashboard/services/smart-invoicing/invoices/${id}`);
+          return;
+        }
+        
         // Ensure all required fields are present with defaults
         const loadedData = {
           ...defaultInvoiceData,
@@ -469,6 +727,9 @@ export default function CreateInvoicePage() {
           attachedFiles: data.data.attachedFiles || [],
           ccClients: data.data.ccClients || []
         };
+        
+        // Keep amounts exactly as stored - no recalculation
+        
         setFormData(loadedData);
         setIsEditing(true);
       }
@@ -506,7 +767,10 @@ export default function CreateInvoicePage() {
               country: finalCountry
             },
             companyTaxNumber: onboardingData.businessInfo?.taxId || prev.companyTaxNumber,
-            currency: onboardingData.invoiceSettings?.defaultCurrency || prev.currency
+            // Only set currency from onboarding if user hasn't manually selected one
+            currency: (!userHasSelectedCurrency && onboardingData.invoiceSettings?.defaultCurrency) 
+              ? onboardingData.invoiceSettings.defaultCurrency 
+              : prev.currency
           };
         });
       }
@@ -638,15 +902,53 @@ export default function CreateInvoicePage() {
   };
 
   const handleInputChange = (field: keyof InvoiceFormData, value: string | number | boolean) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData(prev => {
+      const updated = { ...prev, [field]: value };
+      
+      // Track when user manually selects a currency
+      if (field === 'currency') {
+        setUserHasSelectedCurrency(true);
+        
+        // Only auto-switch payment method if this is NOT an auto-selection
+        if (!isAutoSelectingCurrency) {
+          // Check if the selected currency is a cryptocurrency
+          const selectedCurrency = getCurrencyByCode(value as string);
+          if (selectedCurrency && selectedCurrency.type === 'crypto') {
+            // Automatically switch payment method to crypto for cryptocurrencies
+            updated.paymentMethod = 'crypto';
+            // Set the appropriate network for the cryptocurrency
+            if (selectedCurrency.network) {
+              // Find the network by name and set the network ID
+              const matchingNetwork = networks.find(network => network.name === selectedCurrency.network);
+              if (matchingNetwork) {
+                updated.paymentNetwork = matchingNetwork.id;
+              }
+            }
+          } else if (selectedCurrency && selectedCurrency.type === 'fiat') {
+            // Automatically switch payment method to fiat for fiat currencies
+            updated.paymentMethod = 'fiat';
+            // Clear the payment network for fiat currencies
+            updated.paymentNetwork = '';
+          }
+        } else {
+        }
+      }
+      
+      return updated;
+    });
   };
 
   const handleFiatPaymentSubtypeChange = (value: string) => {
     setFormData(prev => ({
       ...prev,
       fiatPaymentSubtype: value as 'bank' | 'mpesa_paybill' | 'mpesa_till',
-      // Automatically set currency to KES for M-Pesa payments
-      currency: (value === 'mpesa_paybill' || value === 'mpesa_till') ? 'KES' : prev.currency
+      // Only automatically change currency for M-Pesa payments if user hasn't manually selected a currency
+      // or if they're switching from M-Pesa back to bank transfer, preserve their previous currency
+      currency: (value === 'mpesa_paybill' || value === 'mpesa_till') 
+        ? 'KES' 
+        : (prev.fiatPaymentSubtype === 'mpesa_paybill' || prev.fiatPaymentSubtype === 'mpesa_till')
+          ? (userHasSelectedCurrency ? prev.currency : 'USD') // Preserve user selection or default to USD
+          : prev.currency
     }));
   };
 
@@ -736,6 +1038,21 @@ export default function CreateInvoicePage() {
         country
       }
     }));
+
+    // Auto-detect best sending method after client selection
+    setTimeout(() => {
+      const hasEmail = client.email && client.email.trim() !== '';
+      const hasPhone = client.phone && client.phone.trim() !== '';
+      
+      if (!hasEmail && hasPhone) {
+        // Only phone available, auto-switch to WhatsApp
+        setFormData(prev => ({ ...prev, sendViaWhatsapp: true }));
+      } else if (hasEmail && !hasPhone) {
+        // Only email available, auto-switch to email
+        setFormData(prev => ({ ...prev, sendViaWhatsapp: false }));
+      }
+      // If both or neither, don't auto-switch
+    }, 100);
     setShowClientSelector(false);
   };
 
@@ -832,14 +1149,22 @@ export default function CreateInvoicePage() {
     const newItems = [...formData.items];
     newItems[index] = { ...newItems[index], [field]: value };
     
-    // Recalculate amount
+    // Recalculate item amount with proper precision
     const item = newItems[index];
     const subtotalBeforeTax = item.quantity * item.unitPrice * (1 - item.discount / 100);
     item.amount = subtotalBeforeTax * (1 + item.tax / 100);
     
-    // Recalculate totals
-    const subtotal = newItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice * (1 - item.discount / 100)), 0);
-    const totalTax = newItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice * (1 - item.discount / 100) * (item.tax / 100)), 0);
+    // Recalculate totals with proper precision
+    let subtotal = 0;
+    let totalTax = 0;
+    
+    newItems.forEach(item => {
+      const itemSubtotal = item.quantity * item.unitPrice * (1 - item.discount / 100);
+      const itemTax = itemSubtotal * (item.tax / 100);
+      subtotal += itemSubtotal;
+      totalTax += itemTax;
+    });
+    
     const total = subtotal + totalTax;
     
     setFormData(prev => ({
@@ -871,8 +1196,18 @@ export default function CreateInvoicePage() {
   const removeItem = (index: number) => {
     if (formData.items.length > 1) {
       const newItems = formData.items.filter((_, i) => i !== index);
-      const subtotal = newItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice * (1 - item.discount / 100)), 0);
-      const totalTax = newItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice * (1 - item.discount / 100) * (item.tax / 100)), 0);
+      
+      // Recalculate totals with proper precision
+      let subtotal = 0;
+      let totalTax = 0;
+      
+      newItems.forEach(item => {
+        const itemSubtotal = item.quantity * item.unitPrice * (1 - item.discount / 100);
+        const itemTax = itemSubtotal * (item.tax / 100);
+        subtotal += itemSubtotal;
+        totalTax += itemTax;
+      });
+      
       const total = subtotal + totalTax;
       
       setFormData(prev => ({
@@ -928,7 +1263,6 @@ export default function CreateInvoicePage() {
     setValidationErrors([]);
 
     setSendingInvoice(true);
-    setCriticalOperation(true); // Disable notification polling during invoice sending
 
     try {
       // Starting invoice email send...
@@ -1072,11 +1406,11 @@ export default function CreateInvoicePage() {
                   ` : ''}
                 </div>
                 ${formData.companyLogo ? `
-                  <div style="width: 64px; height: 64px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                  <div style="width: 80px; height: 80px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
                     <img src="${formData.companyLogo}" alt="Company Logo" style="width: 100%; height: 100%; object-fit: contain; background: white;" />
                   </div>
                 ` : `
-                  <div style="width: 64px; height: 64px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                  <div style="width: 80px; height: 80px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
                     <svg style="width: 32px; height: 32px; color: #9ca3af;" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M12 2L2 7v10c0 5.55 3.84 9.74 9 11 5.16-1.26 9-5.45 9-11V7l-10-5zM12 22c-4.75-1.11-8-4.67-8-9V8l8-4v18z"/>
                     </svg>
@@ -1353,53 +1687,71 @@ export default function CreateInvoicePage() {
       const filesEndTime = Date.now();
       console.log('📄 [PDF Generation] File attachments conversion completed in', filesEndTime - filesStartTime, 'ms');
 
-      console.log('📧 [Email Sending] Starting email request...');
-      const emailStartTime = Date.now();
-      
-      // Send invoice via email with timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+      let result: { success: boolean; messageId?: string; error?: string };
 
-      const response = await fetch('/api/invoices/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          invoiceId: primaryInvoiceId,
-          recipientEmail: formData.clientEmail,
-          pdfBuffer: pdfBase64,
-          attachedFiles: attachedFilesBase64
-        }),
-        signal: controller.signal
-      });
-      
-      const emailEndTime = Date.now();
-      console.log('📧 [Email Sending] Email request completed in', emailEndTime - emailStartTime, 'ms');
+      if (formData.sendViaWhatsapp) {
+        // Send via WhatsApp
+        console.log('📱 [WhatsApp Sending] Starting WhatsApp request...');
+        const whatsappStartTime = Date.now();
+        
+        result = await sendInvoiceWhatsApp(
+          primaryInvoiceId,
+          formData.clientPhone,
+          pdfBase64
+        );
+        
+        const whatsappEndTime = Date.now();
+        console.log('📱 [WhatsApp Sending] WhatsApp request completed in', whatsappEndTime - whatsappStartTime, 'ms');
+      } else {
+        // Send via Email
+        console.log('📧 [Email Sending] Starting email request...');
+        const emailStartTime = Date.now();
+        
+        // Send invoice via email with timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
 
-      clearTimeout(timeoutId);
+        const response = await fetch('/api/invoices/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            invoiceId: primaryInvoiceId,
+            recipientEmail: formData.clientEmail,
+            pdfBuffer: pdfBase64,
+            attachedFiles: attachedFilesBase64
+          }),
+          signal: controller.signal
+        });
+        
+        const emailEndTime = Date.now();
+        console.log('📧 [Email Sending] Email request completed in', emailEndTime - emailStartTime, 'ms');
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Server error: ${response.status} - ${errorText}`);
+        clearTimeout(timeoutId);
+
+        result = await response.json();
       }
-
-      const result = await response.json();
 
       if (result.success) {
         console.log('✅ [Smart Invoicing] Invoice sent successfully:', {
           invoiceNumber: formData.invoiceNumber,
-          recipientEmail: formData.clientEmail,
+          recipient: formData.sendViaWhatsapp ? formData.clientPhone : formData.clientEmail,
+          method: formData.sendViaWhatsapp ? 'WhatsApp' : 'Email',
           total: formData.total
         });
-        alert('Invoice sent successfully! Check your email for confirmation.');
+        
+        const successMessage = formData.sendViaWhatsapp 
+          ? `Invoice sent successfully via WhatsApp to ${formData.clientPhone}!`
+          : 'Invoice sent successfully! Check your email for confirmation.';
+        alert(successMessage);
         // Clear saved form data after successful send
         clearSavedData();
         // Redirect to invoices page
         router.push('/dashboard/services/smart-invoicing/invoices');
       } else {
-        console.error('❌ [Smart Invoicing] Failed to send invoice:', result.message);
-        alert(`Failed to send invoice: ${result.message}`);
+        console.error('❌ [Smart Invoicing] Failed to send invoice:', result.error);
+        alert(`Failed to send invoice: ${result.error || 'Unknown error occurred'}`);
       }
     } catch (error) {
       console.error('❌ [Smart Invoicing] Failed to send invoice:', error);
@@ -1415,7 +1767,6 @@ export default function CreateInvoicePage() {
       }
     } finally {
       setSendingInvoice(false);
-      setCriticalOperation(false); // Re-enable notification polling
     }
   };
 
@@ -1486,6 +1837,8 @@ export default function CreateInvoicePage() {
     );
   };
 
+
+
   const validateInvoiceForPdf = () => {
     const errors: string[] = [];
     
@@ -1504,6 +1857,29 @@ export default function CreateInvoicePage() {
     }
     if (!formData.clientAddress.street || formData.clientAddress.street.trim() === '') {
       errors.push('Client address is required');
+    }
+    
+    // Contact information validation - require at least one contact method
+    const hasEmail = formData.clientEmail && formData.clientEmail.trim() !== '';
+    const hasPhone = formData.clientPhone && formData.clientPhone.trim() !== '';
+    
+    if (!hasEmail && !hasPhone) {
+      errors.push('At least one contact method (email or phone) is required');
+    } else {
+      // Validate based on selected sending method
+      if (formData.sendViaWhatsapp) {
+        // WhatsApp mode: phone number is required and must be valid format
+        if (!hasPhone) {
+          errors.push('Phone number is required for WhatsApp sending');
+        } else if (!validatePhoneForWhatsApp(formData.clientPhone)) {
+          errors.push('Phone number must be in international format (e.g., +1234567890) for WhatsApp sending');
+        }
+      } else {
+        // Email mode: email is required
+        if (!hasEmail) {
+          errors.push('Email address is required for email sending');
+        }
+      }
     }
     
     // Items validation
@@ -1642,11 +2018,11 @@ export default function CreateInvoicePage() {
                   ` : ''}
                 </div>
                 ${formData.companyLogo ? `
-                  <div style="width: 64px; height: 64px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                  <div style="width: 80px; height: 80px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
                     <img src="${formData.companyLogo}" alt="Company Logo" style="width: 100%; height: 100%; object-fit: contain; background: white;" />
                   </div>
                 ` : `
-                  <div style="width: 64px; height: 64px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                  <div style="width: 80px; height: 80px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
                     <svg style="width: 32px; height: 32px; color: #9ca3af;" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M12 2L2 7v10c0 5.55 3.84 9.74 9 11 5.16-1.26 9-5.45 9-11V7l-10-5zM12 22c-4.75-1.11-8-4.67-8-9V8l8-4v18z"/>
                     </svg>
@@ -1916,7 +2292,6 @@ export default function CreateInvoicePage() {
       alert('Failed to download PDF. Please try again.');
     } finally {
       setSendingInvoice(false);
-      setCriticalOperation(false); // Re-enable notification polling
     }
   };
 
@@ -2158,6 +2533,14 @@ export default function CreateInvoicePage() {
     }
   };
 
+  // Check if user can create invoice on component mount
+  useEffect(() => {
+    if (subscription && !subscription.canCreateInvoice) {
+      // Don't redirect - just disable the form
+      console.log('Invoice limit reached - form will be disabled');
+    }
+  }, [subscription, router]);
+
   if (loading && invoiceId) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -2170,8 +2553,38 @@ export default function CreateInvoicePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="min-h-screen rounded-xl bg-gray-50 py-8">
       <div className="max-w-4xl mx-auto px-4">
+        {/* Disabled Overlay - Show when limit is reached */}
+        {subscription && !subscription.canCreateInvoice && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
+            <div className="bg-white/95 backdrop-blur-sm rounded-xl p-8 border border-white/20 text-center max-w-md mx-auto shadow-2xl">
+              <Lock className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-gray-800 mb-4">Invoice Limit Reached</h2>
+              <p className="text-gray-600 mb-6">
+                You have reached your monthly limit of 5 invoices on the free plan. 
+                Upgrade to a Pro plan to create unlimited invoices.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <button
+                  onClick={() => router.push('/pricing')}
+                  className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  View Pricing Plans
+                </button>
+                <button
+                  onClick={() => router.push('/dashboard/services/smart-invoicing')}
+                  className="bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition-colors"
+                >
+                  Back to Invoices
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Original Form Content - Always rendered but disabled when limit reached */}
+        <div className={`${subscription && !subscription.canCreateInvoice ? 'pointer-events-none opacity-50' : ''}`}>
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 space-y-4 sm:space-y-0">
           <button
@@ -2188,14 +2601,23 @@ export default function CreateInvoicePage() {
               disabled={loading}
               className="flex items-center justify-center space-x-2 px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
             >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              <span>{isEditing ? 'Update Draft' : 'Save Draft'}</span>
+                <Save className="h-4 w-4" />
+                <span>Save Draft</span>
             </button>
-            
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex items-center justify-center space-x-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4" />
+                )}
+                <span>Send Invoice</span>
+              </button>
           </div>
         </div>
-
-
 
         {/* Validation Errors */}
         {validationErrors.length > 0 && (
@@ -2247,7 +2669,7 @@ export default function CreateInvoicePage() {
         )}
 
         {/* Invoice Document */}
-        <div ref={printRef} className="bg-white rounded-lg shadow-lg border max-w-4xl mx-auto">
+        <div ref={printRef} className="bg-white rounded-lg shadow-lg border w-full max-w-4xl mx-auto">
           {/* Document Header */}
           <div className="p-4 sm:p-8 border-b border-gray-200">
             <div className="flex flex-col sm:flex-row justify-between items-start space-y-4 sm:space-y-0">
@@ -2263,25 +2685,28 @@ export default function CreateInvoicePage() {
                   {/* Logo first on mobile */}
                   <div 
                     onClick={() => setShowCompanyEditModal(true)}
-                    className="w-16 h-16 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors cursor-pointer flex-shrink-0 group relative overflow-hidden self-end"
+                    className="w-20 h-20 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors cursor-pointer flex-shrink-0 group relative overflow-hidden self-end"
                   >
                     {formData.companyLogo ? (
                       <>
                         <Image 
                           src={formData.companyLogo} 
                           alt="Company Logo" 
-                          width={64}
-                          height={64}
+                          width={80}
+                          height={80}
                           className="object-contain w-full h-full"
                           unoptimized={formData.companyLogo.startsWith('data:')}
+                          priority={true}
+                          sizes="80px"
+                          style={{ backgroundColor: 'white' }}
                         />
-                        <div className="absolute inset-0 bg-white bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center">
-                          <Edit3 className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <div className="absolute inset-0 bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 rounded-lg flex items-center justify-center">
+                          <Edit3 className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
                         </div>
                       </>
                     ) : (
-                      <div className="flex items-center justify-center w-full h-full">
-                        <Plus className="h-6 w-6 text-gray-400" />
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Upload className="h-6 w-6 text-gray-400" />
                       </div>
                     )}
                   </div>
@@ -2313,17 +2738,19 @@ export default function CreateInvoicePage() {
                   </div>
                   <div 
                     onClick={() => setShowCompanyEditModal(true)}
-                    className="w-16 h-16 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors cursor-pointer flex-shrink-0 group relative overflow-hidden"
+                    className="w-20 h-20 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors cursor-pointer flex-shrink-0 group relative overflow-hidden"
                   >
                     {formData.companyLogo ? (
                       <>
                         <Image 
                           src={formData.companyLogo} 
                           alt="Company Logo" 
-                          width={64}
-                          height={64}
+                          width={80}
+                          height={80}
                           className="object-contain w-full h-full"
                           unoptimized={formData.companyLogo.startsWith('data:')}
+                          priority={true}
+                          sizes="80px"
                           style={{ backgroundColor: 'white' }}
                         />
                         <div className="absolute inset-0  bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 rounded-lg flex items-center justify-center">
@@ -2397,6 +2824,112 @@ export default function CreateInvoicePage() {
                     Bill To
                   </h3>
                   <div className="flex items-center space-x-2">
+                    {/* WhatsApp Toggle Button */}
+                    <button
+                      onClick={() => {
+                        const newWhatsAppMode = !formData.sendViaWhatsapp;
+                        setFormData(prev => {
+                          const updated = { ...prev, sendViaWhatsapp: newWhatsAppMode };
+                          
+                          // Auto-format phone number when switching to WhatsApp
+                          if (newWhatsAppMode && prev.clientPhone) {
+                            // Get country code from current country selection
+                            const countryCode = prev.clientAddress.country ? 
+                              (prev.clientAddress.country === 'US' ? '+1' : 
+                               prev.clientAddress.country === 'GB' ? '+44' :
+                               prev.clientAddress.country === 'DE' ? '+49' :
+                               prev.clientAddress.country === 'FR' ? '+33' :
+                               prev.clientAddress.country === 'IT' ? '+39' :
+                               prev.clientAddress.country === 'ES' ? '+34' :
+                               prev.clientAddress.country === 'CA' ? '+1' :
+                               prev.clientAddress.country === 'AU' ? '+61' :
+                               prev.clientAddress.country === 'JP' ? '+81' :
+                               prev.clientAddress.country === 'CN' ? '+86' :
+                               prev.clientAddress.country === 'IN' ? '+91' :
+                               prev.clientAddress.country === 'BR' ? '+55' :
+                               prev.clientAddress.country === 'MX' ? '+52' :
+                               prev.clientAddress.country === 'RU' ? '+7' :
+                               prev.clientAddress.country === 'KR' ? '+82' :
+                               prev.clientAddress.country === 'NL' ? '+31' :
+                               prev.clientAddress.country === 'SE' ? '+46' :
+                               prev.clientAddress.country === 'NO' ? '+47' :
+                               prev.clientAddress.country === 'DK' ? '+45' :
+                               prev.clientAddress.country === 'FI' ? '+358' :
+                               prev.clientAddress.country === 'PL' ? '+48' :
+                               prev.clientAddress.country === 'CZ' ? '+420' :
+                               prev.clientAddress.country === 'HU' ? '+36' :
+                               prev.clientAddress.country === 'RO' ? '+40' :
+                               prev.clientAddress.country === 'BG' ? '+359' :
+                               prev.clientAddress.country === 'HR' ? '+385' :
+                               prev.clientAddress.country === 'SI' ? '+386' :
+                               prev.clientAddress.country === 'SK' ? '+421' :
+                               prev.clientAddress.country === 'LT' ? '+370' :
+                               prev.clientAddress.country === 'LV' ? '+371' :
+                               prev.clientAddress.country === 'EE' ? '+372' :
+                               prev.clientAddress.country === 'IE' ? '+353' :
+                               prev.clientAddress.country === 'PT' ? '+351' :
+                               prev.clientAddress.country === 'GR' ? '+30' :
+                               prev.clientAddress.country === 'CY' ? '+357' :
+                               prev.clientAddress.country === 'MT' ? '+356' :
+                               prev.clientAddress.country === 'LU' ? '+352' :
+                               prev.clientAddress.country === 'BE' ? '+32' :
+                               prev.clientAddress.country === 'AT' ? '+43' :
+                               prev.clientAddress.country === 'CH' ? '+41' :
+                               prev.clientAddress.country === 'LI' ? '+423' :
+                               prev.clientAddress.country === 'MC' ? '+377' :
+                               prev.clientAddress.country === 'SM' ? '+378' :
+                               prev.clientAddress.country === 'VA' ? '+39' :
+                               prev.clientAddress.country === 'AD' ? '+376' :
+                               prev.clientAddress.country === 'IS' ? '+354' :
+                               prev.clientAddress.country === 'FO' ? '+298' :
+                               prev.clientAddress.country === 'GL' ? '+299' :
+                               prev.clientAddress.country === 'GI' ? '+350' :
+                               prev.clientAddress.country === 'AL' ? '+355' :
+                               prev.clientAddress.country === 'AM' ? '+374' :
+                               prev.clientAddress.country === 'AZ' ? '+994' :
+                               prev.clientAddress.country === 'BY' ? '+375' :
+                               prev.clientAddress.country === 'BA' ? '+387' :
+                               prev.clientAddress.country === 'GE' ? '+995' :
+                               prev.clientAddress.country === 'KG' ? '+996' :
+                               prev.clientAddress.country === 'KZ' ? '+7' :
+                               prev.clientAddress.country === 'MD' ? '+373' :
+                               prev.clientAddress.country === 'ME' ? '+382' :
+                               prev.clientAddress.country === 'MK' ? '+389' :
+                               prev.clientAddress.country === 'RS' ? '+381' :
+                               prev.clientAddress.country === 'TJ' ? '+992' :
+                               prev.clientAddress.country === 'TM' ? '+993' :
+                               prev.clientAddress.country === 'UA' ? '+380' :
+                               prev.clientAddress.country === 'UZ' ? '+998' :
+                               prev.clientAddress.country === 'XK' ? '+383' :
+                               '+1') : '+1';
+                            
+                            updated.clientPhone = formatPhoneForWhatsApp(prev.clientPhone, countryCode);
+                          }
+                          
+                          return updated;
+                        });
+                      }}
+                      className={`flex items-center space-x-2 px-3 py-1 rounded-lg border transition-colors ${
+                        formData.sendViaWhatsapp 
+                          ? 'bg-green-50 border-green-200 text-green-700' 
+                          : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                      }`}
+                      title={formData.sendViaWhatsapp ? 'Sending via WhatsApp' : 'Sending via Email (default)'}
+                    >
+                      <div className="w-4 h-4 flex items-center justify-center">
+                        {formData.sendViaWhatsapp ? (
+                          <CheckCircle className="w-4 h-4 text-green-600" />
+                        ) : (
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/>
+                          </svg>
+                        )}
+                      </div>
+                      <span className="text-xs font-medium">
+                        {formData.sendViaWhatsapp ? 'WhatsApp ✓' : 'WhatsApp'}
+                      </span>
+                    </button>
+                    
                     <button
                       onClick={() => setShowClientEditModal(true)}
                       className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -2435,11 +2968,11 @@ export default function CreateInvoicePage() {
                               onClick={() => selectClient(client)}
                               className="w-full text-left p-2 hover:bg-gray-100 rounded border"
                             >
-                              <div className="font-medium">
+                                <div className="font-medium text-black">
                                 {client.company ? client.company : client.name}
                               </div>
                               {client.company && (
-                                <div className="text-sm text-gray-500">Attn: {client.name}</div>
+                                  <div className="text-sm text-black">Attn: {client.name}</div>
                               )}
                               <div className="text-sm text-gray-600">{client.email}</div>
                             </button>
@@ -2466,7 +2999,7 @@ export default function CreateInvoicePage() {
                     {formData.clientCompany ? formData.clientCompany : formData.clientName || 'Client Name'}
                   </div>
                   {formData.clientCompany && (
-                    <div className="text-gray-700">
+                      <div className="text-black">
                       Attn: {formData.clientName || 'Client Name'}
                     </div>
                   )}
@@ -2479,11 +3012,22 @@ export default function CreateInvoicePage() {
                     </div>
                     <div>{formData.clientAddress.country ? countries.find(c => c.code === formData.clientAddress.country)?.name || formData.clientAddress.country : 'Country'}</div>
                   </div>
-                  <div className="text-gray-700">
-                    {formData.clientEmail || 'Email'}
-                  </div>
-                  <div className="text-gray-700">
+                  {/* Email field - only show in Email mode */}
+                  {!formData.sendViaWhatsapp && (
+                    <div className="text-gray-700 flex items-center">
+                      {formData.clientEmail || 'Email'}
+                    </div>
+                  )}
+                  <div className="text-gray-700 flex items-center">
                     {formData.clientPhone || 'Phone'}
+                    {formData.sendViaWhatsapp && (
+                      <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-1 rounded flex items-center">
+                        <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/>
+                        </svg>
+                        WhatsApp
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -2602,11 +3146,26 @@ export default function CreateInvoicePage() {
                     onClick={() => setShowCurrencyDropdown(!showCurrencyDropdown)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-left flex items-center justify-between bg-white"
                   >
+                      <div className="flex items-center space-x-2">
+                        {formData.currency && (
+                          <Image
+                            src={getCurrencyIcon(formData.currency)}
+                            alt={formData.currency}
+                            width={20}
+                            height={20}
+                            className="rounded-sm"
+                            onError={(e) => {
+                              // Fallback to app logo if currency image fails to load
+                              e.currentTarget.src = '/chainsnobg.png';
+                            }}
+                          />
+                        )}
                     <span className={formData.currency ? 'text-gray-900' : 'text-gray-500'}>
                       {formData.currency 
                         ? `${formData.currency} - ${getCurrencyByCode(formData.currency)?.name || 'Unknown'}`
                         : 'Select currency'}
                     </span>
+                      </div>
                     <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${showCurrencyDropdown ? 'rotate-180' : ''}`} />
                   </button>
                   
@@ -2650,6 +3209,17 @@ export default function CreateInvoicePage() {
                             className="w-full px-3 py-2 text-left text-gray-900 hover:bg-blue-50 transition-colors flex items-center justify-between border-b border-gray-100 last:border-b-0"
                           >
                             <div className="flex items-center space-x-3">
+                                <Image
+                                  src={getCurrencyIcon(currency.code)}
+                                  alt={currency.code}
+                                  width={16}
+                                  height={16}
+                                  className="rounded-sm flex-shrink-0"
+                                  onError={(e) => {
+                                    // Fallback to app logo if currency image fails to load
+                                    e.currentTarget.src = '/chainsnobg.png';
+                                  }}
+                                />
                               <span className="text-sm">{currency.name}</span>
                               <span className="text-blue-600 text-xs font-medium">{currency.symbol}</span>
                             </div>
@@ -2679,6 +3249,17 @@ export default function CreateInvoicePage() {
                             className="w-full px-3 py-2 text-left text-gray-900 hover:bg-blue-50 transition-colors flex items-center justify-between border-b border-gray-100 last:border-b-0"
                           >
                             <div className="flex items-center space-x-3">
+                                <Image
+                                  src={getCurrencyIcon(currency.code)}
+                                  alt={currency.code}
+                                  width={16}
+                                  height={16}
+                                  className="rounded-sm flex-shrink-0"
+                                  onError={(e) => {
+                                    // Fallback to app logo if currency image fails to load
+                                    e.currentTarget.src = '/chainsnobg.png';
+                                  }}
+                                />
                               <span className="text-sm">{currency.name}</span>
                               <span className="text-blue-600 text-xs font-medium">{currency.symbol}</span>
                             </div>
@@ -2775,7 +3356,11 @@ export default function CreateInvoicePage() {
                       type="radio"
                       value="fiat"
                       checked={formData.paymentMethod === 'fiat'}
-                      onChange={(e) => handleInputChange('paymentMethod', e.target.value)}
+                      onChange={(e) => {
+                        handleInputChange('paymentMethod', e.target.value);
+                        // Auto-select USD for fiat payments
+                        autoSelectCurrencyForPaymentMethod(e.target.value);
+                      }}
                       className="mr-3"
                     />
                     <div className="flex items-center">
@@ -2793,7 +3378,11 @@ export default function CreateInvoicePage() {
                       type="radio"
                       value="crypto"
                       checked={formData.paymentMethod === 'crypto'}
-                      onChange={(e) => handleInputChange('paymentMethod', e.target.value)}
+                      onChange={(e) => {
+                        handleInputChange('paymentMethod', e.target.value);
+                        // Auto-select USDT for crypto payments
+                        autoSelectCurrencyForPaymentMethod(e.target.value);
+                      }}
                       className="mr-3"
                     />
                     <div className="flex items-center">
@@ -2970,11 +3559,26 @@ export default function CreateInvoicePage() {
                           onClick={() => setShowNetworkDropdown(!showNetworkDropdown)}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-left flex items-center justify-between bg-white"
                         >
+                            <div className="flex items-center space-x-2">
+                              {formData.paymentNetwork && (
+                                <Image
+                                  src={getNetworkIcon(formData.paymentNetwork)}
+                                  alt={formData.paymentNetwork}
+                                  width={20}
+                                  height={20}
+                                  className="rounded-sm"
+                                  onError={(e) => {
+                                    // Fallback to app logo if network image fails to load
+                                    e.currentTarget.src = '/chainsnobg.png';
+                                  }}
+                                />
+                              )}
                           <span className={formData.paymentNetwork ? 'text-gray-900' : 'text-gray-500'}>
                             {formData.paymentNetwork 
                               ? networks.find(n => n.id === formData.paymentNetwork)?.name || formData.paymentNetwork
                               : 'Select network'}
                           </span>
+                            </div>
                           <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${showNetworkDropdown ? 'rotate-180' : ''}`} />
                         </button>
                         
@@ -3013,6 +3617,17 @@ export default function CreateInvoicePage() {
                                   className="w-full px-3 py-2 text-left text-gray-900 hover:bg-blue-50 transition-colors flex items-center justify-between border-b border-gray-100 last:border-b-0"
                                 >
                                   <div className="flex items-center space-x-3">
+                                      <Image
+                                        src={getNetworkIcon(network.id)}
+                                        alt={network.id}
+                                        width={16}
+                                        height={16}
+                                        className="rounded-sm flex-shrink-0"
+                                        onError={(e) => {
+                                          // Fallback to money icon if network image fails to load
+                                          e.currentTarget.src = '/currency-flags/money-icon.png';
+                                        }}
+                                      />
                                     <span className="text-sm">{network.name}</span>
                                   </div>
                                   <span className="text-gray-500 text-xs font-medium">{network.id}</span>
@@ -3396,7 +4011,7 @@ export default function CreateInvoicePage() {
 
         {/* Company Edit Modal */}
         {showCompanyEditModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative shadow-xl">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">Edit Company Information</h3>
@@ -3422,7 +4037,7 @@ export default function CreateInvoicePage() {
 
         {/* Client Edit Modal */}
         {showClientEditModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative shadow-xl touch-manipulation">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">Edit Client Information</h3>
@@ -3436,8 +4051,27 @@ export default function CreateInvoicePage() {
               
               <ClientEditForm 
                 formData={formData}
+                formatPhoneForWhatsApp={formatPhoneForWhatsApp}
+                extractCountryCodeFromPhone={extractCountryCodeFromPhone}
+                setFormData={setFormData}
                 onSubmit={(updatedData) => {
                   setFormData(prev => ({ ...prev, ...updatedData }));
+                  
+                  // Auto-detect best sending method after client edit
+                  setTimeout(() => {
+                    const hasEmail = updatedData.clientEmail && updatedData.clientEmail.trim() !== '';
+                    const hasPhone = updatedData.clientPhone && updatedData.clientPhone.trim() !== '';
+                    
+                    if (!hasEmail && hasPhone) {
+                      // Only phone available, auto-switch to WhatsApp
+                      setFormData(prev => ({ ...prev, sendViaWhatsapp: true }));
+                    } else if (hasEmail && !hasPhone) {
+                      // Only email available, auto-switch to email
+                      setFormData(prev => ({ ...prev, sendViaWhatsapp: false }));
+                    }
+                    // If both or neither, don't auto-switch
+                  }, 100);
+                  
                   setShowClientEditModal(false);
                 }}
                 onCancel={() => setShowClientEditModal(false)}
@@ -3454,6 +4088,7 @@ export default function CreateInvoicePage() {
 
       {/* Floating Action Button */}
       <FloatingActionButton />
+      </div>
     </div>
   );
 }
@@ -3960,10 +4595,16 @@ function CompanyEditForm({
 // Client Edit Form Component
 function ClientEditForm({
   formData,
+  formatPhoneForWhatsApp,
+  extractCountryCodeFromPhone,
+  setFormData,
   onSubmit,
   onCancel
 }: {
   formData: InvoiceFormData;
+  formatPhoneForWhatsApp: (phone: string, countryCode?: string) => string;
+  extractCountryCodeFromPhone: (phone: string) => string | null;
+  setFormData: React.Dispatch<React.SetStateAction<InvoiceFormData>>;
   onSubmit: (updatedData: Partial<InvoiceFormData>) => void;
   onCancel: () => void;
 }) {
@@ -4031,14 +4672,19 @@ function ClientEditForm({
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-        <input
-          type="email"
-          value={editData.clientEmail}
-          onChange={(e) => handleInputChange('clientEmail', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-          required
-        />
+        {/* Email field - only show in Email mode */}
+        {!formData.sendViaWhatsapp && (
+          <>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <input
+              type="email"
+              value={editData.clientEmail}
+              onChange={(e) => handleInputChange('clientEmail', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+              required
+            />
+          </>
+        )}
       </div>
 
       <div>
@@ -4046,9 +4692,42 @@ function ClientEditForm({
         <input
           type="tel"
           value={editData.clientPhone}
-          onChange={(e) => handleInputChange('clientPhone', e.target.value)}
+          onChange={(e) => {
+            let value = e.target.value;
+            
+            // Auto-format phone number when WhatsApp is selected
+            if (formData.sendViaWhatsapp) {
+              // If user types a number starting with 0, auto-format it
+              if (value && value.match(/^0\d/)) {
+                value = formatPhoneForWhatsApp(value);
+              }
+              
+              // Auto-detect country from phone number with country code
+              if (value && value.startsWith('+')) {
+                const detectedCountry = extractCountryCodeFromPhone(value);
+                if (detectedCountry) {
+                  // Update the country in the form data
+                  setFormData(prev => ({
+                    ...prev,
+                    clientAddress: {
+                      ...prev.clientAddress,
+                      country: detectedCountry
+                    }
+                  }));
+                }
+              }
+            }
+            
+            handleInputChange('clientPhone', value);
+          }}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+          placeholder={formData.sendViaWhatsapp ? "+1234567890 (include country code)" : "Phone number"}
         />
+        {formData.sendViaWhatsapp && (
+          <p className="text-xs text-gray-500 mt-1">
+            Include country code for WhatsApp (e.g., +1234567890). Numbers starting with 0 will be auto-formatted.
+          </p>
+        )}
       </div>
 
       <div>

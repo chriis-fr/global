@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import { usePermissions } from '@/lib/contexts/PermissionContext';
 import Image from 'next/image';
 import { 
   ArrowLeft, 
@@ -16,7 +17,8 @@ import {
   CheckCircle,
   Download,
   File,
-  ChevronDown as ChevronDownIcon
+  ChevronDown as ChevronDownIcon,
+  Receipt
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -115,11 +117,13 @@ export default function InvoiceViewPage() {
   const router = useRouter();
   const params = useParams();
   const { data: session } = useSession();
+  const { permissions } = usePermissions();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [showDownloadDropdown, setShowDownloadDropdown] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [downloadingReceipt, setDownloadingReceipt] = useState(false);
 
   // Check if any items have discounts or taxes
   const hasAnyDiscounts = invoice?.items?.some(item => (item.discount || 0) > 0) || false;
@@ -239,7 +243,7 @@ export default function InvoiceViewPage() {
   const loadInvoice = useCallback(async (id: string) => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/invoices/${id}?convertToPreferred=true`);
+      const response = await fetch(`/api/invoices/${id}?convertToPreferred=true`); // Convert to user's preferred currency
       const data = await response.json();
       
       if (data.success && data.data) {
@@ -265,7 +269,7 @@ export default function InvoiceViewPage() {
         setInvoice(data.data);
       } else {
         console.error('❌ [Invoice View] Failed to load invoice:', data.message);
-        router.push('/dashboard/services/smart-invoicing/invoices');
+        router.push('/dashboard/services/smart-invoicing/invoices?refresh=true');
       }
     } catch (error) {
       console.error('❌ [Invoice View] Error loading invoice:', error);
@@ -292,7 +296,7 @@ export default function InvoiceViewPage() {
       });
       
       if (response.ok) {
-        router.push('/dashboard/services/smart-invoicing/invoices');
+        router.push('/dashboard/services/smart-invoicing/invoices?refresh=true');
       }
     } catch (error) {
       console.error('Failed to delete invoice:', error);
@@ -333,18 +337,22 @@ export default function InvoiceViewPage() {
       return true;
     }
     
-    // For organization users, check if they are admin or have proper rights
-    // For now, we'll allow organization members to mark invoices as paid
-    // You can add more specific permission checks here later
-    return true;
+    // For organization users, check permissions
+    if (permissions?.canMarkInvoiceAsPaid) {
+      return true;
+    }
+    
+    // Fallback: allow owners and admins to mark invoices as paid
+    const userRole = session.user.role;
+    return userRole === 'owner' || userRole === 'admin';
   };
 
   // Check if invoice can be marked as paid
   const canMarkInvoiceAsPaid = () => {
     if (!invoice) return false;
     
-    // Only allow marking as paid if status is 'sent' or 'pending'
-    const allowedStatuses = ['sent', 'pending'];
+    // Allow marking as paid if status is 'sent', 'pending', or 'approved'
+    const allowedStatuses = ['sent', 'pending', 'approved'];
     return allowedStatuses.includes(invoice.status || '') && canMarkAsPaid();
   };
 
@@ -367,6 +375,8 @@ export default function InvoiceViewPage() {
         // Reload the invoice to get updated status
         await loadInvoice(invoice._id);
         alert('Invoice marked as paid successfully!');
+        // Set flag for immediate refresh on other side
+        sessionStorage.setItem('lastPaymentAction', Date.now().toString());
       } else {
         const errorData = await response.json();
         alert(`Failed to mark invoice as paid: ${errorData.message || 'Unknown error'}`);
@@ -676,7 +686,7 @@ export default function InvoiceViewPage() {
               </div>
               <div style="display: flex; justify-content: space-between; padding: 15px 0; background: #f9fafb; margin-top: 10px; border-radius: 8px; padding: 15px;">
                 <span style="font-size: 18px; font-weight: bold; color: #1f2937;">Total:</span>
-                <span style="font-size: 18px; font-weight: bold; color: #1f2937;">${getCurrencySymbol(invoice.currency || '')}${invoice.totalAmount?.toFixed(2) || '0.00'}</span>
+                <span style="font-size: 18px; font-weight: bold; color: #1f2937;">${getCurrencySymbol(invoice.currency || '')}${(invoice.total || invoice.total || invoice.totalAmount || 0).toFixed(2)}</span>
               </div>
             </div>
           </div>
@@ -758,6 +768,174 @@ export default function InvoiceViewPage() {
     }
   };
 
+  // Handle Receipt download
+  const handleDownloadReceipt = async () => {
+    if (!invoice) return;
+
+    try {
+      setDownloadingReceipt(true);
+      console.log('📤 [Smart Invoicing] Starting receipt download for invoice:', invoice.invoiceNumber);
+
+      // Create a temporary container for receipt generation
+      const receiptContainer = document.createElement('div');
+      receiptContainer.style.position = 'absolute';
+      receiptContainer.style.left = '-9999px';
+      receiptContainer.style.top = '-9999px';
+      receiptContainer.style.width = '750px';
+      receiptContainer.style.backgroundColor = 'white';
+      receiptContainer.style.padding = '30px';
+      receiptContainer.style.fontFamily = 'Arial, sans-serif';
+      document.body.appendChild(receiptContainer);
+
+      // Generate receipt HTML
+      const receiptHTML = `
+        <div style="max-width: 600px; margin: 0 auto; background: white; padding: 20px; border: 1px solid #e5e7eb; box-sizing: border-box; width: 100%;">
+          <!-- Header -->
+          <div style="text-align: center; margin-bottom: 20px; border-bottom: 2px solid #3b82f6; padding-bottom: 15px;">
+            ${invoice.companyLogo ? `<img src="${invoice.companyLogo}" alt="Company Logo" style="max-height: 50px; margin-bottom: 8px; max-width: 100%;">` : ''}
+            <h1 style="color: #1f2937; font-size: 24px; font-weight: bold; margin: 0; word-wrap: break-word;">PAYMENT RECEIPT</h1>
+            <p style="color: #6b7280; font-size: 12px; margin: 3px 0 0 0; word-wrap: break-word;">Receipt #${invoice.invoiceNumber || 'N/A'}</p>
+          </div>
+
+          <!-- Payment Details -->
+          <div style="margin-bottom: 18px;">
+            <h2 style="color: #1f2937; font-size: 16px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px;">Payment Details</h2>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+              <div>
+                <p style="margin: 5px 0; color: #6b7280; font-size: 14px; word-wrap: break-word;"><strong>Payment Date:</strong> ${formatDate(invoice.updatedAt || new Date().toISOString())}</p>
+                <p style="margin: 5px 0; color: #6b7280; font-size: 14px; word-wrap: break-word;"><strong>Invoice Date:</strong> ${formatDate(invoice.issueDate || '')}</p>
+                <p style="margin: 5px 0; color: #6b7280; font-size: 14px; word-wrap: break-word;"><strong>Due Date:</strong> ${formatDate(invoice.dueDate || '')}</p>
+              </div>
+              <div>
+                <p style="margin: 5px 0; color: #6b7280; font-size: 14px; word-wrap: break-word;"><strong>Payment Method:</strong> ${invoice.paymentMethod === 'crypto' ? 'Cryptocurrency' : 'Bank Transfer'}</p>
+                <p style="margin: 5px 0; color: #6b7280; font-size: 14px; word-wrap: break-word;"><strong>Status:</strong> <span style="color: #059669; font-weight: bold;">PAID</span></p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Company Information -->
+          <div style="margin-bottom: 18px;">
+            <h2 style="color: #1f2937; font-size: 16px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px;">From</h2>
+            <div style="background: #f9fafb; padding: 12px; border-radius: 6px;">
+              <p style="margin: 0 0 3px 0; font-weight: bold; color: #1f2937; font-size: 14px; word-wrap: break-word;">${invoice.companyName || 'Company Name'}</p>
+              <p style="margin: 0 0 3px 0; color: #6b7280; font-size: 12px; word-wrap: break-word;">${invoice.companyEmail || ''}</p>
+              <p style="margin: 0 0 3px 0; color: #6b7280; font-size: 12px; word-wrap: break-word;">${invoice.companyPhone || ''}</p>
+              ${invoice.companyAddress ? `
+                <p style="margin: 0; color: #6b7280; font-size: 12px; word-wrap: break-word;">
+                  ${invoice.companyAddress.street || ''}<br>
+                  ${invoice.companyAddress.city || ''}, ${invoice.companyAddress.state || ''} ${invoice.companyAddress.zipCode || ''}<br>
+                  ${invoice.companyAddress.country || ''}
+                </p>
+              ` : ''}
+            </div>
+          </div>
+
+          <!-- Client Information -->
+          <div style="margin-bottom: 18px;">
+            <h2 style="color: #1f2937; font-size: 16px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px;">To</h2>
+            <div style="background: #f9fafb; padding: 12px; border-radius: 6px;">
+              <p style="margin: 0 0 3px 0; font-weight: bold; color: #1f2937; font-size: 14px; word-wrap: break-word;">${invoice.clientName || 'Client Name'}</p>
+              <p style="margin: 0 0 3px 0; color: #6b7280; font-size: 12px; word-wrap: break-word;">${invoice.clientEmail || ''}</p>
+              <p style="margin: 0 0 3px 0; color: #6b7280; font-size: 12px; word-wrap: break-word;">${invoice.clientPhone || ''}</p>
+              ${invoice.clientAddress ? `
+                <p style="margin: 0; color: #6b7280; font-size: 12px; word-wrap: break-word;">
+                  ${invoice.clientAddress.street || ''}<br>
+                  ${invoice.clientAddress.city || ''}, ${invoice.clientAddress.state || ''} ${invoice.clientAddress.zipCode || ''}<br>
+                  ${invoice.clientAddress.country || ''}
+                </p>
+              ` : ''}
+            </div>
+          </div>
+
+          <!-- Items -->
+          <div style="margin-bottom: 18px;">
+            <h2 style="color: #1f2937; font-size: 16px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px;">Items Paid</h2>
+            <div style="border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; overflow-x: auto;">
+              <table style="width: 100%; border-collapse: collapse; min-width: 300px;">
+                <thead style="background: #f9fafb;">
+                  <tr>
+                    <th style="padding: 8px; text-align: left; font-weight: bold; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-size: 12px; white-space: nowrap;">Description</th>
+                    <th style="padding: 8px; text-align: center; font-weight: bold; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-size: 12px; white-space: nowrap;">Qty</th>
+                    <th style="padding: 8px; text-align: right; font-weight: bold; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-size: 12px; white-space: nowrap;">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${invoice.items?.map(item => `
+                    <tr>
+                      <td style="padding: 8px; border-bottom: 1px solid #f3f4f6; color: #1f2937; font-size: 12px; word-wrap: break-word; max-width: 200px;">${item.description || ''}</td>
+                      <td style="padding: 8px; text-align: center; border-bottom: 1px solid #f3f4f6; color: #6b7280; font-size: 12px; white-space: nowrap;">${item.quantity || 0}</td>
+                      <td style="padding: 8px; text-align: right; border-bottom: 1px solid #f3f4f6; color: #1f2937; font-weight: bold; font-size: 12px; white-space: nowrap;">${getCurrencyByCode(invoice.currency || 'USD')?.symbol || '$'}${(item.amount || 0).toFixed(2)}</td>
+                    </tr>
+                  `).join('') || ''}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Total -->
+          <div style="margin-bottom: 15px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: #3b82f6; color: white; border-radius: 6px; flex-wrap: wrap; gap: 10px;">
+              <span style="font-size: 16px; font-weight: bold; word-wrap: break-word;">TOTAL PAID:</span>
+              <span style="font-size: 20px; font-weight: bold; word-wrap: break-word;">${getCurrencyByCode(invoice.currency || 'USD')?.symbol || '$'}${(invoice.total || invoice.total || invoice.totalAmount || 0).toFixed(2)}</span>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div style="text-align: center; margin-top: 20px; padding-top: 15px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 11px;">
+            <p style="margin: 0; word-wrap: break-word;">Thank you for your payment!</p>
+            <p style="margin: 3px 0 0 0; word-wrap: break-word;">This receipt confirms that payment has been received and processed.</p>
+            <p style="margin: 8px 0 0 0; font-weight: bold; word-wrap: break-word;">Generated by <span style="color: #3b82f6;">Chains ERP</span> on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}</p>
+          </div>
+        </div>
+      `;
+
+      receiptContainer.innerHTML = receiptHTML;
+
+      // Generate PDF
+      const canvas = await html2canvas(receiptContainer, {
+        scale: 1.5,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        height: 1000, // Limit height to fit on one page
+        width: 750
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      
+      const imgWidth = 210;
+      const pageHeight = 295;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      // Scale down if content is too tall for one page
+      const maxHeight = pageHeight - 20; // Leave 10mm margin on top and bottom
+      let finalWidth = imgWidth;
+      let finalHeight = imgHeight;
+      
+      if (imgHeight > maxHeight) {
+        const scale = maxHeight / imgHeight;
+        finalHeight = maxHeight;
+        finalWidth = imgWidth * scale;
+      }
+
+      pdf.addImage(imgData, 'PNG', (210 - finalWidth) / 2, 10, finalWidth, finalHeight);
+
+      // Clean up
+      document.body.removeChild(receiptContainer);
+
+      // Download the PDF
+      const filename = `Receipt_${invoice.invoiceNumber || 'invoice'}_${formatDate(invoice.updatedAt || new Date().toISOString()).replace(/,/g, '')}.pdf`;
+      pdf.save(filename);
+
+      console.log('✅ [Smart Invoicing] Receipt downloaded successfully');
+    } catch (error) {
+      console.error('❌ [Smart Invoicing] Error downloading receipt:', error);
+      alert('Failed to download receipt. Please try again.');
+    } finally {
+      setDownloadingReceipt(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -775,7 +953,7 @@ export default function InvoiceViewPage() {
         <div className="text-center">
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Invoice not found</h2>
           <button
-            onClick={() => router.push('/dashboard/services/smart-invoicing/invoices')}
+            onClick={() => router.push('/dashboard/services/smart-invoicing/invoices?refresh=true')}
             className="text-blue-600 hover:text-blue-800"
           >
             Back to invoices
@@ -846,13 +1024,15 @@ export default function InvoiceViewPage() {
               )}
             </div>
             
-            <button
-              onClick={() => router.push(`/dashboard/services/smart-invoicing/create?id=${invoice._id}`)}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Edit3 className="h-4 w-4" />
-              <span>Edit</span>
-            </button>
+            {invoice.status === 'draft' && (
+              <button
+                onClick={() => router.push(`/dashboard/services/smart-invoicing/create?id=${invoice._id}`)}
+                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Edit3 className="h-4 w-4" />
+                <span>Edit</span>
+              </button>
+            )}
             {canMarkInvoiceAsPaid() && (
               <button
                 onClick={handleMarkAsPaid}
@@ -865,6 +1045,20 @@ export default function InvoiceViewPage() {
                   <CheckCircle className="h-4 w-4" />
                 )}
                 <span>{updatingStatus ? 'Updating...' : 'Mark as Paid'}</span>
+              </button>
+            )}
+            {invoice?.status === 'paid' && (
+              <button
+                onClick={handleDownloadReceipt}
+                disabled={downloadingReceipt}
+                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {downloadingReceipt ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Receipt className="h-4 w-4" />
+                )}
+                <span>{downloadingReceipt ? 'Generating...' : 'Download Receipt'}</span>
               </button>
             )}
             <button
@@ -990,7 +1184,7 @@ export default function InvoiceViewPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <p className="text-sm text-gray-600 mb-2">Payment Method</p>
-                <p className="font-medium">
+                <p className="font-medium text-gray-600">
                   {invoice.paymentMethod === 'crypto' || invoice.paymentSettings?.method === 'crypto' ? 'Cryptocurrency' : 'Bank Transfer'}
                 </p>
                 {(invoice.paymentMethod === 'crypto' || invoice.paymentSettings?.method === 'crypto') && (invoice.paymentNetwork || invoice.paymentSettings?.cryptoNetwork) && (
@@ -1011,7 +1205,7 @@ export default function InvoiceViewPage() {
               </div>
               <div>
                 <p className="text-sm text-gray-600 mb-2">Currency</p>
-                <p className="font-medium">{invoice.currency || invoice.paymentSettings?.currency || 'USD'}</p>
+                <p className="font-medium text-gray-600">{invoice.currency || invoice.paymentSettings?.currency || 'USD'}</p>
                 {(invoice.enableMultiCurrency || invoice.paymentSettings?.enableMultiCurrency) && (
                   <p className="text-sm text-blue-600">Multi-currency enabled</p>
                 )}
@@ -1100,11 +1294,11 @@ export default function InvoiceViewPage() {
                     />
                   </span>
                 </div>
-                <div className="flex justify-between text-lg font-semibold border-t pt-2">
+                <div className="flex justify-between text-black text-lg font-semibold border-t pt-2">
                   <span>Total amount</span>
                   <span>
                     <FormattedNumberDisplay 
-                      value={invoice.totalAmount || 0} 
+                      value={invoice.total || invoice.totalAmount || 0} 
                     />
                   </span>
                 </div>
@@ -1112,7 +1306,7 @@ export default function InvoiceViewPage() {
                   <span>Due</span>
                   <span>
                     <FormattedNumberDisplay 
-                      value={invoice.totalAmount || 0} 
+                      value={invoice.total || invoice.totalAmount || 0} 
                     />
                   </span>
                 </div>

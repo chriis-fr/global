@@ -14,20 +14,23 @@ import {
   DollarSign,
   Calendar,
   TrendingUp,
-  Download
+  Download,
+  ArrowLeft,
+  CheckCircle,
+  MessageCircle
 } from 'lucide-react';
-import FormattedNumberDisplay from '@/components/FormattedNumber';
-import { InvoiceService } from '@/lib/services/invoiceService';
-import { Invoice } from '@/models/Invoice';
+import CurrencyAmount from '@/components/CurrencyAmount';
 import FloatingActionButton from '@/components/dashboard/FloatingActionButton';
+import PendingInvoiceApprovals from '@/components/dashboard/PendingInvoiceApprovals';
+import { getInvoicesListMinimal, getFullInvoicesForExport, InvoiceDetails } from '@/lib/actions/invoices';
 
 export default function InvoicesPage() {
   const router = useRouter();
   const { data: session } = useSession();
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [invoices, setInvoices] = useState<InvoiceDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'sent' | 'pending' | 'paid' | 'overdue'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'sent' | 'pending' | 'paid' | 'overdue' | 'pending_approval' | 'rejected'>('all');
   const [totalRevenue, setTotalRevenue] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -37,6 +40,8 @@ export default function InvoicesPage() {
     draft: 0,
     sent: 0,
     pending: 0,
+    pending_approval: 0,
+    rejected: 0,
     paid: 0,
     overdue: 0
   });
@@ -54,53 +59,72 @@ export default function InvoicesPage() {
     try {
       setLoading(true);
       
-      // Build query parameters
-      const params = new URLSearchParams({
-        convertToPreferred: 'true',
-        page: currentPage.toString(),
-        limit: showAll ? '1000' : '10' // Show all or paginated
-      });
+      let result;
+      const limit = showAll ? 1000 : 10;
       
-      if (statusFilter !== 'all') {
-        params.append('status', statusFilter);
+      if (searchTerm.trim()) {
+        // Use search server action with minimal data
+        result = await getInvoicesListMinimal(currentPage, limit, statusFilter, searchTerm.trim());
+      } else {
+        // Use paginated list server action with minimal data
+        result = await getInvoicesListMinimal(currentPage, limit, statusFilter);
       }
       
-      // Fetch invoices with pagination
-      const response = await fetch(`/api/invoices?${params.toString()}`);
-      const data = await response.json();
-      
-      if (data.success) {
-        setInvoices(data.data.invoices || []);
-        setTotalRevenue(data.data.stats?.totalRevenue || 0);
-        setTotalPages(data.data.pagination?.pages || 1);
-        setTotalInvoices(data.data.pagination?.total || 0);
-        setStatusCounts(data.data.stats?.statusCounts || {
+      if (result.success && result.data) {
+        setInvoices(result.data.invoices || []);
+        setTotalPages(result.data.pagination?.pages || 1);
+        setTotalInvoices(result.data.pagination?.total || 0);
+        
+        // Calculate total revenue from loaded invoices
+        const revenue = result.data.invoices?.reduce((sum, invoice) => {
+          if (invoice.status === 'paid') {
+            return sum + (invoice.total || 0);
+          }
+          return sum;
+        }, 0) || 0;
+        setTotalRevenue(revenue);
+        
+        // Calculate status counts
+        const counts = result.data.invoices?.reduce((acc, invoice) => {
+          acc[invoice.status as keyof typeof acc] = (acc[invoice.status as keyof typeof acc] || 0) + 1;
+          return acc;
+        }, {
           draft: 0,
           sent: 0,
           pending: 0,
+          pending_approval: 0,
+          rejected: 0,
           paid: 0,
           overdue: 0
-        });
+        }) || {
+          draft: 0,
+          sent: 0,
+          pending: 0,
+          pending_approval: 0,
+          rejected: 0,
+          paid: 0,
+          overdue: 0
+        };
+        setStatusCounts(counts);
       } else {
-        // Fallback to InvoiceService if API fails
-        const invoicesData = await InvoiceService.getInvoices();
-        setInvoices(invoicesData);
-        setTotalRevenue(0); // Will be calculated from loaded invoices
+        console.error('❌ [Invoices Page] Server action failed:', result.error);
+        // Fallback to empty state
+        setInvoices([]);
+        setTotalRevenue(0);
         setTotalPages(1);
-        setTotalInvoices(invoicesData.length);
+        setTotalInvoices(0);
       }
     } catch (error) {
       console.error('❌ [Invoices Page] Error loading invoices:', error);
-      // Fallback to InvoiceService if fetch fails
-      const invoicesData = await InvoiceService.getInvoices();
-      setInvoices(invoicesData);
+      // Fallback to empty state
+      setInvoices([]);
       setTotalRevenue(0);
       setTotalPages(1);
-      setTotalInvoices(invoicesData.length);
+      setTotalInvoices(0);
     } finally {
       setLoading(false);
     }
-  }, [currentPage, statusFilter, showAll]);
+  }, [currentPage, searchTerm, statusFilter, showAll]);
 
   useEffect(() => {
     if (session?.user) {
@@ -123,7 +147,6 @@ export default function InvoicesPage() {
       console.error('Failed to delete invoice:', error);
     }
   };
-
 
   const handleDynamicDownloadCsv = async () => {
     try {
@@ -157,19 +180,18 @@ export default function InvoicesPage() {
           break;
       }
 
-      // Fetch invoices based on criteria
-      const response = await fetch(`/api/invoices?${params.toString()}`);
-      const data = await response.json();
+      // Fetch invoices with full data for export
+      const result = await getFullInvoicesForExport(statusFilter, searchTerm);
       
-      if (!data.success) {
-        throw new Error('Failed to fetch invoices');
+      if (!result.success || !result.data) {
+        throw new Error('Failed to fetch invoices for export');
       }
 
-      let invoicesToDownload = data.data.invoices || [];
+      let invoicesToDownload = result.data;
 
       // Filter by selected invoices if needed
       if (downloadCriteria.type === 'selected' && selectedInvoices.length > 0) {
-        invoicesToDownload = invoicesToDownload.filter((invoice: Invoice) => 
+        invoicesToDownload = invoicesToDownload.filter((invoice: InvoiceDetails) => 
           invoice._id && selectedInvoices.includes(invoice._id.toString())
         );
       }
@@ -195,7 +217,7 @@ export default function InvoicesPage() {
       csvRows.push(headers.join(','));
       
       // Process each invoice
-      invoicesToDownload.forEach((invoice: Invoice) => {
+      invoicesToDownload.forEach((invoice: InvoiceDetails) => {
         // Get company details
         const companyName = invoice.companyDetails?.name || 'N/A';
         const companyEmail = 'N/A';
@@ -231,17 +253,17 @@ export default function InvoicesPage() {
         
         // Combine all items into a single description
         const itemsDescription = invoice.items && invoice.items.length > 0
-          ? invoice.items.map((item) => `${item.description || 'Item'} (Qty: ${item.quantity || 0}, Price: ${item.unitPrice?.toFixed(2) || '0.00'})`).join('; ')
+          ? invoice.items.map((item: { description?: string; quantity?: number; unitPrice?: number }) => `${item.description || 'Item'} (Qty: ${item.quantity || 0}, Price: ${item.unitPrice?.toFixed(2) || '0.00'})`).join('; ')
           : 'No items';
         
         // Calculate total quantity
-        const totalQuantity = invoice.items ? invoice.items.reduce((sum: number, item) => sum + (item.quantity || 0), 0) : 0;
+        const totalQuantity = invoice.items ? invoice.items.reduce((sum: number, item: { quantity?: number }) => sum + (item.quantity || 0), 0) : 0;
 
         const row = [
           `"${invoice.invoiceNumber || 'N/A'}"`,
           `"${invoice.invoiceNumber || 'N/A'}"`,
-          `"${formatDate(invoice.issueDate?.toISOString() || '')}"`,
-          `"${formatDate(invoice.dueDate?.toISOString() || '')}"`,
+          `"${formatDate(invoice.issueDate || '')}"`,
+          `"${formatDate(invoice.dueDate || '')}"`,
           `"${invoice.status || 'N/A'}"`,
           `"${companyName}"`,
           `"${companyEmail}"`,
@@ -256,7 +278,7 @@ export default function InvoicesPage() {
           `"${itemsDescription}"`,
           `"${totalQuantity}"`,
           `"${invoice.subtotal?.toFixed(2) || '0.00'}"`,
-          `"${invoice.taxes?.reduce((sum, tax) => sum + tax.amount, 0).toFixed(2) || '0.00'}"`,
+          `"${(Array.isArray(invoice.taxes) ? invoice.taxes.reduce((sum: number, tax: { amount?: number }) => sum + (tax.amount || 0), 0) : 0).toFixed(2)}"`,
           `"${invoice.totalAmount?.toFixed(2) || '0.00'}"`,
           `"${invoice.currency || 'N/A'}"`,
           `"${paymentMethod}"`,
@@ -266,7 +288,7 @@ export default function InvoicesPage() {
           `"${network}"`,
           `"${paymentAddress}"`,
           `"${invoice.notes || ''}"`,
-          `"${formatDate(invoice.createdAt?.toISOString() || '')}"`
+          `"${formatDate(invoice.createdAt || '')}"`
         ];
         csvRows.push(row.join(','));
       });
@@ -343,8 +365,6 @@ export default function InvoicesPage() {
     });
   };
 
-
-
   const filteredInvoices = invoices.filter(invoice =>
     (invoice.invoiceNumber?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
     (invoice.clientDetails?.companyName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
@@ -366,101 +386,56 @@ export default function InvoicesPage() {
   };
 
   return (
-    <div className="space-y-6 px-4 sm:px-6 lg:px-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex-1">
-          <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Invoices</h1>
-          <p className="text-blue-200">Manage your invoices and track payments</p>
+    <div className="space-y-4 sm:space-y-6 px-4 sm:px-6 lg:px-8">
+      {/* Header - Mobile Optimized */}
+      <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+        <div className="flex items-center space-x-3 sm:space-x-4">
+          <button
+            onClick={() => router.push('/dashboard/services/smart-invoicing?refresh=true')}
+            className="p-2 text-blue-200 hover:text-white transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <div className="flex-1">
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-1 sm:mb-2">Invoices</h1>
+            <p className="text-blue-200 text-sm sm:text-base">Manage your invoices and track payments</p>
+          </div>
         </div>
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-3">
           <button
             onClick={() => setShowDownloadModal(true)}
-            className="flex items-center justify-center sm:justify-start space-x-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-lg w-full sm:w-auto"
+            className="flex items-center justify-center space-x-2 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-lg min-h-[44px] w-full sm:w-auto"
           >
-            <Download className="h-5 w-5" />
-            <span className="font-medium">Download CSV</span>
+            <Download className="h-4 w-4 sm:h-5 sm:w-5" />
+            <span className="font-medium text-sm sm:text-base">Download CSV</span>
           </button>
           <button
             onClick={() => router.push('/dashboard/services/smart-invoicing/create')}
-            className="flex items-center justify-center sm:justify-start space-x-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-lg w-full sm:w-auto"
+            className="flex items-center justify-center space-x-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-lg min-h-[44px] w-full sm:w-auto"
           >
-            <Plus className="h-5 w-5" />
-            <span className="font-medium">Create Invoice</span>
+            <Plus className="h-4 w-4 sm:h-5 sm:w-5" />
+            <span className="font-medium text-sm sm:text-base">Create Invoice</span>
           </button>
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-blue-200 text-sm font-medium">Total Invoices</p>
-              <p className="text-xl sm:text-2xl font-bold text-white">{stats.totalInvoices}</p>
-            </div>
-            <div className="p-2 sm:p-3 bg-blue-500/20 rounded-lg">
-              <FileText className="h-5 w-5 sm:h-6 sm:w-6 text-blue-400" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-blue-200 text-sm font-medium">Total Revenue</p>
-              <p className="text-xl sm:text-2xl font-bold text-white">
-                <FormattedNumberDisplay value={stats.totalRevenue} />
-              </p>
-            </div>
-            <div className="p-2 sm:p-3 bg-green-500/20 rounded-lg">
-              <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-green-400" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-blue-200 text-sm font-medium">Pending</p>
-              <p className="text-xl sm:text-2xl font-bold text-white">{stats.pendingCount}</p>
-            </div>
-            <div className="p-2 sm:p-3 bg-yellow-500/20 rounded-lg">
-              <Calendar className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-400" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-blue-200 text-sm font-medium">Paid</p>
-              <p className="text-xl sm:text-2xl font-bold text-white">{stats.paidCount}</p>
-            </div>
-            <div className="p-2 sm:p-3 bg-green-500/20 rounded-lg">
-              <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-green-400" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Filters and Search */}
+      {/* Search and Filters - Moved to top for better UX */}
       <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20">
-        <div className="flex flex-col sm:flex-row gap-4">
+        <div className="flex flex-col space-y-3 sm:flex-row sm:space-y-0 sm:space-x-4">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4 sm:h-5 sm:w-5" />
             <input
               type="text"
               placeholder="Search invoices by number or client..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-black placeholder-gray-600 font-medium"
+              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-black placeholder-gray-600 font-medium text-sm sm:text-base min-h-[44px]"
             />
           </div>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as 'all' | 'draft' | 'sent' | 'pending' | 'paid' | 'overdue')}
-            className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-900"
+            className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-900 text-sm sm:text-base min-h-[44px] w-full sm:w-auto"
           >
             <option value="all">All Status</option>
             <option value="draft">Draft</option>
@@ -471,7 +446,67 @@ export default function InvoicesPage() {
         </div>
       </div>
 
-      {/* Invoices Table */}
+      {/* Stats Cards - Mobile Optimized */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20">
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <p className="text-blue-200 text-xs sm:text-sm font-medium">Total Invoices</p>
+              <p className="text-lg sm:text-2xl font-bold text-white">{stats.totalInvoices}</p>
+            </div>
+            <div className="p-2 sm:p-3 bg-blue-500/20 rounded-lg flex-shrink-0">
+              <FileText className="h-4 w-4 sm:h-6 sm:w-6 text-blue-400" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20">
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <p className="text-blue-200 text-xs sm:text-sm font-medium">Total Revenue</p>
+              <p className="text-lg sm:text-2xl font-bold text-white">
+                <CurrencyAmount 
+                  amount={stats.totalRevenue} 
+                  currency="USD"
+                  showOriginalCurrency={false}
+                />
+              </p>
+            </div>
+            <div className="p-2 sm:p-3 bg-green-500/20 rounded-lg flex-shrink-0">
+              <DollarSign className="h-4 w-4 sm:h-6 sm:w-6 text-green-400" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20">
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <p className="text-blue-200 text-xs sm:text-sm font-medium">Pending</p>
+              <p className="text-lg sm:text-2xl font-bold text-white">{stats.pendingCount}</p>
+            </div>
+            <div className="p-2 sm:p-3 bg-yellow-500/20 rounded-lg flex-shrink-0">
+              <Calendar className="h-4 w-4 sm:h-6 sm:w-6 text-yellow-400" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20">
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <p className="text-blue-200 text-xs sm:text-sm font-medium">Paid</p>
+              <p className="text-lg sm:text-2xl font-bold text-white">{stats.paidCount}</p>
+            </div>
+            <div className="p-2 sm:p-3 bg-green-500/20 rounded-lg flex-shrink-0">
+              <TrendingUp className="h-4 w-4 sm:h-6 sm:w-6 text-green-400" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Pending Approvals Section */}
+      <PendingInvoiceApprovals />
+
+      {/* Invoices Table - Mobile Optimized */}
       <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-16">
@@ -493,7 +528,7 @@ export default function InvoicesPage() {
             {!searchTerm && statusFilter === 'all' && (
               <button
                 onClick={() => router.push('/dashboard/services/smart-invoicing/create')}
-                className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors min-h-[44px]"
               >
                 <Plus className="h-5 w-5 mr-2" />
                 Create Your First Invoice
@@ -502,11 +537,127 @@ export default function InvoicesPage() {
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto">
+            {/* Mobile Card View */}
+            <div className="block sm:hidden">
+              <div className="p-4 space-y-3">
+                {statusFilteredInvoices.map((invoice) => (
+                  <div
+                    key={invoice._id?.toString() || 'unknown'}
+                    className="bg-white/5 rounded-lg p-4 border border-white/10 hover:bg-white/10 transition-colors"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <input
+                            type="checkbox"
+                            checked={selectedInvoices.includes(invoice._id?.toString() || '')}
+                            onChange={(e) => {
+                              const invoiceId = invoice._id?.toString();
+                              if (!invoiceId) return;
+                              
+                              if (e.target.checked) {
+                                setSelectedInvoices(prev => [...prev, invoiceId]);
+                              } else {
+                                setSelectedInvoices(prev => prev.filter(id => id !== invoiceId));
+                              }
+                            }}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <div className="flex items-center space-x-2">
+                            <h3 className="text-white font-semibold text-sm truncate">
+                              {invoice.invoiceNumber || 'Invoice'}
+                            </h3>
+                            {/* WhatsApp indicator */}
+                            {invoice.sentVia === 'whatsapp' && (
+                              <MessageCircle className="h-4 w-4 text-green-400 flex-shrink-0"  />
+                            )}
+                          </div>
+                          {/* Approval indicator - only for organization recipients */}
+                          {(invoice.status === 'approved' || invoice.status === 'sent') && invoice.organizationId && invoice.recipientType === 'organization' && (
+                            <div className="relative group">
+                              <CheckCircle className="h-4 w-4 text-green-400 flex-shrink-0" />
+                              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                                Approved
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-blue-200 text-xs">
+                          {invoice.clientDetails?.companyName || 
+                           [invoice.clientDetails?.firstName, invoice.clientDetails?.lastName].filter(Boolean).join(' ') || 
+                           'Client'}
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0 ml-3">
+                        <p className="text-white font-semibold text-sm">
+                          <CurrencyAmount 
+                            amount={invoice.total || invoice.totalAmount || 0} 
+                            currency={invoice.currency || 'USD'}
+                            showOriginalCurrency={true}
+                          />
+                        </p>
+                        <div className="flex items-center space-x-2">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(invoice.status === 'approved' ? 'sent' : invoice.status)}`}>
+                            {invoice.status === 'approved' ? 'Pending' :
+                             invoice.status === 'sent' ? 'Pending' : 
+                             invoice.status ? (invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)) : 'Draft'}
+                          </span>
+                          {/* WhatsApp indicator */}
+                          {invoice.sentVia === 'whatsapp' && (
+                            <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full">
+                              <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/>
+                              </svg>
+                              WhatsApp
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center justify-between text-xs text-blue-200 mb-3">
+                      <span>{invoice.issueDate ? formatDate(invoice.issueDate.toString()) : 'N/A'}</span>
+                      <span>{invoice.createdAt ? formatDate(invoice.createdAt.toString()) : 'N/A'}</span>
+                    </div>
+                    
+                    <div className="flex items-center justify-end space-x-2">
+                      {invoice.status === 'draft' ? (
+                        <button
+                          onClick={() => router.push(`/dashboard/services/smart-invoicing/create?id=${invoice._id?.toString()}`)}
+                          className="flex items-center space-x-1 text-blue-400 hover:text-blue-300 transition-colors px-3 py-2 rounded-lg hover:bg-white/10 min-h-[36px]"
+                        >
+                          <Edit3 className="h-4 w-4" />
+                          <span className="text-xs">Edit</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => router.push(`/dashboard/services/smart-invoicing/invoices/${invoice._id?.toString()}`)}
+                          className="flex items-center space-x-1 text-blue-400 hover:text-blue-300 transition-colors px-3 py-2 rounded-lg hover:bg-white/10 min-h-[36px]"
+                        >
+                          <Eye className="h-4 w-4" />
+                          <span className="text-xs">View</span>
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDeleteInvoice(invoice._id?.toString() || '')}
+                        className="flex items-center space-x-1 text-red-400 hover:text-red-300 transition-colors px-3 py-2 rounded-lg hover:bg-white/10 min-h-[36px]"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span className="text-xs">Delete</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="min-w-full divide-y divide-white/10">
                 <thead className="bg-white/5">
                   <tr>
-                    <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
                       <input
                         type="checkbox"
                         checked={selectedInvoices.length === statusFilteredInvoices.length && statusFilteredInvoices.length > 0}
@@ -520,22 +671,22 @@ export default function InvoicesPage() {
                         className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                       />
                     </th>
-                    <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
                       Invoice
                     </th>
-                    <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
                       Client
                     </th>
-                    <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
                       Amount
                     </th>
-                    <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
                       Status
                     </th>
-                    <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
                       Date
                     </th>
-                    <th className="px-3 sm:px-6 py-4 text-right text-xs font-semibold text-blue-200 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-right text-xs font-semibold text-blue-200 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
@@ -547,7 +698,7 @@ export default function InvoicesPage() {
                       className={`hover:bg-white/5 transition-colors ${invoice.status === 'draft' ? 'cursor-pointer' : ''}`}
                       onClick={invoice.status === 'draft' ? () => router.push(`/dashboard/services/smart-invoicing/create?id=${invoice._id?.toString()}`) : undefined}
                     >
-                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           checked={selectedInvoices.includes(invoice._id?.toString() || '')}
@@ -564,49 +715,77 @@ export default function InvoicesPage() {
                           className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                         />
                       </td>
-                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
+                      <td className="px-6 py-4 whitespace-nowrap">
                         <div>
-                          <div className="text-sm font-semibold text-white">
-                            {invoice.invoiceNumber || 'Invoice'}
+                          <div className="flex items-center space-x-2">
+                            <div className="text-sm font-semibold text-white">
+                              {invoice.invoiceNumber || 'Invoice'}
+                            </div>
+                            {/* WhatsApp indicator */}
+                            {invoice.sentVia === 'whatsapp' && (
+                              <MessageCircle className="h-4 w-4 text-green-400 flex-shrink-0" />
+                            )}
+                            {/* Approval indicator */}
+                            {(invoice.status === 'approved' || invoice.status === 'sent') && (
+                              <div className="relative group">
+                                <CheckCircle className="h-4 w-4 text-green-400 flex-shrink-0" />
+                                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                                  Approved
+                                </div>
+                              </div>
+                            )}
                           </div>
                           <div className="text-sm text-blue-200">
                             {invoice.issueDate ? formatDate(invoice.issueDate.toString()) : 'N/A'}
                           </div>
                         </div>
                       </td>
-                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
+                      <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-white">
                           {invoice.clientDetails?.companyName || 
                            [invoice.clientDetails?.firstName, invoice.clientDetails?.lastName].filter(Boolean).join(' ') || 
                            'Client'}
                         </div>
                       </td>
-                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
+                      <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-semibold text-white">
-                          <FormattedNumberDisplay 
-                            value={invoice.totalAmount || 0} 
-                            currency={invoice.currency === 'USD' ? '$' : invoice.currency === 'EUR' ? '€' : invoice.currency === 'GBP' ? '£' : '$'}
+                          <CurrencyAmount 
+                            amount={invoice.totalAmount || 0} 
+                            currency={invoice.currency || 'USD'}
+                            showOriginalCurrency={true}
                           />
                         </div>
                       </td>
-                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${getStatusColor(invoice.status)}`}>
-                          {invoice.status === 'sent' ? 'Pending' : 
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center space-x-2">
+                          <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${getStatusColor(invoice.status === 'approved' ? 'sent' : invoice.status)}`}>
+                            {invoice.status === 'approved' ? 'Pending' :
+                             invoice.status === 'sent' ? 'Pending' : 
                            invoice.status ? (invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)) : 'Draft'}
-                        </span>
+                          </span>
+                          {/* WhatsApp indicator */}
+                          {invoice.sentVia === 'whatsapp' && (
+                            <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full">
+                              <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/>
+                              </svg>
+                              WhatsApp
+                            </span>
+                          )}
+                        </div>
                       </td>
-                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-blue-200">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-200">
                         {invoice.createdAt ? formatDate(invoice.createdAt.toString()) : 'N/A'}
                       </td>
-                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex items-center justify-end space-x-2 sm:space-x-3">
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div className="flex items-center justify-end space-x-3">
                           {invoice.status === 'draft' ? (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 router.push(`/dashboard/services/smart-invoicing/create?id=${invoice._id?.toString()}`);
                               }}
-                              className="text-blue-400 hover:text-blue-300 transition-colors p-1 sm:p-2 rounded-lg hover:bg-white/10"
+                              className="text-blue-400 hover:text-blue-300 transition-colors p-2 rounded-lg hover:bg-white/10"
                               title="Continue Editing Draft"
                             >
                               <Edit3 className="h-4 w-4" />
@@ -617,22 +796,10 @@ export default function InvoicesPage() {
                                 e.stopPropagation();
                                 router.push(`/dashboard/services/smart-invoicing/invoices/${invoice._id?.toString()}`);
                               }}
-                              className="text-blue-400 hover:text-blue-300 transition-colors p-1 sm:p-2 rounded-lg hover:bg-white/10"
+                              className="text-blue-400 hover:text-blue-300 transition-colors p-2 rounded-lg hover:bg-white/10"
                               title="View Invoice"
                             >
                               <Eye className="h-4 w-4" />
-                            </button>
-                          )}
-                          {invoice.status !== 'draft' && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                router.push(`/dashboard/services/smart-invoicing/create?id=${invoice._id?.toString()}`);
-                              }}
-                              className="text-green-400 hover:text-green-300 transition-colors p-1 sm:p-2 rounded-lg hover:bg-white/10"
-                              title="Edit Invoice"
-                            >
-                              <Edit3 className="h-4 w-4" />
                             </button>
                           )}
                           <button
@@ -640,7 +807,7 @@ export default function InvoicesPage() {
                               e.stopPropagation();
                               handleDeleteInvoice(invoice._id?.toString() || '');
                             }}
-                            className="text-red-400 hover:text-red-300 transition-colors p-1 sm:p-2 rounded-lg hover:bg-white/10"
+                            className="text-red-400 hover:text-red-300 transition-colors p-2 rounded-lg hover:bg-white/10"
                             title="Delete Invoice"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -798,6 +965,8 @@ export default function InvoicesPage() {
                       <option value="draft">Draft</option>
                       <option value="sent">Sent</option>
                       <option value="pending">Pending</option>
+            <option value="pending_approval">Pending Approval</option>
+            <option value="rejected">Rejected</option>
                       <option value="paid">Paid</option>
                       <option value="overdue">Overdue</option>
                     </select>

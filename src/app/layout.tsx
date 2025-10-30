@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { SessionProvider } from "@/components/providers/SessionProvider";
 import { CurrencyProvider } from "@/lib/contexts/CurrencyContext";
+import { SubscriptionProvider } from "@/lib/contexts/SubscriptionContext";
+import { PermissionProvider } from "@/lib/contexts/PermissionContext";
 
 // Initialize database connection on app start
 import '../lib/db-init';
@@ -18,11 +20,15 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Chains ERP-Global",
-  description: "Blockchain powered Global Business Solutions",
+  title: "Chains-Global Finance",
   icons: {
     icon: "./chains.PNG"
   }
+};
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1.0,
 };
 
 export default function RootLayout({
@@ -32,13 +38,17 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-              <link rel="icon" href="/chains.PNG" />
+      <link rel="icon" href="/chains.PNG" />
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <SessionProvider>
           <CurrencyProvider>
-            {children}
+            <SubscriptionProvider>
+              <PermissionProvider>
+                {children}
+              </PermissionProvider>
+            </SubscriptionProvider>
           </CurrencyProvider>
         </SessionProvider>
       </body>

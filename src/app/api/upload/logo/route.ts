@@ -42,8 +42,7 @@ export async function POST(request: NextRequest) {
       fileType: file.type
     });
 
-  } catch (error) {
-    console.error('Logo upload error:', error);
+  } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 } 

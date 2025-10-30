@@ -22,6 +22,8 @@ export default function CurrencyAmount({
   const { preferredCurrency, getCurrencySymbol } = useCurrency();
   const conversion = useCurrencyConversion(amount, currency, preferredCurrency);
 
+  // Debug logging
+
   // If currencies are the same, just display the amount
   if (currency === preferredCurrency) {
     const symbol = getCurrencySymbol(currency);

@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
 import { CurrencyService } from '@/lib/services/currencyService';
+// import { NotificationService } from '@/lib/services/notificationService';
 
 export async function GET(
   request: NextRequest,
@@ -23,7 +24,8 @@ export async function GET(
     const convertToPreferred = searchParams.get('convertToPreferred') === 'true';
 
     // Determine if user is individual or organization
-    const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
+    // For organization owners, they should access organization invoices
+    const isOrganization = !!session.user.organizationId;
     const ownerId = isOrganization ? session.user.organizationId : session.user.email;
     const ownerType = isOrganization ? 'organization' : 'individual';
 
@@ -31,16 +33,23 @@ export async function GET(
       id,
       ownerType,
       ownerId,
-      userEmail: session.user.email
+      userEmail: session.user.email,
+      userId: session.user.id
     });
 
     const db = await connectToDatabase();
     const collection = db.collection('invoices');
 
-    // Query based on owner type
+    // Query based on owner type - Organization members should always see organization's invoices
     const query = isOrganization 
       ? { _id: new ObjectId(id), organizationId: session.user.organizationId }
-      : { _id: new ObjectId(id), issuerId: session.user.id };
+      : { 
+          _id: new ObjectId(id),
+          $or: [
+            { issuerId: session.user.id },
+            { userId: session.user.email }
+          ]
+        };
 
     const invoice = await collection.findOne(query);
 
@@ -49,7 +58,9 @@ export async function GET(
         id,
         ownerType,
         ownerId,
-        userEmail: session.user.email
+        userEmail: session.user.email,
+        userId: session.user.id,
+        query
       });
       return NextResponse.json(
         { success: false, message: 'Invoice not found' },
@@ -57,6 +68,12 @@ export async function GET(
       );
     }
 
+    console.log('✅ [API Invoice] Invoice found:', {
+      id,
+      invoiceNumber: invoice.invoiceNumber,
+      issuerId: invoice.issuerId,
+      userId: invoice.userId
+    });
 
     // Convert currencies if requested
     let processedInvoice = invoice;
@@ -102,18 +119,24 @@ export async function PUT(
     const body = await request.json();
 
     // Determine if user is individual or organization
-    const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
+    // For organization owners, they should access organization invoices
+    const isOrganization = !!session.user.organizationId;
     const ownerId = isOrganization ? session.user.organizationId : session.user.email;
     const ownerType = isOrganization ? 'organization' : 'individual';
-
 
     const db = await connectToDatabase();
     const collection = db.collection('invoices');
 
-    // Check if invoice exists and belongs to user/organization
+    // Check if invoice exists and belongs to user/organization - use same logic as GET
     const query = isOrganization 
       ? { _id: new ObjectId(id), organizationId: session.user.organizationId }
-      : { _id: new ObjectId(id), issuerId: session.user.id };
+      : { 
+          _id: new ObjectId(id),
+          $or: [
+            { issuerId: session.user.id },
+            { userId: session.user.email }
+          ]
+        };
 
     const existingInvoice = await collection.findOne(query);
 
@@ -133,9 +156,52 @@ export async function PUT(
     if (body.status === 'paid') {
       // Individual users can always mark their own invoices as paid
       if (isOrganization) {
-        // For organization users, we'll allow organization members to mark invoices as paid
-        // You can add more specific permission checks here later
-      } else {
+        // For organization users, check if they have permission to mark invoices as paid
+        // Get user's permissions
+        const user = await db.collection('users').findOne({ email: session.user.email });
+        if (!user) {
+          return NextResponse.json(
+            { success: false, message: 'User not found' },
+            { status: 404 }
+          );
+        }
+
+        // Get organization and member details
+        const organization = await db.collection('organizations').findOne({
+          _id: user.organizationId
+        });
+
+        if (!organization) {
+          return NextResponse.json(
+            { success: false, message: 'Organization not found' },
+            { status: 404 }
+          );
+        }
+
+        const member = organization.members.find((m: { userId: string | ObjectId }) => m.userId.toString() === user._id?.toString());
+        if (!member) {
+          return NextResponse.json(
+            { success: false, message: 'User not found in organization' },
+            { status: 404 }
+          );
+        }
+
+        // Check if user has permission to mark invoices as paid
+        const { RBACService } = await import('@/lib/services/rbacService');
+        if (!RBACService.canMarkInvoiceAsPaid(member)) {
+          return NextResponse.json(
+            { success: false, message: 'Insufficient permissions to mark invoice as paid' },
+            { status: 403 }
+          );
+        }
+
+        // Additional check: Only allow marking approved invoices as paid for approvers
+        if (member.role === 'approver' && existingInvoice.status !== 'approved') {
+          return NextResponse.json(
+            { success: false, message: 'Approvers can only mark approved invoices as paid' },
+            { status: 403 }
+          );
+        }
       }
     }
 
@@ -163,9 +229,75 @@ export async function PUT(
       );
     }
 
+    // If invoice status is being updated to 'paid', also update the related payable
+    if (body.status === 'paid') {
+      try {
+        
+        const payablesCollection = db.collection('payables');
+        await payablesCollection.updateOne(
+          { relatedInvoiceId: new ObjectId(id) },
+          {
+            $set: {
+              status: 'paid',
+              paymentStatus: 'completed',
+              paymentDate: new Date(),
+              updatedAt: new Date()
+            },
+            $push: {
+              statusHistory: {
+                status: 'paid',
+                timestamp: new Date(),
+                updatedBy: session.user.email,
+                notes: 'Status updated from related invoice'
+              }
+            }
+          } as Record<string, unknown>
+        );
+        
+
+        // Update financial ledger for net balance calculation
+        try {
+          const ledgerCollection = db.collection('financial_ledger');
+          
+          // Find ledger entry by relatedInvoiceId or entryId
+          const existingLedgerEntry = await ledgerCollection.findOne({
+            relatedInvoiceId: new ObjectId(id),
+            type: 'receivable'
+          });
+          
+          const existingLedgerEntryByNumber = await ledgerCollection.findOne({
+            entryId: existingInvoice.invoiceNumber,
+            type: 'receivable'
+          });
+          
+          const ledgerEntryToUpdate = existingLedgerEntry || existingLedgerEntryByNumber;
+          
+          if (ledgerEntryToUpdate) {
+            await ledgerCollection.updateOne(
+              { 
+                _id: ledgerEntryToUpdate._id
+              },
+              {
+                $set: {
+                  status: 'paid',
+                  updatedAt: new Date()
+                }
+              }
+            );
+            console.log('✅ [Invoice Update] Financial ledger updated for invoice:', id);
+          }
+        } catch (ledgerError) {
+          console.error('⚠️ [Invoice Update] Failed to update financial ledger:', ledgerError);
+        }
+      } catch (payableUpdateError) {
+        console.error('⚠️ [Invoice Update] Failed to update related payable:', payableUpdateError);
+        // Don't fail the invoice update if payable update fails
+      }
+
+    }
+
     // Get the updated invoice to return full data
     const updatedInvoice = await collection.findOne({ _id: new ObjectId(id) });
-
 
     return NextResponse.json({
       success: true,
@@ -194,7 +326,8 @@ export async function DELETE(
     const { id } = await params;
 
     // Determine if user is individual or organization
-    const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
+    // For organization owners, they should access organization invoices
+    const isOrganization = !!session.user.organizationId;
     const ownerId = isOrganization ? session.user.organizationId : session.user.email;
     const ownerType = isOrganization ? 'organization' : 'individual';
 
@@ -208,10 +341,16 @@ export async function DELETE(
     const db = await connectToDatabase();
     const collection = db.collection('invoices');
 
-    // Query based on owner type
+    // Query based on owner type - use same logic as GET
     const query = isOrganization 
       ? { _id: new ObjectId(id), organizationId: session.user.organizationId }
-      : { _id: new ObjectId(id), issuerId: session.user.id };
+      : { 
+          _id: new ObjectId(id),
+          $or: [
+            { issuerId: session.user.id },
+            { userId: session.user.email }
+          ]
+        };
 
     const result = await collection.deleteOne(query);
 
@@ -226,7 +365,6 @@ export async function DELETE(
         { status: 404 }
       );
     }
-
 
     return NextResponse.json({
       success: true,

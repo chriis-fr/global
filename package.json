@@ -25,6 +25,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hot-toast": "^2.5.2",
+    "stripe": "^18.5.0",
     "wouter": "^3.7.1"
   },
   "devDependencies": {

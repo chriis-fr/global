@@ -12,9 +12,11 @@ import {
   Phone,
   MapPin,
   ArrowLeft,
-  ChevronDown
+  ChevronDown,
+  Lock
 } from 'lucide-react';
 import { countries } from '@/data/countries';
+import { useSubscription } from '@/lib/contexts/SubscriptionContext';
 
 interface Client {
   _id: string;
@@ -29,9 +31,81 @@ interface Client {
   updatedAt: string;
 }
 
+// Loading Skeleton Component
+function ClientsSkeleton() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-indigo-900">
+      <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6 sm:space-y-8">
+        {/* Header Skeleton */}
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex items-center space-x-3 sm:space-x-4 w-full sm:w-auto">
+              <div className="w-16 h-10 bg-white/20 rounded-lg animate-pulse"></div>
+              <div className="flex-1 sm:flex-none">
+                <div className="w-48 h-8 bg-white/20 rounded-lg animate-pulse mb-2"></div>
+                <div className="w-64 h-4 bg-white/20 rounded-lg animate-pulse"></div>
+              </div>
+            </div>
+            <div className="w-full sm:w-40 h-12 bg-white/20 rounded-lg animate-pulse"></div>
+          </div>
+        </div>
+
+        {/* Search Skeleton */}
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 sm:p-6">
+          <div className="w-full h-12 bg-white/20 rounded-lg animate-pulse"></div>
+        </div>
+
+        {/* Clients Grid Skeleton */}
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 sm:p-6">
+          <div className="flex justify-between items-center mb-6">
+            <div className="w-32 h-6 bg-white/20 rounded-lg animate-pulse"></div>
+            <div className="w-48 h-4 bg-white/20 rounded-lg animate-pulse"></div>
+          </div>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 p-4 sm:p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center space-x-3 flex-1 min-w-0">
+                    <div className="w-12 h-12 bg-white/20 rounded-full animate-pulse flex-shrink-0"></div>
+                    <div className="min-w-0 flex-1">
+                      <div className="w-24 h-5 bg-white/20 rounded-lg animate-pulse mb-2"></div>
+                      <div className="w-32 h-4 bg-white/20 rounded-lg animate-pulse"></div>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-1 ml-2">
+                    <div className="w-8 h-8 bg-white/20 rounded-lg animate-pulse"></div>
+                    <div className="w-8 h-8 bg-white/20 rounded-lg animate-pulse"></div>
+                  </div>
+                </div>
+                
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-4 h-4 bg-white/20 rounded animate-pulse"></div>
+                    <div className="w-40 h-4 bg-white/20 rounded-lg animate-pulse"></div>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <div className="w-4 h-4 bg-white/20 rounded animate-pulse"></div>
+                    <div className="w-32 h-4 bg-white/20 rounded-lg animate-pulse"></div>
+                  </div>
+                  <div className="flex items-start space-x-3">
+                    <div className="w-4 h-4 bg-white/20 rounded animate-pulse mt-0.5"></div>
+                    <div className="w-48 h-4 bg-white/20 rounded-lg animate-pulse"></div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ClientsPage() {
   const { data: session } = useSession();
   const router = useRouter();
+  const { subscription } = useSubscription();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -54,6 +128,11 @@ export default function ClientsPage() {
   });
   const [showCountryDropdown, setShowCountryDropdown] = useState(false);
   const [countrySearch, setCountrySearch] = useState('');
+
+  // Check if user can add more clients (3 client limit for free plan)
+  const canAddClient = subscription?.plan?.planId === 'receivables-free' 
+    ? clients.length < 3 
+    : true;
 
   const fetchClients = useCallback(async () => {
     try {
@@ -81,6 +160,12 @@ export default function ClientsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Check client limit before submitting
+    if (!canAddClient && !editingClient) {
+      alert('You have reached your client limit of 3 on the free plan. Please upgrade to add more clients.');
+      return;
+    }
     
     try {
       const url = editingClient ? `/api/clients/${editingClient._id}` : '/api/clients';
@@ -221,73 +306,93 @@ export default function ClientsPage() {
     (client.company && client.company.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
+  // Show loading skeleton
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-      </div>
-    );
+    return <ClientsSkeleton />;
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br ">
       <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6 sm:space-y-8">
         {/* Header */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="flex items-center space-x-3 sm:space-x-4 w-full sm:w-auto">
               <button
                 onClick={() => router.back()}
-                className="flex items-center space-x-2 px-3 py-2 sm:px-4 sm:py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors shadow-sm"
+                className="flex items-center space-x-2 px-3 py-2 sm:px-4 sm:py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors shadow-sm"
               >
                 <ArrowLeft className="h-4 w-4" />
                 <span className="hidden sm:inline">Back</span>
               </button>
               <div className="flex-1 sm:flex-none">
-                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Client Management</h1>
-                <p className="text-gray-600 mt-1 text-sm sm:text-base">Add, edit, and organize your client information</p>
+                <h1 className="text-2xl sm:text-3xl font-bold text-white">Client Management</h1>
+                <p className="text-blue-200 mt-1 text-sm sm:text-base">Add, edit, and organize your client information</p>
+                {subscription?.plan?.planId === 'receivables-free' && (
+                  <p className="text-blue-300 text-xs mt-1">
+                    {clients.length}/3 clients used
+                  </p>
+                )}
               </div>
             </div>
             
             <button
               onClick={() => {
+                if (!canAddClient) {
+                  alert('You have reached your client limit of 3 on the free plan. Please upgrade to add more clients.');
+                  return;
+                }
                 setEditingClient(null);
                 resetForm();
                 setShowAddModal(true);
               }}
-              className="flex items-center space-x-2 px-4 py-2 sm:px-6 sm:py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm font-medium w-full sm:w-auto justify-center"
+              disabled={!canAddClient}
+              className={`flex items-center space-x-2 px-4 py-2 sm:px-6 sm:py-3 rounded-lg transition-colors shadow-sm font-medium w-full sm:w-auto justify-center ${
+                canAddClient
+                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'bg-gray-500 text-gray-300 cursor-not-allowed'
+              }`}
             >
-              <UserPlus className="h-4 w-4" />
-              <span>Add New Client</span>
+              {canAddClient ? (
+                <>
+                  <UserPlus className="h-4 w-4" />
+                  <span>Add New Client</span>
+                </>
+              ) : (
+                <>
+                  <Lock className="h-4 w-4" />
+                  <span>Limit Reached</span>
+                </>
+              )}
             </button>
           </div>
         </div>
 
         {/* Search */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 sm:p-6">
           <div className="relative">
-            <Search className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
+            <Search className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-blue-300" />
             <input
               type="text"
               placeholder="Search clients by name, email, or company..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 sm:pl-12 pr-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black placeholder-gray-600 text-sm sm:text-base font-medium"
+              className="w-full pl-10 sm:pl-12 pr-4 py-2 sm:py-3 bg-white/10 border border-white/20 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-blue-400 text-white placeholder-blue-200 text-sm sm:text-base font-medium"
             />
           </div>
         </div>
 
         {/* Clients Grid */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6 gap-2 sm:gap-0">
-            <h2 className="text-lg sm:text-xl font-semibold text-gray-900">
+            <h2 className="text-lg sm:text-xl font-semibold text-white">
               {filteredClients.length > 0 
                 ? `${filteredClients.length} client${filteredClients.length === 1 ? '' : 's'}`
                 : 'No clients'
               }
             </h2>
             {filteredClients.length > 0 && (
-              <div className="text-xs sm:text-sm text-gray-500">
+              <div className="text-xs sm:text-sm text-blue-300">
                 Click edit or delete icons to manage clients
               </div>
             )}
@@ -296,7 +401,7 @@ export default function ClientsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {filteredClients.length > 0 ? (
               filteredClients.map((client) => (
-                <div key={client._id} className="bg-gray-50 rounded-xl border border-gray-200 p-4 sm:p-6 hover:shadow-md transition-shadow">
+                <div key={client._id} className="bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 p-4 sm:p-6 hover:bg-white/10 transition-all">
                   <div className="flex items-start justify-between mb-3 sm:mb-4">
                     <div className="flex items-center space-x-2 sm:space-x-3 flex-1 min-w-0">
                       <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center shadow-sm flex-shrink-0">
@@ -305,23 +410,23 @@ export default function ClientsPage() {
                         </span>
                       </div>
                       <div className="min-w-0 flex-1">
-                        <h3 className="font-semibold text-gray-900 text-base sm:text-lg truncate">{client.name}</h3>
+                        <h3 className="font-semibold text-white text-base sm:text-lg truncate">{client.name}</h3>
                         {client.company && (
-                          <p className="text-xs sm:text-sm text-gray-600 font-medium truncate">{client.company}</p>
+                          <p className="text-xs sm:text-sm text-blue-200 font-medium truncate">{client.company}</p>
                         )}
                       </div>
                     </div>
                     <div className="flex items-center space-x-1 ml-2">
                       <button
                         onClick={() => handleEdit(client)}
-                        className="p-1.5 sm:p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        className="p-1.5 sm:p-2 text-blue-300 hover:text-blue-200 hover:bg-white/10 rounded-lg transition-colors"
                         title="Edit client"
                       >
                         <Edit className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => handleDelete(client._id)}
-                        className="p-1.5 sm:p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        className="p-1.5 sm:p-2 text-blue-300 hover:text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
                         title="Delete client"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -331,27 +436,27 @@ export default function ClientsPage() {
                   
                   <div className="space-y-2 sm:space-y-3">
                     <div className="flex items-center space-x-2 sm:space-x-3 text-xs sm:text-sm">
-                      <Mail className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400 flex-shrink-0" />
-                      <span className="text-gray-700 font-medium truncate">{client.email}</span>
+                      <Mail className="h-3 w-3 sm:h-4 sm:w-4 text-blue-300 flex-shrink-0" />
+                      <span className="text-white font-medium truncate">{client.email}</span>
                     </div>
                     
                     {client.phone && (
                       <div className="flex items-center space-x-2 sm:space-x-3 text-xs sm:text-sm">
-                        <Phone className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400 flex-shrink-0" />
-                        <span className="text-gray-700 font-medium truncate">{client.phone}</span>
+                        <Phone className="h-3 w-3 sm:h-4 sm:w-4 text-blue-300 flex-shrink-0" />
+                        <span className="text-white font-medium truncate">{client.phone}</span>
                       </div>
                     )}
                     
                     {client.address && (
                       <div className="flex items-start space-x-2 sm:space-x-3 text-xs sm:text-sm">
-                        <MapPin className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400 flex-shrink-0 mt-0.5" />
-                        <span className="text-gray-700 font-medium line-clamp-2">{client.address}</span>
+                        <MapPin className="h-3 w-3 sm:h-4 sm:w-4 text-blue-300 flex-shrink-0 mt-0.5" />
+                        <span className="text-white font-medium line-clamp-2">{client.address}</span>
                       </div>
                     )}
                     
                     {client.notes && (
-                      <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-200">
-                        <p className="text-xs sm:text-sm text-gray-600 italic line-clamp-2">&quot;{client.notes}&quot;</p>
+                      <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-white/10">
+                        <p className="text-xs sm:text-sm text-blue-200 italic line-clamp-2">&quot;{client.notes}&quot;</p>
                       </div>
                     )}
                   </div>
@@ -359,28 +464,37 @@ export default function ClientsPage() {
               ))
             ) : (
               <div className="col-span-full text-center py-12 sm:py-16">
-                <div className="bg-gray-100 rounded-full w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center mx-auto mb-4 sm:mb-6">
-                  <UserPlus className="h-8 w-8 sm:h-10 sm:w-10 text-gray-400" />
+                <div className="bg-white/10 rounded-full w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center mx-auto mb-4 sm:mb-6">
+                  <UserPlus className="h-8 w-8 sm:h-10 sm:w-10 text-blue-300" />
                 </div>
-                <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2 sm:mb-3">
+                <h3 className="text-lg sm:text-xl font-semibold text-white mb-2 sm:mb-3">
                   {searchTerm ? 'No clients found' : 'No clients yet'}
                 </h3>
-                <p className="text-gray-600 mb-6 sm:mb-8 max-w-md mx-auto text-sm sm:text-base px-4">
-                                     {searchTerm 
-                     ? "Try adjusting your search terms or add a new client"
-                     : "Start by adding your first client to manage their information and create invoices"
-                   }
+                <p className="text-blue-200 mb-6 sm:mb-8 max-w-md mx-auto text-sm sm:text-base px-4">
+                  {searchTerm 
+                    ? "Try adjusting your search terms or add a new client"
+                    : "Start by adding your first client to manage their information and create invoices"
+                  }
                 </p>
                 {!searchTerm && (
                   <button
                     onClick={() => {
+                      if (!canAddClient) {
+                        alert('You have reached your client limit of 3 on the free plan. Please upgrade to add more clients.');
+                        return;
+                      }
                       setEditingClient(null);
                       resetForm();
                       setShowAddModal(true);
                     }}
-                    className="bg-blue-600 text-white py-2 px-6 sm:py-3 sm:px-8 rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-sm text-sm sm:text-base"
+                    disabled={!canAddClient}
+                    className={`py-2 px-6 sm:py-3 sm:px-8 rounded-lg font-medium transition-colors shadow-sm text-sm sm:text-base ${
+                      canAddClient
+                        ? 'bg-blue-600 text-white hover:bg-blue-700'
+                        : 'bg-gray-500 text-gray-300 cursor-not-allowed'
+                    }`}
                   >
-                    Add Your First Client
+                    {canAddClient ? 'Add Your First Client' : 'Limit Reached'}
                   </button>
                 )}
               </div>
@@ -390,8 +504,8 @@ export default function ClientsPage() {
 
         {/* Add/Edit Modal */}
         {showAddModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl mx-4">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className="bg-white/95 backdrop-blur-sm rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl mx-4">
               <div className="p-4 sm:p-8">
                 <div className="flex items-center space-x-3 mb-4 sm:mb-6">
                   <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
@@ -537,7 +651,6 @@ export default function ClientsPage() {
                         
                         {showCountryDropdown && (
                           <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg max-h-60 overflow-y-auto z-20 shadow-lg">
-                            {/* Search input */}
                             <div className="p-2 border-b border-gray-200 bg-gray-50">
                               <div className="relative">
                                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -551,7 +664,6 @@ export default function ClientsPage() {
                               </div>
                             </div>
                             
-                            {/* Country list */}
                             <div className="max-h-48 overflow-y-auto">
                               {countries
                                 .filter(country => 

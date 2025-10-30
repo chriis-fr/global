@@ -29,8 +29,7 @@ export async function GET(request: NextRequest) {
       }
     });
 
-  } catch (error) {
-    console.error('Error searching banks:', error);
+  } catch {
     return NextResponse.json(
       { success: false, error: 'Failed to search banks' },
       { status: 500 }

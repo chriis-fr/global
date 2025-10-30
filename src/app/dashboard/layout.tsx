@@ -113,8 +113,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {children}
         </div>
       </main>
-      
-
     </div>
   );
 } 

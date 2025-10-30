@@ -89,23 +89,58 @@ export default function SmartInvoicingOnboardingPage() {
   });
 
   useEffect(() => {
-    if (session?.user) {
-      // Pre-fill with user data
-      setFormData(prev => ({
-        ...prev,
-        businessInfo: {
-          ...prev.businessInfo,
-          name: session.user.name || '',
-          email: session.user.email || '',
-          phone: '',
-          address: {
-            ...prev.businessInfo.address,
-            ...session.user.address
-          },
-          taxId: session.user.taxId || ''
+    const loadUserProfile = async () => {
+      if (session?.user) {
+        try {
+          // Fetch complete user profile from API
+          const response = await fetch('/api/users/profile');
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.data) {
+              const userProfile = data.data;
+              
+              // Pre-fill with complete user data
+              setFormData(prev => ({
+                ...prev,
+                businessInfo: {
+                  ...prev.businessInfo,
+                  name: userProfile.name || session.user.name || '',
+                  email: userProfile.email || session.user.email || '',
+                  phone: userProfile.phone || '',
+                  website: '',
+                  address: {
+                    street: userProfile.address?.street || '',
+                    city: userProfile.address?.city || '',
+                    state: userProfile.address?.state || '',
+                    zipCode: userProfile.address?.postalCode || '',
+                    country: userProfile.address?.country || 'US'
+                  },
+                  taxId: ''
+                }
+              }));
+            }
+          }
+        } catch {
+          // Fallback to session data only
+          setFormData(prev => ({
+            ...prev,
+            businessInfo: {
+              ...prev.businessInfo,
+              name: session.user.name || '',
+              email: session.user.email || '',
+              phone: '',
+              address: {
+                ...prev.businessInfo.address,
+                ...session.user.address
+              },
+              taxId: ''
+            }
+          }));
         }
-      }));
-    }
+      }
+    };
+
+    loadUserProfile();
   }, [session]);
 
   // Load existing onboarding data if available
@@ -143,10 +178,8 @@ export default function SmartInvoicingOnboardingPage() {
                 invoiceTemplate: existingData.invoiceSettings?.invoiceTemplate || prev.invoiceSettings.invoiceTemplate
               }
             }));
-            console.log('✅ [Onboarding] Loaded existing onboarding data:', existingData);
           }
-        } catch (error) {
-          console.error('Error loading existing onboarding data:', error);
+        } catch {
         }
       }
     };
@@ -232,13 +265,10 @@ export default function SmartInvoicingOnboardingPage() {
 
       const data = await response.json();
       if (data.success) {
-        console.log('✅ [Onboarding] Service onboarding completed successfully');
         router.push('/dashboard/services/smart-invoicing?refresh=true');
       } else {
-        console.error('Failed to complete service onboarding:', data.message);
       }
-    } catch (error) {
-      console.error('Error completing service onboarding:', error);
+    } catch {
     } finally {
       setLoading(false);
     }
@@ -336,10 +366,11 @@ export default function SmartInvoicingOnboardingPage() {
                   <input
                     type="email"
                     value={formData.businessInfo.email}
-                    onChange={(e) => handleInputChange('businessInfo', 'email', e.target.value)}
-                    className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                    readOnly
+                    className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 cursor-not-allowed opacity-75"
                     placeholder="business@example.com"
                   />
+                  <p className="text-xs text-blue-300 mt-1">Email cannot be changed as it&apos;s tied to your account</p>
                 </div>
 
                 <div>

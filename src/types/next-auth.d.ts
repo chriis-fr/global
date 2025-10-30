@@ -55,6 +55,7 @@ declare module "next-auth" {
 declare module "next-auth/jwt" {
   interface JWT {
     googleId?: string
+    mongoId?: string
     userType?: 'individual' | 'business'
     role?: string
     address?: {

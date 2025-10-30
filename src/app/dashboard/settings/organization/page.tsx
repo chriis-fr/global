@@ -1,9 +1,12 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Building2, Users, Edit, User, Plus, Image } from 'lucide-react';
+import { Building2, Users, Edit, User, Plus, Image, Crown, Settings } from 'lucide-react';
 import { LogoManager } from '@/components/LogoManager';
 import DashboardFloatingButton from '@/components/DashboardFloatingButton';
 import { LogoDisplay } from '@/components/LogoDisplay';
+import { ApprovalSettingsComponent } from '@/components/settings/ApprovalSettings';
+import { useSubscription } from '@/lib/contexts/SubscriptionContext';
+import { useRouter } from 'next/navigation';
 
 interface OrganizationAddress {
   street: string;
@@ -17,6 +20,7 @@ interface Organization {
   name: string;
   industry: string;
   companySize: '1-10' | '11-50' | '51-200' | '200+';
+  memberCount?: number;
   businessType: 'LLC' | 'Corporation' | 'Partnership' | 'Sole Proprietorship';
   phone: string;
   billingEmail: string;
@@ -58,6 +62,8 @@ interface Logo {
 }
 
 export default function OrganizationSettingsPage() {
+  const { subscription } = useSubscription();
+  const router = useRouter();
   const [orgInfo, setOrgInfo] = useState<OrganizationInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -153,6 +159,13 @@ export default function OrganizationSettingsPage() {
     }
   };
 
+  const handleUpgradeToPro = () => {
+    router.push('/pricing');
+  };
+
+  // Check if user has organization access (Pro plans for individuals, or organization membership)
+  const hasOrganizationAccess = subscription?.canCreateOrganization || (orgInfo?.hasOrganization && orgInfo?.organization);
+
   if (loading) {
     return (
       <div className="max-w-4xl mx-auto">
@@ -167,6 +180,73 @@ export default function OrganizationSettingsPage() {
             <div className="h-10 bg-white/20 rounded mb-6"></div>
           </div>
         </div>
+        <DashboardFloatingButton />
+      </div>
+    );
+  }
+
+  // Show upgrade prompt for free plan users
+  if (!hasOrganizationAccess) {
+    return (
+      <div className="max-w-4xl mx-auto w-full">
+        <div className="mb-8">
+          <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Organization Settings</h1>
+          <p className="text-blue-200">Manage your organization information and business details.</p>
+        </div>
+
+        {/* Upgrade Required Section */}
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-8 text-center">
+          <div className="flex justify-center mb-6">
+            <div className="p-4 bg-yellow-500/20 rounded-full">
+              <Crown className="h-12 w-12 text-yellow-400" />
+            </div>
+          </div>
+          
+          <h2 className="text-2xl font-bold text-white mb-4">Upgrade to Pro for Organization Access</h2>
+          <p className="text-blue-200 mb-6 max-w-2xl mx-auto">
+            Organization management and team collaboration features are available with our Pro plans. 
+            Upgrade your account to create organizations, manage team members, and collaborate with your business partners.
+          </p>
+
+          <div className="bg-blue-600/10 border border-blue-500/30 rounded-lg p-6 mb-8 max-w-2xl mx-auto">
+            <h3 className="text-blue-300 font-medium mb-4">Pro Plan Benefits:</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-left">
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+                <span className="text-blue-200 text-sm">Create and manage organizations</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+                <span className="text-blue-200 text-sm">Add team members and assign roles</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+                <span className="text-blue-200 text-sm">Role-based access control</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+                <span className="text-blue-200 text-sm">Shared client management</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+                <span className="text-blue-200 text-sm">Team analytics and reporting</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+                <span className="text-blue-200 text-sm">Advanced invoice management</span>
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={handleUpgradeToPro}
+            className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 mx-auto"
+          >
+            <Crown className="h-5 w-5" />
+            <span>Upgrade to Pro</span>
+          </button>
+        </div>
+
         <DashboardFloatingButton />
       </div>
     );
@@ -440,8 +520,17 @@ export default function OrganizationSettingsPage() {
               <div className="flex items-center space-x-3">
                 <Building2 className="h-6 w-6 text-blue-400" />
                 <h2 className="text-xl font-semibold text-white">{orgInfo.organization.name}</h2>
-                <span className="px-2 py-1 bg-blue-600/20 text-blue-300 text-xs rounded-full">
-                  {orgInfo.userRole}
+                <span className={`px-2 py-1 text-xs rounded-full ${
+                  orgInfo.userRole === 'owner' 
+                    ? 'bg-yellow-600/20 text-yellow-300' 
+                    : orgInfo.userRole === 'admin'
+                    ? 'bg-purple-600/20 text-purple-300'
+                    : 'bg-blue-600/20 text-blue-300'
+                }`}>
+                  {orgInfo.userRole === 'owner' ? 'Owner' : 
+                   orgInfo.userRole === 'admin' ? 'Admin' : 
+                   orgInfo.userRole === 'member' ? 'Member' : 
+                   orgInfo.userRole || 'Unknown'}
                 </span>
               </div>
               <div className="flex space-x-2">
@@ -473,7 +562,14 @@ export default function OrganizationSettingsPage() {
               </div>
               <div>
                 <span className="text-blue-300">Company Size:</span>
-                <span className="text-white ml-2">{orgInfo.organization.companySize}</span>
+                <span className="text-white ml-2">
+                  {orgInfo.organization.companySize}
+                  {orgInfo.organization.memberCount && (
+                    <span className="text-blue-200 text-xs ml-1">
+                      ({orgInfo.organization.memberCount} members)
+                    </span>
+                  )}
+                </span>
               </div>
               <div>
                 <span className="text-blue-300">Business Type:</span>
@@ -497,7 +593,7 @@ export default function OrganizationSettingsPage() {
           </div>
 
           {/* Logo Management Section */}
-          <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
+          <div className="bg-white/10 mb-4 backdrop-blur-sm rounded-xl p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center space-x-3">
                 <Image className="h-6 w-6 text-blue-400" aria-label="Logo management icon" />
@@ -532,6 +628,20 @@ export default function OrganizationSettingsPage() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Approval Settings Section */}
+      {orgInfo?.hasOrganization && (
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
+          <div className="flex items-center space-x-3 mb-6">
+            <Settings className="h-6 w-6 text-blue-400" />
+            <h2 className="text-xl font-semibold text-white">Approval Settings</h2>
+          </div>
+          <p className="text-blue-200 text-sm mb-6">
+            Configure approval workflows and rules for your organization&apos;s bills and payments.
+          </p>
+          <ApprovalSettingsComponent />
         </div>
       )}
 

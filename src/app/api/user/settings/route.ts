@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { UserService } from '@/lib/services/userService';
 import { UpdateUserInput } from '@/models';
+import { getDatabase } from '@/lib/database';
+import { ObjectId } from 'mongodb';
 
 // GET /api/user/settings - Get current user settings
 export async function GET() {
@@ -25,20 +27,43 @@ export async function GET() {
       );
     }
 
+    // Get organization data if user belongs to one
+    let organizationData = null;
+    if (user.organizationId) {
+      const db = await getDatabase();
+      const organization = await db.collection('organizations').findOne({ 
+        _id: new ObjectId(user.organizationId.toString()) 
+      });
+      if (organization) {
+        organizationData = {
+          _id: organization._id?.toString(),
+          name: organization.name,
+          industry: organization.industry || '',
+          address: organization.address,
+          billingEmail: organization.billingEmail,
+          services: organization.services || [],
+          onboarding: organization.onboarding || {},
+          subscription: organization.subscription
+        };
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: {
         profile: {
-          name: user.name,
+          name: user.name, // User's full name
           email: user.email,
-          phone: user.phone || '',
-          currencyPreference: user.settings?.currencyPreference || 'USD',
+          phone: '',
+          currencyPreference: user.preferences?.currency || 'USD',
+          profilePhoto: user.avatar || '',
+          isGoogleUser: false, // Default to false since googleId is not in User interface
         },
-        organization: {
-          industry: user.industry || '',
-          address: user.address,
+        organization: organizationData || {
+          industry: '',
+          address: null,
         },
-        settings: user.settings,
+        settings: user.preferences,
       },
       timestamp: new Date().toISOString()
     });
@@ -92,9 +117,9 @@ export async function PUT(request: NextRequest) {
       updateData = {
         name: data.name,
         phone: data.phone,
-        settings: {
-          ...user.settings,
-          currencyPreference: data.currencyPreference || 'USD',
+        preferences: {
+          ...user.preferences,
+          currency: data.currencyPreference || 'USD',
         },
       };
     } else if (type === 'organization') {
@@ -104,8 +129,8 @@ export async function PUT(request: NextRequest) {
       };
     } else if (type === 'notifications') {
       updateData = {
-        settings: {
-          ...user.settings,
+        preferences: {
+          ...user.preferences,
           notifications: data.notifications,
         },
       };

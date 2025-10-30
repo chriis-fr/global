@@ -55,8 +55,7 @@ export function LogoManager({ onLogoSelectAction, selectedLogoId, className = ''
       } else {
         setMessage({ type: 'error', text: 'Failed to load logos' });
       }
-    } catch (error) {
-      console.error('Error fetching logos:', error);
+    } catch {
       setMessage({ type: 'error', text: 'Failed to load logos' });
     } finally {
       setLoading(false);
@@ -135,9 +134,8 @@ export function LogoManager({ onLogoSelectAction, selectedLogoId, className = ''
       } else {
         throw new Error(saveResult.error || 'Failed to save logo');
       }
-    } catch (error) {
-      console.error('Error uploading logo:', error);
-      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Upload failed' });
+    } catch {
+      setMessage({ type: 'error', text: 'Upload failed' });
     } finally {
       setUploading(false);
     }
@@ -171,9 +169,8 @@ export function LogoManager({ onLogoSelectAction, selectedLogoId, className = ''
       } else {
         throw new Error(result.error || 'Failed to update logo');
       }
-    } catch (error) {
-      console.error('Error updating logo:', error);
-      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Update failed' });
+    } catch {
+      setMessage({ type: 'error', text: 'Update failed' });
     }
   };
 
@@ -195,9 +192,8 @@ export function LogoManager({ onLogoSelectAction, selectedLogoId, className = ''
       } else {
         throw new Error(result.error || 'Failed to delete logo');
       }
-    } catch (error) {
-      console.error('Error deleting logo:', error);
-      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Delete failed' });
+    } catch {
+      setMessage({ type: 'error', text: 'Delete failed' });
     }
   };
 
@@ -222,9 +218,8 @@ export function LogoManager({ onLogoSelectAction, selectedLogoId, className = ''
       } else {
         throw new Error(result.error || 'Failed to update default logo');
       }
-    } catch (error) {
-      console.error('Error setting default logo:', error);
-      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Failed to set default' });
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to set default' });
     }
   };
 
