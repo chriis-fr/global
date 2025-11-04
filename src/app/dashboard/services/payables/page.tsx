@@ -15,7 +15,9 @@ import {
   CheckCircle,
   RotateCcw,
   Eye,
-  Edit3
+  Edit3,
+  Building2,
+  ArrowRight
 } from 'lucide-react';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
 import PayablesSkeleton from '@/components/ui/PayablesSkeleton';
@@ -299,6 +301,10 @@ export default function AccountsPayablePage() {
     }
   };
 
+  const handleManagePayablesInfo = () => {
+    router.push('/dashboard/services/payables/onboarding');
+  };
+
 
 
   const getStatusColor = (status: string) => {
@@ -420,6 +426,47 @@ export default function AccountsPayablePage() {
               <div className="p-3 bg-blue-500/20 rounded-lg">
                 <DollarSign className="h-6 w-6 text-blue-400" />
               </div>
+            </div>
+          </motion.div>
+        </div>
+
+        {/* Quick Actions - Similar to Smart Invoicing */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200 cursor-pointer"
+            onClick={handleManagePayablesInfo}
+          >
+            <div className="flex items-center space-x-4">
+              <div className="p-3 bg-orange-500/20 rounded-lg">
+                <Building2 className="h-6 w-6 text-orange-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg font-semibold text-white">Manage Payables Settings</h3>
+                <p className="text-blue-200 text-sm">Configure business information and payment settings</p>
+              </div>
+              <ArrowRight className="h-5 w-5 text-blue-400 flex-shrink-0" />
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+            className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200 cursor-pointer"
+            onClick={() => router.push('/dashboard/vendors')}
+          >
+            <div className="flex items-center space-x-4">
+              <div className="p-3 bg-green-500/20 rounded-lg">
+                <Users className="h-6 w-6 text-green-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg font-semibold text-white">Manage Vendors</h3>
+                <p className="text-blue-200 text-sm">Add and organize your vendors</p>
+              </div>
+              <ArrowRight className="h-5 w-5 text-blue-400 flex-shrink-0" />
             </div>
           </motion.div>
         </div>
