@@ -34,6 +34,19 @@ html {
   box-sizing: border-box;
 }
 
+/* Mobile touch optimizations */
+button, a, [role="button"], input[type="button"], input[type="submit"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+/* Improve scrolling performance on mobile */
+body, html {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
 /* Custom reverse spin animation for reload icon */
 @keyframes spin-reverse {
   from {

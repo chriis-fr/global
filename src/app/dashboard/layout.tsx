@@ -53,30 +53,52 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, []);
 
-  // Touch gesture handlers for mobile sidebar
-  const [touchStart, setTouchStart] = useState<number | null>(null);
-  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+  // Touch gesture handlers for mobile sidebar - only for edge swipes
+  const touchStartRef = useRef<number | null>(null);
+  const touchEndRef = useRef<number | null>(null);
+  const isTrackingSwipeRef = useRef<boolean>(false);
 
   const onTouchStart = (e: React.TouchEvent) => {
-    setTouchEnd(null);
-    setTouchStart(e.targetTouches[0].clientX);
+    // Only track if touch starts from left edge (first 50px)
+    const touchX = e.targetTouches[0].clientX;
+    if (touchX < 50) {
+      isTrackingSwipeRef.current = true;
+      touchStartRef.current = touchX;
+      touchEndRef.current = null;
+    } else {
+      isTrackingSwipeRef.current = false;
+    }
   };
 
   const onTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd(e.targetTouches[0].clientX);
+    // Only track if we're tracking a swipe from the edge
+    if (isTrackingSwipeRef.current && touchStartRef.current !== null) {
+      touchEndRef.current = e.targetTouches[0].clientX;
+    }
   };
 
   const onTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
+    // Only process if we were tracking an edge swipe
+    if (!isTrackingSwipeRef.current || touchStartRef.current === null || touchEndRef.current === null) {
+      isTrackingSwipeRef.current = false;
+      touchStartRef.current = null;
+      touchEndRef.current = null;
+      return;
+    }
     
-    const distance = touchStart - touchEnd;
+    const distance = touchStartRef.current - touchEndRef.current;
     const isRightSwipe = distance < -50; // Swipe right to open sidebar
 
-    if (isRightSwipe && touchStart < 50) { // Only trigger if swipe starts from left edge
+    if (isRightSwipe) {
       // Trigger sidebar open by dispatching a custom event
       const event = new CustomEvent('openMobileSidebar');
       window.dispatchEvent(event);
     }
+    
+    // Reset tracking
+    isTrackingSwipeRef.current = false;
+    touchStartRef.current = null;
+    touchEndRef.current = null;
   };
 
   // Show loading while checking authentication
@@ -107,6 +129,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
+        style={{ touchAction: 'pan-y pinch-zoom' }}
       >
         <div className="max-w-full">
           <Breadcrumb />

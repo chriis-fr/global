@@ -3,7 +3,6 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { UserService } from '@/lib/services/userService';
 import { OrganizationService } from '@/lib/services/organizationService';
-import { ServiceOnboarding } from '@/models/User';
 
 export async function POST(request: NextRequest) {
   try {
@@ -110,11 +109,11 @@ export async function POST(request: NextRequest) {
         }
       };
 
-      // Update user's service onboarding
+      // Update user's service onboarding - use serviceOnboarding directly (matches UpdateUserInput interface)
       const updatedUser = await UserService.updateUser(user._id!.toString(), {
         onboarding: {
           ...user.onboarding,
-          serviceOnboarding: updatedServiceOnboarding as Partial<ServiceOnboarding>
+          serviceOnboarding: updatedServiceOnboarding as Record<string, unknown>
         }
       });
 
@@ -128,7 +127,9 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const updatedServiceOnboardingData = (updatedUser.onboarding.data as { serviceOnboarding?: Record<string, unknown> })?.serviceOnboarding || (updatedUser.onboarding as unknown as { serviceOnboarding?: Record<string, unknown> }).serviceOnboarding || {};
+      // Retrieve updated service onboarding data - check both locations for backward compatibility
+      const updatedServiceOnboardingData = (updatedUser.onboarding as unknown as { serviceOnboarding?: Record<string, unknown> }).serviceOnboarding || 
+        (updatedUser.onboarding.data as { serviceOnboarding?: Record<string, unknown> })?.serviceOnboarding || {};
 
       return NextResponse.json({
         success: true,
@@ -218,14 +219,46 @@ export async function GET(request: NextRequest) {
         const serviceOnboarding = completedServiceOnboarding[serviceKey];
         const isServiceEnabled = (organizationServices as unknown as Record<string, unknown>)[serviceKey];
         
+        // Check if onboarding is completed: service is enabled OR onboarding data has required fields
+        let isCompleted = false;
+        let completionReason = 'not_completed';
+        
+        if (isServiceEnabled === true) {
+          isCompleted = true;
+          completionReason = 'service_enabled';
+        } else if (serviceOnboarding && typeof serviceOnboarding === 'object') {
+          const onboardingData = serviceOnboarding as Record<string, unknown>;
+          
+          // Check if completed flag is set (explicit or truthy)
+          if ('completed' in onboardingData) {
+            const completedValue = onboardingData.completed;
+            if (completedValue === true || completedValue === 'true' || completedValue === 1) {
+              isCompleted = true;
+              completionReason = 'completed_flag_set';
+            }
+          }
+          
+          // For smart invoicing, also check if required data exists (even if completed flag is missing)
+          if (serviceKey === 'smartInvoicing' && !isCompleted) {
+            const hasBusinessInfo = onboardingData.businessInfo && typeof onboardingData.businessInfo === 'object' && Object.keys(onboardingData.businessInfo as Record<string, unknown>).length > 0;
+            const hasInvoiceSettings = onboardingData.invoiceSettings && typeof onboardingData.invoiceSettings === 'object' && Object.keys(onboardingData.invoiceSettings as Record<string, unknown>).length > 0;
+            
+            if (hasBusinessInfo && hasInvoiceSettings) {
+              isCompleted = true;
+              completionReason = 'data_exists';
+            }
+          }
+        }
+        
         return NextResponse.json({
           success: true,
           data: {
             serviceKey,
             serviceOnboarding,
-            isCompleted: isServiceEnabled || (serviceOnboarding && typeof serviceOnboarding === 'object' && 'completed' in serviceOnboarding ? serviceOnboarding.completed : false),
+            isCompleted,
             storageLocation: 'organization',
-            serviceEnabled: isServiceEnabled
+            serviceEnabled: isServiceEnabled,
+            completionReason // Include for debugging
           },
           timestamp: new Date().toISOString()
         });
@@ -243,18 +276,51 @@ export async function GET(request: NextRequest) {
       }
     } else {
       // For individual users, retrieve service onboarding data from the user record
-      const serviceOnboarding = (user.onboarding.data as { serviceOnboarding?: Record<string, unknown> })?.serviceOnboarding || {};
+      // Check both locations for backward compatibility: onboarding.serviceOnboarding (current) and onboarding.data.serviceOnboarding (legacy)
+      const serviceOnboardingFromDirect = (user.onboarding as unknown as { serviceOnboarding?: Record<string, unknown> }).serviceOnboarding;
+      const serviceOnboardingFromData = (user.onboarding.data as { serviceOnboarding?: Record<string, unknown> })?.serviceOnboarding;
+      const serviceOnboarding = serviceOnboardingFromDirect || serviceOnboardingFromData || {};
       
       if (serviceKey) {
         // Return specific service onboarding status from user
         const serviceOnboardingData = (serviceOnboarding as Record<string, unknown>)[serviceKey];
+        
+        // Check if onboarding is completed: completed flag OR required data exists
+        let isCompleted = false;
+        let completionReason = 'not_completed';
+        
+        if (serviceOnboardingData && typeof serviceOnboardingData === 'object') {
+          const onboardingData = serviceOnboardingData as Record<string, unknown>;
+          
+          // Check if completed flag is set (explicit or truthy)
+          if ('completed' in onboardingData) {
+            const completedValue = onboardingData.completed;
+            if (completedValue === true || completedValue === 'true' || completedValue === 1) {
+              isCompleted = true;
+              completionReason = 'completed_flag_set';
+            }
+          }
+          
+          // For smart invoicing, also check if required data exists (even if completed flag is missing)
+          if (serviceKey === 'smartInvoicing' && !isCompleted) {
+            const hasBusinessInfo = onboardingData.businessInfo && typeof onboardingData.businessInfo === 'object' && Object.keys(onboardingData.businessInfo as Record<string, unknown>).length > 0;
+            const hasInvoiceSettings = onboardingData.invoiceSettings && typeof onboardingData.invoiceSettings === 'object' && Object.keys(onboardingData.invoiceSettings as Record<string, unknown>).length > 0;
+            
+            if (hasBusinessInfo && hasInvoiceSettings) {
+              isCompleted = true;
+              completionReason = 'data_exists';
+            }
+          }
+        }
+        
         return NextResponse.json({
           success: true,
           data: {
             serviceKey,
             serviceOnboarding: serviceOnboardingData,
-            isCompleted: serviceOnboardingData && typeof serviceOnboardingData === 'object' && 'completed' in serviceOnboardingData ? serviceOnboardingData.completed : false,
-            storageLocation: 'user'
+            isCompleted,
+            storageLocation: 'user',
+            completionReason // Include for debugging
           },
           timestamp: new Date().toISOString()
         });

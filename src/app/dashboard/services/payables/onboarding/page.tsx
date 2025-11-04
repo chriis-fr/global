@@ -111,12 +111,59 @@ export default function PayablesOnboardingPage() {
     categories: ['Office Supplies', 'Software & Services', 'Marketing & Advertising']
   });
 
-  // Load user profile data to pre-fill form
+  // Load existing payables onboarding data and user profile
   useEffect(() => {
-    const loadUserProfile = async () => {
+    const loadData = async () => {
       if (session?.user) {
         try {
-          // Fetch complete user profile from API
+          // First, try to load existing payables onboarding data
+          const onboardingResponse = await fetch('/api/onboarding/service?service=accountsPayable');
+          if (onboardingResponse.ok) {
+            const onboardingData = await onboardingResponse.json();
+            if (onboardingData.success && onboardingData.data.serviceOnboarding) {
+              const savedData = onboardingData.data.serviceOnboarding as Record<string, unknown>;
+              
+              // Load saved onboarding data
+              const businessInfo = savedData.businessInfo as Record<string, unknown> | undefined;
+              const companyAddress = businessInfo?.companyAddress as Record<string, unknown> | undefined;
+              const paymentSettings = savedData.paymentSettings as Record<string, unknown> | undefined;
+              const vendorSettings = savedData.vendorSettings as Record<string, unknown> | undefined;
+              
+              setOnboardingData(prev => ({
+                ...prev,
+                businessInfo: {
+                  companyName: (typeof businessInfo?.companyName === 'string' ? businessInfo.companyName : prev.businessInfo.companyName),
+                  companyEmail: (typeof businessInfo?.companyEmail === 'string' ? businessInfo.companyEmail : prev.businessInfo.companyEmail),
+                  companyPhone: (typeof businessInfo?.companyPhone === 'string' ? businessInfo.companyPhone : prev.businessInfo.companyPhone),
+                  companyAddress: {
+                    street: (typeof companyAddress?.street === 'string' ? companyAddress.street : prev.businessInfo.companyAddress.street),
+                    city: (typeof companyAddress?.city === 'string' ? companyAddress.city : prev.businessInfo.companyAddress.city),
+                    state: (typeof companyAddress?.state === 'string' ? companyAddress.state : prev.businessInfo.companyAddress.state),
+                    zipCode: (typeof companyAddress?.zipCode === 'string' ? companyAddress.zipCode : prev.businessInfo.companyAddress.zipCode),
+                    country: (typeof companyAddress?.country === 'string' ? companyAddress.country : prev.businessInfo.companyAddress.country)
+                  },
+                  companyTaxNumber: (typeof businessInfo?.companyTaxNumber === 'string' ? businessInfo.companyTaxNumber : prev.businessInfo.companyTaxNumber)
+                },
+                paymentSettings: {
+                  defaultCurrency: (typeof paymentSettings?.defaultCurrency === 'string' ? paymentSettings.defaultCurrency : prev.paymentSettings.defaultCurrency),
+                  paymentMethods: (Array.isArray(paymentSettings?.paymentMethods) ? paymentSettings.paymentMethods as string[] : prev.paymentSettings.paymentMethods),
+                  approvalWorkflow: (typeof paymentSettings?.approvalWorkflow === 'boolean' ? paymentSettings.approvalWorkflow : prev.paymentSettings.approvalWorkflow),
+                  approverEmail: (typeof paymentSettings?.approverEmail === 'string' ? paymentSettings.approverEmail : prev.paymentSettings.approverEmail)
+                },
+                vendorSettings: {
+                  autoCreateVendors: (typeof vendorSettings?.autoCreateVendors === 'boolean' ? vendorSettings.autoCreateVendors : prev.vendorSettings.autoCreateVendors),
+                  requireVendorApproval: (typeof vendorSettings?.requireVendorApproval === 'boolean' ? vendorSettings.requireVendorApproval : prev.vendorSettings.requireVendorApproval),
+                  defaultPaymentTerms: (typeof vendorSettings?.defaultPaymentTerms === 'number' ? vendorSettings.defaultPaymentTerms : prev.vendorSettings.defaultPaymentTerms)
+                },
+                categories: (Array.isArray(savedData.categories) ? savedData.categories as string[] : prev.categories)
+              }));
+              
+              // If we loaded saved data, return early (don't overwrite with user profile)
+              return;
+            }
+          }
+          
+          // If no saved onboarding data, load user profile as fallback
           const response = await fetch('/api/users/profile');
           if (response.ok) {
             const data = await response.json();
@@ -163,7 +210,7 @@ export default function PayablesOnboardingPage() {
       }
     };
 
-    loadUserProfile();
+    loadData();
   }, [session]);
 
   const steps: OnboardingStep[] = [
@@ -222,6 +269,10 @@ export default function PayablesOnboardingPage() {
       });
       
       if (response.ok) {
+        // Clear the cache to force fresh data
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('payables-cache');
+        }
         router.push('/dashboard/services/payables?refresh=true');
       }
     } catch {
@@ -367,7 +418,7 @@ function BusinessInfoStep({ data, onUpdate }: { data: BusinessInfoData; onUpdate
             type="text"
             value={data.companyName}
             onChange={(e) => handleInputChange('companyName', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-500"
             required
           />
         </div>
@@ -378,7 +429,7 @@ function BusinessInfoStep({ data, onUpdate }: { data: BusinessInfoData; onUpdate
             type="email"
             value={data.companyEmail}
             readOnly
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-100 cursor-not-allowed opacity-75"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-100 text-gray-700 cursor-not-allowed opacity-75"
             required
           />
           <p className="text-xs text-gray-500 mt-1">Email cannot be changed as it&apos;s tied to your account</p>
@@ -390,7 +441,7 @@ function BusinessInfoStep({ data, onUpdate }: { data: BusinessInfoData; onUpdate
             type="tel"
             value={data.companyPhone}
             onChange={(e) => handleInputChange('companyPhone', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-500"
           />
         </div>
 
@@ -400,7 +451,7 @@ function BusinessInfoStep({ data, onUpdate }: { data: BusinessInfoData; onUpdate
             type="text"
             value={data.companyTaxNumber}
             onChange={(e) => handleInputChange('companyTaxNumber', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-500"
           />
         </div>
 
@@ -410,7 +461,7 @@ function BusinessInfoStep({ data, onUpdate }: { data: BusinessInfoData; onUpdate
             type="text"
             value={data.companyAddress.street}
             onChange={(e) => handleInputChange('companyAddress.street', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-500"
           />
         </div>
 
@@ -420,7 +471,7 @@ function BusinessInfoStep({ data, onUpdate }: { data: BusinessInfoData; onUpdate
             type="text"
             value={data.companyAddress.city}
             onChange={(e) => handleInputChange('companyAddress.city', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-500"
           />
         </div>
 
@@ -430,7 +481,7 @@ function BusinessInfoStep({ data, onUpdate }: { data: BusinessInfoData; onUpdate
             type="text"
             value={data.companyAddress.state}
             onChange={(e) => handleInputChange('companyAddress.state', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-500"
           />
         </div>
 
@@ -440,7 +491,7 @@ function BusinessInfoStep({ data, onUpdate }: { data: BusinessInfoData; onUpdate
             type="text"
             value={data.companyAddress.zipCode}
             onChange={(e) => handleInputChange('companyAddress.zipCode', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-500"
           />
         </div>
 
@@ -449,7 +500,7 @@ function BusinessInfoStep({ data, onUpdate }: { data: BusinessInfoData; onUpdate
           <select
             value={data.companyAddress.country}
             onChange={(e) => handleInputChange('companyAddress.country', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-500"
           >
             <option value="US">United States</option>
             <option value="KE">Kenya</option>
@@ -489,7 +540,7 @@ function PaymentSettingsStep({ data, onUpdate }: { data: PaymentSettingsData; on
           <select
             value={data.defaultCurrency}
             onChange={(e) => handleInputChange('defaultCurrency', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-500"
           >
             <option value="USD">USD - US Dollar</option>
             <option value="EUR">EUR - Euro</option>
@@ -552,7 +603,7 @@ function PaymentSettingsStep({ data, onUpdate }: { data: PaymentSettingsData; on
               type="email"
               value={data.approverEmail || ''}
               onChange={(e) => handleInputChange('approverEmail', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-500"
               placeholder="approver@company.com"
             />
           </div>
@@ -605,7 +656,7 @@ function VendorSettingsStep({ data, onUpdate }: { data: VendorSettingsData; onUp
           <select
             value={data.defaultPaymentTerms}
             onChange={(e) => handleInputChange('defaultPaymentTerms', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-500"
           >
             <option value={15}>15 days</option>
             <option value={30}>30 days</option>
@@ -677,7 +728,7 @@ function CategoriesStep({ data, onUpdate }: { data: string[]; onUpdate: (data: s
               value={newCategory}
               onChange={(e) => setNewCategory(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && addCategory()}
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-500"
               placeholder="Enter category name"
             />
             <button

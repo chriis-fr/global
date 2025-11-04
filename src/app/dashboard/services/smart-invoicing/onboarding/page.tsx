@@ -88,103 +88,94 @@ export default function SmartInvoicingOnboardingPage() {
     }
   });
 
+  // Load existing onboarding data first, then fallback to user profile
   useEffect(() => {
-    const loadUserProfile = async () => {
-      if (session?.user) {
+    const loadData = async () => {
+      if (!session?.user) return;
+
+      try {
+        // First, try to load existing onboarding data
+        const onboardingResponse = await fetch('/api/onboarding/service?service=smartInvoicing');
+        const onboardingData = await onboardingResponse.json();
+        
+        if (onboardingData.success && onboardingData.data?.serviceOnboarding) {
+          const existingData = onboardingData.data.serviceOnboarding;
+          
+          // Load saved onboarding data - this takes precedence
+          setFormData(prev => ({
+            ...prev,
+            businessInfo: {
+              ...prev.businessInfo,
+              name: existingData.businessInfo?.name || prev.businessInfo.name,
+              email: existingData.businessInfo?.email || session.user.email || prev.businessInfo.email,
+              phone: existingData.businessInfo?.phone || prev.businessInfo.phone,
+              website: existingData.businessInfo?.website || prev.businessInfo.website,
+              address: {
+                street: existingData.businessInfo?.address?.street || prev.businessInfo.address.street,
+                city: existingData.businessInfo?.address?.city || prev.businessInfo.address.city,
+                state: existingData.businessInfo?.address?.state || prev.businessInfo.address.state,
+                zipCode: existingData.businessInfo?.address?.zipCode || prev.businessInfo.address.zipCode,
+                country: existingData.businessInfo?.address?.country || prev.businessInfo.address.country
+              },
+              taxId: existingData.businessInfo?.taxId || prev.businessInfo.taxId,
+              logo: existingData.businessInfo?.logo || prev.businessInfo.logo
+            },
+            invoiceSettings: {
+              defaultCurrency: existingData.invoiceSettings?.defaultCurrency || prev.invoiceSettings.defaultCurrency,
+              paymentTerms: existingData.invoiceSettings?.paymentTerms || prev.invoiceSettings.paymentTerms,
+              taxRates: existingData.invoiceSettings?.taxRates || prev.invoiceSettings.taxRates,
+              invoiceTemplate: existingData.invoiceSettings?.invoiceTemplate || prev.invoiceSettings.invoiceTemplate
+            }
+          }));
+          return; // Exit early if we found saved data
+        }
+
+        // Fallback: If no saved onboarding data, load user profile data
         try {
-          // Fetch complete user profile from API
-          const response = await fetch('/api/users/profile');
-          if (response.ok) {
-            const data = await response.json();
-            if (data.success && data.data) {
-              const userProfile = data.data;
+          const profileResponse = await fetch('/api/users/profile');
+          if (profileResponse.ok) {
+            const profileData = await profileResponse.json();
+            if (profileData.success && profileData.data) {
+              const userProfile = profileData.data;
               
-              // Pre-fill with complete user data
+              // Pre-fill with user profile data
               setFormData(prev => ({
                 ...prev,
                 businessInfo: {
                   ...prev.businessInfo,
-                  name: userProfile.name || session.user.name || '',
-                  email: userProfile.email || session.user.email || '',
-                  phone: userProfile.phone || '',
-                  website: '',
+                  name: userProfile.name || session.user.name || prev.businessInfo.name,
+                  email: userProfile.email || session.user.email || prev.businessInfo.email,
+                  phone: userProfile.phone || prev.businessInfo.phone,
+                  website: prev.businessInfo.website,
                   address: {
-                    street: userProfile.address?.street || '',
-                    city: userProfile.address?.city || '',
-                    state: userProfile.address?.state || '',
-                    zipCode: userProfile.address?.postalCode || '',
-                    country: userProfile.address?.country || 'US'
+                    street: userProfile.address?.street || prev.businessInfo.address.street,
+                    city: userProfile.address?.city || prev.businessInfo.address.city,
+                    state: userProfile.address?.state || prev.businessInfo.address.state,
+                    zipCode: userProfile.address?.postalCode || prev.businessInfo.address.zipCode,
+                    country: userProfile.address?.country || prev.businessInfo.address.country
                   },
-                  taxId: ''
+                  taxId: prev.businessInfo.taxId
                 }
               }));
             }
           }
         } catch {
-          // Fallback to session data only
+          // Final fallback to session data only
           setFormData(prev => ({
             ...prev,
             businessInfo: {
               ...prev.businessInfo,
-              name: session.user.name || '',
-              email: session.user.email || '',
-              phone: '',
-              address: {
-                ...prev.businessInfo.address,
-                ...session.user.address
-              },
-              taxId: ''
+              name: session.user.name || prev.businessInfo.name,
+              email: session.user.email || prev.businessInfo.email
             }
           }));
         }
+      } catch (error) {
+        console.error('Error loading onboarding data:', error);
       }
     };
 
-    loadUserProfile();
-  }, [session]);
-
-  // Load existing onboarding data if available
-  useEffect(() => {
-    const loadExistingOnboarding = async () => {
-      if (session?.user) {
-        try {
-          const response = await fetch('/api/onboarding/service?service=smartInvoicing');
-          const data = await response.json();
-          
-          if (data.success && data.data.serviceOnboarding) {
-            const existingData = data.data.serviceOnboarding;
-            setFormData(prev => ({
-              ...prev,
-              businessInfo: {
-                ...prev.businessInfo,
-                name: existingData.businessInfo?.name || prev.businessInfo.name,
-                email: existingData.businessInfo?.email || prev.businessInfo.email,
-                phone: existingData.businessInfo?.phone || prev.businessInfo.phone,
-                website: existingData.businessInfo?.website || prev.businessInfo.website,
-                address: {
-                  street: existingData.businessInfo?.address?.street || prev.businessInfo.address.street,
-                  city: existingData.businessInfo?.address?.city || prev.businessInfo.address.city,
-                  state: existingData.businessInfo?.address?.state || prev.businessInfo.address.state,
-                  zipCode: existingData.businessInfo?.address?.zipCode || prev.businessInfo.address.zipCode,
-                  country: existingData.businessInfo?.address?.country || prev.businessInfo.address.country
-                },
-                taxId: existingData.businessInfo?.taxId || prev.businessInfo.taxId,
-                logo: existingData.businessInfo?.logo || prev.businessInfo.logo
-              },
-              invoiceSettings: {
-                defaultCurrency: existingData.invoiceSettings?.defaultCurrency || prev.invoiceSettings.defaultCurrency,
-                paymentTerms: existingData.invoiceSettings?.paymentTerms || prev.invoiceSettings.paymentTerms,
-                taxRates: existingData.invoiceSettings?.taxRates || prev.invoiceSettings.taxRates,
-                invoiceTemplate: existingData.invoiceSettings?.invoiceTemplate || prev.invoiceSettings.invoiceTemplate
-              }
-            }));
-          }
-        } catch {
-        }
-      }
-    };
-
-    loadExistingOnboarding();
+    loadData();
   }, [session]);
 
   const handleInputChange = (section: 'businessInfo' | 'invoiceSettings', field: string, value: string | number) => {
@@ -265,6 +256,10 @@ export default function SmartInvoicingOnboardingPage() {
 
       const data = await response.json();
       if (data.success) {
+        // Clear the cache to force fresh data
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('smart-invoicing-cache');
+        }
         router.push('/dashboard/services/smart-invoicing?refresh=true');
       } else {
       }
