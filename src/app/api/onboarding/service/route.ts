@@ -3,7 +3,6 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { UserService } from '@/lib/services/userService';
 import { OrganizationService } from '@/lib/services/organizationService';
-import { ServiceOnboarding } from '@/models/User';
 
 export async function POST(request: NextRequest) {
   try {
@@ -110,14 +109,11 @@ export async function POST(request: NextRequest) {
         }
       };
 
-      // Update user's service onboarding - save to onboarding.data.serviceOnboarding (correct path)
+      // Update user's service onboarding - use serviceOnboarding directly (matches UpdateUserInput interface)
       const updatedUser = await UserService.updateUser(user._id!.toString(), {
         onboarding: {
           ...user.onboarding,
-          data: {
-            ...(user.onboarding.data || {}),
-            serviceOnboarding: updatedServiceOnboarding
-          }
+          serviceOnboarding: updatedServiceOnboarding as Record<string, unknown>
         }
       });
 
@@ -131,7 +127,9 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const updatedServiceOnboardingData = (updatedUser.onboarding.data as { serviceOnboarding?: Record<string, unknown> })?.serviceOnboarding || {};
+      // Retrieve updated service onboarding data - check both locations for backward compatibility
+      const updatedServiceOnboardingData = (updatedUser.onboarding as unknown as { serviceOnboarding?: Record<string, unknown> }).serviceOnboarding || 
+        (updatedUser.onboarding.data as { serviceOnboarding?: Record<string, unknown> })?.serviceOnboarding || {};
 
       return NextResponse.json({
         success: true,
@@ -278,10 +276,10 @@ export async function GET(request: NextRequest) {
       }
     } else {
       // For individual users, retrieve service onboarding data from the user record
-      // Check both locations for backward compatibility: onboarding.data.serviceOnboarding (correct) and onboarding.serviceOnboarding (legacy)
+      // Check both locations for backward compatibility: onboarding.serviceOnboarding (current) and onboarding.data.serviceOnboarding (legacy)
+      const serviceOnboardingFromDirect = (user.onboarding as unknown as { serviceOnboarding?: Record<string, unknown> }).serviceOnboarding;
       const serviceOnboardingFromData = (user.onboarding.data as { serviceOnboarding?: Record<string, unknown> })?.serviceOnboarding;
-      const serviceOnboardingFromLegacy = (user.onboarding as unknown as { serviceOnboarding?: Record<string, unknown> }).serviceOnboarding;
-      const serviceOnboarding = serviceOnboardingFromData || serviceOnboardingFromLegacy || {};
+      const serviceOnboarding = serviceOnboardingFromDirect || serviceOnboardingFromData || {};
       
       if (serviceKey) {
         // Return specific service onboarding status from user

@@ -124,33 +124,38 @@ export default function PayablesOnboardingPage() {
               const savedData = onboardingData.data.serviceOnboarding as Record<string, unknown>;
               
               // Load saved onboarding data
+              const businessInfo = savedData.businessInfo as Record<string, unknown> | undefined;
+              const companyAddress = businessInfo?.companyAddress as Record<string, unknown> | undefined;
+              const paymentSettings = savedData.paymentSettings as Record<string, unknown> | undefined;
+              const vendorSettings = savedData.vendorSettings as Record<string, unknown> | undefined;
+              
               setOnboardingData(prev => ({
                 ...prev,
                 businessInfo: {
-                  companyName: (savedData.businessInfo as Record<string, unknown>)?.companyName || prev.businessInfo.companyName,
-                  companyEmail: (savedData.businessInfo as Record<string, unknown>)?.companyEmail || prev.businessInfo.companyEmail,
-                  companyPhone: (savedData.businessInfo as Record<string, unknown>)?.companyPhone || prev.businessInfo.companyPhone,
+                  companyName: (typeof businessInfo?.companyName === 'string' ? businessInfo.companyName : prev.businessInfo.companyName),
+                  companyEmail: (typeof businessInfo?.companyEmail === 'string' ? businessInfo.companyEmail : prev.businessInfo.companyEmail),
+                  companyPhone: (typeof businessInfo?.companyPhone === 'string' ? businessInfo.companyPhone : prev.businessInfo.companyPhone),
                   companyAddress: {
-                    street: ((savedData.businessInfo as Record<string, unknown>)?.companyAddress as Record<string, unknown>)?.street || prev.businessInfo.companyAddress.street,
-                    city: ((savedData.businessInfo as Record<string, unknown>)?.companyAddress as Record<string, unknown>)?.city || prev.businessInfo.companyAddress.city,
-                    state: ((savedData.businessInfo as Record<string, unknown>)?.companyAddress as Record<string, unknown>)?.state || prev.businessInfo.companyAddress.state,
-                    zipCode: ((savedData.businessInfo as Record<string, unknown>)?.companyAddress as Record<string, unknown>)?.zipCode || prev.businessInfo.companyAddress.zipCode,
-                    country: ((savedData.businessInfo as Record<string, unknown>)?.companyAddress as Record<string, unknown>)?.country || prev.businessInfo.companyAddress.country
+                    street: (typeof companyAddress?.street === 'string' ? companyAddress.street : prev.businessInfo.companyAddress.street),
+                    city: (typeof companyAddress?.city === 'string' ? companyAddress.city : prev.businessInfo.companyAddress.city),
+                    state: (typeof companyAddress?.state === 'string' ? companyAddress.state : prev.businessInfo.companyAddress.state),
+                    zipCode: (typeof companyAddress?.zipCode === 'string' ? companyAddress.zipCode : prev.businessInfo.companyAddress.zipCode),
+                    country: (typeof companyAddress?.country === 'string' ? companyAddress.country : prev.businessInfo.companyAddress.country)
                   },
-                  companyTaxNumber: (savedData.businessInfo as Record<string, unknown>)?.companyTaxNumber || prev.businessInfo.companyTaxNumber
+                  companyTaxNumber: (typeof businessInfo?.companyTaxNumber === 'string' ? businessInfo.companyTaxNumber : prev.businessInfo.companyTaxNumber)
                 },
                 paymentSettings: {
-                  defaultCurrency: (savedData.paymentSettings as Record<string, unknown>)?.defaultCurrency || prev.paymentSettings.defaultCurrency,
-                  paymentMethods: (savedData.paymentSettings as Record<string, unknown>)?.paymentMethods as string[] || prev.paymentSettings.paymentMethods,
-                  approvalWorkflow: (savedData.paymentSettings as Record<string, unknown>)?.approvalWorkflow || prev.paymentSettings.approvalWorkflow,
-                  approverEmail: (savedData.paymentSettings as Record<string, unknown>)?.approverEmail || prev.paymentSettings.approverEmail
+                  defaultCurrency: (typeof paymentSettings?.defaultCurrency === 'string' ? paymentSettings.defaultCurrency : prev.paymentSettings.defaultCurrency),
+                  paymentMethods: (Array.isArray(paymentSettings?.paymentMethods) ? paymentSettings.paymentMethods as string[] : prev.paymentSettings.paymentMethods),
+                  approvalWorkflow: (typeof paymentSettings?.approvalWorkflow === 'boolean' ? paymentSettings.approvalWorkflow : prev.paymentSettings.approvalWorkflow),
+                  approverEmail: (typeof paymentSettings?.approverEmail === 'string' ? paymentSettings.approverEmail : prev.paymentSettings.approverEmail)
                 },
                 vendorSettings: {
-                  autoCreateVendors: (savedData.vendorSettings as Record<string, unknown>)?.autoCreateVendors ?? prev.vendorSettings.autoCreateVendors,
-                  requireVendorApproval: (savedData.vendorSettings as Record<string, unknown>)?.requireVendorApproval ?? prev.vendorSettings.requireVendorApproval,
-                  defaultPaymentTerms: (savedData.vendorSettings as Record<string, unknown>)?.defaultPaymentTerms || prev.vendorSettings.defaultPaymentTerms
+                  autoCreateVendors: (typeof vendorSettings?.autoCreateVendors === 'boolean' ? vendorSettings.autoCreateVendors : prev.vendorSettings.autoCreateVendors),
+                  requireVendorApproval: (typeof vendorSettings?.requireVendorApproval === 'boolean' ? vendorSettings.requireVendorApproval : prev.vendorSettings.requireVendorApproval),
+                  defaultPaymentTerms: (typeof vendorSettings?.defaultPaymentTerms === 'number' ? vendorSettings.defaultPaymentTerms : prev.vendorSettings.defaultPaymentTerms)
                 },
-                categories: (savedData.categories as string[]) || prev.categories
+                categories: (Array.isArray(savedData.categories) ? savedData.categories as string[] : prev.categories)
               }));
               
               // If we loaded saved data, return early (don't overwrite with user profile)
