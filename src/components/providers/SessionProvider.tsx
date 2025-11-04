@@ -2,16 +2,42 @@
 
 import { SessionProvider as NextAuthSessionProvider, useSession } from 'next-auth/react'
 import { ReactNode } from 'react'
+import { usePathname } from 'next/navigation'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 
 interface SessionProviderProps {
   children: ReactNode
 }
 
+// Public routes that don't require auth and should render immediately
+const PUBLIC_ROUTES = [
+  '/',
+  '/auth',
+  '/pricing',
+  '/terms',
+  '/privacy',
+  '/use-cases',
+  '/services',
+  '/invoice-access',
+  '/invite',
+  '/invoice' // Public invoice viewing routes
+]
+
 function AuthWrapper({ children }: SessionProviderProps) {
   const { status } = useSession()
-
-  if (status === 'loading') {
+  const pathname = usePathname()
+  
+  // Check if current route is public
+  const isPublicRoute = pathname && PUBLIC_ROUTES.some(route => {
+    if (route === '/') {
+      return pathname === '/'
+    }
+    return pathname.startsWith(route)
+  })
+  
+  // Only show loading state on protected routes (dashboard, profile, etc.)
+  // Allow public routes to render immediately while auth happens in background
+  if (status === 'loading' && !isPublicRoute) {
     return (
       <LoadingSpinner 
         fullScreen={true} 
@@ -20,6 +46,7 @@ function AuthWrapper({ children }: SessionProviderProps) {
     )
   }
 
+  // Always render children - auth will be handled by individual route guards
   return <>{children}</>
 }
 

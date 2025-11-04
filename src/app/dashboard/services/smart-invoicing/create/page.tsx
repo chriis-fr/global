@@ -2936,19 +2936,18 @@ export default function CreateInvoicePage() {
                     >
                       <Edit3 className="h-4 w-4" />
                     </button>
-                    <button
-                      onClick={() => setShowClientSelector(!showClientSelector)}
-                      className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
-                    >
-                      <Plus className="h-4 w-4 mr-1" />
-                      {formData.clientName ? 'Change Client' : 'Add Client'}
-                    </button>
-                  </div>
-                </div>
-                
-                {/* Client Selector Dropdown */}
-                {showClientSelector && (
-                  <div className="absolute z-10 mt-2 w-full sm:w-80 bg-white border border-gray-300 rounded-lg shadow-lg">
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowClientSelector(!showClientSelector)}
+                        className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        {formData.clientName ? 'Change Client' : 'Add Client'}
+                      </button>
+                      
+                      {/* Client Selector Dropdown */}
+                      {showClientSelector && (
+                        <div className="absolute top-full right-1 z-10 mt-2 border w-80 bg-white rounded-lg shadow-lg">
                     <div className="p-4">
                       <div className="flex justify-between items-center mb-3">
                         <h4 className="font-medium text-gray-900">Select Client</h4>
@@ -2991,8 +2990,11 @@ export default function CreateInvoicePage() {
                         </button>
                       </div>
                     </div>
+                      </div>
+                      )}
+                    </div>
                   </div>
-                )}
+                </div>
 
                 <div className="space-y-2">
                   <div className="font-medium text-gray-700">
@@ -3967,115 +3969,123 @@ export default function CreateInvoicePage() {
 
         {/* Client Creation Modal */}
         {showNewClientModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative touch-manipulation">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Create New Client</h3>
-                <button
-                  onClick={() => setShowNewClientModal(false)}
-                  className="text-gray-400 hover:text-gray-600 transition-colors touch-manipulation active:scale-95 p-2 -m-2"
-                >
-                  ×
-                </button>
+          <div className="fixed inset-0 bg-black bg-opacity-30 z-50 p-4 overflow-y-auto">
+            <div className="min-h-full flex items-center justify-center py-4">
+              <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative touch-manipulation shadow-xl">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Create New Client</h3>
+                  <button
+                    onClick={() => setShowNewClientModal(false)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors touch-manipulation active:scale-95 p-2 -m-2"
+                  >
+                    ×
+                  </button>
+                </div>
+                
+                <ClientCreationForm 
+                  onSubmit={handleCreateClient}
+                  onCancel={() => setShowNewClientModal(false)}
+                />
               </div>
-              
-              <ClientCreationForm 
-                onSubmit={handleCreateClient}
-                onCancel={() => setShowNewClientModal(false)}
-              />
             </div>
           </div>
         )}
 
         {/* CC Client Creation Modal */}
         {showCcClientCreationModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Create New CC Client</h3>
-                <button
-                  onClick={() => setShowCcClientCreationModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  ×
-                </button>
+          <div className="fixed inset-0 bg-black bg-opacity-30 z-50 p-4 overflow-y-auto">
+            <div className="min-h-full flex items-center justify-center py-4">
+              <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative touch-manipulation shadow-xl">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Create New CC Client</h3>
+                  <button
+                    onClick={() => setShowCcClientCreationModal(false)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors touch-manipulation active:scale-95 p-2 -m-2"
+                  >
+                    ×
+                  </button>
+                </div>
+                
+                <ClientCreationForm 
+                  onSubmit={handleCreateCcClient}
+                  onCancel={() => setShowCcClientCreationModal(false)}
+                />
               </div>
-              
-              <ClientCreationForm 
-                onSubmit={handleCreateCcClient}
-                onCancel={() => setShowCcClientCreationModal(false)}
-              />
             </div>
           </div>
         )}
 
         {/* Company Edit Modal */}
         {showCompanyEditModal && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative shadow-xl">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Edit Company Information</h3>
-                <button
-                  onClick={() => setShowCompanyEditModal(false)}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  ×
-                </button>
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 p-4 overflow-y-auto">
+            <div className="min-h-full flex items-center justify-center py-4">
+              <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative shadow-xl touch-manipulation">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Edit Company Information</h3>
+                  <button
+                    onClick={() => setShowCompanyEditModal(false)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors touch-manipulation active:scale-95 p-2 -m-2"
+                  >
+                    ×
+                  </button>
+                </div>
+                
+                <CompanyEditForm 
+                  formData={formData}
+                  onSubmit={(updatedData) => {
+                    setFormData(prev => ({ ...prev, ...updatedData }));
+                    setShowCompanyEditModal(false);
+                  }}
+                  onCancel={() => setShowCompanyEditModal(false)}
+                />
               </div>
-              
-              <CompanyEditForm 
-                formData={formData}
-                onSubmit={(updatedData) => {
-                  setFormData(prev => ({ ...prev, ...updatedData }));
-                  setShowCompanyEditModal(false);
-                }}
-                onCancel={() => setShowCompanyEditModal(false)}
-              />
             </div>
           </div>
         )}
 
         {/* Client Edit Modal */}
         {showClientEditModal && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative shadow-xl touch-manipulation">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Edit Client Information</h3>
-                <button
-                  onClick={() => setShowClientEditModal(false)}
-                  className="text-gray-400 hover:text-gray-600 transition-colors touch-manipulation active:scale-95 p-2 -m-2"
-                >
-                  ×
-                </button>
-              </div>
-              
-              <ClientEditForm 
-                formData={formData}
-                formatPhoneForWhatsApp={formatPhoneForWhatsApp}
-                extractCountryCodeFromPhone={extractCountryCodeFromPhone}
-                setFormData={setFormData}
-                onSubmit={(updatedData) => {
-                  setFormData(prev => ({ ...prev, ...updatedData }));
-                  
-                  // Auto-detect best sending method after client edit
-                  setTimeout(() => {
-                    const hasEmail = updatedData.clientEmail && updatedData.clientEmail.trim() !== '';
-                    const hasPhone = updatedData.clientPhone && updatedData.clientPhone.trim() !== '';
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 p-4 overflow-y-auto">
+            <div className="min-h-full flex items-center justify-center py-4">
+              <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative shadow-xl touch-manipulation">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Edit Client Information</h3>
+                  <button
+                    onClick={() => setShowClientEditModal(false)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors touch-manipulation active:scale-95 p-2 -m-2"
+                  >
+                    ×
+                  </button>
+                </div>
+                
+                <ClientEditForm 
+                  formData={formData}
+                  formatPhoneForWhatsApp={formatPhoneForWhatsApp}
+                  extractCountryCodeFromPhone={extractCountryCodeFromPhone}
+                  setFormData={setFormData}
+                  onSubmit={(updatedData) => {
+                    setFormData(prev => ({ ...prev, ...updatedData }));
                     
-                    if (!hasEmail && hasPhone) {
-                      // Only phone available, auto-switch to WhatsApp
-                      setFormData(prev => ({ ...prev, sendViaWhatsapp: true }));
-                    } else if (hasEmail && !hasPhone) {
-                      // Only email available, auto-switch to email
-                      setFormData(prev => ({ ...prev, sendViaWhatsapp: false }));
-                    }
-                    // If both or neither, don't auto-switch
-                  }, 100);
-                  
-                  setShowClientEditModal(false);
-                }}
-                onCancel={() => setShowClientEditModal(false)}
-              />
+                    // Auto-detect best sending method after client edit
+                    setTimeout(() => {
+                      const hasEmail = updatedData.clientEmail && updatedData.clientEmail.trim() !== '';
+                      const hasPhone = updatedData.clientPhone && updatedData.clientPhone.trim() !== '';
+                      
+                      if (!hasEmail && hasPhone) {
+                        // Only phone available, auto-switch to WhatsApp
+                        setFormData(prev => ({ ...prev, sendViaWhatsapp: true }));
+                      } else if (hasEmail && !hasPhone) {
+                        // Only email available, auto-switch to email
+                        setFormData(prev => ({ ...prev, sendViaWhatsapp: false }));
+                      }
+                      // If both or neither, don't auto-switch
+                    }, 100);
+                    
+                    setShowClientEditModal(false);
+                  }}
+                  onCancel={() => setShowClientEditModal(false)}
+                />
+              </div>
             </div>
           </div>
         )}
