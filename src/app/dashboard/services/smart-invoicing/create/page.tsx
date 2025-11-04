@@ -4150,7 +4150,7 @@ function ClientCreationForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Name <span className="text-red-500">*</span></label>
         <input
           type="text"
           value={formData.name}
@@ -4161,7 +4161,7 @@ function ClientCreationForm({
       </div>
       
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Email <span className="text-red-500">*</span></label>
         <input
           type="email"
           value={formData.email}
@@ -4650,7 +4650,7 @@ function ClientEditForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Client Name</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Client Name <span className="text-red-500">*</span></label>
         <input
           type="text"
           value={editData.clientName}
@@ -4675,7 +4675,7 @@ function ClientEditForm({
         {/* Email field - only show in Email mode */}
         {!formData.sendViaWhatsapp && (
           <>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email <span className="text-red-500">*</span></label>
             <input
               type="email"
               value={editData.clientEmail}
@@ -4688,7 +4688,9 @@ function ClientEditForm({
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Phone {formData.sendViaWhatsapp && <span className="text-red-500">*</span>}
+        </label>
         <input
           type="tel"
           value={editData.clientPhone}
