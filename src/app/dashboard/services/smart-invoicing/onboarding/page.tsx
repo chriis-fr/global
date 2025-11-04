@@ -265,6 +265,10 @@ export default function SmartInvoicingOnboardingPage() {
 
       const data = await response.json();
       if (data.success) {
+        // Clear the cache to force fresh data
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('smart-invoicing-cache');
+        }
         router.push('/dashboard/services/smart-invoicing?refresh=true');
       } else {
       }

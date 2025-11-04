@@ -197,6 +197,8 @@ export default function SmartInvoicingPage() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('refresh') === 'true') {
+      // Clear the cache to ensure fresh data
+      localStorage.removeItem(CACHE_KEY);
       // Remove the refresh parameter from URL
       const newUrl = window.location.pathname;
       window.history.replaceState({}, '', newUrl);
