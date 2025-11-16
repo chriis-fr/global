@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
+import { usePathname } from 'next/navigation';
 import { getUserSubscription, SubscriptionData } from '@/lib/actions/subscription';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 
@@ -21,9 +22,13 @@ const USER_CACHE_KEY = 'subscription_user_id'; // Track which user the cache bel
 
 export function SubscriptionProvider({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
+  const pathname = usePathname();
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Check if we're on the landing page - don't show loader there
+  const isLandingPage = pathname === '/';
 
   const getCachedData = useCallback((userId?: string) => {
     if (typeof window === 'undefined') return null;
@@ -229,7 +234,8 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
 
   return (
     <SubscriptionContext.Provider value={{ subscription, loading, error, refetch, clearCache }}>
-      {loading && session?.user?.id ? (
+      {/* Don't show loader on landing page - it has its own preloader */}
+      {loading && session?.user?.id && !isLandingPage ? (
         <LoadingSpinner 
           fullScreen={true} 
           message="Logging you in..." 

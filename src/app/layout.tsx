@@ -41,6 +41,11 @@ export default function RootLayout({
       <link rel="icon" href="/chains.PNG" />
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        style={{
+          background: 'linear-gradient(to bottom right, #1c398e, #172554)',
+          margin: 0,
+          padding: 0,
+        }}
       >
         <SessionProvider>
           <CurrencyProvider>
