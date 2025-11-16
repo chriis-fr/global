@@ -171,9 +171,18 @@ const InvoicePdfView = memo(forwardRef<HTMLDivElement, InvoicePdfViewProps>(
               <div className="text-gray-600">{formData.clientEmail}</div>
               <div className="text-gray-600">{formData.clientPhone}</div>
               <div className="text-gray-600">
-                {formData.clientAddress.street}<br />
-                {formData.clientAddress.city}, {formData.clientAddress.state} {formData.clientAddress.zipCode}<br />
-                {countries.find(c => c.code === formData.clientAddress.country)?.name || formData.clientAddress.country}
+                {formData.clientAddress.street && <>{formData.clientAddress.street}<br /></>}
+                {(formData.clientAddress.city || formData.clientAddress.state || formData.clientAddress.zipCode) && (
+                  <>
+                    {formData.clientAddress.city || ''}{formData.clientAddress.city && (formData.clientAddress.state || formData.clientAddress.zipCode) ? ', ' : ''}
+                    {formData.clientAddress.state || ''}{formData.clientAddress.state && formData.clientAddress.zipCode ? ' ' : ''}
+                    {formData.clientAddress.zipCode || ''}
+                    <br />
+                  </>
+                )}
+                {formData.clientAddress.country && (
+                  <>{countries.find(c => c.code === formData.clientAddress.country)?.name || formData.clientAddress.country}</>
+                )}
               </div>
             </div>
           </div>
