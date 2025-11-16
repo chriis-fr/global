@@ -17,7 +17,7 @@ export default function Home() {
 
   // Show preloader immediately on first render, then wait for both animation and session
   // Default to true to ensure preloader shows immediately
-  const shouldShowPreloader = !preloaderComplete || !sessionCheckComplete || status === 'loading';
+  const shouldShowPreloader = !preloaderComplete || !sessionCheckComplete;
   
   // Set body background immediately on mount to prevent any flash
   useEffect(() => {

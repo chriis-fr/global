@@ -87,7 +87,7 @@ interface InvoiceFormData {
   sendViaWhatsapp: boolean;
   currency: string;
   paymentMethod: 'fiat' | 'crypto';
-  fiatPaymentSubtype?: 'bank' | 'mpesa_paybill' | 'mpesa_till';
+  fiatPaymentSubtype?: 'bank' | 'mpesa_paybill' | 'mpesa_till' | 'phone';
   paymentNetwork?: string;
   paymentAddress?: string;
   bankName?: string;
@@ -103,6 +103,8 @@ interface InvoiceFormData {
   // M-Pesa Till fields
   tillNumber?: string;
   businessName?: string;
+  // Phone payment field
+  paymentPhoneNumber?: string;
   enableMultiCurrency: boolean;
   invoiceType: 'regular' | 'recurring';
   items: Array<{
@@ -175,6 +177,7 @@ const defaultInvoiceData: InvoiceFormData = {
   mpesaAccountNumber: '',
   tillNumber: '',
   businessName: '',
+  paymentPhoneNumber: '',
   enableMultiCurrency: false,
   invoiceType: 'regular',
   items: [
@@ -494,11 +497,10 @@ export default function CreateInvoicePage() {
   const pdfRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Helper function to check if user is from Kenya
-  const isKenyanUser = () => {
-    return session?.user?.address?.country === 'KE' || 
-           formData.companyAddress?.country === 'KE' ||
-           formData.currency === 'KES';
+  // Helper function to check if currency is local/fiat (not crypto)
+  const isLocalCurrency = () => {
+    const currencyInfo = getCurrencyByCode(formData.currency);
+    return currencyInfo?.type === 'fiat' || !currencyInfo || formData.paymentMethod === 'fiat';
   };
 
   // Helper function to get currency icon
@@ -674,7 +676,7 @@ export default function CreateInvoicePage() {
     name: string;
     type: 'fiat' | 'crypto';
     fiatDetails?: {
-      subtype: 'bank' | 'mpesa_paybill' | 'mpesa_till';
+      subtype: 'bank' | 'mpesa_paybill' | 'mpesa_till' | 'phone';
       // Bank details
       bankName?: string;
       swiftCode?: string;
@@ -688,6 +690,8 @@ export default function CreateInvoicePage() {
       mpesaAccountNumber?: string;
       tillNumber?: string;
       businessName?: string;
+      // Phone payment details
+      paymentPhoneNumber?: string;
     };
     cryptoDetails?: {
       network: string;
@@ -941,7 +945,7 @@ export default function CreateInvoicePage() {
   const handleFiatPaymentSubtypeChange = (value: string) => {
     setFormData(prev => ({
       ...prev,
-      fiatPaymentSubtype: value as 'bank' | 'mpesa_paybill' | 'mpesa_till',
+      fiatPaymentSubtype: value as 'bank' | 'mpesa_paybill' | 'mpesa_till' | 'phone',
       // Only automatically change currency for M-Pesa payments if user hasn't manually selected a currency
       // or if they're switching from M-Pesa back to bank transfer, preserve their previous currency
       currency: (value === 'mpesa_paybill' || value === 'mpesa_till') 
@@ -1525,6 +1529,7 @@ export default function CreateInvoicePage() {
               <h4 style="font-weight: 500; color: #111827; margin: 0 0 8px 0;">Payment Method</h4>
               <div style="font-size: 14px; color: #6b7280;">
                 ${formData.paymentMethod === 'crypto' ? 'Cryptocurrency' : 
+                  formData.fiatPaymentSubtype === 'phone' ? 'Phone Number' :
                   formData.fiatPaymentSubtype === 'mpesa_paybill' ? 'M-Pesa Paybill' :
                   formData.fiatPaymentSubtype === 'mpesa_till' ? 'M-Pesa Till' :
                   'Bank Transfer'}
@@ -1564,6 +1569,11 @@ export default function CreateInvoicePage() {
                   Branch Address: ${formData.branchAddress}
                 </div>
               ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'phone' && formData.paymentPhoneNumber ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Phone Number: ${formData.paymentPhoneNumber}
+                </div>
+              ` : ''}
               ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'mpesa_paybill' && formData.paybillNumber ? `
                 <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
                   Paybill Number: ${formData.paybillNumber}
@@ -1579,7 +1589,7 @@ export default function CreateInvoicePage() {
                   Till Number: ${formData.tillNumber}
                 </div>
               ` : ''}
-              ${formData.paymentMethod === 'fiat' && (formData.fiatPaymentSubtype === 'mpesa_paybill' || formData.fiatPaymentSubtype === 'mpesa_till') && formData.businessName ? `
+              ${formData.paymentMethod === 'fiat' && (formData.fiatPaymentSubtype === 'mpesa_paybill' || formData.fiatPaymentSubtype === 'mpesa_till' || formData.fiatPaymentSubtype === 'phone') && formData.businessName ? `
                 <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
                   Business Name: ${formData.businessName}
                 </div>
@@ -2137,6 +2147,7 @@ export default function CreateInvoicePage() {
               <h4 style="font-weight: 500; color: #111827; margin: 0 0 8px 0;">Payment Method</h4>
               <div style="font-size: 14px; color: #6b7280;">
                 ${formData.paymentMethod === 'crypto' ? 'Cryptocurrency' : 
+                  formData.fiatPaymentSubtype === 'phone' ? 'Phone Number' :
                   formData.fiatPaymentSubtype === 'mpesa_paybill' ? 'M-Pesa Paybill' :
                   formData.fiatPaymentSubtype === 'mpesa_till' ? 'M-Pesa Till' :
                   'Bank Transfer'}
@@ -2176,6 +2187,11 @@ export default function CreateInvoicePage() {
                   Branch Address: ${formData.branchAddress}
                 </div>
               ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'phone' && formData.paymentPhoneNumber ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Phone Number: ${formData.paymentPhoneNumber}
+                </div>
+              ` : ''}
               ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'mpesa_paybill' && formData.paybillNumber ? `
                 <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
                   Paybill Number: ${formData.paybillNumber}
@@ -2191,7 +2207,7 @@ export default function CreateInvoicePage() {
                   Till Number: ${formData.tillNumber}
                 </div>
               ` : ''}
-              ${formData.paymentMethod === 'fiat' && (formData.fiatPaymentSubtype === 'mpesa_paybill' || formData.fiatPaymentSubtype === 'mpesa_till') && formData.businessName ? `
+              ${formData.paymentMethod === 'fiat' && (formData.fiatPaymentSubtype === 'mpesa_paybill' || formData.fiatPaymentSubtype === 'mpesa_till' || formData.fiatPaymentSubtype === 'phone') && formData.businessName ? `
                 <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
                   Business Name: ${formData.businessName}
                 </div>
@@ -2504,7 +2520,8 @@ export default function CreateInvoicePage() {
             paybillNumber: selectedMethod.fiatDetails?.paybillNumber || '',
             mpesaAccountNumber: selectedMethod.fiatDetails?.mpesaAccountNumber || '',
             tillNumber: selectedMethod.fiatDetails?.tillNumber || '',
-            businessName: selectedMethod.fiatDetails?.businessName || ''
+            businessName: selectedMethod.fiatDetails?.businessName || '',
+            paymentPhoneNumber: selectedMethod.fiatDetails?.paymentPhoneNumber || ''
           }));
         } else if (selectedMethod.type === 'crypto') {
           setFormData(prev => ({
@@ -3416,8 +3433,19 @@ export default function CreateInvoicePage() {
                           <CreditCard className="h-4 w-4 text-green-600 mr-2" />
                           Bank Transfer
                         </label>
-                        {isKenyanUser() && (
+                        {isLocalCurrency() && (
                           <>
+                            <label className="flex items-center text-gray-600">
+                              <input
+                                type="radio"
+                                value="phone"
+                                checked={formData.fiatPaymentSubtype === 'phone'}
+                                onChange={(e) => handleFiatPaymentSubtypeChange(e.target.value)}
+                                className="mr-2 text-gray-600"
+                              />
+                              <Smartphone className="h-4 w-4 text-blue-600 mr-2" />
+                              Phone Number
+                            </label>
                             <label className="flex items-center text-gray-600">
                               <input
                                 type="radio"
@@ -3444,6 +3472,31 @@ export default function CreateInvoicePage() {
                         )}
                       </div>
                     </div>
+                    
+                    {formData.fiatPaymentSubtype === 'phone' && (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm text-gray-700 mb-1">Phone Number</label>
+                          <input
+                            type="tel"
+                            value={formData.paymentPhoneNumber || ''}
+                            onChange={(e) => handleInputChange('paymentPhoneNumber', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="e.g., +1234567890"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-600 mb-1">Business Name (Optional)</label>
+                          <input
+                            type="text"
+                            value={formData.businessName || ''}
+                            onChange={(e) => handleInputChange('businessName', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="Your business name (optional)"
+                          />
+                        </div>
+                      </div>
+                    )}
                     
                     {formData.fiatPaymentSubtype === 'bank' && (
                       <div className="space-y-4">

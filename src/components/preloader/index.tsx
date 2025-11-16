@@ -13,7 +13,7 @@ const Preloader = ({
 }: {
   setComplete: Dispatch<SetStateAction<boolean>>;
   canComplete?: boolean;
-  landingPageRef?: React.RefObject<HTMLDivElement>;
+  landingPageRef?: React.RefObject<HTMLDivElement | null>;
 }) => {
   const word = ['C', 'h', 'a', 'i', 'n', 's'];
 
