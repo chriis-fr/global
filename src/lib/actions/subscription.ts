@@ -162,13 +162,21 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
       return null;
     }
 
-    // Check cache first
+    // Check cache first (but always refresh for new users to ensure trial is recognized)
     const cacheKey = session.user.id;
     const cached = subscriptionCache.get(cacheKey);
     const currentTime = Date.now();
     
+    // Only use cache if it's recent AND the cached data shows trial-premium with canCreateInvoice=true
+    // This ensures we don't serve stale data that shows limits for trial users
     if (cached && (currentTime - cached.timestamp) < CACHE_DURATION) {
-      return cached.data;
+      // If cached data is for trial-premium but shows canCreateInvoice=false, refresh
+      if (cached.data.plan?.planId === 'trial-premium' && !cached.data.canCreateInvoice) {
+        console.log('🔄 [getUserSubscription] Cached trial data shows limits - refreshing');
+        subscriptionCache.delete(cacheKey);
+      } else {
+        return cached.data;
+      }
     }
     
     const db = await getDatabase();
@@ -261,25 +269,34 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
         // Check trial status for organization
         const currentDate = new Date();
         const trialEndDate = orgSubscription.trialEndDate ? new Date(orgSubscription.trialEndDate) : null;
-        const isTrialActive = Boolean(orgSubscription.status === 'trial' && trialEndDate && currentDate < trialEndDate);
+        const isTrialPremiumPlan = planId === 'trial-premium';
+        const isTrialActive = !!(isTrialPremiumPlan && trialEndDate && currentDate < trialEndDate);
         const trialDaysRemaining = trialEndDate ? Math.max(0, Math.ceil((trialEndDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24))) : 0;
         
         // Feature access based on organization subscription
         const canCreateOrganization = false; // Members can't create organizations
-        const canAccessPayables = Boolean((planId.includes('payables') || planId.includes('combined')) && orgSubscription.status === 'active');
+        const canAccessPayables = Boolean(
+          isTrialPremiumPlan || 
+          ((planId.includes('payables') || planId.includes('combined')) && orgSubscription.status === 'active')
+        );
         
         // Get organization's current month invoice count (use organization's usage, not individual)
         const currentMonthInvoiceCount = orgSubscription.usage?.invoicesThisMonth || 0;
         
-        // Check if organization can create invoice
+        // CRITICAL: Check if organization can create invoice
+        // Trial-premium organizations ALWAYS get unlimited invoices
         let canCreateInvoice = false;
-        if (planId === 'receivables-free') {
+        if (isTrialPremiumPlan) {
+          // Trial-premium organizations get unlimited invoices - ALWAYS TRUE
+          canCreateInvoice = true;
+          console.log('✅ [getUserSubscription] Organization on trial-premium - unlimited invoice creation allowed');
+        } else if (planId === 'receivables-free') {
           canCreateInvoice = currentMonthInvoiceCount < 5;
         } else {
           canCreateInvoice = orgSubscription.status === 'active';
         }
         
-        const canUseAdvancedFeatures = Boolean(planId !== 'receivables-free' && orgSubscription.status === 'active');
+        const canUseAdvancedFeatures = Boolean(isTrialPremiumPlan || (planId !== 'receivables-free' && orgSubscription.status === 'active'));
         
         const subscriptionData = {
           plan: plan ? {
@@ -300,8 +317,8 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
           canCreateInvoice,
           canUseAdvancedFeatures,
           limits: {
-            invoicesPerMonth: plan?.limits?.invoicesPerMonth || 5,
-            monthlyVolume: plan?.limits?.monthlyVolume || 0,
+            invoicesPerMonth: isTrialPremiumPlan ? -1 : (plan?.limits?.invoicesPerMonth || 5),
+            monthlyVolume: isTrialPremiumPlan ? -1 : (plan?.limits?.monthlyVolume || 0),
             cryptoToCryptoFee: plan?.limits?.cryptoToCryptoFee || 0
           }
         };
@@ -368,11 +385,13 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
     // Check trial status
     const currentDate = new Date();
     const trialEndDate = subscription.trialEndDate ? new Date(subscription.trialEndDate) : null;
-    const isTrialActive = Boolean(subscription.status === 'trial' && trialEndDate && currentDate < trialEndDate);
+    // CRITICAL: If planId is trial-premium, user is on trial regardless of status field
+    const isTrialPremiumPlan = planId === 'trial-premium';
+    const isTrialActive = !!(isTrialPremiumPlan && trialEndDate && currentDate < trialEndDate);
     const trialDaysRemaining = trialEndDate ? Math.max(0, Math.ceil((trialEndDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24))) : 0;
     
-    // If trial has expired, downgrade to free plan
-    if (subscription.status === 'trial' && trialEndDate && currentDate >= trialEndDate) {
+    // If trial has expired, downgrade to free plan (only if it's actually expired)
+    if (isTrialPremiumPlan && trialEndDate && currentDate >= trialEndDate) {
       await db.collection('users').updateOne(
         { _id: userObjectId },
         {
@@ -389,19 +408,25 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
     }
     
     // Feature access (trial users get full access)
-    const isTrialOrPro = planId === 'trial-premium' || (planId !== 'receivables-free' && subscription.status === 'active');
+    const isTrialOrPro = isTrialPremiumPlan || (planId !== 'receivables-free' && subscription.status === 'active');
     const canCreateOrganization = Boolean(isTrialOrPro);
-    const canAccessPayables = Boolean(planId === 'trial-premium' || (planId.includes('payables') || planId.includes('combined')) && subscription.status === 'active');
+    const canAccessPayables = Boolean(
+      isTrialPremiumPlan || 
+      ((planId.includes('payables') || planId.includes('combined')) && subscription.status === 'active')
+    );
     
     // Get current month invoice count
     const currentMonthInvoiceCount = await getCurrentMonthInvoiceCount(session.user.id);
     
     // CRITICAL: Check if user can create invoice based on plan and usage limits
+    // Trial users ALWAYS get unlimited invoices - no checks needed
     let canCreateInvoice = false;
     
-    if (planId === 'trial-premium') {
-      // Trial users get unlimited invoices
+    // PRIORITY: Trial-premium users ALWAYS get unlimited invoices
+    if (isTrialPremiumPlan) {
+      // Trial users get unlimited invoices - ALWAYS TRUE (even if trialEndDate is missing, they're on trial)
       canCreateInvoice = true;
+      console.log('✅ [getUserSubscription] Trial-premium user - unlimited invoice creation allowed');
     } else if (planId === 'receivables-free') {
       // Free plan users can create invoices only if they haven't reached the monthly limit
       canCreateInvoice = currentMonthInvoiceCount < 5;
@@ -413,10 +438,10 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
     
     const canUseAdvancedFeatures = Boolean(isTrialOrPro);
     
-    // Usage limits
+    // Usage limits - trial users get unlimited
     const limits = {
-      invoicesPerMonth: plan?.limits?.invoicesPerMonth || 5,
-      monthlyVolume: plan?.limits?.monthlyVolume || 0,
+      invoicesPerMonth: isTrialPremiumPlan ? -1 : (plan?.limits?.invoicesPerMonth || 5),
+      monthlyVolume: isTrialPremiumPlan ? -1 : (plan?.limits?.monthlyVolume || 0),
       cryptoToCryptoFee: plan?.limits?.cryptoToCryptoFee || 0.9,
     };
     
@@ -441,6 +466,15 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
       limits,
     };
     
+    // Debug logging for trial users
+    if (isTrialPremiumPlan) {
+      console.log('✅ [getUserSubscription] Trial-premium user subscription result:', {
+        planId: result.plan?.planId,
+        canCreateInvoice: result.canCreateInvoice,
+        limits: result.limits,
+        isTrialActive: result.isTrialActive
+      });
+    }
     
     // Cache the result
     subscriptionCache.set(cacheKey, { data: result, timestamp: currentTime });

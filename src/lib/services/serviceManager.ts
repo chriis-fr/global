@@ -180,14 +180,15 @@ export const SERVICE_DEFINITIONS = {
 export type ServiceKey = keyof typeof SERVICE_DEFINITIONS;
 
 // Create default services object with all services disabled
+// Services will only be enabled after user completes onboarding and selects them
 export function createDefaultServices(): UserServices {
-  console.log(' [ServiceManager] Creating default services...');
+  console.log(' [ServiceManager] Creating default services (all disabled until onboarding)...');
   return {
-    // Core Invoicing & Payments
-    smartInvoicing: true, // Enable by default so users can see it in sidebar
-    emailService: true, // Enable by default for email notifications
-    accountsReceivable: false, // Keep disabled by default, but now available to enable
-    accountsPayable: true, // Enable by default so users can see it in sidebar
+    // Core Invoicing & Payments - ALL disabled until onboarding
+    smartInvoicing: false, // Will be enabled during onboarding if user selects it
+    emailService: false, // Will be enabled during onboarding if user selects it
+    accountsReceivable: false,
+    accountsPayable: false, // Will be enabled during onboarding if user selects it
     
     // Business Operations
     expenses: false,
@@ -207,20 +208,59 @@ export function createDefaultServices(): UserServices {
   };
 }
 
+// Service relationships: when one service is enabled/disabled, related services are also affected
+// Note: emailService is not included as it's not a user-selectable service during onboarding
+const SERVICE_RELATIONSHIPS: Record<ServiceKey, ServiceKey[]> = {
+  smartInvoicing: ['accountsReceivable'], // Smart Invoicing automatically enables Accounts Receivable
+  accountsReceivable: [], // Accounts Receivable is managed by Smart Invoicing
+  accountsPayable: [],
+  expenses: [],
+  payroll: [],
+  immutableRecords: [],
+  auditTrail: [],
+  smartPayments: [],
+  enhancedSecurity: [],
+  accounting: [],
+  accountsPayableReceivableAPI: [],
+  cryptoToFiat: [],
+  offrampAPI: []
+};
+
 // Enable a specific service
 export function enableService(services: UserServices, serviceKey: ServiceKey): UserServices {
-  return {
+  const updatedServices = {
     ...services,
     [serviceKey]: true
   };
+  
+  // Enable related services
+  const relatedServices = SERVICE_RELATIONSHIPS[serviceKey] || [];
+  relatedServices.forEach(relatedKey => {
+    updatedServices[relatedKey] = true;
+  });
+  
+  return updatedServices;
 }
 
 // Disable a specific service
 export function disableService(services: UserServices, serviceKey: ServiceKey): UserServices {
-  return {
+  const updatedServices = {
     ...services,
     [serviceKey]: false
   };
+  
+  // Disable related services
+  const relatedServices = SERVICE_RELATIONSHIPS[serviceKey] || [];
+  relatedServices.forEach(relatedKey => {
+    updatedServices[relatedKey] = false;
+  });
+  
+  // If disabling Accounts Receivable, also disable Smart Invoicing (they're linked)
+  if (serviceKey === 'accountsReceivable') {
+    updatedServices.smartInvoicing = false;
+  }
+  
+  return updatedServices;
 }
 
 // Toggle a service

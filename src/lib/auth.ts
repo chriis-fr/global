@@ -277,13 +277,15 @@ export const authOptions: NextAuthOptions = {
           if (dbUser) {
             token.organizationId = dbUser.organizationId?.toString()
             token.role = dbUser.role
+            // Mark as completed if isCompleted is true OR if currentStep is 4 (final step)
+            const isCompleted = dbUser.onboarding?.isCompleted || dbUser.onboarding?.currentStep === 4
             token.onboarding = {
-              completed: dbUser.onboarding?.isCompleted || false,
+              completed: isCompleted,
               currentStep: dbUser.onboarding?.currentStep || 0,
               completedSteps: dbUser.onboarding?.completedSteps || [],
               serviceOnboarding: dbUser.onboarding?.data || {}
             }
-            token.services = dbUser.services || createDefaultServices()
+            token.services = { ...(dbUser.services || createDefaultServices()) } as Record<string, boolean>
             token.mongoId = dbUser._id?.toString()
           }
         } catch {

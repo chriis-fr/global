@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import { UserService } from '@/lib/services/userService';
 import { SERVICE_DEFINITIONS, ServiceKey, enableService, disableService, getEnabledServices, createDefaultServices } from '@/lib/services/serviceManager';
 
@@ -28,15 +30,27 @@ export async function GET() {
 // POST /api/services - Enable/disable services for a user
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { userId, serviceKey, action } = body;
-
-    // Basic validation
-    if (!userId || !serviceKey || !action) {
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user?.email) {
       return NextResponse.json(
         { 
           success: false, 
-          message: 'userId, serviceKey, and action are required' 
+          message: 'Unauthorized' 
+        },
+        { status: 401 }
+      );
+    }
+
+    const body = await request.json();
+    const { serviceKey, action } = body;
+
+    // Basic validation
+    if (!serviceKey || !action) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: 'serviceKey and action are required' 
         },
         { status: 400 }
       );
@@ -62,8 +76,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get current user
-    const user = await UserService.getUserById(userId);
+    // Get current user by email (from session)
+    const user = await UserService.getUserByEmail(session.user.email);
     if (!user) {
       return NextResponse.json(
         { 
@@ -81,7 +95,17 @@ export async function POST(request: NextRequest) {
       : disableService(currentServices, serviceKey as ServiceKey);
 
     // Update user
-    const updatedUser = await UserService.updateUser(userId, { services: updatedServices });
+    if (!user._id) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: 'User ID not found' 
+        },
+        { status: 500 }
+      );
+    }
+
+    const updatedUser = await UserService.updateUser(user._id.toString(), { services: updatedServices });
     
     if (!updatedUser) {
       return NextResponse.json(

@@ -86,7 +86,7 @@ export function Header() {
   ]
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-200/50">
+    <header className="top-5 shadow-inner font-serif bg-opacity-15 w-[90%]  mx-auto sticky border-secondary border z-50 rounded-2xl bg-gray-200 backdrop-blur-md ">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
@@ -99,7 +99,7 @@ export function Header() {
                 height={40}
                 className="bg-white rounded-lg"
               />
-              <span className="text-xl font-bold text-gray-900">Global Solutions</span>
+              <span className="text-xl font-bold text-gray-900">Global Finance</span>
             </Link>
           </div>
 

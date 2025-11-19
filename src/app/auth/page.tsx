@@ -13,17 +13,21 @@ import {
   UserCheck,
   Shield,
   ChevronDown,
-  Receipt
+  Receipt,
+  ArrowLeft
 } from 'lucide-react'
 import Image from 'next/image'
+import Link from 'next/link'
 import { signIn, useSession } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { countries, defaultCountry } from '@/data/countries'
 import { getIndustriesByCategory, getIndustryCategories } from '@/data/industries'
+import { useOnboardingStore } from '@/lib/stores/onboardingStore'
 
 function AuthContent() {
   const { data: session, status } = useSession()
   const searchParams = useSearchParams()
+  const { setOnboarding } = useOnboardingStore()
   const [isLogin, setIsLogin] = useState(true)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -135,8 +139,7 @@ function AuthContent() {
   // Close dropdowns when clicking outside
   const handleClickOutside = (e: MouseEvent) => {
     const target = e.target as Element
-    if (!target.closest('.dropdown-container') && !target.closest('.phone-country-dropdown')) {
-      setShowCountryDropdown(false)
+    if (!target.closest('.dropdown-container')) {
       setShowIndustryDropdown(false)
       setCountrySearch('')
     }
@@ -229,26 +232,10 @@ function AuthContent() {
         console.error('❌ [Auth] Google sign-in error:', result.error)
         setError('Google sign-in failed. Please try again.')
       } else if (result?.ok) {
-        console.log('✅ [Auth] Google sign-in successful, checking onboarding status...')
-        // For Google sign-in, we need to check if user exists and has completed onboarding
-        try {
-          // Wait a moment for session to update
-          setTimeout(async () => {
-            const response = await fetch('/api/onboarding/status')
-            const data = await response.json()
-            
-            if (data.success && data.data.onboarding.completed) {
-              console.log('✅ [Auth] Onboarding completed, redirecting to dashboard')
-              window.location.href = '/dashboard'
-            } else {
-              console.log('⚠️ [Auth] Onboarding not completed, redirecting to onboarding')
-              window.location.href = '/onboarding'
-            }
-          }, 1000)
-        } catch (error) {
-          console.error('❌ [Auth] Error checking onboarding status:', error)
-          window.location.href = '/onboarding'
-        }
+        console.log('✅ [Auth] Google sign-in successful, redirecting...')
+        // Session will be updated automatically, redirect will happen via useEffect
+        // The useEffect will check session data and redirect appropriately
+        // No need to manually redirect here - let useEffect handle it
       }
     } catch (error) {
       console.error('❌ [Auth] Google sign-in error:', error)
@@ -258,39 +245,33 @@ function AuthContent() {
     }
   }
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated - use session data (no API call needed)
   useEffect(() => {
     if (status === 'authenticated' && session) {
-      console.log('✅ [Auth] User already authenticated, checking onboarding status...')
+      // Use onboarding data from session (already fetched during login)
+      // Consider completed if: completed === true OR currentStep === 4 (final step)
+      const isCompleted = session.user?.onboarding?.completed || session.user?.onboarding?.currentStep === 4
       
-      // Check if user has completed onboarding
-      const checkOnboardingStatus = async () => {
-        try {
-          const response = await fetch('/api/onboarding/status')
-          const data = await response.json()
-          
-          if (data.success) {
-            if (data.data.onboarding.completed) {
-              console.log('✅ [Auth] Onboarding completed, redirecting to dashboard')
-              window.location.href = '/dashboard'
-            } else {
-              console.log('⚠️ [Auth] Onboarding not completed, redirecting to onboarding')
-              window.location.href = '/onboarding'
-            }
-          } else {
-            console.log('⚠️ [Auth] Could not check onboarding status, redirecting to onboarding')
-            window.location.href = '/onboarding'
-          }
-        } catch (error) {
-          console.error('❌ [Auth] Error checking onboarding status:', error)
-          // Fallback to onboarding
-          window.location.href = '/onboarding'
-        }
+      // Initialize Zustand store from session immediately
+      if (session.user?.onboarding && session.user?.services) {
+        setOnboarding(
+          {
+            completed: isCompleted,
+            currentStep: session.user.onboarding.currentStep || 1,
+            completedSteps: session.user.onboarding.completedSteps || [],
+            serviceOnboarding: session.user.onboarding.serviceOnboarding || {}
+          },
+          session.user.services as Record<string, boolean>
+        )
       }
       
-      checkOnboardingStatus()
+      if (isCompleted) {
+        window.location.href = '/dashboard'
+      } else {
+        window.location.href = '/onboarding'
+      }
     }
-  }, [session, status])
+  }, [session, status, setOnboarding])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -319,23 +300,10 @@ function AuthContent() {
           console.error('❌ [Auth] Login failed:', loginResult.error)
           setError('Invalid email or password')
         } else if (loginResult?.ok) {
-          console.log('✅ [Auth] Login successful, checking onboarding status...')
-          // Check onboarding status and redirect accordingly
-          try {
-            const response = await fetch('/api/onboarding/status')
-            const data = await response.json()
-            
-            if (data.success && data.data.onboarding.completed) {
-              console.log('✅ [Auth] Onboarding completed, redirecting to dashboard')
-              window.location.href = '/dashboard'
-            } else {
-              console.log('⚠️ [Auth] Onboarding not completed, redirecting to onboarding')
-              window.location.href = '/onboarding'
-            }
-          } catch (error) {
-            console.error('❌ [Auth] Error checking onboarding status:', error)
-            window.location.href = '/onboarding'
-          }
+          console.log('✅ [Auth] Login successful, redirecting...')
+          // Session will be updated automatically, redirect will happen via useEffect
+          // The useEffect will check session data and redirect appropriately
+          // No need to manually redirect here - let useEffect handle it
         }
       } else {
         // Handle signup
@@ -554,7 +522,16 @@ function AuthContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 to-blue-950 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-900 to-blue-950 flex items-center justify-center p-4 relative">
+      {/* Back Button - Top Left Corner */}
+      <Link
+        href="/"
+        className="absolute top-4 left-4 inline-flex items-center gap-2 text-blue-200 hover:text-white transition-colors text-sm font-medium z-10"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Back to Website
+      </Link>
+      
       <div className="w-full max-w-md">
         {/* Logo and Header */}
         <div className="text-center mb-8">
@@ -745,67 +722,17 @@ function AuthContent() {
                         Phone Number
                       </label>
                       <div className="relative">
-                        <div className="flex">
-                          <div className="flex-shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => setShowCountryDropdown(!showCountryDropdown)}
-                              className="px-3 py-3 bg-white/5 border border-white/20 border-r-0 rounded-l-lg text-blue-200 text-sm font-medium hover:bg-white/10 transition-colors flex items-center gap-1"
-                            >
-                              {countries.find(c => c.code === formData.address.country)?.phoneCode || '+1'}
-                              <ChevronDown className="h-3 w-3" />
-                            </button>
-                          </div>
-                          <input
-                            type="tel"
-                            name="phone"
-                            value={formData.phone}
-                            onChange={handleInputChange}
-                            className="flex-1 pl-4 pr-4 py-3 bg-white/10 border border-white/20 rounded-r-lg text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="Enter your phone number"
-                          />
-                        </div>
-                        
-                        {/* Country Dropdown for Phone */}
-                        {showCountryDropdown && (
-                          <div className="phone-country-dropdown absolute top-full left-0 mt-1 bg-gray-900 border border-gray-600 rounded-lg max-h-60 overflow-y-auto z-20 min-w-64 shadow-xl">
-                            <div className="p-2 border-b border-gray-600 bg-gray-800">
-                              <input
-                                type="text"
-                                value={countrySearch}
-                                onChange={(e) => setCountrySearch(e.target.value)}
-                                placeholder="Search countries..."
-                                className="w-full px-3 py-2 bg-gray-700 border border-gray-500 rounded text-white placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              />
-                            </div>
-                            <div className="max-h-48 overflow-y-auto bg-gray-900">
-                              {countries
-                                .filter(country => 
-                                  country.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
-                                  country.phoneCode.includes(countrySearch) ||
-                                  country.code.toLowerCase().includes(countrySearch.toLowerCase())
-                                )
-                                .map(country => (
-                                <button
-                                  key={country.code}
-                                  type="button"
-                                  onClick={() => {
-                                    handleAddressChange('country', country.code)
-                                    setShowCountryDropdown(false)
-                                    setCountrySearch('')
-                                  }}
-                                  className="w-full px-3 py-2 text-left text-white hover:bg-gray-700 transition-colors flex items-center justify-between border-b border-gray-700"
-                                >
-                                  <span>{country.name}</span>
-                                  <span className="text-blue-300 text-sm font-medium">{country.phoneCode}</span>
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                        <input
+                          type="tel"
+                          name="phone"
+                          value={formData.phone}
+                          onChange={handleInputChange}
+                          className="w-full pl-4 pr-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="+123 000 000"
+                        />
                       </div>
-                      <p className="text-xs text-blue-300">
-                        Click the country code to change it, or type a phone number to auto-detect country
+                      <p className="text-xs text-blue-300/70">
+                        Include your country code (e.g., +1 for US, +254 for Kenya)
                       </p>
                     </div>
 

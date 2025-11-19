@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useSession } from 'next-auth/react';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -21,6 +22,7 @@ interface StatsCardsProps {
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
 
 export default function StatsCards({ className = '' }: StatsCardsProps) {
+  const { data: session } = useSession();
   const { subscription } = useSubscription();
   const [stats, setStats] = useState<DashboardStats>({
     totalReceivables: 0,
@@ -42,9 +44,18 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
   const isReceivablesOnly = subscription?.plan?.type === 'receivables';
   const isCombined = subscription?.plan?.type === 'combined';
   const isFreePlan = subscription?.plan?.planId === 'receivables-free';
+  const isTrialPremium = subscription?.plan?.planId === 'trial-premium';
   
-  const hasReceivablesAccess = isReceivablesOnly || isCombined || isFreePlan;
-  const hasPayablesAccess = (isPayablesOnly || isCombined) && subscription?.canAccessPayables;
+  const hasReceivablesAccess = isReceivablesOnly || isCombined || isFreePlan || isTrialPremium;
+  const hasPayablesAccess = (isPayablesOnly || isCombined || isTrialPremium) && subscription?.canAccessPayables;
+  
+  // Check if services are enabled (must be enabled during onboarding)
+  const isSmartInvoicingEnabled = session?.user?.services?.smartInvoicing || false;
+  const isAccountsPayableEnabled = session?.user?.services?.accountsPayable || false;
+  
+  // Stats should only show if BOTH subscription access AND service is enabled
+  const canShowReceivables = hasReceivablesAccess && isSmartInvoicingEnabled;
+  const canShowPayables = hasPayablesAccess && isAccountsPayableEnabled;
 
 
          useEffect(() => {
@@ -135,8 +146,8 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
 
   // Calculate number of cards to show
   const cardCount = 1 + // Net Balance (always shown)
-    (hasReceivablesAccess ? 1 : 0) + // Receivables
-    (hasPayablesAccess ? 1 : 0) + // Payables
+    (canShowReceivables ? 1 : 0) + // Receivables
+    (canShowPayables ? 1 : 0) + // Payables
     1; // Total Clients (always shown)
 
   return (
@@ -167,8 +178,8 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
         </div>
       </div>
 
-      {/* Receivables (Invoices) - Show for receivables plans */}
-      {hasReceivablesAccess && (
+      {/* Receivables (Invoices) - Show if service is enabled AND user has subscription access */}
+      {canShowReceivables && (
         <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200">
         <div className="flex items-center justify-between">
           <div>
@@ -185,8 +196,8 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
         </div>
       )}
 
-      {/* Payables (Bills) - Show for payables plans */}
-      {hasPayablesAccess && (
+      {/* Payables (Bills) - Show if service is enabled AND user has subscription access */}
+      {canShowPayables && (
         <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200">
           <div className="flex items-center justify-between">
             <div>

@@ -83,12 +83,21 @@ export default function DashboardPage() {
   const isReceivablesOnly = subscription?.plan?.type === 'receivables';
   const isCombined = subscription?.plan?.type === 'combined';
   const isFreePlan = subscription?.plan?.planId === 'receivables-free';
+  const isTrialPremium = subscription?.plan?.planId === 'trial-premium';
   
-  // Check if user has access to receivables (receivables plans, combined plans, or free plan)
-  const hasReceivablesAccess = isReceivablesOnly || isCombined || isFreePlan;
+  // Check if user has access to receivables (receivables plans, combined plans, free plan, or trial)
+  const hasReceivablesAccess = isReceivablesOnly || isCombined || isFreePlan || isTrialPremium;
   
-  // Check if user has access to payables (payables plans or combined plans)
-  const hasPayablesAccess = (isPayablesOnly || isCombined) && subscription?.canAccessPayables;
+  // Check if user has access to payables (payables plans, combined plans, or trial)
+  const hasPayablesAccess = (isPayablesOnly || isCombined || isTrialPremium) && subscription?.canAccessPayables;
+  
+  // Check if services are enabled (must be enabled during onboarding)
+  const isSmartInvoicingEnabled = session?.user?.services?.smartInvoicing || false;
+  const isAccountsPayableEnabled = session?.user?.services?.accountsPayable || false;
+  
+  // Quick Actions should only show if BOTH subscription access AND service is enabled
+  const canShowCreateInvoice = hasReceivablesAccess && isSmartInvoicingEnabled;
+  const canShowCreatePayable = hasPayablesAccess && isAccountsPayableEnabled;
   
   // Check if user is on a paid plan
   const isPaidUser = subscription?.plan?.planId && subscription.plan.planId !== 'receivables-free';
@@ -166,8 +175,8 @@ export default function DashboardPage() {
         <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
           <h3 className="text-lg font-semibold text-white mb-4">Quick Actions</h3>
           <div className="flex flex-col space-y-3">
-            {/* Show Create Invoice only for receivables plans */}
-            {hasReceivablesAccess && (
+            {/* Show Create Invoice only if service is enabled AND user has subscription access */}
+            {canShowCreateInvoice && (
               <button
                 onClick={() => router.push('/dashboard/services/smart-invoicing/create')}
                 disabled={!subscription?.canCreateInvoice}
@@ -188,8 +197,8 @@ export default function DashboardPage() {
               </button>
             )}
             
-            {/* Show Create Payable only for payables plans */}
-            {hasPayablesAccess && (
+            {/* Show Create Payable only if service is enabled AND user has subscription access */}
+            {canShowCreatePayable && (
               <button
                 onClick={() => router.push('/dashboard/services/payables/create')}
                 className="flex items-center space-x-3 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -229,9 +238,14 @@ export default function DashboardPage() {
       </div>
 
       {/* Recent Activity - Independent Loading */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <RecentInvoices />
-        <RecentPayables />
+      {/* Dynamic grid: full width if only one service, 2 columns if both services */}
+      <div className={`grid gap-6 ${
+        canShowCreateInvoice && canShowCreatePayable 
+          ? 'grid-cols-1 lg:grid-cols-2' 
+          : 'grid-cols-1'
+      }`}>
+        {canShowCreateInvoice && <RecentInvoices />}
+        {canShowCreatePayable && <RecentPayables />}
       </div>
     </div>
   );

@@ -1,11 +1,7 @@
 import { getDatabase } from '../database';
 import { User, CreateUserInput, UpdateUserInput } from '@/models';
 import { ObjectId } from 'mongodb';
-
-interface UserServicesInput {
-  smartInvoicing?: boolean;
-  payables?: boolean;
-}
+import { createDefaultServices } from './serviceManager';
 
 export class UserService {
   private static async getCollection() {
@@ -32,10 +28,9 @@ export class UserService {
           paymentNotifications: userData.settings?.notifications?.paymentReceived ?? true
         }
       },
-      services: {
-        smartInvoicing: (userData.services as UserServicesInput)?.smartInvoicing ?? true,
-        payables: (userData.services as UserServicesInput)?.payables ?? true
-      },
+      // Services are disabled by default - will be enabled during onboarding
+      // Merge userData.services (if provided) with default services
+      services: userData.services ? { ...createDefaultServices(), ...userData.services } : createDefaultServices(),
       onboarding: {
         isCompleted: userData.onboarding?.completed ?? false,
         currentStep: userData.onboarding?.currentStep ?? 1,
@@ -43,8 +38,12 @@ export class UserService {
         data: userData.onboarding?.serviceOnboarding ?? {}
       },
       subscription: {
-        planId: 'receivables-free',
+        planId: 'trial-premium',
         status: 'trial',
+        trialStartDate: now,
+        trialEndDate: new Date(now.getTime() + (30 * 24 * 60 * 60 * 1000)), // 30 days from now
+        hasUsedTrial: true,
+        trialActivatedAt: now,
         billingPeriod: 'monthly',
         createdAt: now,
         updatedAt: now

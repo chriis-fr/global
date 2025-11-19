@@ -61,7 +61,7 @@ export default function Home() {
       {/* Landing page content - always rendered but hidden, slides up with preloader layers */}
       <div 
         ref={landingPageRef}
-        className="bg-white"
+        className="bg-gradient-to-br from-blue-900 to-blue-950 "
         style={{ 
           position: shouldShowPreloader ? 'fixed' : 'static',
           top: shouldShowPreloader ? 0 : 'auto',
