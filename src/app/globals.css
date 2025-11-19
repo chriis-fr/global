@@ -3,6 +3,9 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --Background: #000000;
+  --emerald: #10b981;
+  --white: #ffffff;
 }
 
 @theme inline {
@@ -20,10 +23,21 @@
 }
 
 body {
-  background: var(--background);
+  background: linear-gradient(to bottom right, #1c398e, #172554) !important;
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
   overflow-x: hidden;
+}
+
+/* Prevent flash of landing page content - hide by default until preloader is ready */
+html body > div:first-child {
+  opacity: 0;
+  visibility: hidden;
+}
+
+html body > div:first-child[data-preloader-ready="true"] {
+  opacity: 1;
+  visibility: visible;
 }
 
 html {

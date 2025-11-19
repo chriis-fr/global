@@ -23,6 +23,7 @@ import { ProfileAvatar } from '@/components/ProfileAvatar';
 import Image from 'next/image';
 import { useSubscription } from '@/lib/contexts/SubscriptionContext';
 import { usePermissions } from '@/lib/contexts/PermissionContext';
+import { useOnboardingStore } from '@/lib/stores/onboardingStore';
 
 const SERVICE_LINKS = [
   {
@@ -92,6 +93,7 @@ export default function Sidebar() {
   const { data: session } = useSession();
   const { subscription } = useSubscription();
   const { permissions } = usePermissions();
+  const { clearOnboarding } = useOnboardingStore();
   const pathname = usePathname();
   // const enabledServices = session?.user?.services || {}; // Temporarily disabled to show all services
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -272,17 +274,20 @@ export default function Sidebar() {
               </h3>
             )}
             {SERVICE_LINKS.filter(link => {
-              // Hide Payables service if user doesn't have access to payables
+              // Check if service is enabled (services must be enabled during onboarding)
+              const isServiceEnabled = session?.user?.services?.[link.key] || false;
+              
+              // Hide Payables service if user doesn't have access to payables OR service is not enabled
               if (link.key === 'accountsPayable') {
-                return subscription?.canAccessPayables || false;
+                return (subscription?.canAccessPayables || false) && isServiceEnabled;
               }
-              // Hide Smart Invoicing service if user only has payables access (payables-only plans)
+              // Hide Smart Invoicing service if user only has payables access (payables-only plans) OR service is not enabled
               if (link.key === 'smartInvoicing') {
-                // Show Smart Invoicing for receivables plans, combined plans, or free plan
+                // Show Smart Invoicing for receivables plans, combined plans, or free plan, AND service must be enabled
                 const isPayablesOnly = subscription?.plan?.type === 'payables';
-                return !isPayablesOnly;
+                return !isPayablesOnly && isServiceEnabled;
               }
-              return true;
+              return isServiceEnabled;
             }).map(link => {
               const active = pathname.startsWith(link.href);
               return (
@@ -433,6 +438,7 @@ export default function Sidebar() {
           </div>
           <button
             onClick={() => {
+              clearOnboarding(); // Clear onboarding store on logout
               signOut({ callbackUrl: '/auth' });
               closeMobileMenu();
             }}

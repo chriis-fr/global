@@ -15,6 +15,7 @@
     "@types/nodemailer": "^6.4.17",
     "bcryptjs": "^3.0.2",
     "framer-motion": "^12.16.0",
+    "gsap": "^3.13.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^3.0.1",
     "lucide-react": "^0.514.0",
@@ -26,7 +27,9 @@
     "react-dom": "^19.0.0",
     "react-hot-toast": "^2.5.2",
     "stripe": "^18.5.0",
-    "wouter": "^3.7.1"
+    "styled-components": "^6.1.19",
+    "wouter": "^3.7.1",
+    "zustand": "^5.0.8"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

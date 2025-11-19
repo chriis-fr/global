@@ -148,10 +148,7 @@ export interface User {
   };
 
   // Services
-  services: {
-    smartInvoicing: boolean;
-    payables: boolean;
-  };
+  services: UserServices;
 
   // Preferences
   preferences: {

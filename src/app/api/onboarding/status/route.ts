@@ -28,11 +28,28 @@ export async function GET() {
       );
     }
 
-    // If user belongs to an organization, mark onboarding as completed
-    const onboardingData = user.organizationId ? {
-      ...user.onboarding,
-      completed: true
-    } : user.onboarding;
+    // Convert User model structure to API response structure
+    // User model has: isCompleted, currentStep, completedSteps, data
+    // API response should have: completed, currentStep, completedSteps, serviceOnboarding
+    // IMPORTANT: Check user's onboarding status, NOT organization status
+    // Users must complete their own onboarding even if they belong to an organization
+    // Mark as completed if isCompleted is true OR if currentStep is 4 (final step)
+    const isCompleted = user.onboarding.isCompleted || user.onboarding.currentStep === 4;
+    const onboardingData = {
+      completed: isCompleted,
+      currentStep: user.onboarding.currentStep || 1,
+      completedSteps: user.onboarding.completedSteps || [],
+      serviceOnboarding: (user.onboarding.data as { serviceOnboarding?: Record<string, unknown> })?.serviceOnboarding || {}
+    };
+    
+    console.log('📊 [OnboardingStatus] User onboarding:', {
+      userId: user._id?.toString(),
+      email: user.email,
+      hasOrganization: !!user.organizationId,
+      isCompleted: onboardingData.completed,
+      currentStep: onboardingData.currentStep,
+      completedSteps: onboardingData.completedSteps.length
+    });
 
     return NextResponse.json({
       success: true,

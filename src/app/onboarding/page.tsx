@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
+import { useOnboardingStore } from '@/lib/stores/onboardingStore';
 
 interface User {
   _id: string;
@@ -84,6 +85,7 @@ const ONBOARDING_STEPS = [
 
 export default function OnboardingPage() {
   const { data: session, status } = useSession();
+  const { onboarding, services: storeServices, setOnboarding, updateOnboarding } = useOnboardingStore();
   const [user, setUser] = useState<User | null>(null);
   const [services, setServices] = useState<Record<string, ServiceDefinition>>({});
   const [categories, setCategories] = useState<string[]>([]);
@@ -104,7 +106,7 @@ export default function OnboardingPage() {
         _id: session.user.id,
         email: session.user.email,
         name: session.user.name,
-        userType: session.user.userType || 'individual', // Fallback to 'individual' if not set
+        userType: session.user.userType || 'individual',
         address: session.user.address || {
           street: '',
           city: '',
@@ -112,20 +114,20 @@ export default function OnboardingPage() {
           postalCode: ''
         },
         taxId: session.user.taxId || '',
-        onboarding: session.user.onboarding || {
+        onboarding: onboarding || session.user.onboarding || {
           completed: false,
           currentStep: 1,
           completedSteps: [],
           serviceOnboarding: {}
         },
-        services: session.user.services || {}
+        services: storeServices || session.user.services || {}
       };
       setUser(userObj);
       
       // Initialize tax ID from user data
       setTaxID(userObj.taxId || '');
 
-      // Load services
+      // Load services definitions (not user services)
       const servicesResponse = await fetch('/api/services');
       const servicesData = await servicesResponse.json();
       if (servicesData.success) {
@@ -133,17 +135,27 @@ export default function OnboardingPage() {
         setCategories(servicesData.data.categories);
       }
 
-      // Load onboarding status
-      const onboardingResponse = await fetch('/api/onboarding/status');
-      const onboardingData = await onboardingResponse.json();
-      if (onboardingData.success) {
-        setCurrentStep(onboardingData.data.onboarding.currentStep);
+      // Use onboarding from store or session
+      if (onboarding) {
+        setCurrentStep(onboarding.currentStep);
+      } else if (session.user.onboarding) {
+        setCurrentStep(session.user.onboarding.currentStep || 1);
+        // Initialize store from session
+        setOnboarding(
+          {
+            completed: session.user.onboarding.completed || false,
+            currentStep: session.user.onboarding.currentStep || 1,
+            completedSteps: session.user.onboarding.completedSteps || [],
+            serviceOnboarding: session.user.onboarding.serviceOnboarding || {}
+          },
+          session.user.services as Record<string, boolean> || {}
+        );
       }
     } catch {
     } finally {
       setLoading(false);
     }
-  }, [session?.user]);
+  }, [session?.user, onboarding, storeServices, setOnboarding]);
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -154,28 +166,32 @@ export default function OnboardingPage() {
     }
 
     if (session?.user) {
-      // Check if user has already completed onboarding
-      const checkOnboardingStatus = async () => {
-        try {
-          const response = await fetch('/api/onboarding/status');
-          const data = await response.json();
-          
-          if (data.success && data.data.onboarding.completed) {
-            window.location.href = '/dashboard';
-            return;
-          }
-          
-          // If not completed, continue with normal flow
-          loadUserAndServices();
-        } catch {
-          // Continue with normal flow if check fails
-          loadUserAndServices();
-        }
-      };
+      // Check session data FIRST (fastest, no API call)
+      // Consider completed if: completed === true OR currentStep === 4 (final step)
+      const sessionCompleted = session.user.onboarding?.completed || session.user.onboarding?.currentStep === 4;
       
-      checkOnboardingStatus();
+      // If session shows onboarding is completed, redirect immediately
+      if (sessionCompleted) {
+        // Initialize store from session before redirect
+        if (session.user.onboarding && session.user.services) {
+          setOnboarding(
+            {
+              completed: true,
+              currentStep: session.user.onboarding.currentStep || 4,
+              completedSteps: session.user.onboarding.completedSteps || [],
+              serviceOnboarding: session.user.onboarding.serviceOnboarding || {}
+            },
+            session.user.services as Record<string, boolean>
+          );
+        }
+        window.location.href = '/dashboard';
+        return;
+      }
+      
+      // If session shows it's not completed, continue with onboarding flow
+      loadUserAndServices();
     }
-  }, [session, status, loadUserAndServices]);
+  }, [session, status, onboarding, loadUserAndServices, setOnboarding]);
 
   const updateOnboardingStep = async (step: number, stepData?: Record<string, unknown>) => {
     if (!user) return;
@@ -188,7 +204,7 @@ export default function OnboardingPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          userId: user.email, // Use email instead of _id for more reliable identification
+          userId: user.email,
           step,
           stepData,
           completedSteps: [...(user.onboarding.completedSteps || []), step.toString()]
@@ -197,7 +213,18 @@ export default function OnboardingPage() {
 
       const data = await response.json();
       if (data.success) {
-        setUser(prev => prev ? { ...prev, onboarding: data.data.onboarding } : null);
+        const updatedOnboarding = {
+          completed: data.data.onboarding.completed || false,
+          currentStep: step,
+          completedSteps: data.data.onboarding.completedSteps || [],
+          serviceOnboarding: data.data.onboarding.serviceOnboarding || {}
+        };
+        
+        // Update store
+        updateOnboarding(updatedOnboarding);
+        
+        // Update local state
+        setUser(prev => prev ? { ...prev, onboarding: updatedOnboarding } : null);
         setCurrentStep(step);
       }
     } catch {
@@ -217,7 +244,6 @@ export default function OnboardingPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          userId: user._id,
           serviceKey,
           action
         }),
@@ -225,22 +251,63 @@ export default function OnboardingPage() {
 
       const data = await response.json();
       if (data.success) {
-        setUser(prev => prev ? { ...prev, services: data.data.user.services } : null);
+        const updatedServices = data.data.user.services;
+        setUser(prev => prev ? { ...prev, services: updatedServices } : null);
+        
+        // Update store with new services
+        if (onboarding) {
+          setOnboarding(onboarding, updatedServices);
+        }
+      } else {
+        console.error('Failed to toggle service:', data.message);
       }
-    } catch {
+    } catch (error) {
+      console.error('Error toggling service:', error);
     }
   };
 
   const getEnabledServicesCount = () => {
     if (!user) return 0;
     return Object.entries(user.services)
-      .filter(([serviceKey, enabled]) => enabled && services[serviceKey]?.ready)
+      .filter(([serviceKey, enabled]) => {
+        // Don't count Accounts Receivable separately - it's included with Smart Invoicing
+        if (serviceKey === 'accountsReceivable') return false;
+        return enabled && services[serviceKey]?.ready;
+      })
       .length;
   };
 
   const getReadyServicesCount = () => {
-    return Object.values(services).filter(service => service.ready).length;
+    // Don't count Accounts Receivable - it's included with Smart Invoicing
+    return Object.entries(services)
+      .filter(([serviceKey]) => serviceKey !== 'accountsReceivable')
+      .filter(([, service]) => service.ready).length;
   };
+
+  // Early check: if onboarding is completed, redirect immediately (before any loading)
+  // Consider completed if: completed === true OR currentStep === 4 (final step)
+  if (status === 'authenticated' && session?.user) {
+    const sessionCompleted = session.user.onboarding?.completed || session.user.onboarding?.currentStep === 4;
+    if (sessionCompleted) {
+      // Initialize store from session before redirect
+      if (session.user.onboarding && session.user.services) {
+        setOnboarding(
+          {
+            completed: true,
+            currentStep: session.user.onboarding.currentStep || 4,
+            completedSteps: session.user.onboarding.completedSteps || [],
+            serviceOnboarding: session.user.onboarding.serviceOnboarding || {}
+          },
+          session.user.services as Record<string, boolean>
+        );
+      }
+      // Redirect immediately without rendering anything
+      if (typeof window !== 'undefined') {
+        window.location.href = '/dashboard';
+      }
+      return null;
+    }
+  }
 
   if (loading) {
     return (
@@ -433,6 +500,10 @@ export default function OnboardingPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {Object.entries(services)
                       .filter(([, service]) => service.category === category)
+                      .filter(([serviceKey]) => {
+                        // Hide Accounts Receivable - it's automatically enabled with Smart Invoicing
+                        return serviceKey !== 'accountsReceivable';
+                      })
                       .map(([serviceKey, service]) => {
                         const Icon = iconMap[service.icon] || FileText; // Fallback to FileText if icon not found
                         if (!iconMap[service.icon]) {
@@ -481,11 +552,19 @@ export default function OnboardingPage() {
                               isReady ? 'text-white' : 'text-gray-400'
                             }`}>
                               {service.title}
+                              {serviceKey === 'smartInvoicing' && (
+                                <span className="ml-2 text-xs text-blue-300">(includes Accounts Receivable)</span>
+                              )}
                             </h4>
                             <p className={`text-sm ${
                               isReady ? 'text-blue-200' : 'text-gray-500'
                             }`}>
                               {service.description}
+                              {serviceKey === 'smartInvoicing' && (
+                                <span className="block mt-1 text-xs text-blue-300/80">
+                                  Automatically includes Accounts Receivable management
+                                </span>
+                              )}
                             </p>
                           </motion.div>
                         );
@@ -536,11 +615,20 @@ export default function OnboardingPage() {
                 <h3 className="text-lg font-semibold text-white mb-4">Selected Services</h3>
                 <div className="space-y-2">
                   {Object.entries(user.services)
-                    .filter(([serviceKey, enabled]) => enabled && services[serviceKey]?.ready)
+                    .filter(([serviceKey, enabled]) => {
+                      // Don't show Accounts Receivable separately - it's included with Smart Invoicing
+                      if (serviceKey === 'accountsReceivable') return false;
+                      return enabled && services[serviceKey]?.ready;
+                    })
                     .map(([serviceKey]) => (
                       <div key={serviceKey} className="flex items-center space-x-2 text-left">
                         <Check className="h-4 w-4 text-green-400 flex-shrink-0" />
-                        <span className="text-white">{services[serviceKey]?.title || serviceKey}</span>
+                        <span className="text-white">
+                          {services[serviceKey]?.title || serviceKey}
+                          {serviceKey === 'smartInvoicing' && user.services?.accountsReceivable && (
+                            <span className="ml-2 text-xs text-blue-300">(includes Accounts Receivable)</span>
+                          )}
+                        </span>
                       </div>
                     ))}
                 </div>

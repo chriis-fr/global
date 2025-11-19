@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
+import { usePathname } from 'next/navigation';
 import { getUserSubscription, SubscriptionData } from '@/lib/actions/subscription';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 
@@ -21,9 +22,14 @@ const USER_CACHE_KEY = 'subscription_user_id'; // Track which user the cache bel
 
 export function SubscriptionProvider({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
+  const pathname = usePathname();
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [hasInitialized, setHasInitialized] = useState(false);
+
+  // Check if we're on the landing page - don't show loader there
+  const isLandingPage = pathname === '/';
 
   const getCachedData = useCallback((userId?: string) => {
     if (typeof window === 'undefined') return null;
@@ -194,15 +200,27 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     // Only fetch subscription if user is authenticated
     if (session?.user?.id) {
-      fetchSubscription();
+      // Only show loading spinner on initial load, not on navigation
+      if (!hasInitialized) {
+        setLoading(true);
+        setHasInitialized(true);
+        // Clear cache on mount to ensure fresh data for new users
+        clearCache();
+        fetchSubscription(true); // Force refresh on mount
+      } else {
+        // On subsequent navigations, fetch in background without showing loader
+        setLoading(false);
+        fetchSubscription(false); // Don't force refresh, use cache if available
+      }
     } else {
       // Clear subscription data and cache for unauthenticated users
       setSubscription(null);
       setLoading(false);
       setError(null);
+      setHasInitialized(false);
       clearCache(); // Clear cache on logout
     }
-  }, [session?.user?.id, fetchSubscription, clearCache]);
+  }, [session?.user?.id, fetchSubscription, clearCache, hasInitialized]);
 
   // Refetch on window focus if cache is older than 30 minutes (less aggressive)
   useEffect(() => {
@@ -229,10 +247,12 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
 
   return (
     <SubscriptionContext.Provider value={{ subscription, loading, error, refetch, clearCache }}>
-      {loading && session?.user?.id ? (
+      {/* Only show loader on initial load, not during navigation */}
+      {/* Don't show loader on landing page - it has its own preloader */}
+      {loading && !hasInitialized && session?.user?.id && !isLandingPage ? (
         <LoadingSpinner 
           fullScreen={true} 
-          message="Logging you in..." 
+          message="Loading..." 
         />
       ) : (
         children

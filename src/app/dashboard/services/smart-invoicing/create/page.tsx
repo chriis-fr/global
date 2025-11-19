@@ -87,7 +87,7 @@ interface InvoiceFormData {
   sendViaWhatsapp: boolean;
   currency: string;
   paymentMethod: 'fiat' | 'crypto';
-  fiatPaymentSubtype?: 'bank' | 'mpesa_paybill' | 'mpesa_till';
+  fiatPaymentSubtype?: 'bank' | 'mpesa_paybill' | 'mpesa_till' | 'phone';
   paymentNetwork?: string;
   paymentAddress?: string;
   bankName?: string;
@@ -103,6 +103,8 @@ interface InvoiceFormData {
   // M-Pesa Till fields
   tillNumber?: string;
   businessName?: string;
+  // Phone payment field
+  paymentPhoneNumber?: string;
   enableMultiCurrency: boolean;
   invoiceType: 'regular' | 'recurring';
   items: Array<{
@@ -155,7 +157,7 @@ const defaultInvoiceData: InvoiceFormData = {
     city: '',
     state: '',
     zipCode: '',
-    country: 'US'
+    country: ''
   },
   // WhatsApp sending options
   sendViaWhatsapp: false,
@@ -175,6 +177,7 @@ const defaultInvoiceData: InvoiceFormData = {
   mpesaAccountNumber: '',
   tillNumber: '',
   businessName: '',
+  paymentPhoneNumber: '',
   enableMultiCurrency: false,
   invoiceType: 'regular',
   items: [
@@ -494,11 +497,10 @@ export default function CreateInvoicePage() {
   const pdfRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Helper function to check if user is from Kenya
-  const isKenyanUser = () => {
-    return session?.user?.address?.country === 'KE' || 
-           formData.companyAddress?.country === 'KE' ||
-           formData.currency === 'KES';
+  // Helper function to check if currency is local/fiat (not crypto)
+  const isLocalCurrency = () => {
+    const currencyInfo = getCurrencyByCode(formData.currency);
+    return currencyInfo?.type === 'fiat' || !currencyInfo || formData.paymentMethod === 'fiat';
   };
 
   // Helper function to get currency icon
@@ -674,7 +676,7 @@ export default function CreateInvoicePage() {
     name: string;
     type: 'fiat' | 'crypto';
     fiatDetails?: {
-      subtype: 'bank' | 'mpesa_paybill' | 'mpesa_till';
+      subtype: 'bank' | 'mpesa_paybill' | 'mpesa_till' | 'phone';
       // Bank details
       bankName?: string;
       swiftCode?: string;
@@ -688,6 +690,8 @@ export default function CreateInvoicePage() {
       mpesaAccountNumber?: string;
       tillNumber?: string;
       businessName?: string;
+      // Phone payment details
+      paymentPhoneNumber?: string;
     };
     cryptoDetails?: {
       network: string;
@@ -859,6 +863,27 @@ export default function CreateInvoicePage() {
     }
   }, [invoiceId, session, loadInvoice, loadLogoFromSettings, loadOrganizationData, loadServiceOnboardingData]);
 
+  // Set client country to user's country if client country is empty and user has a country
+  // This only runs once when session becomes available and formData is initialized
+  const hasSetClientCountry = useRef(false);
+  useEffect(() => {
+    if (
+      session?.user?.address?.country && 
+      !formData.clientAddress.country && 
+      !invoiceId &&
+      !hasSetClientCountry.current
+    ) {
+      hasSetClientCountry.current = true;
+      setFormData(prev => ({
+        ...prev,
+        clientAddress: {
+          ...prev.clientAddress,
+          country: session.user.address.country
+        }
+      }));
+    }
+  }, [session?.user?.address?.country, formData.clientAddress.country, invoiceId, setFormData]);
+
     // Monitor formData changes for debugging (disabled during sending)
   useEffect(() => {
     if (!sendingInvoice) {
@@ -941,7 +966,7 @@ export default function CreateInvoicePage() {
   const handleFiatPaymentSubtypeChange = (value: string) => {
     setFormData(prev => ({
       ...prev,
-      fiatPaymentSubtype: value as 'bank' | 'mpesa_paybill' | 'mpesa_till',
+      fiatPaymentSubtype: value as 'bank' | 'mpesa_paybill' | 'mpesa_till' | 'phone',
       // Only automatically change currency for M-Pesa payments if user hasn't manually selected a currency
       // or if they're switching from M-Pesa back to bank transfer, preserve their previous currency
       currency: (value === 'mpesa_paybill' || value === 'mpesa_till') 
@@ -1454,13 +1479,19 @@ export default function CreateInvoicePage() {
               </div>
               ${formData.clientCompany ? `
               <div style="color: #6b7280; font-size: 14px; margin-bottom: 8px;">
-                Attn: ${formData.clientName || 'Client Name'}
+                Contact Person: ${formData.clientName || 'Client Name'}
               </div>
               ` : ''}
               <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
-                <div>${formData.clientAddress.street || 'Street Address'}</div>
-                <div>${formData.clientAddress.city || 'City'}, ${formData.clientAddress.state || 'State'} ${formData.clientAddress.zipCode || 'ZIP'}</div>
-                <div>${formData.clientAddress.country ? countries.find(c => c.code === formData.clientAddress.country)?.name || formData.clientAddress.country : 'Country'}</div>
+                ${formData.clientAddress.street ? `<div>${formData.clientAddress.street}</div>` : ''}
+                ${formData.clientAddress.city || formData.clientAddress.state || formData.clientAddress.zipCode ? `
+                  <div>
+                    ${formData.clientAddress.city || ''}${formData.clientAddress.city && (formData.clientAddress.state || formData.clientAddress.zipCode) ? ', ' : ''}
+                    ${formData.clientAddress.state || ''}${formData.clientAddress.state && formData.clientAddress.zipCode ? ' ' : ''}
+                    ${formData.clientAddress.zipCode || ''}
+                  </div>
+                ` : ''}
+                ${formData.clientAddress.country ? `<div>${countries.find(c => c.code === formData.clientAddress.country)?.name || formData.clientAddress.country}</div>` : ''}
                 <div>${formData.clientEmail || 'Email'}</div>
                 <div>${formData.clientPhone || 'Phone'}</div>
               </div>
@@ -1525,6 +1556,7 @@ export default function CreateInvoicePage() {
               <h4 style="font-weight: 500; color: #111827; margin: 0 0 8px 0;">Payment Method</h4>
               <div style="font-size: 14px; color: #6b7280;">
                 ${formData.paymentMethod === 'crypto' ? 'Cryptocurrency' : 
+                  formData.fiatPaymentSubtype === 'phone' ? 'Phone Number' :
                   formData.fiatPaymentSubtype === 'mpesa_paybill' ? 'M-Pesa Paybill' :
                   formData.fiatPaymentSubtype === 'mpesa_till' ? 'M-Pesa Till' :
                   'Bank Transfer'}
@@ -1564,6 +1596,11 @@ export default function CreateInvoicePage() {
                   Branch Address: ${formData.branchAddress}
                 </div>
               ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'phone' && formData.paymentPhoneNumber ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Phone Number: ${formData.paymentPhoneNumber}
+                </div>
+              ` : ''}
               ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'mpesa_paybill' && formData.paybillNumber ? `
                 <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
                   Paybill Number: ${formData.paybillNumber}
@@ -1579,7 +1616,7 @@ export default function CreateInvoicePage() {
                   Till Number: ${formData.tillNumber}
                 </div>
               ` : ''}
-              ${formData.paymentMethod === 'fiat' && (formData.fiatPaymentSubtype === 'mpesa_paybill' || formData.fiatPaymentSubtype === 'mpesa_till') && formData.businessName ? `
+              ${formData.paymentMethod === 'fiat' && (formData.fiatPaymentSubtype === 'mpesa_paybill' || formData.fiatPaymentSubtype === 'mpesa_till' || formData.fiatPaymentSubtype === 'phone') && formData.businessName ? `
                 <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
                   Business Name: ${formData.businessName}
                 </div>
@@ -1743,7 +1780,7 @@ export default function CreateInvoicePage() {
         
         const successMessage = formData.sendViaWhatsapp 
           ? `Invoice sent successfully via WhatsApp to ${formData.clientPhone}!`
-          : 'Invoice sent successfully! Check your email for confirmation.';
+          : 'Invoice sent successfully to Your Client!';
         alert(successMessage);
         // Clear saved form data after successful send
         clearSavedData();
@@ -1855,9 +1892,7 @@ export default function CreateInvoicePage() {
     if (!formData.companyAddress.street || formData.companyAddress.street.trim() === '') {
       errors.push('Company address is required');
     }
-    if (!formData.clientAddress.street || formData.clientAddress.street.trim() === '') {
-      errors.push('Client address is required');
-    }
+    // Client address is now optional - removed validation check
     
     // Contact information validation - require at least one contact method
     const hasEmail = formData.clientEmail && formData.clientEmail.trim() !== '';
@@ -2066,13 +2101,19 @@ export default function CreateInvoicePage() {
               </div>
               ${formData.clientCompany ? `
               <div style="color: #6b7280; font-size: 14px; margin-bottom: 8px;">
-                Attn: ${formData.clientName || 'Client Name'}
+                Contact Person: ${formData.clientName || 'Client Name'}
               </div>
               ` : ''}
               <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
-                <div>${formData.clientAddress.street || 'Street Address'}</div>
-                <div>${formData.clientAddress.city || 'City'}, ${formData.clientAddress.state || 'State'} ${formData.clientAddress.zipCode || 'ZIP'}</div>
-                <div>${formData.clientAddress.country ? countries.find(c => c.code === formData.clientAddress.country)?.name || formData.clientAddress.country : 'Country'}</div>
+                ${formData.clientAddress.street ? `<div>${formData.clientAddress.street}</div>` : ''}
+                ${formData.clientAddress.city || formData.clientAddress.state || formData.clientAddress.zipCode ? `
+                  <div>
+                    ${formData.clientAddress.city || ''}${formData.clientAddress.city && (formData.clientAddress.state || formData.clientAddress.zipCode) ? ', ' : ''}
+                    ${formData.clientAddress.state || ''}${formData.clientAddress.state && formData.clientAddress.zipCode ? ' ' : ''}
+                    ${formData.clientAddress.zipCode || ''}
+                  </div>
+                ` : ''}
+                ${formData.clientAddress.country ? `<div>${countries.find(c => c.code === formData.clientAddress.country)?.name || formData.clientAddress.country}</div>` : ''}
                 <div>${formData.clientEmail || 'Email'}</div>
                 <div>${formData.clientPhone || 'Phone'}</div>
               </div>
@@ -2137,6 +2178,7 @@ export default function CreateInvoicePage() {
               <h4 style="font-weight: 500; color: #111827; margin: 0 0 8px 0;">Payment Method</h4>
               <div style="font-size: 14px; color: #6b7280;">
                 ${formData.paymentMethod === 'crypto' ? 'Cryptocurrency' : 
+                  formData.fiatPaymentSubtype === 'phone' ? 'Phone Number' :
                   formData.fiatPaymentSubtype === 'mpesa_paybill' ? 'M-Pesa Paybill' :
                   formData.fiatPaymentSubtype === 'mpesa_till' ? 'M-Pesa Till' :
                   'Bank Transfer'}
@@ -2176,6 +2218,11 @@ export default function CreateInvoicePage() {
                   Branch Address: ${formData.branchAddress}
                 </div>
               ` : ''}
+              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'phone' && formData.paymentPhoneNumber ? `
+                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
+                  Phone Number: ${formData.paymentPhoneNumber}
+                </div>
+              ` : ''}
               ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'mpesa_paybill' && formData.paybillNumber ? `
                 <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
                   Paybill Number: ${formData.paybillNumber}
@@ -2191,7 +2238,7 @@ export default function CreateInvoicePage() {
                   Till Number: ${formData.tillNumber}
                 </div>
               ` : ''}
-              ${formData.paymentMethod === 'fiat' && (formData.fiatPaymentSubtype === 'mpesa_paybill' || formData.fiatPaymentSubtype === 'mpesa_till') && formData.businessName ? `
+              ${formData.paymentMethod === 'fiat' && (formData.fiatPaymentSubtype === 'mpesa_paybill' || formData.fiatPaymentSubtype === 'mpesa_till' || formData.fiatPaymentSubtype === 'phone') && formData.businessName ? `
                 <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
                   Business Name: ${formData.businessName}
                 </div>
@@ -2284,9 +2331,15 @@ export default function CreateInvoicePage() {
 
       console.log('✅ [Smart Invoicing] PDF downloaded successfully:', {
         invoiceNumber: primaryInvoiceNumber,
-          total: formData.total
-        });
+        total: formData.total
+      });
+      
       alert(`PDF downloaded successfully! Invoice ${primaryInvoiceNumber} has been saved to your invoices.`);
+      
+      // Clear saved form data after successful download (same as send invoice)
+      clearSavedData();
+      // Redirect to invoices page to show the sent invoice
+      router.push('/dashboard/services/smart-invoicing/invoices');
     } catch (error) {
       console.error('❌ [Smart Invoicing] Failed to download PDF:', error);
       alert('Failed to download PDF. Please try again.');
@@ -2504,7 +2557,8 @@ export default function CreateInvoicePage() {
             paybillNumber: selectedMethod.fiatDetails?.paybillNumber || '',
             mpesaAccountNumber: selectedMethod.fiatDetails?.mpesaAccountNumber || '',
             tillNumber: selectedMethod.fiatDetails?.tillNumber || '',
-            businessName: selectedMethod.fiatDetails?.businessName || ''
+            businessName: selectedMethod.fiatDetails?.businessName || '',
+            paymentPhoneNumber: selectedMethod.fiatDetails?.paymentPhoneNumber || ''
           }));
         } else if (selectedMethod.type === 'crypto') {
           setFormData(prev => ({
@@ -2971,7 +3025,7 @@ export default function CreateInvoicePage() {
                                 {client.company ? client.company : client.name}
                               </div>
                               {client.company && (
-                                  <div className="text-sm text-black">Attn: {client.name}</div>
+                                  <div className="text-sm text-black">Contact Person: {client.name}</div>
                               )}
                               <div className="text-sm text-gray-600">{client.email}</div>
                             </button>
@@ -3002,17 +3056,31 @@ export default function CreateInvoicePage() {
                   </div>
                   {formData.clientCompany && (
                       <div className="text-black">
-                      Attn: {formData.clientName || 'Client Name'}
+                      Contact Person: {formData.clientName || 'Client Name'}
                     </div>
                   )}
                   <div className="text-gray-700 space-y-1">
-                    <div>{formData.clientAddress.street || 'Street Address'}</div>
-                    <div className="flex space-x-2">
-                      <span>{formData.clientAddress.city || 'City'}</span>
-                      <span>{formData.clientAddress.state || 'State'}</span>
-                      <span>{formData.clientAddress.zipCode || 'ZIP'}</span>
+                    {formData.clientAddress.street && (
+                      <div>{formData.clientAddress.street}</div>
+                    )}
+                    {(formData.clientAddress.city || formData.clientAddress.state || formData.clientAddress.zipCode) && (
+                      <div className="flex space-x-2">
+                        {formData.clientAddress.city && (
+                          <span>{formData.clientAddress.city}</span>
+                        )}
+                        {formData.clientAddress.state && (
+                          <span>{formData.clientAddress.state}</span>
+                        )}
+                        {formData.clientAddress.zipCode && (
+                          <span>{formData.clientAddress.zipCode}</span>
+                        )}
+                      </div>
+                    )}
+                    <div className="text-gray-700">
+                      {formData.clientAddress.country 
+                        ? countries.find(c => c.code === formData.clientAddress.country)?.name || formData.clientAddress.country 
+                        : 'Country'}
                     </div>
-                    <div>{formData.clientAddress.country ? countries.find(c => c.code === formData.clientAddress.country)?.name || formData.clientAddress.country : 'Country'}</div>
                   </div>
                   {/* Email field - only show in Email mode */}
                   {!formData.sendViaWhatsapp && (
@@ -3084,7 +3152,7 @@ export default function CreateInvoicePage() {
                                     {client.company ? client.company : client.name}
                                   </div>
                                   {client.company && (
-                                    <div className="text-sm text-gray-500">Attn: {client.name}</div>
+                                    <div className="text-sm text-gray-500">Contact Person: {client.name}</div>
                                   )}
                                   <div className="text-sm text-gray-600">{client.email}</div>
                                 </button>
@@ -3117,7 +3185,7 @@ export default function CreateInvoicePage() {
                               {ccClient.company ? ccClient.company : ccClient.name}
                             </div>
                             {ccClient.company && (
-                              <div className="text-xs text-gray-500">Attn: {ccClient.name}</div>
+                              <div className="text-xs text-gray-500">Contact Person: {ccClient.name}</div>
                             )}
                             <div className="text-xs text-gray-600">{ccClient.email}</div>
                           </div>
@@ -3370,7 +3438,7 @@ export default function CreateInvoicePage() {
                       <div>
                         <div className="font-medium text-gray-700">Local currency ({formData.currency})</div>
                         <div className="text-sm text-gray-700">
-                          {formData.companyAddress.country === 'KE' ? ' Dynamic Selection' : 'Bank Transfer'}
+                          {formData.companyAddress.country === 'KE' ? ' M-pesa & more' : 'Bank Transfer'}
                         </div>
                       </div>
                     </div>
@@ -3416,8 +3484,19 @@ export default function CreateInvoicePage() {
                           <CreditCard className="h-4 w-4 text-green-600 mr-2" />
                           Bank Transfer
                         </label>
-                        {isKenyanUser() && (
+                        {isLocalCurrency() && (
                           <>
+                            <label className="flex items-center text-gray-600">
+                              <input
+                                type="radio"
+                                value="phone"
+                                checked={formData.fiatPaymentSubtype === 'phone'}
+                                onChange={(e) => handleFiatPaymentSubtypeChange(e.target.value)}
+                                className="mr-2 text-gray-600"
+                              />
+                              <Smartphone className="h-4 w-4 text-blue-600 mr-2" />
+                              Phone Number
+                            </label>
                             <label className="flex items-center text-gray-600">
                               <input
                                 type="radio"
@@ -3444,6 +3523,31 @@ export default function CreateInvoicePage() {
                         )}
                       </div>
                     </div>
+                    
+                    {formData.fiatPaymentSubtype === 'phone' && (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm text-gray-700 mb-1">Phone Number</label>
+                          <input
+                            type="tel"
+                            value={formData.paymentPhoneNumber || ''}
+                            onChange={(e) => handleInputChange('paymentPhoneNumber', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="e.g., +1234567890"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-600 mb-1">Business Name (Optional)</label>
+                          <input
+                            type="text"
+                            value={formData.businessName || ''}
+                            onChange={(e) => handleInputChange('businessName', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+                            placeholder="Your business name (optional)"
+                          />
+                        </div>
+                      </div>
+                    )}
                     
                     {formData.fiatPaymentSubtype === 'bank' && (
                       <div className="space-y-4">
@@ -4633,6 +4737,9 @@ function ClientEditForm({
   });
   const [showCountryDropdown, setShowCountryDropdown] = useState(false);
   const [countrySearch, setCountrySearch] = useState('');
+  const [showAddressFields, setShowAddressFields] = useState(
+    !!(formData.clientAddress.street || formData.clientAddress.state || formData.clientAddress.zipCode)
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -4743,107 +4850,145 @@ function ClientEditForm({
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Street Address</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
         <input
           type="text"
-          value={editData.clientAddress.street}
-          onChange={(e) => handleInputChange('clientAddress.street', e.target.value)}
+          value={editData.clientAddress.city}
+          onChange={(e) => handleInputChange('clientAddress.city', e.target.value)}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
-          <input
-            type="text"
-            value={editData.clientAddress.city}
-            onChange={(e) => handleInputChange('clientAddress.city', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
-          <input
-            type="text"
-            value={editData.clientAddress.state}
-            onChange={(e) => handleInputChange('clientAddress.state', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-          />
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowCountryDropdown(!showCountryDropdown)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-left flex items-center justify-between bg-white"
+          >
+            <span className={editData.clientAddress.country ? 'text-gray-900' : 'text-gray-500'}>
+              {editData.clientAddress.country 
+                ? countries.find(c => c.code === editData.clientAddress.country)?.name 
+                : 'Select Country'}
+            </span>
+            <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${showCountryDropdown ? 'rotate-180' : ''}`} />
+          </button>
+          
+          {showCountryDropdown && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md max-h-60 overflow-y-auto z-20 shadow-lg">
+              {/* Search input */}
+              <div className="p-2 border-b border-gray-200 bg-gray-50">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    value={countrySearch}
+                    onChange={(e) => setCountrySearch(e.target.value)}
+                    placeholder="Search countries..."
+                    className="w-full pl-10 pr-3 py-2 bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              
+              {/* Country list */}
+              <div className="max-h-48 overflow-y-auto">
+                {countries
+                  .filter(country => 
+                    country.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                    country.phoneCode.includes(countrySearch) ||
+                    country.code.toLowerCase().includes(countrySearch.toLowerCase())
+                  )
+                  .map(country => (
+                  <button
+                    key={country.code}
+                    type="button"
+                    onClick={() => {
+                      handleInputChange('clientAddress.country', country.code);
+                      setShowCountryDropdown(false);
+                      setCountrySearch('');
+                    }}
+                    className="w-full px-3 py-2 text-left text-gray-700 hover:bg-gray-100 transition-colors flex items-center justify-between border-b border-gray-100 last:border-b-0"
+                  >
+                    <span className="text-sm">{country.name}</span>
+                    <span className="text-blue-600 text-xs font-medium">{country.phoneCode}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
+      {!showAddressFields && (
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">ZIP Code</label>
-          <input
-            type="text"
-            value={editData.clientAddress.zipCode}
-            onChange={(e) => handleInputChange('clientAddress.zipCode', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-          />
+          <button
+            type="button"
+            onClick={() => setShowAddressFields(true)}
+            className="flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm font-medium"
+          >
+            <Plus className="h-4 w-4" />
+            Add Address
+          </button>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
-          <div className="relative">
+      )}
+
+      {showAddressFields && (
+        <>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Street Address</label>
+            <input
+              type="text"
+              value={editData.clientAddress.street}
+              onChange={(e) => handleInputChange('clientAddress.street', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+              <input
+                type="text"
+                value={editData.clientAddress.state}
+                onChange={(e) => handleInputChange('clientAddress.state', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">ZIP Code</label>
+              <input
+                type="text"
+                value={editData.clientAddress.zipCode}
+                onChange={(e) => handleInputChange('clientAddress.zipCode', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-2">
             <button
               type="button"
-              onClick={() => setShowCountryDropdown(!showCountryDropdown)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-left flex items-center justify-between bg-white"
+              onClick={() => {
+                setShowAddressFields(false);
+                // Clear only street, state, and zipCode when hiding (keep city and country)
+                setEditData(prev => ({
+                  ...prev,
+                  clientAddress: {
+                    ...prev.clientAddress,
+                    street: '',
+                    state: '',
+                    zipCode: ''
+                  }
+                }));
+              }}
+              className="text-sm text-gray-500 hover:text-gray-700"
             >
-              <span className={editData.clientAddress.country ? 'text-gray-900' : 'text-gray-500'}>
-                {editData.clientAddress.country 
-                  ? countries.find(c => c.code === editData.clientAddress.country)?.name 
-                  : 'Select Country'}
-              </span>
-              <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${showCountryDropdown ? 'rotate-180' : ''}`} />
+              Remove Address
             </button>
-            
-            {showCountryDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md max-h-60 overflow-y-auto z-20 shadow-lg">
-                {/* Search input */}
-                <div className="p-2 border-b border-gray-200 bg-gray-50">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <input
-                      type="text"
-                      value={countrySearch}
-                      onChange={(e) => setCountrySearch(e.target.value)}
-                      placeholder="Search countries..."
-                      className="w-full pl-10 pr-3 py-2 bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-                
-                {/* Country list */}
-                <div className="max-h-48 overflow-y-auto">
-                  {countries
-                    .filter(country => 
-                      country.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
-                      country.phoneCode.includes(countrySearch) ||
-                      country.code.toLowerCase().includes(countrySearch.toLowerCase())
-                    )
-                    .map(country => (
-                    <button
-                      key={country.code}
-                      type="button"
-                      onClick={() => {
-                        handleInputChange('clientAddress.country', country.code);
-                        setShowCountryDropdown(false);
-                        setCountrySearch('');
-                      }}
-                      className="w-full px-3 py-2 text-left text-gray-700 hover:bg-gray-100 transition-colors flex items-center justify-between border-b border-gray-100 last:border-b-0"
-                    >
-                      <span className="text-sm">{country.name}</span>
-                      <span className="text-blue-600 text-xs font-medium">{country.phoneCode}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
-        </div>
-      </div>
+        </>
+      )}
 
       <div className="flex space-x-3 pt-4">
         <button

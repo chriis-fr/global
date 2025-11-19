@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { UserService } from '@/lib/services/userService';
-import { ServiceOnboarding } from '@/models/User';
 
 export async function POST(request: NextRequest) {
   try {
@@ -37,17 +36,25 @@ export async function POST(request: NextRequest) {
     }
 
     // Update onboarding progress
-    const currentServiceOnboarding = (user.onboarding.data as { serviceOnboarding?: Record<string, unknown> })?.serviceOnboarding || {};
+    // Handle both old structure (data.serviceOnboarding) and new structure (serviceOnboarding)
+    const onboardingData = user.onboarding.data as { serviceOnboarding?: Record<string, unknown> } | undefined;
+    const onboardingDirect = user.onboarding as { serviceOnboarding?: Record<string, unknown> } | undefined;
+    const currentServiceOnboarding = 
+      onboardingDirect?.serviceOnboarding || 
+      onboardingData?.serviceOnboarding || 
+      {};
+    
     const updatedOnboarding = {
-      ...user.onboarding,
+      isCompleted: step === 4 ? true : (user.onboarding.isCompleted || false),
       currentStep: step,
-      completedSteps: completedSteps || [...user.onboarding.completedSteps, step],
-      serviceOnboarding: {
-        ...currentServiceOnboarding,
-        ...stepData
-      } as Partial<ServiceOnboarding>,
-      // Mark onboarding as completed when user reaches step 4 (final step)
-      completed: step === 4 ? true : user.onboarding.isCompleted
+      completedSteps: completedSteps || [...(user.onboarding.completedSteps || []), step.toString()],
+      data: {
+        ...((user.onboarding.data as Record<string, unknown>) || {}),
+        serviceOnboarding: {
+          ...currentServiceOnboarding,
+          ...stepData
+        }
+      }
     };
 
     if (!user._id) {

@@ -5,7 +5,6 @@ import { CreateUserInput, CreateOrganizationInput } from '@/models';
 import { createDefaultServices } from '@/lib/services/serviceManager';
 import bcrypt from 'bcryptjs';
 import { ObjectId } from 'mongodb';
-import { SubscriptionService } from '@/lib/services/subscriptionService';
 import { getDatabase } from '@/lib/database';
 
 
@@ -248,10 +247,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Initialize trial for new users (skip for invitation signups as they'll use organization's subscription)
+    // Note: Trial is already initialized in UserService.createUser with trial-premium plan
+    // No need to call initializeTrial again - subscription is set in UserService
     if (!isInvitationSignup) {
-      console.log('🔄 [SubscriptionService] Initializing trial for user:', new ObjectId(newUser._id));
-      await SubscriptionService.initializeTrial(new ObjectId(newUser._id));
+      console.log('✅ [SIGNUP] User created with trial-premium subscription (already set in UserService)');
       
       // If organization was created, ensure the owner has proper permissions
       if (organization && organization._id && newUser._id) {

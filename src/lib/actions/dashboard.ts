@@ -74,9 +74,15 @@ export async function getDashboardStats(): Promise<{ success: boolean; data?: Da
     // Build query - Organization members should always see organization's data
     const isOrganization = !!session.user.organizationId;
     const baseQuery = isOrganization 
-      ? { organizationId: session.user.organizationId }
+      ? { 
+          $or: [
+            { organizationId: session.user.organizationId },
+            { organizationId: new ObjectId(session.user.organizationId) }
+          ]
+        }
       : { 
           $or: [
+            { ownerId: session.user.email }, // Primary identifier for individual users
             { issuerId: session.user.id },
             { userId: session.user.email }
           ]
@@ -143,14 +149,95 @@ export async function getDashboardStats(): Promise<{ success: boolean; data?: Da
     
     // Only count approved payables as bills ready to be paid (not needed in this response)
     // Get ledger stats for net balance and overdue counts
-    // Net balance should only include PAID receivables and APPROVED payables
+    // Net balance should only include PAID receivables and PAID payables (actual money in/out)
+    // Build a STRICT query for ledger entries - ownerId is the primary identifier
+    // CRITICAL: Only match entries where ownerId exactly matches the user's email (for individuals)
+    const ledgerQuery = isOrganization
+      ? {
+          $and: [
+            {
+              $or: [
+                { organizationId: session.user.organizationId },
+                { organizationId: new ObjectId(session.user.organizationId) }
+              ]
+            },
+            // Ensure ownerId also matches for organizations and is not null/empty
+            { 
+              ownerId: {
+                $exists: true,
+                $ne: null,
+                $eq: session.user.organizationId
+              }
+            },
+            { ownerId: { $ne: '' } }
+          ]
+        }
+      : {
+          // For individual users, ownerId MUST exactly match user's email
+          // This is the strictest possible filter - only entries owned by this exact user
+          ownerId: session.user.email
+        };
+    
+    // First, let's see what entries exist for debugging
+    const allUserEntries = await ledgerCollection.find({
+      ...ledgerQuery,
+      $or: [
+        { type: 'receivable', status: 'paid' },
+        { type: 'payable', status: 'paid' }
+      ]
+    }).toArray();
+    
+    // Also check if there are any entries with wrong ownerId that might be matching
+    const wrongOwnerEntries = await ledgerCollection.find({
+      $or: [
+        { type: 'receivable', status: 'paid' },
+        { type: 'payable', status: 'paid' }
+      ],
+      $and: [
+        { ownerId: { $exists: true } },
+        { 
+          $or: [
+            { ownerId: { $ne: session.user.email } },
+            { ownerId: null },
+            { ownerId: '' }
+          ]
+        }
+      ]
+    }).limit(5).toArray();
+    
+    console.log('🔍 [Dashboard Stats] Matching ledger entries:', {
+      userId: session.user.id,
+      userEmail: session.user.email,
+      isOrganization,
+      query: ledgerQuery,
+      entriesFound: allUserEntries.length,
+      entries: allUserEntries.map(e => ({
+        entryId: e.entryId,
+        type: e.type,
+        status: e.status,
+        amount: e.amount,
+        currency: e.currency,
+        ownerId: e.ownerId,
+        userId: e.userId,
+        issuerId: e.issuerId,
+        organizationId: e.organizationId,
+        relatedInvoiceId: e.relatedInvoiceId
+      })),
+      wrongOwnerEntriesSample: wrongOwnerEntries.length > 0 ? wrongOwnerEntries.map(e => ({
+        entryId: e.entryId,
+        ownerId: e.ownerId,
+        userId: e.userId,
+        amount: e.amount
+      })) : 'none'
+    });
+    
     const ledgerStats = await ledgerCollection.aggregate([
       { 
         $match: {
-          ...baseQuery,
+          ...ledgerQuery,
           $or: [
             { type: 'receivable', status: 'paid' }, // Only paid receivables
-            { type: 'payable', status: 'approved' }  // Only approved payables
+            { type: 'payable', status: 'paid' }  // Only paid payables (actual money out)
           ]
         }
       },
@@ -165,6 +252,17 @@ export async function getDashboardStats(): Promise<{ success: boolean; data?: Da
     ]).toArray();
 
     const ledgerData = ledgerStats[0] || { netBalance: 0, overdueReceivables: 0, overduePayables: 0 };
+
+    // Debug logging to help diagnose net balance issues
+    console.log('📊 [Dashboard Stats] Net balance calculation:', {
+      userId: session.user.id,
+      userEmail: session.user.email,
+      isOrganization,
+      organizationId: session.user.organizationId,
+      ledgerQuery,
+      netBalance: ledgerData.netBalance,
+      entryCount: ledgerStats.length
+    });
 
     const stats: DashboardStats = {
       totalReceivables, // Expected revenue from all invoices

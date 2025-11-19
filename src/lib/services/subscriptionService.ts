@@ -84,6 +84,7 @@ export class SubscriptionService {
   }
 
   // Check if user can create invoice with detailed response
+  // CRITICAL: Trial users ALWAYS allowed - no limits
   static async canCreateInvoice(userId: ObjectId): Promise<{
     allowed: boolean;
     reason?: string;
@@ -91,6 +92,12 @@ export class SubscriptionService {
   }> {
     console.log('🔍 [SubscriptionService] Checking invoice creation permission for user:', userId);
     const subscription = await this.getUserSubscription(userId);
+    
+    // TRIAL USERS: Always allowed - unlimited access
+    if (subscription.plan?.planId === 'trial-premium' && subscription.isTrialActive) {
+      console.log('✅ [SubscriptionService] Trial user - unlimited invoice creation allowed');
+      return { allowed: true };
+    }
     
     if (!subscription.canCreateInvoice) {
       if (subscription.status === 'trial' && subscription.trialDaysRemaining <= 0) {
@@ -119,7 +126,7 @@ export class SubscriptionService {
       };
     }
 
-    // Check usage limits - all plans use monthly limits
+    // Check usage limits - skip for trial users (already handled above) and unlimited plans
     if (subscription.limits.invoicesPerMonth > 0 && 
         subscription.usage.invoicesThisMonth >= subscription.limits.invoicesPerMonth) {
       console.log('❌ [SubscriptionService] Monthly limit reached for user:', userId);
@@ -286,10 +293,10 @@ export class SubscriptionService {
       throw new Error('User not found');
     }
 
-    // If user has no subscription data, initialize them with free plan
+    // If user has no subscription data, initialize them with trial-premium (30-day trial)
     if (!user.subscription) {
-      console.log(' [SubscriptionService] User has no subscription data, initializing free plan for:', user.email);
-      await this.initializeFreePlan(userId);
+      console.log('🔄 [SubscriptionService] User has no subscription data, initializing trial-premium for:', user.email);
+      await this.initializeTrial(userId);
       
       // Refetch user data after initialization
       const updatedUser = await db.collection('users').findOne({ _id: userId }) as UserData | null;
@@ -297,7 +304,7 @@ export class SubscriptionService {
         console.log('❌ [SubscriptionService] Failed to initialize user subscription');
         throw new Error('Failed to initialize user subscription');
       }
-      console.log('✅ [SubscriptionService] Free plan initialized, processing subscription data');
+      console.log('✅ [SubscriptionService] Trial-premium initialized, processing subscription data');
       return this.processSubscriptionData(updatedUser);
     }
 
@@ -348,25 +355,36 @@ export class SubscriptionService {
     const trialDaysRemaining = trialEndDate ? Math.max(0, Math.ceil((trialEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))) : 0;
 
     // Feature access based on plan and status
-    const canCreateOrganization = Boolean(planId !== 'receivables-free' && subscription.status === 'active');
-    const canAccessPayables = Boolean((planId.includes('payables') || planId.includes('combined')) && subscription.status === 'active');
+    // Trial users get full access to all features
+    const canCreateOrganization = Boolean(
+      (planId !== 'receivables-free' && subscription.status === 'active') || 
+      (planId === 'trial-premium' && isTrialActive)
+    );
+    const canAccessPayables = Boolean(
+      ((planId.includes('payables') || planId.includes('combined')) && subscription.status === 'active') ||
+      (planId === 'trial-premium' && isTrialActive)
+    );
     
-    // FIXED: Free plan users should always be able to create invoices (up to their limit)
+    // CRITICAL: Trial users ALWAYS get unlimited invoices - no limits
+    // Free plan users can create invoices up to their limit
     const canCreateInvoice = Boolean(
+      // Trial is active (trial users get unlimited access - PRIORITY)
+      (planId === 'trial-premium' && isTrialActive) ||
       // Active subscription
-      subscription.status === 'active' || 
-      // Trial is active
-      isTrialActive ||
+      (subscription.status === 'active' && planId !== 'trial-premium') ||
       // Free plan (even if trial expired, they can still use free features)
       planId === 'receivables-free'
     );
     
-    const canUseAdvancedFeatures = Boolean(planId.includes('pro') && subscription.status === 'active');
+    const canUseAdvancedFeatures = Boolean(
+      (planId.includes('pro') && subscription.status === 'active') ||
+      (planId === 'trial-premium' && isTrialActive)
+    );
 
-    // Usage limits
+    // Usage limits - trial users get unlimited access
     const limits = {
-      invoicesPerMonth: plan?.limits?.invoicesPerMonth || 5,
-      monthlyVolume: plan?.limits?.monthlyVolume || 0,
+      invoicesPerMonth: planId === 'trial-premium' && isTrialActive ? -1 : (plan?.limits?.invoicesPerMonth || 5),
+      monthlyVolume: planId === 'trial-premium' && isTrialActive ? -1 : (plan?.limits?.monthlyVolume || 0),
       cryptoToCryptoFee: plan?.limits?.cryptoToCryptoFee || 0.9,
     };
 

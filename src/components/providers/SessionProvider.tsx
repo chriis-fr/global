@@ -36,7 +36,8 @@ function AuthWrapper({ children }: SessionProviderProps) {
   })
   
   // Only show loading state on protected routes (dashboard, profile, etc.)
-  // Allow public routes to render immediately while auth happens in background
+  // For public routes (especially landing page '/'), render immediately - no loading spinner
+  // The landing page handles its own preloader
   if (status === 'loading' && !isPublicRoute) {
     return (
       <LoadingSpinner 
@@ -47,6 +48,7 @@ function AuthWrapper({ children }: SessionProviderProps) {
   }
 
   // Always render children - auth will be handled by individual route guards
+  // For landing page, this allows the preloader to show immediately
   return <>{children}</>
 }
 
