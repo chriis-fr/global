@@ -228,6 +228,7 @@ export const authOptions: NextAuthOptions = {
         session.user.image = token.picture as string
         session.user.userType = token.userType as 'individual' | 'business'
         session.user.role = token.role as string
+        session.user.adminTag = (token.adminTag as boolean) || false
         session.user.address = token.address as {
           street: string
           city: string
@@ -287,6 +288,7 @@ export const authOptions: NextAuthOptions = {
             }
             token.services = { ...(dbUser.services || createDefaultServices()) } as Record<string, boolean>
             token.mongoId = dbUser._id?.toString()
+            token.adminTag = dbUser.adminTag || false
           }
         } catch {
           // Error fetching latest user data for JWT

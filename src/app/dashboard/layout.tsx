@@ -11,7 +11,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const [sidebarState, setSidebarState] = useState<'expanded' | 'collapsed' | 'auto-hidden'>('expanded');
   const mainContentRef = useRef<HTMLDivElement>(null);
-  
+
   const { fetchOnboarding, setOnboarding } = useOnboardingStore();
 
   // Initialize onboarding store from session on mount and check completion

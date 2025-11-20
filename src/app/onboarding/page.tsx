@@ -184,13 +184,13 @@ export default function OnboardingPage() {
             session.user.services as Record<string, boolean>
           );
         }
-        window.location.href = '/dashboard';
-        return;
-      }
-      
+            window.location.href = '/dashboard';
+            return;
+          }
+          
       // If session shows it's not completed, continue with onboarding flow
-      loadUserAndServices();
-    }
+          loadUserAndServices();
+        }
   }, [session, status, onboarding, loadUserAndServices, setOnboarding]);
 
   const updateOnboardingStep = async (step: number, stepData?: Record<string, unknown>) => {
