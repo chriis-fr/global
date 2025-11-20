@@ -274,10 +274,14 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
         const trialDaysRemaining = trialEndDate ? Math.max(0, Math.ceil((trialEndDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24))) : 0;
         
         // Feature access based on organization subscription
+        // For combined plans, allow access even if status is not explicitly 'active' (for old accounts)
+        const isPaidPlan = planId !== 'receivables-free' && planId !== 'trial-premium';
+        const isActiveOrCombined = orgSubscription.status === 'active' || (isPaidPlan && planId.includes('combined'));
+        
         const canCreateOrganization = false; // Members can't create organizations
         const canAccessPayables = Boolean(
           isTrialPremiumPlan || 
-          ((planId.includes('payables') || planId.includes('combined')) && orgSubscription.status === 'active')
+          ((planId.includes('payables') || planId.includes('combined')) && isActiveOrCombined)
         );
         
         // Get organization's current month invoice count (use organization's usage, not individual)
@@ -408,11 +412,14 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
     }
     
     // Feature access (trial users get full access)
-    const isTrialOrPro = isTrialPremiumPlan || (planId !== 'receivables-free' && subscription.status === 'active');
+    // For combined plans, allow access even if status is not explicitly 'active' (for old accounts)
+    const isPaidPlan = planId !== 'receivables-free' && planId !== 'trial-premium';
+    const isActiveOrCombined = subscription.status === 'active' || (isPaidPlan && planId.includes('combined'));
+    const isTrialOrPro = isTrialPremiumPlan || (isPaidPlan && isActiveOrCombined);
     const canCreateOrganization = Boolean(isTrialOrPro);
     const canAccessPayables = Boolean(
       isTrialPremiumPlan || 
-      ((planId.includes('payables') || planId.includes('combined')) && subscription.status === 'active')
+      ((planId.includes('payables') || planId.includes('combined')) && isActiveOrCombined)
     );
     
     // Get current month invoice count

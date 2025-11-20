@@ -92,6 +92,7 @@ export interface User {
   password?: string; // Optional for OAuth users
   avatar?: string;
   role: 'user' | 'admin';
+  adminTag?: boolean; // Special admin tag for system admin access (separate from role)
   organizationId?: ObjectId;
   isEmailVerified: boolean;
   emailVerificationToken?: string;

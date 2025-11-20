@@ -120,11 +120,19 @@ export default function ServicesPage() {
       const response = await fetch('/api/services');
       const data = await response.json();
       if (data.success) {
-        setServices(data.data.services);
-        setCategories(data.data.categories);
+        setServices(data.data.services || {});
+        setCategories(data.data.categories || []);
+      } else {
+        console.error('Failed to load services:', data.message);
+        // Set empty defaults to prevent blank page
+        setServices({});
+        setCategories([]);
       }
     } catch (error) {
       console.error('Failed to load services:', error);
+      // Set empty defaults to prevent blank page
+      setServices({});
+      setCategories([]);
     }
   };
 

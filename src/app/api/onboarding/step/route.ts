@@ -50,9 +50,9 @@ export async function POST(request: NextRequest) {
       completedSteps: completedSteps || [...(user.onboarding.completedSteps || []), step.toString()],
       data: {
         ...((user.onboarding.data as Record<string, unknown>) || {}),
-        serviceOnboarding: {
-          ...currentServiceOnboarding,
-          ...stepData
+      serviceOnboarding: {
+        ...currentServiceOnboarding,
+        ...stepData
         }
       }
     };
