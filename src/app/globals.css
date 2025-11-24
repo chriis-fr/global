@@ -4,8 +4,79 @@
   --background: #ffffff;
   --foreground: #171717;
   --Background: #000000;
-  --emerald: #10b981;
   --white: #ffffff;
+  --cursor-color: rgb(238, 19, 19);
+  --blur: 3px;
+  --innerBlur: 2px;
+  --outerColor: rgba(226, 79, 46, 0.4);
+  --size: 40,
+  --outerSize: 25;
+  /* Cursor gradient colors - persistent defaults */
+  --cursor-gradient-start: rgb(238, 19, 19);
+  --cursor-gradient-middle: rgba(238, 19, 19, 0.8);
+  --cursor-gradient-end: rgba(238, 19, 19, 0.4);
+  --outer-gradient-start: rgba(226, 79, 46, 0.4);
+  --outer-gradient-middle: rgba(226, 79, 46, 0.2);
+  --outer-gradient-end: rgba(226, 79, 46, 0.1);
+}
+
+.crossBg {
+  background-image: linear-gradient(#dcdce5 0.5px, transparent 0.5px),
+    linear-gradient(to right, #dcdce5 0.5px, transparent 0.5px);
+  background-size: 75px 75px;
+  background-color: #ffffff;
+}
+
+.bg {
+  position: fixed;
+  top: -50%;
+  left: -50%;
+  right: -50%;
+  bottom: -50%;
+  width: 200vw;
+  height: 200vh;
+  background: transparent
+    url("http://assets.iceable.com/img/noise-transparent.png") repeat 0 0;
+  background-repeat: repeat;
+  animation: bg-animation 0.2s infinite;
+  opacity: 0.9;
+  visibility: visible;
+}
+
+@keyframes bg-animation {
+  0% {
+    transform: translate(0, 0);
+  }
+  10% {
+    transform: translate(-5%, -5%);
+  }
+  20% {
+    transform: translate(-10%, 5%);
+  }
+  30% {
+    transform: translate(5%, -10%);
+  }
+  40% {
+    transform: translate(-5%, 15%);
+  }
+  50% {
+    transform: translate(-10%, 5%);
+  }
+  60% {
+    transform: translate(15%, 0);
+  }
+  70% {
+    transform: translate(0, 10%);
+  }
+  80% {
+    transform: translate(-15%, 0);
+  }
+  90% {
+    transform: translate(10%, 5%);
+  }
+  100% {
+    transform: translate(5%, 0);
+  }
 }
 
 @theme inline {
@@ -23,10 +94,61 @@
 }
 
 body {
-  background: linear-gradient(to bottom right, #1c398e, #172554) !important;
+  /* background: linear-gradient(to bottom right, #1c398e, #172554) !important; */
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
   overflow-x: hidden;
+  /* Ensure default cursor is visible by default */
+  cursor: auto !important;
+}
+
+html {
+  /* Ensure default cursor is visible by default */
+  cursor: auto !important;
+}
+
+/* Only hide cursor on landing page - override with !important */
+body[data-landing-page="true"],
+html[data-landing-page="true"] {
+  cursor: none !important;
+}
+
+/* Ensure cursor is ALWAYS visible on all pages except landing page */
+/* This is critical to override any cursor: none styles */
+body:not([data-landing-page="true"]),
+html:not([data-landing-page="true"]) {
+  cursor: auto !important;
+}
+
+/* Buttons and interactive elements should show pointer cursor */
+body:not([data-landing-page="true"]) button,
+body:not([data-landing-page="true"]) a,
+body:not([data-landing-page="true"]) [role="button"],
+body:not([data-landing-page="true"]) input[type="button"],
+body:not([data-landing-page="true"]) input[type="submit"],
+body:not([data-landing-page="true"]) input[type="image"],
+body:not([data-landing-page="true"]) label[for],
+body:not([data-landing-page="true"]) select,
+body:not([data-landing-page="true"]) .cursor-pointer,
+body:not([data-landing-page="true"]) [style*="cursor: pointer"] {
+  cursor: pointer !important;
+}
+
+/* Text inputs and textareas should show text cursor */
+body:not([data-landing-page="true"]) input[type="text"],
+body:not([data-landing-page="true"]) input[type="email"],
+body:not([data-landing-page="true"]) input[type="password"],
+body:not([data-landing-page="true"]) input[type="search"],
+body:not([data-landing-page="true"]) input[type="url"],
+body:not([data-landing-page="true"]) input[type="tel"],
+body:not([data-landing-page="true"]) textarea,
+body:not([data-landing-page="true"]) [contenteditable="true"] {
+  cursor: text !important;
+}
+
+/* All other elements get default cursor */
+body:not([data-landing-page="true"]) * {
+  cursor: inherit;
 }
 
 /* Prevent flash of landing page content - hide by default until preloader is ready */

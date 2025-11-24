@@ -24,6 +24,7 @@
     "next-auth": "^4.24.11",
     "nodemailer": "^6.10.1",
     "react": "^19.0.0",
+    "react-animated-cursor": "^2.11.2",
     "react-dom": "^19.0.0",
     "react-hot-toast": "^2.5.2",
     "stripe": "^18.5.0",

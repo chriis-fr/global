@@ -42,7 +42,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         style={{
-          background: 'linear-gradient(to bottom right, #1c398e, #172554)',
+          // background: 'linear-gradient(to bottom right, #1c398e, #172554)',
           margin: 0,
           padding: 0,
         }}

@@ -59,7 +59,7 @@ export const Inner = styled.div`
 `;
 
 export const SecondOverlay = styled.div`
-  background: var(--emerald);
+  background: var(--white);
   position: fixed;
   height: 100vh;
   width: 100vw;
