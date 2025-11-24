@@ -10,14 +10,7 @@
   --innerBlur: 2px;
   --outerColor: rgba(226, 79, 46, 0.4);
   --size: 40,
-  --outerSize: 25;
-  /* Cursor gradient colors - persistent defaults */
-  --cursor-gradient-start: rgb(238, 19, 19);
-  --cursor-gradient-middle: rgba(238, 19, 19, 0.8);
-  --cursor-gradient-end: rgba(238, 19, 19, 0.4);
-  --outer-gradient-start: rgba(226, 79, 46, 0.4);
-  --outer-gradient-middle: rgba(226, 79, 46, 0.2);
-  --outer-gradient-end: rgba(226, 79, 46, 0.1);
+  --outerSize: 25
 }
 
 .crossBg {

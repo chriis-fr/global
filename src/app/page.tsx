@@ -54,28 +54,26 @@ export default function Home() {
   // Show preloader immediately, even before client-side hydration
   // Return preloader structure immediately to prevent any flash
 
+  const bodyStyles = typeof document === "undefined" ? null : document.body.style;
   const isHome = pathname === "/";
 
-  // Manage cursor visibility and CSS variables - ONLY on landing page
+  // Initialize cursor CSS variables on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined' && bodyStyles) {
+      bodyStyles.setProperty("--cursor-color", "rgb(238, 19, 19)");
+      bodyStyles.setProperty("--blur", "3px");
+      bodyStyles.setProperty("--innerBlur", "2px");
+      bodyStyles.setProperty("--outerColor", "rgba(226, 79, 46, 0.4)");
+    }
+  }, [bodyStyles]);
+
+  // Manage cursor visibility - ONLY on landing page
   useEffect(() => {
     if (typeof window === 'undefined') return;
     
     // This component only renders on landing page, so we can safely assume isHome is true
     // But we check anyway for safety
     if (isHome && pathname === '/') {
-      const root = document.documentElement;
-      // Set cursor CSS variables for landing page
-      root.style.setProperty('--cursor-color', 'rgb(238, 19, 19)');
-      root.style.setProperty('--blur', '3px');
-      root.style.setProperty('--innerBlur', '2px');
-      root.style.setProperty('--outerColor', 'rgba(226, 79, 46, 0.4)');
-      root.style.setProperty('--cursor-gradient-start', 'rgb(238, 19, 19)');
-      root.style.setProperty('--cursor-gradient-middle', 'rgba(238, 19, 19, 0.8)');
-      root.style.setProperty('--cursor-gradient-end', 'rgba(238, 19, 19, 0.4)');
-      root.style.setProperty('--outer-gradient-start', 'rgba(226, 79, 46, 0.4)');
-      root.style.setProperty('--outer-gradient-middle', 'rgba(226, 79, 46, 0.2)');
-      root.style.setProperty('--outer-gradient-end', 'rgba(226, 79, 46, 0.1)');
-      
       // Hide default cursor on landing page
       document.body.style.cursor = 'none';
       document.documentElement.style.cursor = 'none';
@@ -100,20 +98,18 @@ export default function Home() {
     {/* Only show animated cursor on landing page */}
     {isHome && (
       <AnimatedCursor 
-        innerSize={25}
-        outerSize={40}
+        innerSize={isHome ? 25 : 14}
+        outerSize={isHome ? 40 : 46}
         outerAlpha={0.2}
         innerScale={0.7}
         innerStyle={{
-          filter: "blur(var(--innerBlur, 2px))",
-          background: "radial-gradient(circle at center, var(--cursor-gradient-start, rgb(238, 19, 19)) 0%, var(--cursor-gradient-middle, rgba(238, 19, 19, 0.8)) 50%, var(--cursor-gradient-end, rgba(238, 19, 19, 0.4)) 100%)",
-          boxShadow: "0 0 20px var(--cursor-color, rgb(238, 19, 19))",
+          filter: "blur(var(--innerBlur))",
+          backgroundColor: "var(--cursor-color)",
         }}
         outerStyle={{
-          filter: "blur(var(--blur, 3px))",
-          background: "radial-gradient(circle at center, var(--outer-gradient-start, rgba(226, 79, 46, 0.4)) 0%, var(--outer-gradient-middle, rgba(226, 79, 46, 0.2)) 50%, var(--outer-gradient-end, rgba(226, 79, 46, 0.1)) 100%)",
+          filter: "blur(var(--blur))",
+          backgroundColor: "var(--outerColor)",
           opacity: 0.4,
-          boxShadow: "0 0 40px var(--outerColor, rgba(226, 79, 46, 0.4))",
         }}
         outerScale={5}
         clickables={[
@@ -144,18 +140,12 @@ export default function Home() {
       {/* Landing page content - always rendered but hidden, slides up with preloader layers */}
       <div 
         onMouseOver={() => {
-          // Update cursor variables on hover for dynamic effects
-          const root = document.documentElement;
-          root.style.setProperty("--cursor-color", "rgb(238, 19, 19)");
-          root.style.setProperty("--blur", "3px");
-          root.style.setProperty("--innerBlur", "2px");
-          root.style.setProperty("--outerColor", "rgba(226, 79, 46, 0.4)");
-          root.style.setProperty("--cursor-gradient-start", "rgb(238, 19, 19)");
-          root.style.setProperty("--cursor-gradient-middle", "rgba(238, 19, 19, 0.8)");
-          root.style.setProperty("--cursor-gradient-end", "rgba(238, 19, 19, 0.4)");
-          root.style.setProperty("--outer-gradient-start", "rgba(226, 79, 46, 0.4)");
-          root.style.setProperty("--outer-gradient-middle", "rgba(226, 79, 46, 0.2)");
-          root.style.setProperty("--outer-gradient-end", "rgba(226, 79, 46, 0.1)");
+          if (bodyStyles) {
+            bodyStyles.setProperty("--cursor-color", "rgb(238, 19, 19)");
+            bodyStyles.setProperty("--blur", "3px");
+            bodyStyles.setProperty("--innerBlur", "2px");
+            bodyStyles.setProperty("--outerColor", "rgba(226, 79, 46, 0.4)");
+          }
         }}
 
         ref={landingPageRef}
