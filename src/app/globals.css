@@ -34,6 +34,15 @@
   animation: bg-animation 0.2s infinite;
   opacity: 0.9;
   visibility: visible;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Ensure animated cursor is above bg layer */
+[data-react-animated-cursor],
+[data-react-animated-cursor] * {
+  z-index: 99999 !important;
+  pointer-events: none !important;
 }
 
 @keyframes bg-animation {

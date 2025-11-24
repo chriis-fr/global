@@ -54,30 +54,39 @@ export default function Home() {
   // Show preloader immediately, even before client-side hydration
   // Return preloader structure immediately to prevent any flash
 
-  const bodyStyles = typeof document === "undefined" ? null : document.body.style;
   const isHome = pathname === "/";
 
-  // Initialize cursor CSS variables on mount
+  // Variables are now set in layout.tsx script BEFORE React hydrates
+  // This useEffect only updates them if needed (e.g., on hover changes)
   useEffect(() => {
-    if (typeof window !== 'undefined' && bodyStyles) {
-      bodyStyles.setProperty("--cursor-color", "rgb(238, 19, 19)");
-      bodyStyles.setProperty("--blur", "3px");
-      bodyStyles.setProperty("--innerBlur", "2px");
-      bodyStyles.setProperty("--outerColor", "rgba(226, 79, 46, 0.4)");
+    if (typeof window !== 'undefined' && typeof document !== 'undefined' && document.body && isHome) {
+      // Ensure variables are set (backup in case script didn't run)
+      const body = document.body;
+      body.style.setProperty("--cursor-color", "rgb(238, 19, 19)");
+      body.style.setProperty("--blur", "3px");
+      body.style.setProperty("--innerBlur", "2px");
+      body.style.setProperty("--outerColor", "rgba(226, 79, 46, 0.4)");
     }
-  }, [bodyStyles]);
+  }, [isHome]);
 
-  // Manage cursor visibility - ONLY on landing page
+  // Manage cursor visibility and ensure variables are set - ONLY on landing page
   useEffect(() => {
     if (typeof window === 'undefined') return;
     
     // This component only renders on landing page, so we can safely assume isHome is true
     // But we check anyway for safety
     if (isHome && pathname === '/') {
+      const body = document.body;
+      // Set cursor CSS variables - ensure they're always set when on landing page
+      body.style.setProperty("--cursor-color", "rgb(238, 19, 19)");
+      body.style.setProperty("--blur", "3px");
+      body.style.setProperty("--innerBlur", "2px");
+      body.style.setProperty("--outerColor", "rgba(226, 79, 46, 0.4)");
+      
       // Hide default cursor on landing page
-      document.body.style.cursor = 'none';
+      body.style.cursor = 'none';
       document.documentElement.style.cursor = 'none';
-      document.body.setAttribute('data-landing-page', 'true');
+      body.setAttribute('data-landing-page', 'true');
       document.documentElement.setAttribute('data-landing-page', 'true');
     }
     
@@ -140,11 +149,13 @@ export default function Home() {
       {/* Landing page content - always rendered but hidden, slides up with preloader layers */}
       <div 
         onMouseOver={() => {
-          if (bodyStyles) {
-            bodyStyles.setProperty("--cursor-color", "rgb(238, 19, 19)");
-            bodyStyles.setProperty("--blur", "3px");
-            bodyStyles.setProperty("--innerBlur", "2px");
-            bodyStyles.setProperty("--outerColor", "rgba(226, 79, 46, 0.4)");
+          // Update cursor variables on hover - exactly like working app
+          if (typeof window !== 'undefined' && typeof document !== 'undefined' && document.body) {
+            const body = document.body;
+            body.style.setProperty("--cursor-color", "rgb(238, 19, 19)");
+            body.style.setProperty("--blur", "3px");
+            body.style.setProperty("--innerBlur", "2px");
+            body.style.setProperty("--outerColor", "rgba(226, 79, 46, 0.4)");
           }
         }}
 
@@ -164,6 +175,7 @@ export default function Home() {
           // opacity and visibility controlled by GSAP animation
         }}
       >
+        <div className='bg' />
         <Header />
         <div className="pt-16">
           <BlockchainBenefits />
