@@ -50,15 +50,17 @@ const SectionA = () => {
             </div>
 
             {/* Description */}
-            <p className="max-w-screen-sm mx-auto text-xl text-gray-700 text-muted-foreground">
+            <p className="max-w-screen-sm mx-auto font-serif text-sm md:text-base lg:text-lg text-gray-700 text-muted-foreground">
               {`Enterprise-grade security with modern technology ensuring business continuity. Send your customers and clients
-              the most flexible invoices; Fast, Flexible, and Secure.`}
+              the most flexible invoices. Fast, Flexible, and Secure!`}
             </p>
 
             {/* Buttons */}
             <div className="flex flex-col md:flex-row items-center justify-center gap-4">
               <Button className="w-5/6 md:w-auto md:px-6 font-bold group/arrow">
-                Get Started
+              <Link href="/auth">
+              Get Started
+              </Link>
                 <ArrowRight className="size-5 ml-2 group-hover/arrow:translate-x-1 transition-transform" />
               </Button>
 
@@ -68,10 +70,10 @@ const SectionA = () => {
                 className="w-5/6 md:w-auto md:px-6 font-bold"
               >
                 <Link
-                  href="https://github.com/nobruf/shadcn-landing-page.git"
+                  href="https://linkedin.com/company/chainserp"
                   target="_blank"
                 >
-                  Github respository
+                  More
                 </Link>
               </Button>
             </div>
@@ -80,7 +82,7 @@ const SectionA = () => {
           {/* Hero Image section - dynamic rendering based on device */}
           <div className="relative group mt-14 border-4 border-black">
             {/* Blur effect background */}
-            <div className="absolute top-2 lg:-top-8 border-4 border-black left-1/2 transform -translate-x-1/2 w-[90%] mx-auto h-24 lg:h-80 bg-primary/50 rounded-full blur-3xl"></div>
+            <div className="absolute top-2 lg:-top-8 border-4 border-black left-1/2 transform -translate-x-1/2 w-[70%] mt-16 mx-auto h-24 lg:h-50 bg-primary/50 rounded-full blur-2xl"></div>
             
             {/* Laptop image - shown on desktop/tablet (md and above) */}
             <div className="hidden md:block">

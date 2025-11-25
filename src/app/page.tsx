@@ -14,6 +14,67 @@ export default function Home() {
   const [preloaderComplete, setPreloaderComplete] = useState(false);
   const landingPageRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
+  const [isTouchDevice, setIsTouchDevice] = useState<boolean | null>(null);
+
+  // Detect if device is a touch device (mobile/tablet) - dynamically updates on resize/device changes
+  // This detection happens immediately on mount and updates in real-time
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const detectTouchDevice = () => {
+      // More accurate touch detection: 
+      // - Check if pointer is coarse (touch screen) AND fine pointer is not available
+      // - OR check if it's a small screen with touch support
+      const hasCoarsePointer = window.matchMedia('(pointer: coarse)').matches;
+      const hasFinePointer = window.matchMedia('(pointer: fine)').matches;
+      const isSmallScreen = window.innerWidth < 768;
+      const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+      
+      // Consider it a touch device if:
+      // - Has coarse pointer but no fine pointer (touch-only device)
+      // - OR has touch support AND small screen (mobile device)
+      const isTouch = (hasCoarsePointer && !hasFinePointer) || (hasTouch && isSmallScreen);
+      setIsTouchDevice(isTouch);
+    };
+
+    // Detect immediately (during preloader time for performance)
+    detectTouchDevice();
+
+    // Listen for resize / orientation changes
+    window.addEventListener('resize', detectTouchDevice);
+    
+    // Listen for pointer media query changes (when switching device emulation)
+    const coarsePointerQuery = window.matchMedia('(pointer: coarse)');
+    const finePointerQuery = window.matchMedia('(pointer: fine)');
+    
+    // Modern browsers support addEventListener on MediaQueryList
+    if (coarsePointerQuery.addEventListener) {
+      coarsePointerQuery.addEventListener('change', detectTouchDevice);
+    } else {
+      // Fallback for older browsers
+      coarsePointerQuery.addListener(detectTouchDevice);
+    }
+    
+    if (finePointerQuery.addEventListener) {
+      finePointerQuery.addEventListener('change', detectTouchDevice);
+    } else {
+      finePointerQuery.addListener(detectTouchDevice);
+    }
+
+    return () => {
+      window.removeEventListener('resize', detectTouchDevice);
+      if (coarsePointerQuery.removeEventListener) {
+        coarsePointerQuery.removeEventListener('change', detectTouchDevice);
+      } else {
+        coarsePointerQuery.removeListener(detectTouchDevice);
+      }
+      if (finePointerQuery.removeEventListener) {
+        finePointerQuery.removeEventListener('change', detectTouchDevice);
+      } else {
+        finePointerQuery.removeListener(detectTouchDevice);
+      }
+    };
+  }, []); // Run immediately on mount - detection happens during preloader time
 
 
   // Track when session check is complete
@@ -67,25 +128,40 @@ export default function Home() {
     }
   }, [isHome]);
 
-  // Manage cursor visibility and ensure variables are set - ONLY on landing page
+  // Set CSS variables - always set when on landing page (needed for cursor animation)
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || typeof document === 'undefined' || !document.body) return;
     
-    // This component only renders on landing page, so we can safely assume isHome is true
-    // But we check anyway for safety
     if (isHome && pathname === '/') {
       const body = document.body;
       // Set cursor CSS variables - ensure they're always set when on landing page
+      // This ensures animation works when cursor mounts on desktop
       body.style.setProperty("--cursor-color", "rgb(238, 19, 19)");
       body.style.setProperty("--blur", "3px");
       body.style.setProperty("--innerBlur", "2px");
       body.style.setProperty("--outerColor", "rgba(226, 79, 46, 0.4)");
-      
-      // Hide default cursor on landing page
-      body.style.cursor = 'none';
-      document.documentElement.style.cursor = 'none';
-      body.setAttribute('data-landing-page', 'true');
-      document.documentElement.setAttribute('data-landing-page', 'true');
+    }
+  }, [isHome, pathname]);
+
+  // Manage cursor visibility dynamically - updates in real-time based on device type
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    // Only manage cursor visibility on landing page
+    if (isHome && pathname === '/') {
+      if (isTouchDevice === false) {
+        // Hide default cursor on landing page (desktop/laptop confirmed)
+        document.body.style.cursor = 'none';
+        document.documentElement.style.cursor = 'none';
+        document.body.setAttribute('data-landing-page', 'true');
+        document.documentElement.setAttribute('data-landing-page', 'true');
+      } else {
+        // On touch devices or while detecting, ensure cursor is visible (normal behavior)
+        document.body.style.cursor = '';
+        document.documentElement.style.cursor = '';
+        document.body.removeAttribute('data-landing-page');
+        document.documentElement.removeAttribute('data-landing-page');
+      }
     }
     
     // Cleanup: ALWAYS restore cursor when component unmounts (user navigates away)
@@ -98,12 +174,14 @@ export default function Home() {
         document.documentElement.removeAttribute('data-landing-page');
       }
     };
-  }, [isHome, pathname]);
+  }, [isHome, pathname, isTouchDevice]); // Updates whenever isTouchDevice changes
 
   return (
     <>
-      {/* Cursor renders immediately on landing page - no dynamic import delay */}
-      {isHome && (
+      {/* Cursor renders only after detection completes and confirms it's NOT a touch device */}
+      {/* Wait for detection (!== null) and only mount if isTouchDevice === false (desktop/laptop) */}
+      {/* This prevents red dot on mobile - detection happens during preloader for performance */}
+      {isHome && isTouchDevice === false && (
         <AnimatedCursor 
           innerSize={isHome ? 25 : 14}
           outerSize={isHome ? 40 : 46}
