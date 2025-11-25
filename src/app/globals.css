@@ -10,7 +10,16 @@
   --innerBlur: 2px;
   --outerColor: rgba(226, 79, 46, 0.4);
   --size: 40,
-  --outerSize: 25
+  --outerSize: 25;
+  
+  /* Design system colors for Badge and other UI components */
+  --primary: hsl(221.2 83.2% 53.3%);
+  --primary-foreground: hsl(210 40% 98%);
+  --secondary: hsl(210 40% 96.1%);
+  --secondary-foreground: hsl(222.2 47.4% 11.2%);
+  --destructive: hsl(0 84.2% 60.2%);
+  --destructive-foreground: hsl(210 40% 98%);
+  --ring: hsl(221.2 83.2% 53.3%);
 }
 
 .crossBg {
@@ -43,6 +52,12 @@
 [data-react-animated-cursor] * {
   z-index: 99999 !important;
   pointer-events: none !important;
+}
+
+/* Hide cursor on non-landing pages */
+body:not([data-landing-page="true"]) .react-animated-cursor,
+html:not([data-landing-page="true"]) .react-animated-cursor {
+  display: none !important;
 }
 
 @keyframes bg-animation {
@@ -84,6 +99,12 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }

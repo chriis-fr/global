@@ -6,10 +6,8 @@ import { BlockchainBenefits } from "@/components/landing/blockchain-benefits";
 import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
 import Preloader from "@/components/preloader";
-import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
-
-const AnimatedCursor = dynamic(() => import('react-animated-cursor'), { ssr: false });
+import AnimatedCursor from 'react-animated-cursor';
 
 export default function Home() {
   const { status } = useSession();
@@ -104,39 +102,39 @@ export default function Home() {
 
   return (
     <>
-    {/* Only show animated cursor on landing page */}
-    {isHome && (
-      <AnimatedCursor 
-        innerSize={isHome ? 25 : 14}
-        outerSize={isHome ? 40 : 46}
-        outerAlpha={0.2}
-        innerScale={0.7}
-        innerStyle={{
-          filter: "blur(var(--innerBlur))",
-          backgroundColor: "var(--cursor-color)",
-        }}
-        outerStyle={{
-          filter: "blur(var(--blur))",
-          backgroundColor: "var(--outerColor)",
-          opacity: 0.4,
-        }}
-        outerScale={5}
-        clickables={[
-          "a",
-          'input[type="text"]',
-          'input[type="email"]',
-          'input[type="number"]',
-          'input[type="submit"]',
-          'input[type="image"]',
-          "label[for]",
-          "select",
-          "textarea",
-          "button",
-          ".link",
-          "img",
-        ]}
-      />
-    )}
+      {/* Cursor renders immediately on landing page - no dynamic import delay */}
+      {isHome && (
+        <AnimatedCursor 
+          innerSize={isHome ? 25 : 14}
+          outerSize={isHome ? 40 : 46}
+          outerAlpha={0.2}
+          innerScale={0.7}
+          innerStyle={{
+            filter: "blur(var(--innerBlur))",
+            backgroundColor: "var(--cursor-color)",
+          }}
+          outerStyle={{
+            filter: "blur(var(--blur))",
+            backgroundColor: "var(--outerColor)",
+            opacity: 0.4,
+          }}
+          outerScale={5}
+          clickables={[
+            "a",
+            'input[type="text"]',
+            'input[type="email"]',
+            'input[type="number"]',
+            'input[type="submit"]',
+            'input[type="image"]',
+            "label[for]",
+            "select",
+            "textarea",
+            "button",
+            ".link",
+            "img",
+          ]}
+        />
+      )}
       {/* Preloader - shows immediately, mounts once and stays until complete */}
       {shouldShowPreloader && (
         <Preloader 
