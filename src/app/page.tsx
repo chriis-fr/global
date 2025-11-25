@@ -131,7 +131,7 @@ export default function Home() {
             "textarea",
             "button",
             ".link",
-            "img",
+            // "img",
           ]}
         />
       )}

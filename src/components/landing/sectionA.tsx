@@ -77,42 +77,40 @@ const SectionA = () => {
             </div>
           </div>
 
-          {/* Hero Image section - styled for future laptop/phone images */}
+          {/* Hero Image section - dynamic rendering based on device */}
           <div className="relative group mt-14 border-4 border-black">
+            {/* Blur effect background */}
             <div className="absolute top-2 lg:-top-8 border-4 border-black left-1/2 transform -translate-x-1/2 w-[90%] mx-auto h-24 lg:h-80 bg-primary/50 rounded-full blur-3xl"></div>
-            <Image
-              width={1200}
-              height={1200}
-              className="w-full md:w-[1200px] mx-auto rounded-lg relative leading-none flex items-center border border-t-2 border-secondary border-t-primary/30"
-              src="/chainsnobg.png"
-              alt="ChainsERP Dashboard"
-            />
+            
+            {/* Laptop image - shown on desktop/tablet (md and above) */}
+            <div className="hidden md:block">
+              <Image
+                width={1200}
+                height={1200}
+                className="w-full md:w-[1200px] mx-auto rounded-lg relative leading-none flex items-center border border-t-2 border-secondary border-t-primary/30"
+                src="/laptop.png"
+                alt="ChainsERP Dashboard - Desktop View"
+                priority
+              />
+            </div>
+            
+            {/* Mobile image - shown on mobile devices (below md breakpoint) */}
+            <div className="block md:hidden">
+              <Image
+                width={600}
+                height={1200}
+                className="w-full mx-auto rounded-lg relative leading-none flex items-center border border-t-2 border-secondary border-t-primary/30"
+                src="/leftmobile.png"
+                alt="ChainsERP Dashboard - Mobile View"
+                priority
+              />
+            </div>
+            
+            {/* Gradient overlay */}
             <div className="absolute bottom-0 left-0 w-full h-20 md:h-28 bg-gradient-to-b from-background/0 via-background/50 to-background rounded-lg"></div>
           </div>
         </div>
-        {/* <div className="text-center mb-16 border-4 border-black relative z-10">
-          <div className="flex justify-center">
-            <div className="bg-white border-4 border-black mb-4 rounded-2xl p-2 relative z-10">
-              <Image
-                src="/chainsnobg.png"
-                alt="ChainsERP"
-                width={150}
-                height={150}
-                className="rounded-xl"
-              />
-            </div>
-          </div>
-          <h1 className="text-4xl md:text-6xl font-bold text-white mb-6">
-            Blockchain-Powered {' '}
-            <span className="bg-gradient-to-r from-blue-400 to-blue-200 bg-clip-text text-transparent">
-              Global Business
-            </span>
-          </h1>
-          <p className="text-xl text-blue-100 max-w-3xl mx-auto">
-            Enterprise-grade security and transparency with blockchain technology, 
-            designed for modern global business operations
-          </p>
-        </div> */}
+        
         </section>
     )
 }
