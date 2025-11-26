@@ -218,6 +218,11 @@ body, html {
   }
 }
 
+font-face {
+  font-family: Neue;
+  src: url("../../public/fonts/neue-montreal-free-demo-pangram-pangram-030418/NeueMontreal-Regular.otf");
+}
+
 /* Custom reverse spin animation for reload icon */
 @keyframes spin-reverse {
   from {
