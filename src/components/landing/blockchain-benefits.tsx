@@ -18,7 +18,10 @@ export function BlockchainBenefits() {
         <SectionA />
 
         {/* Core Benefits */}
-        {/* <SectionB /> */}
+        
+<div className="w-screen mx-[calc(50%-50vw)]">
+  <SectionB />
+</div>
 
         {/* Business Solutions */}
         {/* <SectionC /> */}

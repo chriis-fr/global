@@ -20,11 +20,78 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Chains-Global Finance",
+  metadataBase: new URL("https://chains-erp.com"),
+  title: {
+    default: "Global Finance - Flexible, secure and simple borderless finance for DAOs, Freelancers, Contractors & more...",
+    template: "%s | Chains ERP"
+  },
+  description:
+    "Chains ERP is a next-generation global finance and business automation platform integrating Web2 + Web3 technology. For companies seeking accounting, payroll, HR, blockchain payments, B2B automation, and decentralized financial tools.",
+  keywords: [
+    "Chains ERP",
+    "global finance software",
+    "web3 erp",
+    "blockchain erp",
+    "crypto payments",
+    "b2b finance platform",
+    "decentralized accounting",
+    "smart contract finance",
+    "Christopher Odhiambo",
+    "next generation erp"
+  ],
+  authors: [{ name: "Christopher Odhiambo" }],
+  creator: "Christopher Odhiambo",
+  publisher: "Chains ERP",
   icons: {
-    icon: "./chains.PNG"
-  }
+    icon: "/chains.PNG",
+    shortcut: "/chains.PNG",
+    apple: "/chains.PNG",
+  },
+
+  openGraph: {
+    title: "Chains ERP – Global Finance & Web3 Business Automation",
+    description:
+      "A powerful ERP that merges Web2 and Web3 to power global businesses with accounting, HR, payments, and decentralized finance tools.",
+    url: "https://global.chains-erp.com",
+    siteName: "Chains ERP",
+    images: [
+      {
+        url: "/chains.PNG",
+        width: 1200,
+        height: 630,
+        alt: "Chains ERP – Global Finance Platform",
+      },
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+
+  twitter: {
+    card: "summary_large_image",
+    title: "Chains ERP – Finance + Web3 automation",
+    description:
+      "Next-generation ERP that merges Web2 and Web3 for global businesses.",
+    images: ["/chains.PNG"],
+    creator: "@chains_erp",
+  },
+
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-video-preview": -1,
+      "max-snippet": -1,
+    },
+  },
+
+  alternates: {
+    canonical: "https://global.chains-erp.com",
+  },
 };
+
 
 export const viewport = {
   width: "device-width",

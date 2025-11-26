@@ -58,7 +58,7 @@ const benefits = [
 const SectionB = () => {
 
     return(
-        <div className="mb-16 border-4 border-black">
+        <div className="mb-16 mt-4 w-screen mx-[calc(50%-50vw)] border-4 border-black px-4 sm:px-6 lg:px-8 overflow-x-hidden">
           <h3 className="text-2xl font-bold text-center mb-10">
             Core Blockchain Benefits
           </h3>
