@@ -42,10 +42,10 @@ const SectionB = () => {
   const isMobile = width ? width < 1023 : true;
 
     return(
-        <div className="h-screen w-full border-8 border-red-600 bg-[#1a1a1a] text-gray-400 flex items-center flex-col mt-12 justify-center relative overflow-hidden">
+        <div className="h-screen w-full border-8 border-red-600 bg-[#1a1a1a] text-[#4cf7029e] flex items-center flex-col mt-12 justify-center relative overflow-hidden">
           {/* Mobile Text */}
           <div className="font-Neue text-3xl mb-4 p-8 ml-6 flex lg:hidden flex-col lg:text-6xl lg:w-3/5 w-screen lg:text-left absolute top-10">
-            {["Connect", "around the", "Globe"].map((wrd, index) => {
+            {["Invoice, Receive ", "& Pay ", "around the", "Globe"].map((wrd, index) => {
               return (
                 <div
                   className={`${
@@ -96,13 +96,14 @@ const SectionB = () => {
               {!isMobile && <UserPopLg></UserPopLg>}
             </motion.div>
 
-            <div className="font-Neue z-30 text-white flex flex-col absolute w-2/5 xl:w-3/5 text-6xl right-10 xl:left-none top-20 text-right">
-              Connect{" "}
-              <div className="p-2 border rounded-full text-left px-4 border-gray-600">
+            <div className="font-Neue z-30  text-[#4cf7029e] flex flex-col absolute w-2/5 xl:w-2/5 text-6xl right-10 xl:left-none top-20 text-right">
+              Invoicing{" "}
+              <div className="p-2 border rounded-full text-left text-white px-4 ">
                 Around{" "}
               </div>
-              <span className="text-gray-400">the Globe</span>
+              <span className="text-[#4cf7029e]">the Globe</span>
             </div>
+
 
             <div className="hidden absolute right-4 space-x-4">
               {images.map((col, index) => {
