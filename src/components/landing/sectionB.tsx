@@ -45,7 +45,7 @@ const SectionB = () => {
         <div className="h-screen w-full border-8 border-red-600 bg-[#1a1a1a] text-[#4cf7029e] flex items-center flex-col mt-12 justify-center relative overflow-hidden">
           {/* Mobile Text */}
           <div className="font-Neue text-3xl mb-4 p-8 ml-6 flex lg:hidden flex-col lg:text-6xl lg:w-3/5 w-screen lg:text-left absolute top-10">
-            {["Invoice, Receive ", "& Pay ", "around the", "Globe"].map((wrd, index) => {
+            {["Invoice, Receive ", "& Pay ", "all round the", "Globe"].map((wrd, index) => {
               return (
                 <div
                   className={`${
@@ -97,7 +97,7 @@ const SectionB = () => {
             </motion.div>
 
             <div className="font-Neue z-30  text-[#4cf7029e] flex flex-col absolute w-2/5 xl:w-2/5 text-6xl right-10 xl:left-none top-20 text-right">
-              Invoicing{" "}
+              Send Invoices{" "}
               <div className="p-2 border rounded-full text-left text-white px-4 ">
                 Around{" "}
               </div>
