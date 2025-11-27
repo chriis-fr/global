@@ -14,7 +14,8 @@ export default function Home() {
   const [preloaderComplete, setPreloaderComplete] = useState(false);
   const landingPageRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
-  const [isTouchDevice, setIsTouchDevice] = useState<boolean | null>(null);
+  // Default to false (desktop) to allow cursor to mount early and preload during preloader
+  const [isTouchDevice, setIsTouchDevice] = useState<boolean>(false);
 
   // Detect if device is a touch device (mobile/tablet) - dynamically updates on resize/device changes
   // This detection happens immediately on mount and updates in real-time
@@ -143,20 +144,30 @@ export default function Home() {
     }
   }, [isHome, pathname]);
 
-  // Manage cursor visibility dynamically - updates in real-time based on device type
+  // Manage cursor visibility - show normal cursor during preloader, animated cursor after
   useEffect(() => {
     if (typeof window === 'undefined') return;
     
     // Only manage cursor visibility on landing page
     if (isHome && pathname === '/') {
-      if (isTouchDevice === false) {
-        // Hide default cursor on landing page (desktop/laptop confirmed)
-        document.body.style.cursor = 'none';
-        document.documentElement.style.cursor = 'none';
-        document.body.setAttribute('data-landing-page', 'true');
-        document.documentElement.setAttribute('data-landing-page', 'true');
+      if (shouldShowPreloader) {
+        // During preloader: show normal cursor (animated cursor is mounted but hidden)
+        document.body.style.cursor = '';
+        document.documentElement.style.cursor = '';
+        document.body.removeAttribute('data-landing-page');
+        document.documentElement.removeAttribute('data-landing-page');
+      } else if (isTouchDevice === false) {
+        // After preloader completes: hide default cursor, show animated cursor
+        // Small delay to ensure smooth transition
+        const timer = setTimeout(() => {
+          document.body.style.cursor = 'none';
+          document.documentElement.style.cursor = 'none';
+          document.body.setAttribute('data-landing-page', 'true');
+          document.documentElement.setAttribute('data-landing-page', 'true');
+        }, 50); // Minimal delay for smooth transition
+        return () => clearTimeout(timer);
       } else {
-        // On touch devices or while detecting, ensure cursor is visible (normal behavior)
+        // On touch devices: keep normal cursor
         document.body.style.cursor = '';
         document.documentElement.style.cursor = '';
         document.body.removeAttribute('data-landing-page');
@@ -174,44 +185,50 @@ export default function Home() {
         document.documentElement.removeAttribute('data-landing-page');
       }
     };
-  }, [isHome, pathname, isTouchDevice]); // Updates whenever isTouchDevice changes
+  }, [isHome, pathname, isTouchDevice, shouldShowPreloader]); // Include shouldShowPreloader
 
   return (
     <>
-      {/* Cursor renders only after detection completes and confirms it's NOT a touch device */}
-      {/* Wait for detection (!== null) and only mount if isTouchDevice === false (desktop/laptop) */}
-      {/* This prevents red dot on mobile - detection happens during preloader for performance */}
+      {/* Preload animated cursor during preloader - mount early but keep hidden until preloader completes */}
+      {/* This ensures cursor is ready immediately when preloader finishes - no lag or gap */}
       {isHome && isTouchDevice === false && (
-        <AnimatedCursor 
-          innerSize={isHome ? 25 : 14}
-          outerSize={isHome ? 40 : 46}
-          outerAlpha={0.2}
-          innerScale={0.7}
-          innerStyle={{
-            filter: "blur(var(--innerBlur))",
-            backgroundColor: "var(--cursor-color)",
-          }}
-          outerStyle={{
-            filter: "blur(var(--blur))",
-            backgroundColor: "var(--outerColor)",
-            opacity: 0.4,
-          }}
-          outerScale={5}
-          clickables={[
-            "a",
-            'input[type="text"]',
-            'input[type="email"]',
-            'input[type="number"]',
-            'input[type="submit"]',
-            'input[type="image"]',
-            "label[for]",
-            "select",
-            "textarea",
-            "button",
-            ".link",
-            // "img",
-          ]}
-        />
+        <div style={{ 
+          opacity: shouldShowPreloader ? 0 : 1,
+          visibility: shouldShowPreloader ? 'hidden' : 'visible',
+          pointerEvents: shouldShowPreloader ? 'none' : 'auto',
+          transition: 'opacity 0.1s ease-in-out'
+        }}>
+          <AnimatedCursor 
+            innerSize={isHome ? 25 : 14}
+            outerSize={isHome ? 40 : 46}
+            outerAlpha={0.2}
+            innerScale={0.7}
+            innerStyle={{
+              filter: "blur(var(--innerBlur))",
+              backgroundColor: "var(--cursor-color)",
+            }}
+            outerStyle={{
+              filter: "blur(var(--blur))",
+              backgroundColor: "var(--outerColor)",
+              opacity: 0.4,
+            }}
+            outerScale={5}
+            clickables={[
+              "a",
+              'input[type="text"]',
+              'input[type="email"]',
+              'input[type="number"]',
+              'input[type="submit"]',
+              'input[type="image"]',
+              "label[for]",
+              "select",
+              "textarea",
+              "button",
+              ".link",
+              // "img",
+            ]}
+          />
+        </div>
       )}
       {/* Preloader - shows immediately, mounts once and stays until complete */}
       {shouldShowPreloader && (

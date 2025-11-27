@@ -2,7 +2,6 @@ import Face1 from "../../../public/globeImages/enterprise.png";
 import Face2 from "../../../public/globeImages/freelance.png";
 import Face3 from "../../../public/globeImages/meeting.png";
 
-// import Link from "next/link"
 import { motion } from 'framer-motion'
 import useMediaQuery from "@/lib/hooks/useMediaQuery"
 import dynamic from "next/dynamic"
@@ -129,38 +128,6 @@ const SectionB = () => {
               })}
             </div>
           </div>
-          {/* <h3 className="text-2xl font-bold text-center mb-10">
-            Core Blockchain Benefits
-          </h3>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {benefits.map((benefit, index) => {
-              const Icon = benefit.icon
-              const cardContent = (
-                <motion.div
-                  key={benefit.title}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                  className="p-6 rounded-xl bg-white/5 hover:bg-white/10 transition-colors cursor-pointer ring-2 ring-blue-400/50 hover:ring-blue-500"
-                >
-                  <div className="w-12 h-12 bg-blue-500/20 rounded-lg flex items-center justify-center mb-4">
-                    <Icon className="h-6 w-6 text-blue-400" />
-                  </div>
-                  <h3 className="text-xl font-semibold mb-2">
-                    {benefit.title}
-                  </h3>
-                  <p className="text-blue-100">
-                    {benefit.description}
-                  </p>
-                </motion.div>
-              )
-              return (
-                <Link href={benefit.link} key={benefit.title} style={{ textDecoration: 'none' }}>
-                  {cardContent}
-                </Link>
-              )
-            })}
-          </div> */}
         </div>
     )
 }

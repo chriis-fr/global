@@ -18,14 +18,14 @@ export function BlockchainBenefits() {
         <SectionA />
 
         {/* Core Benefits */}
-        
-<div className="w-screen mx-[calc(50%-50vw)]">
-  <SectionB />
-</div>
+
+        <div className="w-screen mx-[calc(50%-50vw)]">
+          <SectionB />
+        </div>
 
         {/* Business Solutions */}
-        {/* <SectionC /> */}
-        
+        <SectionC />
+
 
         {/* Integrations and API Solutions */}
         {/* <SectionD /> */}

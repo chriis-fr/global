@@ -51,8 +51,8 @@ const SectionA = () => {
 
             {/* Description */}
             <p className="max-w-screen-sm mx-auto font-serif text-sm md:text-base lg:text-lg text-gray-700 text-muted-foreground">
-              {`Enterprise-grade security with modern technology ensuring business continuity. Send your customers and clients
-              the most flexible invoices. Fast, Flexible, and Secure!`}
+              {`Send your customers and clients
+              the most flexible invoices. Quick onboarding, Easy to use, ensuring business continuity. Fast, Flexible, and Secure!`}
             </p>
 
             {/* Buttons */}
