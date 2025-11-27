@@ -6,29 +6,60 @@ import {
   ArrowUpLeft,
 } from 'lucide-react'
 
+// const benefits = [
+//   {
+//     icon: ArrowUpLeft,
+//     title: 'Accounts Payable',
+//     description: 'Manage business payments and streamline outgoing transactions in both crypto and fiat.',
+//     link: '/services'
+//   },
+//   {
+//     icon: ArrowDownRight,
+//     title: 'Accounts Receivable',
+//     description: 'Create invoices, and get paid seamlessly in crypto and fiat while staying compliant.',
+//     link: '/services'
+//   },
+//   {
+//     icon: Receipt,
+//     title: 'Expenses',
+//     description: 'Manage corporate expenses, track spending, and get reimbursed easily across crypto and fiat.',
+//     link: '/services'
+//   },
+//   {
+//     icon: Users,
+//     title: 'Payroll & Compensation',
+//     description: 'Pay your team salaries, bonuses, and contractor bills globally in crypto and fiat.',
+//     link: '/services'
+//   }
+// ];
+
 const benefits = [
   {
     icon: ArrowUpLeft,
     title: 'Accounts Payable',
-    description: 'Manage business payments and streamline outgoing transactions in both crypto and fiat.',
+    description:
+      'Manage outgoing crypto & fiat payments with batch requests for DAOs, automated workflows, audit-ready tracking, and secure supplier wallet validation.',
     link: '/services'
   },
   {
     icon: ArrowDownRight,
     title: 'Accounts Receivable',
-    description: 'Create invoices and get paid seamlessly in crypto and fiat while staying compliant.',
+    description:
+      'Create compliant invoices, accept multi-chain payments, automate cross-currency handling, and keep a clear, auditable record for your finance team.',
     link: '/services'
   },
   {
     icon: Receipt,
     title: 'Expenses',
-    description: 'Manage corporate expenses, track spending, and get reimbursed easily across crypto and fiat.',
+    description:
+      'Track spending, reimburse in crypto or fiat, enforce policies, and keep transparent records with simplified reconciliation and approval flows.',
     link: '/services'
   },
   {
     icon: Users,
     title: 'Payroll & Compensation',
-    description: 'Pay your team salaries, bonuses, and contractor bills globally in crypto and fiat.',
+    description:
+      'Pay global teams in crypto or fiat with scheduling, bulk payouts, secure address checks, and full visibility over payroll history.',
     link: '/services'
   }
 ];
@@ -78,10 +109,10 @@ const SectionC = () => {
                   </span>
                 </div>
 
-                <CardTitle className="text-black">{title}</CardTitle>
+                <CardTitle className="text-black font-bold font-sans">{title}</CardTitle>
               </CardHeader>
 
-              <CardContent className="text-gray-700">
+              <CardContent className="text-gray-700 font-serif">
                 {description}
               </CardContent>
             </Card>
