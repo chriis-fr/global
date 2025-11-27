@@ -9,35 +9,71 @@ import {
 } from 'lucide-react'
 
 const integrations = [
-    {
-      icon: Calculator,
-      title: 'Accounting',
-      description: 'Import, categorize, and sync your crypto and fiat transactions with QuickBooks, Xero and more',
-      module: 'Integrations',
-      link: '/services'
-    },
-    {
-      icon: Code,
-      title: 'Accounts Payable & Receivable API',
-      description: 'Build custom finance processes and let users manage payables and receivables on your platform',
-      module: 'API Solutions',
-      link: '/services'
-    },
-    {
-      icon: Coins,
-      title: 'Crypto-to-Fiat',
-      description: 'Pay in Crypto and your beneficiary receives Fiat',
-      module: 'Payment Solutions',
-      link: '/services'
-    },
-    {
-      icon: Globe2,
-      title: 'Offramp API',
-      description: 'Add worldwide offramp capabilities to your platform and unlock a new revenue stream for your business',
-      module: 'API Solutions',
-      link: '/services'
-    }
-  ]
+  {
+    icon: Calculator,
+    title: 'Accounting',
+    description:
+      'Import, categorize, and sync your crypto and fiat transactions with QuickBooks, Xero and more. Immutable records and full audit trails ensure every financial action is permanently stored and verifiable.',
+    module: 'Integrations',
+    link: '/services'
+  },
+  {
+    icon: Code,
+    title: 'Accounts Payable & Receivable API',
+    description:
+      'Build custom finance processes and let users manage payables and receivables on your platform. Smart invoicing and smart contract–powered payments automate settlements end-to-end.',
+    module: 'API Solutions',
+    link: '/services'
+  },
+  {
+    icon: Coins,
+    title: 'Crypto-to-Fiat',
+    description:
+      'Pay in Crypto and your beneficiary receives Fiat. Decentralized payment flows with enhanced cryptographic security ensure trustless, global settlements.',
+    module: 'Payment Solutions',
+    link: '/services'
+  },
+  {
+    icon: Globe2,
+    title: 'Offramp API',
+    description:
+      'Add worldwide offramp capabilities to your platform and unlock new revenue. Identity management and tamper-proof records provide secure, compliant on/off-ramping.',
+    module: 'API Solutions',
+    link: '/services'
+  }
+]
+
+
+// const integrations = [
+//     {
+//       icon: Calculator,
+//       title: 'Accounting',
+//       description: 'Import, categorize, and sync your crypto and fiat transactions with QuickBooks, Xero and more',
+//       module: 'Integrations',
+//       link: '/services'
+//     },
+//     {
+//       icon: Code,
+//       title: 'Accounts Payable & Receivable API',
+//       description: 'Build custom finance processes and let users manage payables and receivables on your platform',
+//       module: 'API Solutions',
+//       link: '/services'
+//     },
+//     {
+//       icon: Coins,
+//       title: 'Crypto-to-Fiat',
+//       description: 'Pay in Crypto and your beneficiary receives Fiat',
+//       module: 'Payment Solutions',
+//       link: '/services'
+//     },
+//     {
+//       icon: Globe2,
+//       title: 'Offramp API',
+//       description: 'Add worldwide offramp capabilities to your platform and unlock a new revenue stream for your business',
+//       module: 'API Solutions',
+//       link: '/services'
+//     }
+//   ]
 
 const SectionD = () => {
     return(
