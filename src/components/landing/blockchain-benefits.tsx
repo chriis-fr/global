@@ -28,7 +28,7 @@ export function BlockchainBenefits() {
 
 
         {/* Integrations and API Solutions */}
-        {/* <SectionD /> */}
+        <SectionD />
 
         {/* <SectionE /> */}
       </div>

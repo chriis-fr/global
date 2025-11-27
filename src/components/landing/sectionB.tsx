@@ -5,7 +5,7 @@ import Face3 from "../../../public/globeImages/meeting.png";
 import { motion } from 'framer-motion'
 import useMediaQuery from "@/lib/hooks/useMediaQuery"
 import dynamic from "next/dynamic"
-import { useLayoutEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import Image from "next/image"
 const UserPop = dynamic(() => import("../UserPop"), { ssr: false });
 
@@ -24,21 +24,17 @@ const SectionB = () => {
     ],
   ];
 
-  const { width,  } = useMediaQuery();
+  const { width } = useMediaQuery();
+  const [isMounted, setIsMounted] = useState(false);
 
-  const [, setSize] = useState([0, 0]);
-
-  useLayoutEffect(() => {
-    function updateSize() {
-      setSize([window.innerWidth, window.innerHeight]);
-    }
-    window.addEventListener("resize", updateSize);
-    updateSize();
-    return () => window.removeEventListener("resize", updateSize);
+  // Set mounted state after component mounts (client-side only)
+  useEffect(() => {
+    setIsMounted(true);
   }, []);
 
-
-  const isMobile = width ? width < 1023 : true;
+  // Default to mobile on server to match initial client render, then update after mount
+  // This prevents hydration mismatch
+  const isMobile = isMounted ? (width ? width < 1023 : true) : true;
 
     return(
         <div className="h-screen w-full border-8 border-red-600 bg-[#1a1a1a] text-[#4cf7029e] flex items-center flex-col mt-12 justify-center relative overflow-hidden">

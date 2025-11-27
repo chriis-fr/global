@@ -5,6 +5,7 @@ import { SessionProvider } from "@/components/providers/SessionProvider";
 import { CurrencyProvider } from "@/lib/contexts/CurrencyContext";
 import { SubscriptionProvider } from "@/lib/contexts/SubscriptionContext";
 import { PermissionProvider } from "@/lib/contexts/PermissionContext";
+import CursorManager from "@/components/CursorManager";
 
 // Initialize database connection on app start
 import '../lib/db-init';
@@ -146,6 +147,7 @@ export default function RootLayout({
           <CurrencyProvider>
             <SubscriptionProvider>
               <PermissionProvider>
+                <CursorManager />
                 {children}
               </PermissionProvider>
             </SubscriptionProvider>

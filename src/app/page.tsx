@@ -144,7 +144,22 @@ export default function Home() {
     }
   }, [isHome, pathname]);
 
+  // CRITICAL: Restore cursor immediately when navigating away from landing page
+  // This runs first to ensure cursor is visible on other routes
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    // If NOT on landing page, immediately restore cursor
+    if (pathname !== '/') {
+      document.body.style.cursor = '';
+      document.documentElement.style.cursor = '';
+      document.body.removeAttribute('data-landing-page');
+      document.documentElement.removeAttribute('data-landing-page');
+    }
+  }, [pathname]); // Run immediately on pathname change
+
   // Manage cursor visibility - show normal cursor during preloader, animated cursor after
+  // CRITICAL: Only affects landing page, always restores cursor on other pages
   useEffect(() => {
     if (typeof window === 'undefined') return;
     
@@ -160,10 +175,13 @@ export default function Home() {
         // After preloader completes: hide default cursor, show animated cursor
         // Small delay to ensure smooth transition
         const timer = setTimeout(() => {
-          document.body.style.cursor = 'none';
-          document.documentElement.style.cursor = 'none';
-          document.body.setAttribute('data-landing-page', 'true');
-          document.documentElement.setAttribute('data-landing-page', 'true');
+          // Double-check we're still on landing page before hiding cursor
+          if (pathname === '/') {
+            document.body.style.cursor = 'none';
+            document.documentElement.style.cursor = 'none';
+            document.body.setAttribute('data-landing-page', 'true');
+            document.documentElement.setAttribute('data-landing-page', 'true');
+          }
         }, 50); // Minimal delay for smooth transition
         return () => clearTimeout(timer);
       } else {
@@ -175,7 +193,7 @@ export default function Home() {
       }
     }
     
-    // Cleanup: ALWAYS restore cursor when component unmounts (user navigates away)
+    // Cleanup: ALWAYS restore cursor when component unmounts or pathname changes
     return () => {
       if (typeof window !== 'undefined') {
         // Always restore cursor - this ensures it's visible on other pages

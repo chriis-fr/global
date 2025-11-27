@@ -41,8 +41,8 @@ const integrations = [
 
 const SectionD = () => {
     return(
-        <div className="border-t border-blue-800 pt-16 mb-12">
-          <h3 className="text-2xl font-bold text-center mb-10">
+        <div className="pt-16 mb-12 pb-16">
+          <h3 className="text-2xl font-bold text-center mb-10 text-black">
             Integrations and API Solutions
           </h3>
           
@@ -55,19 +55,19 @@ const SectionD = () => {
                   initial={{ opacity: 0, x: index % 2 === 0 ? -20 : 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: index * 0.1 + 0.3 }}
-                  className="flex bg-white/5 rounded-xl overflow-hidden cursor-pointer hover:bg-white/10 transition-colors"
+                  className="flex bg-white border border-gray-200 rounded-xl overflow-hidden cursor-pointer hover:bg-gray-50 hover:shadow-lg transition-all shadow-md"
                 >
-                  <div className="w-16 flex-shrink-0 bg-blue-800/30 flex items-center justify-center">
-                    <Icon className="h-8 w-8 text-blue-400" />
+                  <div className="w-16 flex-shrink-0 bg-blue-100 flex items-center justify-center">
+                    <Icon className="h-8 w-8 text-[#0066ff]" />
                   </div>
                   <div className="p-5">
-                    <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider">
+                    <span className="text-xs font-semibold text-primary uppercase tracking-wider">
                       {integration.module}
                     </span>
-                    <h4 className="text-lg font-semibold mb-2 mt-1">
+                    <h4 className="text-lg font-semibold mb-2 mt-1 text-black">
                       {integration.title}
                     </h4>
-                    <p className="text-blue-100 text-sm">
+                    <p className="text-gray-700 text-sm">
                       {integration.description}
                     </p>
                   </div>
