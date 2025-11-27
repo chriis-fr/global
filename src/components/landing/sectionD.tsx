@@ -79,7 +79,7 @@ const SectionD = () => {
     return(
         <div className="pt-16 mb-12 pb-16">
           <h3 className="text-2xl font-bold text-center mb-10 text-black">
-            Integrations and API Solutions
+            <span className="text-transparent bg-gradient-to-r from-[#D247BF] to-primary bg-clip-text">Integrations and API Solutions</span>
           </h3>
           
           <div className="grid md:grid-cols-2 gap-8">
