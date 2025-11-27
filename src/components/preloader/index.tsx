@@ -57,7 +57,7 @@ const Preloader = ({
     
     if (secondOverlayRef.current) {
       const overlay = secondOverlayRef.current;
-      overlay.style.background = '#10b981';
+      overlay.style.background = '#ffffff';
       overlay.style.position = 'fixed';
       overlay.style.height = '100vh';
       overlay.style.width = '100vw';
@@ -204,7 +204,7 @@ const Preloader = ({
       <SecondOverlay 
         ref={secondOverlayRef}
         style={{
-          background: '#10b981',
+          background: '#ffffff',
           position: 'fixed',
           height: '100vh',
           width: '100vw',

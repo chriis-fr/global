@@ -175,7 +175,7 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
         console.log('🔄 [getUserSubscription] Cached trial data shows limits - refreshing');
         subscriptionCache.delete(cacheKey);
       } else {
-        return cached.data;
+      return cached.data;
       }
     }
     

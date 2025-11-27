@@ -16,6 +16,7 @@ export const Wrapper = styled.div`
   display: flex;
   align-items: flex-end;
   justify-content: flex-end;
+  pointer-events: none; /* Allow cursor to show through preloader */
 `;
 
 export const Inner = styled.div`
@@ -59,7 +60,7 @@ export const Inner = styled.div`
 `;
 
 export const SecondOverlay = styled.div`
-  background: var(--emerald);
+  background: var(--white);
   position: fixed;
   height: 100vh;
   width: 100vw;

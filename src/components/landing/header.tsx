@@ -2,9 +2,9 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { 
-  Menu, 
-  X, 
+import {
+  Menu,
+  X,
   ChevronDown,
   Globe,
   Shield,
@@ -86,7 +86,7 @@ export function Header() {
   ]
 
   return (
-    <header className="top-5 shadow-inner font-serif bg-opacity-15 w-[90%]  mx-auto sticky border-secondary border z-50 rounded-2xl bg-gray-200 backdrop-blur-md ">
+    <header className="fixed left-1/2 -translate-x-1/2  top-3 shadow-inner font-sans bg-opacity-15 w-[90%] border border-gray-300 mx-auto z-50 rounded-2xl bg-white backdrop-blur-md ">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
@@ -95,18 +95,18 @@ export function Header() {
               <Image
                 src="/chainsnobg.png"
                 alt="ChainsERP"
-                width={40}
-                height={40}
+                width={45}
+                height={45}
                 className="bg-white rounded-lg"
               />
-              <span className="text-xl font-bold text-gray-900">Global Finance</span>
+              <span className="text-xl font-sans font-bold text-gray-900">Global Finance</span>
             </Link>
           </div>
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-8">
             {navigation.map((item) => (
-              <div key={item.name} className="relative">
+              <div key={item.name} className="relative ">
                 {item.hasDropdown ? (
                   <div
                     onMouseEnter={() => {
@@ -123,7 +123,7 @@ export function Header() {
                       <span>{item.name}</span>
                       <ChevronDown className="h-4 w-4" />
                     </button>
-                    
+
                     {/* Dropdown */}
                     <AnimatePresence>
                       {((item.name === 'Products' && isProductsOpen) || (item.name === 'Solutions' && isSolutionsOpen)) && (
@@ -175,7 +175,7 @@ export function Header() {
             {session && (
               <Link
                 href="/dashboard"
-                className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 transition-colors font-medium"
+                className="flex items-center space-x-2 hover:bg-blue-800 text-white bg-blue-600 py-1 px-4  rounded-lg transition-colors font-medium"
               >
                 <LayoutDashboard className="h-4 w-4" />
                 <span>Dashboard</span>
@@ -196,17 +196,19 @@ export function Header() {
                 Sign In
               </Link>
             )}
-            <motion.div
+            {!session && <motion.div
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
+
               <Link
                 href="/auth"
                 className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors"
               >
-                {session ? 'Go to Dashboard' : 'Get Started'}
+
+                {'Get Started'}
               </Link>
-            </motion.div>
+            </motion.div>}
           </div>
 
           {/* Mobile menu button */}
@@ -244,7 +246,7 @@ export function Header() {
                     {item.name}
                   </Link>
                 ))}
-                
+
                 {/* Mobile Dashboard button - only show if authenticated */}
                 {session && (
                   <Link
@@ -256,7 +258,7 @@ export function Header() {
                     <span>Dashboard</span>
                   </Link>
                 )}
-                
+
                 <div className="pt-4 border-t border-gray-200 space-y-3">
                   {session ? (
                     <button

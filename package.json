@@ -11,9 +11,11 @@
   },
   "dependencies": {
     "@auth/mongodb-adapter": "^3.10.0",
+    "@radix-ui/react-slot": "^1.2.4",
     "@types/mongodb": "^4.0.7",
     "@types/nodemailer": "^6.4.17",
     "bcryptjs": "^3.0.2",
+    "class-variance-authority": "^0.7.1",
     "framer-motion": "^12.16.0",
     "gsap": "^3.13.0",
     "html2canvas": "^1.4.1",
@@ -23,11 +25,15 @@
     "next": "15.3.3",
     "next-auth": "^4.24.11",
     "nodemailer": "^6.10.1",
+    "radix-ui": "^1.4.3",
     "react": "^19.0.0",
+    "react-animated-cursor": "^2.11.2",
     "react-dom": "^19.0.0",
     "react-hot-toast": "^2.5.2",
+    "react-xarrows": "^2.0.2",
     "stripe": "^18.5.0",
     "styled-components": "^6.1.19",
+    "tailwind-merge": "^3.4.0",
     "wouter": "^3.7.1",
     "zustand": "^5.0.8"
   },
@@ -42,5 +48,11 @@
     "eslint-config-next": "15.3.3",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "overrides": {
+    "react-animated-cursor": {
+      "react": "^19.0.0",
+      "react-dom": "^19.0.0"
+    }
   }
 }
