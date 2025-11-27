@@ -4,7 +4,6 @@ import SectionA from './sectionA'
 import SectionB from './sectionB'
 import SectionC from './sectionC'
 import SectionD from './sectionD'
-import SectionE from './sectionE'
 
 
 
