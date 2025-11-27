@@ -2,9 +2,9 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { 
-  Menu, 
-  X, 
+import {
+  Menu,
+  X,
   ChevronDown,
   Globe,
   Shield,
@@ -86,7 +86,7 @@ export function Header() {
   ]
 
   return (
-    <header className="fixed left-1/2 -translate-x-1/2  top-3 shadow-inner font-sans bg-opacity-15 w-[90%] border-red-500 border mx-auto z-50 rounded-2xl bg-white backdrop-blur-md ">
+    <header className="fixed left-1/2 -translate-x-1/2  top-3 shadow-inner font-sans bg-opacity-15 w-[90%] border border-gray-300 mx-auto z-50 rounded-2xl bg-white backdrop-blur-md ">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
@@ -106,7 +106,7 @@ export function Header() {
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-8">
             {navigation.map((item) => (
-              <div key={item.name} className="relative border ">
+              <div key={item.name} className="relative ">
                 {item.hasDropdown ? (
                   <div
                     onMouseEnter={() => {
@@ -123,7 +123,7 @@ export function Header() {
                       <span>{item.name}</span>
                       <ChevronDown className="h-4 w-4" />
                     </button>
-                    
+
                     {/* Dropdown */}
                     <AnimatePresence>
                       {((item.name === 'Products' && isProductsOpen) || (item.name === 'Solutions' && isSolutionsOpen)) && (
@@ -196,16 +196,16 @@ export function Header() {
                 Sign In
               </Link>
             )}
-            {!session &&<motion.div
+            {!session && <motion.div
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
-              
-               <Link
+
+              <Link
                 href="/auth"
                 className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors"
               >
-                
+
                 {'Get Started'}
               </Link>
             </motion.div>}
@@ -246,7 +246,7 @@ export function Header() {
                     {item.name}
                   </Link>
                 ))}
-                
+
                 {/* Mobile Dashboard button - only show if authenticated */}
                 {session && (
                   <Link
@@ -258,7 +258,7 @@ export function Header() {
                     <span>Dashboard</span>
                   </Link>
                 )}
-                
+
                 <div className="pt-4 border-t border-gray-200 space-y-3">
                   {session ? (
                     <button
