@@ -55,7 +55,7 @@ export default function UserPop() {
                     unoptimized={true}
                     alt="User"
                 ></Image>
-                {GlobeIcon("fill-[#242425]", "100%", "100%")}
+                {GlobeIcon("fill-[#555f60]", "100%", "100%")}
 
                 <Image
                     id="6LT"
