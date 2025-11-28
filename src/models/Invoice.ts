@@ -56,6 +56,7 @@ export interface PaymentSettings {
   cryptoNetwork?: string;
   cryptoCurrency?: string;
   walletAddress?: string;
+  chainId?: number; // Chain ID for crypto payments (e.g., 42220 for Celo)
   tokenAddress?: string; // Contract address for the crypto token
   bankAccount?: {
     accountNumber: string;

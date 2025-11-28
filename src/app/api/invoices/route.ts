@@ -138,6 +138,8 @@ export async function POST(request: NextRequest) {
       paymentMethod,
       paymentNetwork,
       paymentAddress,
+      chainId,
+      tokenAddress,
       bankName,
       accountNumber,
       routingNumber,
@@ -413,6 +415,8 @@ export async function POST(request: NextRequest) {
         enableMultiCurrency,
         cryptoNetwork: paymentNetwork,
         walletAddress: paymentAddress,
+        ...(chainId && { chainId }), // Only include if provided
+        ...(tokenAddress && { tokenAddress }), // Only include if provided
         bankAccount: bankName ? {
           accountNumber: accountNumber || '',
           routingNumber: routingNumber || '',

@@ -42,6 +42,7 @@ import BankSelector from '@/components/BankSelector';
 import { Bank } from '@/data';
 import FloatingActionButton from '@/components/dashboard/FloatingActionButton';
 import { useSubscription } from '@/lib/contexts/SubscriptionContext';
+import { CELO_TOKENS } from '@/lib/chains/celo';
 
 interface Client {
   _id: string;
@@ -90,6 +91,8 @@ interface InvoiceFormData {
   fiatPaymentSubtype?: 'bank' | 'mpesa_paybill' | 'mpesa_till' | 'phone';
   paymentNetwork?: string;
   paymentAddress?: string;
+  chainId?: number; // Chain ID for crypto payments (e.g., 42220 for Celo)
+  tokenAddress?: string; // Contract address for the crypto token
   bankName?: string;
   swiftCode?: string;
   bankCode?: string;
@@ -166,6 +169,8 @@ const defaultInvoiceData: InvoiceFormData = {
   fiatPaymentSubtype: 'bank',
   paymentNetwork: '',
   paymentAddress: '',
+  chainId: undefined, // Optional - only set when Celo is selected
+  tokenAddress: undefined, // Optional - only set when Celo is selected
   bankName: '',
   swiftCode: '',
   bankCode: '',
@@ -729,7 +734,10 @@ export default function CreateInvoicePage() {
           ...defaultInvoiceData,
           ...data.data,
           attachedFiles: data.data.attachedFiles || [],
-          ccClients: data.data.ccClients || []
+          ccClients: data.data.ccClients || [],
+          // Map chainId and tokenAddress from paymentSettings if they exist
+          chainId: data.data.paymentSettings?.chainId || data.data.chainId,
+          tokenAddress: data.data.paymentSettings?.tokenAddress || data.data.tokenAddress
         };
         
         // Keep amounts exactly as stored - no recalculation
@@ -947,15 +955,61 @@ export default function CreateInvoicePage() {
               const matchingNetwork = networks.find(network => network.name === selectedCurrency.network);
               if (matchingNetwork) {
                 updated.paymentNetwork = matchingNetwork.id;
+                // Clear chainId and tokenAddress if not Celo
+                if (matchingNetwork.id !== 'celo') {
+                  updated.chainId = undefined;
+                  updated.tokenAddress = undefined;
+                } else {
+                  // Set chainId and sync tokenAddress based on currency
+                  updated.chainId = 42220;
+                  // Sync tokenAddress with currency selection for Celo tokens
+                  const currencyCode = String(value).toUpperCase();
+                  if (currencyCode === 'USDT') {
+                    updated.tokenAddress = CELO_TOKENS.USDT.address;
+                  } else if (currencyCode === 'CUSD') {
+                    updated.tokenAddress = CELO_TOKENS.cUSD.address;
+                  } else {
+                    // Default to cUSD for other Celo currencies
+                    updated.tokenAddress = CELO_TOKENS.cUSD.address;
+                  }
+                }
               }
             }
           } else if (selectedCurrency && selectedCurrency.type === 'fiat') {
             // Automatically switch payment method to fiat for fiat currencies
             updated.paymentMethod = 'fiat';
-            // Clear the payment network for fiat currencies
+            // Clear the payment network and chain/token fields for fiat currencies
             updated.paymentNetwork = '';
+            updated.chainId = undefined;
+            updated.tokenAddress = undefined;
           }
         } else {
+        }
+      }
+      
+      // Sync currency when token is selected (if Celo network is active)
+      if (field === 'tokenAddress' && updated.paymentNetwork === 'celo' && value) {
+        if (String(value) === CELO_TOKENS.USDT.address) {
+          updated.currency = 'USDT';
+          setUserHasSelectedCurrency(true); // Mark currency as manually selected
+        } else if (String(value) === CELO_TOKENS.cUSD.address) {
+          updated.currency = 'CUSD';
+          setUserHasSelectedCurrency(true); // Mark currency as manually selected
+        }
+      }
+      
+      // Sync tokenAddress when network changes to Celo (if currency is a Celo token)
+      if (field === 'paymentNetwork' && value === 'celo') {
+        updated.chainId = 42220;
+        // Sync tokenAddress based on current currency
+        const currentCurrency = String(updated.currency || '').toUpperCase();
+        if (currentCurrency === 'USDT') {
+          updated.tokenAddress = CELO_TOKENS.USDT.address;
+        } else if (currentCurrency === 'CUSD') {
+          updated.tokenAddress = CELO_TOKENS.cUSD.address;
+        } else {
+          // Default to cUSD if currency doesn't match
+          updated.tokenAddress = CELO_TOKENS.cUSD.address;
         }
       }
       
@@ -3717,6 +3771,30 @@ export default function CreateInvoicePage() {
                                   type="button"
                                   onClick={() => {
                                     handleInputChange('paymentNetwork', network.id);
+                                    // Clear chainId and tokenAddress if not Celo, or sync with currency if Celo
+                                    setFormData(prev => {
+                                      if (network.id === 'celo') {
+                                        // Sync tokenAddress with current currency when Celo is selected
+                                        const currentCurrency = String(prev.currency || '').toUpperCase();
+                                        let tokenAddress = CELO_TOKENS.cUSD.address; // Default
+                                        if (currentCurrency === 'USDT') {
+                                          tokenAddress = CELO_TOKENS.USDT.address;
+                                        } else if (currentCurrency === 'CUSD') {
+                                          tokenAddress = CELO_TOKENS.cUSD.address;
+                                        }
+                                        return {
+                                          ...prev,
+                                          chainId: 42220,
+                                          tokenAddress
+                                        };
+                                      } else {
+                                        return {
+                                          ...prev,
+                                          chainId: undefined,
+                                          tokenAddress: undefined
+                                        };
+                                      }
+                                    });
                                     setShowNetworkDropdown(false);
                                     setNetworkSearch('');
                                   }}
@@ -3744,6 +3822,48 @@ export default function CreateInvoicePage() {
                         )}
                       </div>
                     </div>
+                    {/* Chain and Token Selection - Only show when Celo is selected */}
+                    {formData.paymentNetwork === 'celo' && (
+                      <>
+                        {/* Chain Selection */}
+                        <div>
+                          <label className="block text-sm text-gray-600 mb-1">Select Chain</label>
+                          <select
+                            value={formData.chainId || ''}
+                            onChange={(e) => {
+                              const value = e.target.value ? Number(e.target.value) : undefined;
+                              setFormData(prev => ({ ...prev, chainId: value }));
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white font-medium"
+                          >
+                            <option value="">Select chain</option>
+                            <option value={42220}>Celo</option>
+                          </select>
+                        </div>
+                        {/* Token Selection */}
+                        <div>
+                          <label className="block text-sm text-gray-600 mb-1">Select Token</label>
+                          <select
+                            value={formData.tokenAddress || ''}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              // Use handleInputChange to trigger sync logic (only if value exists)
+                              if (value) {
+                                handleInputChange('tokenAddress', value);
+                              } else {
+                                // Clear tokenAddress and don't sync currency if cleared
+                                setFormData(prev => ({ ...prev, tokenAddress: undefined }));
+                              }
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white font-medium"
+                          >
+                            <option value="">Select token</option>
+                            <option value={CELO_TOKENS.cUSD.address}>cUSD</option>
+                            <option value={CELO_TOKENS.USDT.address}>USDT</option>
+                          </select>
+                        </div>
+                      </>
+                    )}
                     <div>
                       <label className="block text-sm text-gray-600 mb-1">Where do you want to receive your payment?</label>
                       <input
