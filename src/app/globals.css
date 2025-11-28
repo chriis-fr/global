@@ -117,12 +117,25 @@ html:not([data-landing-page="true"]) .react-animated-cursor {
 }
 
 body {
-  /* background: linear-gradient(to bottom right, #1c398e, #172554) !important; */
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
   overflow-x: hidden;
   /* Ensure default cursor is visible by default */
   cursor: auto !important;
+  /* Background handled by CSS class to prevent flicker */
+  background: transparent;
+  transition: background 0.3s ease;
+}
+
+/* Preloader background - controlled by CSS class instead of JS to prevent flicker */
+body.preloader-active,
+html.preloader-active {
+  background: linear-gradient(to bottom right, #1c398e, #172554) !important;
+}
+
+html {
+  background: transparent;
+  transition: background 0.3s ease;
 }
 
 html {

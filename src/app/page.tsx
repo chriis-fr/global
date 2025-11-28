@@ -14,68 +14,25 @@ export default function Home() {
   const [preloaderComplete, setPreloaderComplete] = useState(false);
   const landingPageRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
-  // Default to false (desktop) to allow cursor to mount early and preload during preloader
+  // Default to false (desktop) - will be detected once on mount only
   const [isTouchDevice, setIsTouchDevice] = useState<boolean>(false);
 
-  // Detect if device is a touch device (mobile/tablet) - dynamically updates on resize/device changes
-  // This detection happens immediately on mount and updates in real-time
+  // Detect touch device ONCE on mount only - no resize/orientation listeners to prevent flicker
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const detectTouchDevice = () => {
-      // More accurate touch detection: 
-      // - Check if pointer is coarse (touch screen) AND fine pointer is not available
-      // - OR check if it's a small screen with touch support
-      const hasCoarsePointer = window.matchMedia('(pointer: coarse)').matches;
-      const hasFinePointer = window.matchMedia('(pointer: fine)').matches;
-      const isSmallScreen = window.innerWidth < 768;
-      const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-      
-      // Consider it a touch device if:
-      // - Has coarse pointer but no fine pointer (touch-only device)
-      // - OR has touch support AND small screen (mobile device)
-      const isTouch = (hasCoarsePointer && !hasFinePointer) || (hasTouch && isSmallScreen);
-      setIsTouchDevice(isTouch);
-    };
-
-    // Detect immediately (during preloader time for performance)
-    detectTouchDevice();
-
-    // Listen for resize / orientation changes
-    window.addEventListener('resize', detectTouchDevice);
+    // Single detection on mount - no listeners to prevent mobile flicker
+    const hasCoarsePointer = window.matchMedia('(pointer: coarse)').matches;
+    const hasFinePointer = window.matchMedia('(pointer: fine)').matches;
+    const isSmallScreen = window.innerWidth < 768;
+    const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
     
-    // Listen for pointer media query changes (when switching device emulation)
-    const coarsePointerQuery = window.matchMedia('(pointer: coarse)');
-    const finePointerQuery = window.matchMedia('(pointer: fine)');
-    
-    // Modern browsers support addEventListener on MediaQueryList
-    if (coarsePointerQuery.addEventListener) {
-      coarsePointerQuery.addEventListener('change', detectTouchDevice);
-    } else {
-      // Fallback for older browsers
-      coarsePointerQuery.addListener(detectTouchDevice);
-    }
-    
-    if (finePointerQuery.addEventListener) {
-      finePointerQuery.addEventListener('change', detectTouchDevice);
-    } else {
-      finePointerQuery.addListener(detectTouchDevice);
-    }
-
-    return () => {
-      window.removeEventListener('resize', detectTouchDevice);
-      if (coarsePointerQuery.removeEventListener) {
-        coarsePointerQuery.removeEventListener('change', detectTouchDevice);
-      } else {
-        coarsePointerQuery.removeListener(detectTouchDevice);
-      }
-      if (finePointerQuery.removeEventListener) {
-        finePointerQuery.removeEventListener('change', detectTouchDevice);
-      } else {
-        finePointerQuery.removeListener(detectTouchDevice);
-      }
-    };
-  }, []); // Run immediately on mount - detection happens during preloader time
+    // Consider it a touch device if:
+    // - Has coarse pointer but no fine pointer (touch-only device)
+    // - OR has touch support AND small screen (mobile device)
+    const isTouch = (hasCoarsePointer && !hasFinePointer) || (hasTouch && isSmallScreen);
+    setIsTouchDevice(isTouch);
+  }, []); // Run ONCE on mount only - no resize listeners
 
 
   // Track when session check is complete
@@ -84,139 +41,97 @@ export default function Home() {
   // Show preloader immediately on first render, then wait for both animation and session
   // Default to true to ensure preloader shows immediately
   const shouldShowPreloader = !preloaderComplete || !sessionCheckComplete;
-  
-  // Set body background immediately on mount (only runs on landing page)
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      // Set body background for preloader
-      document.body.style.background = 'linear-gradient(to bottom right, #1c398e, #172554)';
-      document.documentElement.style.background = 'linear-gradient(to bottom right, #1c398e, #172554)';
-    }
-  }, []);
-
-  // Update body background when preloader completes - keep blue until landing page is fully visible
-  useEffect(() => {
-    if (!shouldShowPreloader) {
-      // Keep blue background until landing page animation completes (1 second)
-      const timer = setTimeout(() => {
-        // Clear body background to let crossBg (white) show through
-        document.body.style.background = '';
-        document.documentElement.style.background = '';
-      }, 1100); // Slightly longer than animation duration
-      return () => clearTimeout(timer);
-    } else {
-      // Ensure blue background is set while preloader is showing
-      document.body.style.background = 'linear-gradient(to bottom right, #1c398e, #172554)';
-      document.documentElement.style.background = 'linear-gradient(to bottom right, #1c398e, #172554)';
-    }
-  }, [shouldShowPreloader]);
 
   // Show preloader immediately, even before client-side hydration
   // Return preloader structure immediately to prevent any flash
 
   const isHome = pathname === "/";
 
-  // Variables are now set in layout.tsx script BEFORE React hydrates
-  // This useEffect only updates them if needed (e.g., on hover changes)
+  // Set cursor CSS variables early (once on mount) - they're needed when cursor mounts
   useEffect(() => {
-    if (typeof window !== 'undefined' && typeof document !== 'undefined' && document.body && isHome) {
-      // Ensure variables are set (backup in case script didn't run)
-      const body = document.body;
-      body.style.setProperty("--cursor-color", "rgb(59, 130, 246)");
-      body.style.setProperty("--blur", "3px");
-      body.style.setProperty("--innerBlur", "2px");
-      body.style.setProperty("--outerColor", "rgba(59, 130, 246, 0.4)");
-    }
-  }, [isHome]);
-
-  // Set CSS variables - always set when on landing page (needed for cursor animation)
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof document === 'undefined' || !document.body) return;
+    if (typeof window === 'undefined' || !document.body) return;
     
-    if (isHome && pathname === '/') {
-      const body = document.body;
-      // Set cursor CSS variables - ensure they're always set when on landing page
-      // This ensures animation works when cursor mounts on desktop
-      body.style.setProperty("--cursor-color", "rgb(59, 130, 246)");
-      body.style.setProperty("--blur", "3px");
-      body.style.setProperty("--innerBlur", "2px");
-      body.style.setProperty("--outerColor", "rgba(59, 130, 246, 0.4)");
-    }
-  }, [isHome, pathname]);
+    // Set cursor CSS variables once on mount - available for cursor when it mounts
+    const body = document.body;
+    body.style.setProperty("--cursor-color", "rgb(59, 130, 246)");
+    body.style.setProperty("--blur", "3px");
+    body.style.setProperty("--innerBlur", "2px");
+    body.style.setProperty("--outerColor", "rgba(59, 130, 246, 0.4)");
+  }, []); // Run once on mount
 
-  // CRITICAL: Restore cursor immediately when navigating away from landing page
-  // This runs first to ensure cursor is visible on other routes
+  // CONSOLIDATED: Single effect that manages ALL body styles AFTER preloader completes
+  // This prevents multiple style mutations that cause mobile flicker
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    
-    // If NOT on landing page, immediately restore cursor
+    if (typeof window === 'undefined' || !document.body) return;
+
+    const body = document.body;
+    const html = document.documentElement;
+
+    // If NOT on landing page, restore everything immediately
     if (pathname !== '/') {
-      document.body.style.cursor = '';
-      document.documentElement.style.cursor = '';
-      document.body.removeAttribute('data-landing-page');
-      document.documentElement.removeAttribute('data-landing-page');
+      body.style.cursor = '';
+      html.style.cursor = '';
+      body.removeAttribute('data-landing-page');
+      html.removeAttribute('data-landing-page');
+      body.classList.remove('preloader-active');
+      return;
     }
-  }, [pathname]); // Run immediately on pathname change
 
-  // Manage cursor visibility - show normal cursor during preloader, animated cursor after
-  // CRITICAL: Only affects landing page, always restores cursor on other pages
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    
-    // Only manage cursor visibility on landing page
-    if (isHome && pathname === '/') {
-      if (shouldShowPreloader) {
-        // During preloader: show normal cursor (animated cursor is mounted but hidden)
-        document.body.style.cursor = '';
-        document.documentElement.style.cursor = '';
-        document.body.removeAttribute('data-landing-page');
-        document.documentElement.removeAttribute('data-landing-page');
-      } else if (isTouchDevice === false) {
-        // After preloader completes: hide default cursor, show animated cursor
-        // Small delay to ensure smooth transition
-        const timer = setTimeout(() => {
-          // Double-check we're still on landing page before hiding cursor
-          if (pathname === '/') {
-            document.body.style.cursor = 'none';
-            document.documentElement.style.cursor = 'none';
-            document.body.setAttribute('data-landing-page', 'true');
-            document.documentElement.setAttribute('data-landing-page', 'true');
-          }
-        }, 50); // Minimal delay for smooth transition
-        return () => clearTimeout(timer);
-      } else {
-        // On touch devices: keep normal cursor
-        document.body.style.cursor = '';
-        document.documentElement.style.cursor = '';
-        document.body.removeAttribute('data-landing-page');
-        document.documentElement.removeAttribute('data-landing-page');
-      }
+    // On landing page - manage styles based on preloader state
+    if (shouldShowPreloader) {
+      // During preloader: show normal cursor, set background via class
+      body.style.cursor = '';
+      html.style.cursor = '';
+      body.removeAttribute('data-landing-page');
+      html.removeAttribute('data-landing-page');
+      body.classList.add('preloader-active');
+      html.classList.add('preloader-active');
+    } else {
+      // After preloader completes: set cursor visibility in one batch
+      // Use requestAnimationFrame to batch DOM writes and prevent flicker
+      requestAnimationFrame(() => {
+        if (pathname !== '/') return; // Double-check we're still on landing page
+
+        if (isTouchDevice === false) {
+          // Desktop: hide default cursor, show animated cursor
+          body.style.cursor = 'none';
+          html.style.cursor = 'none';
+          body.setAttribute('data-landing-page', 'true');
+          html.setAttribute('data-landing-page', 'true');
+        } else {
+          // Mobile: keep normal cursor
+          body.style.cursor = '';
+          html.style.cursor = '';
+          body.removeAttribute('data-landing-page');
+          html.removeAttribute('data-landing-page');
+        }
+
+        // Remove preloader background class after animation completes
+        setTimeout(() => {
+          body.classList.remove('preloader-active');
+          html.classList.remove('preloader-active');
+        }, 1100);
+      });
     }
-    
-    // Cleanup: ALWAYS restore cursor when component unmounts or pathname changes
+
+    // Cleanup: restore cursor when navigating away
     return () => {
-      if (typeof window !== 'undefined') {
-        // Always restore cursor - this ensures it's visible on other pages
-        document.body.style.cursor = '';
-        document.documentElement.style.cursor = '';
-        document.body.removeAttribute('data-landing-page');
-        document.documentElement.removeAttribute('data-landing-page');
+      if (typeof window !== 'undefined' && document.body) {
+        body.style.cursor = '';
+        html.style.cursor = '';
+        body.removeAttribute('data-landing-page');
+        html.removeAttribute('data-landing-page');
+        body.classList.remove('preloader-active');
+        html.classList.remove('preloader-active');
       }
     };
-  }, [isHome, pathname, isTouchDevice, shouldShowPreloader]); // Include shouldShowPreloader
+  }, [isHome, pathname, isTouchDevice, shouldShowPreloader]);
 
   return (
     <>
-      {/* Preload animated cursor during preloader - mount early but keep hidden until preloader completes */}
-      {/* This ensures cursor is ready immediately when preloader finishes - no lag or gap */}
-      {isHome && isTouchDevice === false && (
-        <div style={{ 
-          opacity: shouldShowPreloader ? 0 : 1,
-          visibility: shouldShowPreloader ? 'hidden' : 'visible',
-          pointerEvents: shouldShowPreloader ? 'none' : 'auto',
-          transition: 'opacity 0.1s ease-in-out'
-        }}>
-          <AnimatedCursor 
+      {/* Only mount AnimatedCursor on desktop AFTER preloader completes - prevents mobile flicker */}
+      {isHome && !isTouchDevice && preloaderComplete && (
+        <AnimatedCursor 
             innerSize={isHome ? 25 : 14}
             outerSize={isHome ? 40 : 46}
             outerAlpha={0.2}
@@ -246,7 +161,6 @@ export default function Home() {
               // "img",
             ]}
           />
-        </div>
       )}
       {/* Preloader - shows immediately, mounts once and stays until complete */}
       {shouldShowPreloader && (
@@ -259,16 +173,6 @@ export default function Home() {
       )}
       {/* Landing page content - always rendered but hidden, slides up with preloader layers */}
       <div 
-        onMouseOver={() => {
-          // Update cursor variables on hover - exactly like working app
-          if (typeof window !== 'undefined' && typeof document !== 'undefined' && document.body) {
-            const body = document.body;
-            body.style.setProperty("--cursor-color", "rgb(59, 130, 246)");
-            body.style.setProperty("--blur", "3px");
-            body.style.setProperty("--innerBlur", "2px");
-            body.style.setProperty("--outerColor", "rgba(59, 130, 246, 0.4)");
-          }
-        }}
 
         ref={landingPageRef}
         className="crossBg"
@@ -286,7 +190,7 @@ export default function Home() {
           // opacity and visibility controlled by GSAP animation
         }}
       >
-        <div className='bg' />
+        {/* <div className='bg' /> */}
         <Header />
         <div className="pt-16">
           <BlockchainBenefits />
