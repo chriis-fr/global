@@ -12,6 +12,7 @@ import AnimatedCursor from 'react-animated-cursor';
 export default function Home() {
   const { status } = useSession();
   const [preloaderComplete, setPreloaderComplete] = useState(false);
+  const [cursorReady, setCursorReady] = useState(false);
   const landingPageRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
   // Default to false (desktop) - will be detected once on mount only
@@ -47,11 +48,9 @@ export default function Home() {
 
   const isHome = pathname === "/";
 
-  // Set cursor CSS variables early (once on mount) - they're needed when cursor mounts
+  // Set cursor CSS variables early - before cursor mounts (minimal change)
   useEffect(() => {
     if (typeof window === 'undefined' || !document.body) return;
-    
-    // Set cursor CSS variables once on mount - available for cursor when it mounts
     const body = document.body;
     body.style.setProperty("--cursor-color", "rgb(59, 130, 246)");
     body.style.setProperty("--blur", "3px");
@@ -77,20 +76,26 @@ export default function Home() {
       return;
     }
 
-    // On landing page - manage styles based on preloader state
-    if (shouldShowPreloader) {
-      // During preloader: show normal cursor, set background via class
-      body.style.cursor = '';
-      html.style.cursor = '';
-      body.removeAttribute('data-landing-page');
-      html.removeAttribute('data-landing-page');
-      body.classList.add('preloader-active');
-      html.classList.add('preloader-active');
-    } else {
-      // After preloader completes: set cursor visibility in one batch
+      // On landing page - manage styles based on preloader state
+      if (shouldShowPreloader) {
+        // During preloader: show normal cursor, set background via class
+        body.style.cursor = '';
+        html.style.cursor = '';
+        body.removeAttribute('data-landing-page');
+        html.removeAttribute('data-landing-page');
+        body.classList.add('preloader-active');
+        html.classList.add('preloader-active');
+      } else {
+      // After preloader completes: set cursor and CSS variables in one batch
       // Use requestAnimationFrame to batch DOM writes and prevent flicker
       requestAnimationFrame(() => {
         if (pathname !== '/') return; // Double-check we're still on landing page
+
+        // Set cursor CSS variables (only once after preloader)
+        body.style.setProperty("--cursor-color", "rgb(59, 130, 246)");
+        body.style.setProperty("--blur", "3px");
+        body.style.setProperty("--innerBlur", "2px");
+        body.style.setProperty("--outerColor", "rgba(59, 130, 246, 0.4)");
 
         if (isTouchDevice === false) {
           // Desktop: hide default cursor, show animated cursor
@@ -98,12 +103,15 @@ export default function Home() {
           html.style.cursor = 'none';
           body.setAttribute('data-landing-page', 'true');
           html.setAttribute('data-landing-page', 'true');
+          // Set cursor ready flag AFTER all styles are applied
+          setCursorReady(true);
         } else {
           // Mobile: keep normal cursor
           body.style.cursor = '';
           html.style.cursor = '';
           body.removeAttribute('data-landing-page');
           html.removeAttribute('data-landing-page');
+          setCursorReady(false);
         }
 
         // Remove preloader background class after animation completes
@@ -123,14 +131,15 @@ export default function Home() {
         html.removeAttribute('data-landing-page');
         body.classList.remove('preloader-active');
         html.classList.remove('preloader-active');
+        setCursorReady(false);
       }
     };
   }, [isHome, pathname, isTouchDevice, shouldShowPreloader]);
 
   return (
     <>
-      {/* Only mount AnimatedCursor on desktop AFTER preloader completes - prevents mobile flicker */}
-      {isHome && !isTouchDevice && preloaderComplete && (
+      {/* Only mount AnimatedCursor on desktop AFTER cursor state is fully ready - prevents flicker */}
+      {isHome && !isTouchDevice && cursorReady && (
         <AnimatedCursor 
             innerSize={isHome ? 25 : 14}
             outerSize={isHome ? 40 : 46}
