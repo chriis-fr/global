@@ -5,10 +5,10 @@
   --foreground: #171717;
   --Background: #000000;
   --white: #ffffff;
-  --cursor-color: rgb(238, 19, 19);
+  --cursor-color: rgb(59, 130, 246);
   --blur: 3px;
   --innerBlur: 2px;
-  --outerColor: rgba(226, 79, 46, 0.4);
+  --outerColor: rgba(59, 130, 246, 0.4);
   --size: 40,
   --outerSize: 25;
   

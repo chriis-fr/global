@@ -122,19 +122,19 @@ export default function RootLayout({
             __html: `
               (function() {
                 if (typeof document !== 'undefined' && document.body) {
-                  document.body.style.setProperty('--cursor-color', 'rgb(238, 19, 19)');
+                  document.body.style.setProperty('--cursor-color', 'rgb(59, 130, 246)');
                   document.body.style.setProperty('--blur', '3px');
                   document.body.style.setProperty('--innerBlur', '2px');
-                  document.body.style.setProperty('--outerColor', 'rgba(226, 79, 46, 0.4)');
+                  document.body.style.setProperty('--outerColor', 'rgba(59, 130, 246, 0.4)');
                 } else {
                   // If body doesn't exist yet, set on DOMContentLoaded
                   if (typeof document !== 'undefined') {
                     document.addEventListener('DOMContentLoaded', function() {
                       if (document.body) {
-                        document.body.style.setProperty('--cursor-color', 'rgb(238, 19, 19)');
+                        document.body.style.setProperty('--cursor-color', 'rgb(59, 130, 246)');
                         document.body.style.setProperty('--blur', '3px');
                         document.body.style.setProperty('--innerBlur', '2px');
-                        document.body.style.setProperty('--outerColor', 'rgba(226, 79, 46, 0.4)');
+                        document.body.style.setProperty('--outerColor', 'rgba(59, 130, 246, 0.4)');
                       }
                     });
                   }

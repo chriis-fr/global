@@ -122,10 +122,10 @@ export default function Home() {
     if (typeof window !== 'undefined' && typeof document !== 'undefined' && document.body && isHome) {
       // Ensure variables are set (backup in case script didn't run)
       const body = document.body;
-      body.style.setProperty("--cursor-color", "rgb(238, 19, 19)");
+      body.style.setProperty("--cursor-color", "rgb(59, 130, 246)");
       body.style.setProperty("--blur", "3px");
       body.style.setProperty("--innerBlur", "2px");
-      body.style.setProperty("--outerColor", "rgba(226, 79, 46, 0.4)");
+      body.style.setProperty("--outerColor", "rgba(59, 130, 246, 0.4)");
     }
   }, [isHome]);
 
@@ -137,10 +137,10 @@ export default function Home() {
       const body = document.body;
       // Set cursor CSS variables - ensure they're always set when on landing page
       // This ensures animation works when cursor mounts on desktop
-      body.style.setProperty("--cursor-color", "rgb(238, 19, 19)");
+      body.style.setProperty("--cursor-color", "rgb(59, 130, 246)");
       body.style.setProperty("--blur", "3px");
       body.style.setProperty("--innerBlur", "2px");
-      body.style.setProperty("--outerColor", "rgba(226, 79, 46, 0.4)");
+      body.style.setProperty("--outerColor", "rgba(59, 130, 246, 0.4)");
     }
   }, [isHome, pathname]);
 
@@ -263,10 +263,10 @@ export default function Home() {
           // Update cursor variables on hover - exactly like working app
           if (typeof window !== 'undefined' && typeof document !== 'undefined' && document.body) {
             const body = document.body;
-            body.style.setProperty("--cursor-color", "rgb(238, 19, 19)");
+            body.style.setProperty("--cursor-color", "rgb(59, 130, 246)");
             body.style.setProperty("--blur", "3px");
             body.style.setProperty("--innerBlur", "2px");
-            body.style.setProperty("--outerColor", "rgba(226, 79, 46, 0.4)");
+            body.style.setProperty("--outerColor", "rgba(59, 130, 246, 0.4)");
           }
         }}
 
