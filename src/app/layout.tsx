@@ -50,9 +50,9 @@ export const metadata: Metadata = {
   },
 
   openGraph: {
-    title: "Chains ERP – Global Finance & Web3 Business Automation",
+    title: "Global Finance - Flexible, secure and simple borderless finance for DAOs, Freelancers, Contractors & more...",
     description:
-      "A powerful ERP that merges Web2 and Web3 to power global businesses with accounting, HR, payments, and decentralized finance tools.",
+      "Manage invoices, payables and more with the most flexible and secure finance platform.",
     url: "https://global.chains-erp.com",
     siteName: "Chains ERP",
     images: [
@@ -116,33 +116,7 @@ export default function RootLayout({
         }}
         suppressHydrationWarning
       >
-        {/* Set cursor CSS variables BEFORE React hydrates - this ensures they're available when AnimatedCursor mounts */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function() {
-                if (typeof document !== 'undefined' && document.body) {
-                  document.body.style.setProperty('--cursor-color', 'rgb(238, 19, 19)');
-                  document.body.style.setProperty('--blur', '3px');
-                  document.body.style.setProperty('--innerBlur', '2px');
-                  document.body.style.setProperty('--outerColor', 'rgba(226, 79, 46, 0.4)');
-                } else {
-                  // If body doesn't exist yet, set on DOMContentLoaded
-                  if (typeof document !== 'undefined') {
-                    document.addEventListener('DOMContentLoaded', function() {
-                      if (document.body) {
-                        document.body.style.setProperty('--cursor-color', 'rgb(238, 19, 19)');
-                        document.body.style.setProperty('--blur', '3px');
-                        document.body.style.setProperty('--innerBlur', '2px');
-                        document.body.style.setProperty('--outerColor', 'rgba(226, 79, 46, 0.4)');
-                      }
-                    });
-                  }
-                }
-              })();
-            `,
-          }}
-        />
+        {/* Cursor CSS variables are set in globals.css - no script injection needed to prevent hydration flicker */}
         <SessionProvider>
           <CurrencyProvider>
             <SubscriptionProvider>
