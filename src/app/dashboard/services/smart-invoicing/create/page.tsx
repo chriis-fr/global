@@ -213,8 +213,19 @@ const useFormPersistence = (key: string, initialData: InvoiceFormData, setAutoSa
         const saved = localStorage.getItem(key);
         if (saved) {
           const parsed = JSON.parse(saved);
-          // Merge with default data to handle new fields
-          return { ...initialData, ...parsed };
+          // Merge with default data to handle new fields, but preserve user selections
+          // Prioritize saved data over defaults, especially for currency and payment settings
+          return { 
+            ...initialData, 
+            ...parsed,
+            // Explicitly preserve currency and payment-related fields from saved data
+            currency: parsed.currency || initialData.currency,
+            paymentMethod: parsed.paymentMethod || initialData.paymentMethod,
+            paymentNetwork: parsed.paymentNetwork || initialData.paymentNetwork,
+            chainId: parsed.chainId || initialData.chainId,
+            tokenAddress: parsed.tokenAddress || initialData.tokenAddress,
+            paymentAddress: parsed.paymentAddress || initialData.paymentAddress
+          };
         }
       } catch (error) {
         console.warn('Failed to load saved form data:', error);
@@ -626,49 +637,92 @@ export default function CreateInvoicePage() {
   const [currencySearch, setCurrencySearch] = useState('');
   const [userHasSelectedCurrency, setUserHasSelectedCurrency] = useState(false);
   const [isAutoSelectingCurrency, setIsAutoSelectingCurrency] = useState(false);
+  
+  // Check saved data on mount to preserve currency selection
+  useEffect(() => {
+    if (typeof window !== 'undefined' && session?.user?.email) {
+      try {
+        const saved = localStorage.getItem(`invoice-draft-${session.user.email}`);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          // If currency exists and is not the default USD, user has selected it
+          if (parsed.currency && parsed.currency !== 'USD' && parsed.currency !== defaultInvoiceData.currency) {
+            setUserHasSelectedCurrency(true);
+          }
+        }
+      } catch {
+        // Ignore errors
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run on mount
 
-  // Auto-select currency based on payment method
+  // Auto-select currency based on payment method (only if user hasn't manually selected)
   const autoSelectCurrencyForPaymentMethod = (paymentMethod: string) => {
+    // Don't auto-select if user has already manually selected a currency
+    if (userHasSelectedCurrency) {
+      return;
+    }
     
     if (paymentMethod === 'crypto') {
-      // Auto-select USDT for crypto payments
+      // Auto-select USDT for crypto payments only if no currency is selected
       const usdtCurrency = cryptoCurrencies.find((c: { code: string }) => c.code === 'USDT');
       
       if (usdtCurrency) {
         setIsAutoSelectingCurrency(true);
-        setFormData(prev => ({
-          ...prev,
-          currency: usdtCurrency.code,
-          currencySymbol: usdtCurrency.symbol,
-          currencyName: usdtCurrency.name,
-          currencyLogo: usdtCurrency.logo,
-          currencyType: usdtCurrency.type,
-          currencyNetwork: usdtCurrency.network
-        }));
-        setUserHasSelectedCurrency(true);
+        setFormData(prev => {
+          // Don't auto-select if currency is already a crypto currency (user has selected it)
+          const currentCurrency = getCurrencyByCode(prev.currency);
+          if (currentCurrency && currentCurrency.type === 'crypto') {
+            // User has already selected a crypto currency, don't override
+            return prev;
+          }
+          // Only auto-select if currency is default (USD) or empty
+          if (prev.currency === 'USD' || !prev.currency || prev.currency === defaultInvoiceData.currency) {
+            return {
+              ...prev,
+              currency: usdtCurrency.code,
+              currencySymbol: usdtCurrency.symbol,
+              currencyName: usdtCurrency.name,
+              currencyLogo: usdtCurrency.logo,
+              currencyType: usdtCurrency.type,
+              currencyNetwork: usdtCurrency.network
+            };
+          }
+          return prev; // Keep existing currency if user has selected something else
+        });
         // Reset the flag after a short delay
         setTimeout(() => setIsAutoSelectingCurrency(false), 100);
-      } else {
       }
     } else if (paymentMethod === 'fiat') {
-      // Auto-select USD for fiat payments
+      // Auto-select USD for fiat payments only if no currency is selected
       const usdCurrency = fiatCurrencies.find((c: { code: string }) => c.code === 'USD');
       
       if (usdCurrency) {
         setIsAutoSelectingCurrency(true);
-        setFormData(prev => ({
-          ...prev,
-          currency: usdCurrency.code,
-          currencySymbol: usdCurrency.symbol,
-          currencyName: usdCurrency.name,
-          currencyLogo: usdCurrency.logo,
-          currencyType: usdCurrency.type,
-          currencyNetwork: usdCurrency.network
-        }));
-        setUserHasSelectedCurrency(true);
+        setFormData(prev => {
+          // Don't auto-select if currency is already a fiat currency (user has selected it)
+          const currentCurrency = getCurrencyByCode(prev.currency);
+          if (currentCurrency && currentCurrency.type === 'fiat' && prev.currency !== 'USD') {
+            // User has already selected a fiat currency, don't override
+            return prev;
+          }
+          // Only auto-select if currency is a crypto currency or empty
+          if (!prev.currency || (currentCurrency && currentCurrency.type === 'crypto')) {
+            return {
+              ...prev,
+              currency: usdCurrency.code,
+              currencySymbol: usdCurrency.symbol,
+              currencyName: usdCurrency.name,
+              currencyLogo: usdCurrency.logo,
+              currencyType: usdCurrency.type,
+              currencyNetwork: usdCurrency.network
+            };
+          }
+          return prev; // Keep existing currency if user has selected something else
+        });
         // Reset the flag after a short delay
         setTimeout(() => setIsAutoSelectingCurrency(false), 100);
-      } else {
       }
     }
   };
@@ -989,6 +1043,7 @@ export default function CreateInvoicePage() {
       
       // Sync currency when token is selected (if Celo network is active)
       if (field === 'tokenAddress' && updated.paymentNetwork === 'celo' && value) {
+        setIsAutoSelectingCurrency(true); // Prevent currency change handler from interfering
         if (String(value) === CELO_TOKENS.USDT.address) {
           updated.currency = 'USDT';
           setUserHasSelectedCurrency(true); // Mark currency as manually selected
@@ -996,6 +1051,8 @@ export default function CreateInvoicePage() {
           updated.currency = 'CUSD';
           setUserHasSelectedCurrency(true); // Mark currency as manually selected
         }
+        // Reset the flag after a short delay to allow the currency to be set
+        setTimeout(() => setIsAutoSelectingCurrency(false), 150);
       }
       
       // Sync tokenAddress when network changes to Celo (if currency is a Celo token)
@@ -3822,47 +3879,29 @@ export default function CreateInvoicePage() {
                         )}
                       </div>
                     </div>
-                    {/* Chain and Token Selection - Only show when Celo is selected */}
+                    {/* Token Selection - Only show when a chain with tokens is selected (e.g., Celo) */}
                     {formData.paymentNetwork === 'celo' && (
-                      <>
-                        {/* Chain Selection */}
-                        <div>
-                          <label className="block text-sm text-gray-600 mb-1">Select Chain</label>
-                          <select
-                            value={formData.chainId || ''}
-                            onChange={(e) => {
-                              const value = e.target.value ? Number(e.target.value) : undefined;
-                              setFormData(prev => ({ ...prev, chainId: value }));
-                            }}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white font-medium"
-                          >
-                            <option value="">Select chain</option>
-                            <option value={42220}>Celo</option>
-                          </select>
-                        </div>
-                        {/* Token Selection */}
-                        <div>
-                          <label className="block text-sm text-gray-600 mb-1">Select Token</label>
-                          <select
-                            value={formData.tokenAddress || ''}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              // Use handleInputChange to trigger sync logic (only if value exists)
-                              if (value) {
-                                handleInputChange('tokenAddress', value);
-                              } else {
-                                // Clear tokenAddress and don't sync currency if cleared
-                                setFormData(prev => ({ ...prev, tokenAddress: undefined }));
-                              }
-                            }}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white font-medium"
-                          >
-                            <option value="">Select token</option>
-                            <option value={CELO_TOKENS.cUSD.address}>cUSD</option>
-                            <option value={CELO_TOKENS.USDT.address}>USDT</option>
-                          </select>
-                        </div>
-                      </>
+                      <div>
+                        <label className="block text-sm text-gray-600 mb-1">Select Token</label>
+                        <select
+                          value={formData.tokenAddress || ''}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            // Use handleInputChange to trigger sync logic (only if value exists)
+                            if (value) {
+                              handleInputChange('tokenAddress', value);
+                            } else {
+                              // Clear tokenAddress and don't sync currency if cleared
+                              setFormData(prev => ({ ...prev, tokenAddress: undefined }));
+                            }
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white font-medium"
+                        >
+                          <option value="">Select token</option>
+                          <option value={CELO_TOKENS.cUSD.address}>cUSD</option>
+                          <option value={CELO_TOKENS.USDT.address}>USDT</option>
+                        </select>
+                      </div>
                     )}
                     <div>
                       <label className="block text-sm text-gray-600 mb-1">Where do you want to receive your payment?</label>
