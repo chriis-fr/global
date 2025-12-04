@@ -124,6 +124,11 @@ export interface Organization {
   status: 'pending' | 'active' | 'suspended';
   verified: boolean;
   
+  // Safe Wallet (Gnosis Safe) - Optional, for organizations using multisig
+  safeAddress?: string; // Deployed Safe wallet address
+  safeOwners?: string[]; // Array of owner addresses
+  safeThreshold?: number; // Number of signatures required (e.g., 2 of 3)
+  
   // Timestamps
   createdAt: Date;
   updatedAt: Date;

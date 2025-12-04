@@ -12,6 +12,8 @@
   "dependencies": {
     "@auth/mongodb-adapter": "^3.10.0",
     "@radix-ui/react-slot": "^1.2.4",
+    "@safe-global/api-kit": "^4.0.1",
+    "@safe-global/protocol-kit": "^6.1.2",
     "@types/mongodb": "^4.0.7",
     "@types/nodemailer": "^6.4.17",
     "bcryptjs": "^3.0.2",

@@ -35,5 +35,5 @@ export const CELO_TOKENS = {
 };
 
 export const CELO_SAFE = {
-  transactionService: "https://transaction-service.safe.global/api/v1/chains/42220",
+  transactionService: "https://safe-transaction-celo.safe.global/api/v1",
 };

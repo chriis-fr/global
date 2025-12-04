@@ -215,7 +215,8 @@ const useFormPersistence = (key: string, initialData: InvoiceFormData, setAutoSa
           const parsed = JSON.parse(saved);
           // Merge with default data to handle new fields, but preserve user selections
           // Prioritize saved data over defaults, especially for currency and payment settings
-          return { 
+          // CRITICAL: If tokenAddress is set, preserve the currency that was synced with it
+          const merged = { 
             ...initialData, 
             ...parsed,
             // Explicitly preserve currency and payment-related fields from saved data
@@ -226,6 +227,17 @@ const useFormPersistence = (key: string, initialData: InvoiceFormData, setAutoSa
             tokenAddress: parsed.tokenAddress || initialData.tokenAddress,
             paymentAddress: parsed.paymentAddress || initialData.paymentAddress
           };
+          
+          // If tokenAddress is set and currency doesn't match, sync it
+          if (merged.tokenAddress && merged.paymentNetwork === 'celo') {
+            if (merged.tokenAddress === CELO_TOKENS.USDT.address && merged.currency !== 'USDT') {
+              merged.currency = 'USDT';
+            } else if (merged.tokenAddress === CELO_TOKENS.cUSD.address && merged.currency !== 'CUSD') {
+              merged.currency = 'CUSD';
+            }
+          }
+          
+          return merged;
         }
       } catch (error) {
         console.warn('Failed to load saved form data:', error);
@@ -664,6 +676,11 @@ export default function CreateInvoicePage() {
       return;
     }
     
+    // Don't auto-select if we're currently syncing from token selection
+    if (isAutoSelectingCurrency) {
+      return;
+    }
+    
     if (paymentMethod === 'crypto') {
       // Auto-select USDT for crypto payments only if no currency is selected
       const usdtCurrency = cryptoCurrencies.find((c: { code: string }) => c.code === 'USDT');
@@ -671,12 +688,19 @@ export default function CreateInvoicePage() {
       if (usdtCurrency) {
         setIsAutoSelectingCurrency(true);
         setFormData(prev => {
+          // CRITICAL: Don't override if tokenAddress is set (user selected via token)
+          if (prev.tokenAddress && prev.paymentNetwork === 'celo') {
+            // User has selected a token, don't override the currency
+            return prev;
+          }
+          
           // Don't auto-select if currency is already a crypto currency (user has selected it)
           const currentCurrency = getCurrencyByCode(prev.currency);
           if (currentCurrency && currentCurrency.type === 'crypto') {
             // User has already selected a crypto currency, don't override
             return prev;
           }
+          
           // Only auto-select if currency is default (USD) or empty
           if (prev.currency === 'USD' || !prev.currency || prev.currency === defaultInvoiceData.currency) {
             return {
@@ -701,12 +725,19 @@ export default function CreateInvoicePage() {
       if (usdCurrency) {
         setIsAutoSelectingCurrency(true);
         setFormData(prev => {
+          // CRITICAL: Don't override if tokenAddress is set (user selected via token)
+          if (prev.tokenAddress && prev.paymentNetwork === 'celo') {
+            // User has selected a token, don't override the currency
+            return prev;
+          }
+          
           // Don't auto-select if currency is already a fiat currency (user has selected it)
           const currentCurrency = getCurrencyByCode(prev.currency);
           if (currentCurrency && currentCurrency.type === 'fiat' && prev.currency !== 'USD') {
             // User has already selected a fiat currency, don't override
             return prev;
           }
+          
           // Only auto-select if currency is a crypto currency or empty
           if (!prev.currency || (currentCurrency && currentCurrency.type === 'crypto')) {
             return {
@@ -1042,17 +1073,24 @@ export default function CreateInvoicePage() {
       }
       
       // Sync currency when token is selected (if Celo network is active)
+      // This MUST happen BEFORE any other currency logic to prevent resets
       if (field === 'tokenAddress' && updated.paymentNetwork === 'celo' && value) {
-        setIsAutoSelectingCurrency(true); // Prevent currency change handler from interfering
+        // Immediately set the flag to prevent ANY auto-select from interfering
+        setUserHasSelectedCurrency(true);
+        setIsAutoSelectingCurrency(true);
+        
         if (String(value) === CELO_TOKENS.USDT.address) {
           updated.currency = 'USDT';
-          setUserHasSelectedCurrency(true); // Mark currency as manually selected
         } else if (String(value) === CELO_TOKENS.cUSD.address) {
           updated.currency = 'CUSD';
-          setUserHasSelectedCurrency(true); // Mark currency as manually selected
         }
-        // Reset the flag after a short delay to allow the currency to be set
-        setTimeout(() => setIsAutoSelectingCurrency(false), 150);
+        
+        // Keep the flag set longer to prevent any race conditions
+        setTimeout(() => {
+          setIsAutoSelectingCurrency(false);
+          // Ensure the flag stays true - user has selected via token
+          setUserHasSelectedCurrency(true);
+        }, 500);
       }
       
       // Sync tokenAddress when network changes to Celo (if currency is a Celo token)
