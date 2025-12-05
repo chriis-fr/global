@@ -42,6 +42,48 @@ export function getSafeTransactionServiceUrlForChain(chainId?: string): string {
 }
 
 /**
+ * Get Safe info from the blockchain using Safe API Kit
+ * This is used to import existing Safe wallets
+ */
+export async function getSafeInfoFromChain(
+    safeAddress: string,
+    chainId?: string
+): Promise<{
+    safeAddress: string;
+    owners: string[];
+    threshold: number;
+    version?: string;
+    modules?: string[];
+    nonce?: number;
+}> {
+    const targetChainId = chainId || DEFAULT_CHAIN.id;
+    const chainConfig = getChainById(targetChainId);
+    if (!chainConfig) {
+        throw new Error(`Chain not found or not enabled: ${targetChainId}`);
+    }
+
+    const safeApiKit = new SafeApiKit({
+        txServiceUrl: getSafeTransactionServiceUrlForChain(targetChainId),
+        chainId: BigInt(chainConfig.chain.id),
+    });
+
+    const safeInfo = await safeApiKit.getSafeInfo(safeAddress);
+    
+    if (!safeInfo) {
+        throw new Error("Safe wallet not found on the specified chain");
+    }
+
+    return {
+        safeAddress: safeAddress.toLowerCase(),
+        owners: safeInfo.owners.map((addr: string) => addr.toLowerCase()),
+        threshold: safeInfo.threshold,
+        version: safeInfo.version,
+        modules: safeInfo.modules || [],
+        nonce: typeof safeInfo.nonce === 'string' ? parseInt(safeInfo.nonce, 10) : safeInfo.nonce,
+    };
+}
+
+/**
  * Get public client for a specific chain
  * Defaults to the default chain (CELO) if no chainId provided
  */

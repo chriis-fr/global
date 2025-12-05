@@ -153,6 +153,10 @@ export interface Invoice {
   chainId?: number; // Blockchain network ID (e.g., 42220 for Celo)
   txHash?: string; // Transaction hash after payment
   safeTxHash?: string; // Safe transaction hash (for multisig payments)
+  
+  // Receiving Address Metadata (Request Finance pattern)
+  receivingMethod?: 'manual' | 'wallet'; // How the receiving address was entered
+  receivingWalletType?: string | null; // Type of wallet if connected (safe, metamask, walletconnect, etc.)
 }
 
 export interface CreateInvoiceInput {

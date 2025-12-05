@@ -13,11 +13,15 @@ import {
   Eye,
   EyeOff,
   LayoutDashboard,
-  Smartphone
+  Smartphone,
+  Shield
 } from 'lucide-react';
 import Link from 'next/link';
 import BankSelector from '@/components/BankSelector';
 import { Bank } from '@/data';
+import ConnectSafeModal from '@/components/safe/ConnectSafeModal';
+import SafeWalletCard from '@/components/safe/SafeWalletCard';
+import { getConnectedSafeWallets } from '@/app/actions/safe-connection';
 
 interface PaymentMethod {
   _id?: string;
@@ -48,15 +52,31 @@ interface PaymentMethod {
     address: string;
     network: string;
     currency: string;
+    safeDetails?: {
+      safeAddress: string;
+      owners: string[];
+      threshold: number;
+      chainId?: number;
+    };
   };
 }
 
 export default function PaymentMethodsPage() {
   const { data: session } = useSession();
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [safeWallets, setSafeWallets] = useState<Array<{
+    paymentMethodId: string;
+    name: string;
+    safeAddress: string;
+    owners: string[];
+    threshold: number;
+    chainId?: number;
+    isDefault: boolean;
+  }>>([]);
   const [loading, setLoading] = useState(true);
   const [showSensitiveData, setShowSensitiveData] = useState<Record<string, boolean>>({});
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showSafeModal, setShowSafeModal] = useState(false);
   const [newPaymentMethod, setNewPaymentMethod] = useState({
     name: '',
     type: 'fiat' as 'fiat' | 'crypto',
@@ -86,7 +106,19 @@ export default function PaymentMethodsPage() {
 
   useEffect(() => {
     loadPaymentMethods();
+    loadSafeWallets();
   }, []);
+
+  const loadSafeWallets = async () => {
+    try {
+      const result = await getConnectedSafeWallets({});
+      if (result.success) {
+        setSafeWallets(result.safeWallets);
+      }
+    } catch (error) {
+      console.error('Error loading Safe wallets:', error);
+    }
+  };
 
   // Check if user is from Kenya to show M-Pesa options
   const isKenyanUser = () => {
@@ -231,7 +263,11 @@ export default function PaymentMethodsPage() {
                         <CreditCard className="h-6 w-6 text-green-400" />
                       )
                     ) : method.type === 'crypto' ? (
-                      <Wallet className="h-6 w-6 text-purple-400" />
+                      method.cryptoDetails?.safeDetails ? (
+                        <Shield className="h-6 w-6 text-blue-400" />
+                      ) : (
+                        <Wallet className="h-6 w-6 text-purple-400" />
+                      )
                     ) : (
                       <CreditCard className="h-6 w-6 text-green-400" />
                     )}
@@ -246,6 +282,8 @@ export default function PaymentMethodsPage() {
                     <p className="text-blue-200 text-sm">
                       {method.type === 'fiat' ? (
                         `${method.fiatDetails?.bankName} • ${method.fiatDetails?.currency}`
+                      ) : method.cryptoDetails?.safeDetails ? (
+                        `Safe Wallet • ${method.cryptoDetails?.network} • ${method.cryptoDetails?.safeDetails.threshold} of ${method.cryptoDetails?.safeDetails.owners.length}`
                       ) : (
                         `${method.cryptoDetails?.network} • ${method.cryptoDetails?.currency}`
                       )}
@@ -753,6 +791,16 @@ export default function PaymentMethodsPage() {
           </div>
         </div>
       )}
+
+      {/* Connect Safe Modal */}
+      <ConnectSafeModal
+        isOpen={showSafeModal}
+        onClose={() => setShowSafeModal(false)}
+        onSuccess={() => {
+          loadSafeWallets();
+          loadPaymentMethods();
+        }}
+      />
     </div>
   );
 } 

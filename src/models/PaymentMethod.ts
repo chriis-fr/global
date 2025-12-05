@@ -29,13 +29,32 @@ export interface FiatPaymentDetails {
   country: string;
 }
 
+// Safe Wallet Details (extends crypto payment method)
+export interface SafeWalletDetails {
+  safeAddress: string;
+  owners: string[]; // Array of owner addresses
+  threshold: number; // Number of signatures required (e.g., 2 of 3)
+  version?: string; // Safe version
+  modules?: string[]; // Connected modules
+  networks?: string[]; // Connected networks
+  nonce?: number; // Current nonce
+  connectionMethod?: 'safe_app' | 'wallet_connect' | 'manual' | 'imported';
+  safeAppAuthorized?: boolean; // If connected via Safe App
+  authorizedAt?: Date; // When Safe App was authorized
+  chainId?: number; // Chain ID where Safe is deployed
+}
+
 // Crypto Payment Method Details
 export interface CryptoPaymentDetails {
   address: string;
-  network: string; // e.g., "Ethereum", "Bitcoin", "Polygon"
+  network: string; // e.g., "Ethereum", "Bitcoin", "Polygon", "Celo"
   currency: string; // e.g., "ETH", "BTC", "USDC"
+  chainId?: number; // Blockchain network ID (e.g., 42220 for Celo)
+  tokenAddress?: string; // ERC20 token contract address
   label?: string; // Optional label for the wallet
   isDefault?: boolean;
+  // Safe wallet details (if this is a Safe wallet)
+  safeDetails?: SafeWalletDetails;
 }
 
 
@@ -100,6 +119,7 @@ export interface CreateCryptoPaymentMethodInput {
   isDefault?: boolean;
   description?: string;
   tags?: string[];
+  safeDetails?: SafeWalletDetails; // For Safe wallet connections
 }
 
 
@@ -121,6 +141,7 @@ export interface UpdatePaymentMethodInput {
   tags?: string[];
   fiatDetails?: Partial<FiatPaymentDetails>;
   cryptoDetails?: Partial<CryptoPaymentDetails>;
+  safeDetails?: Partial<SafeWalletDetails>; // For updating Safe wallet details
 }
 
 // Payment Method Settings for Organizations/Users

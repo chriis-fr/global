@@ -23,6 +23,9 @@ import CurrencyAmount from '@/components/CurrencyAmount';
 import FloatingActionButton from '@/components/dashboard/FloatingActionButton';
 import PendingInvoiceApprovals from '@/components/dashboard/PendingInvoiceApprovals';
 import { getInvoicesListMinimal, getFullInvoicesForExport, InvoiceDetails } from '@/lib/actions/invoices';
+import BatchInvoiceSelector from '@/components/payments/BatchInvoiceSelector';
+import BatchPaymentModal from '@/components/payments/BatchPaymentModal';
+import { Wallet } from 'lucide-react';
 
 export default function InvoicesPage() {
   const router = useRouter();
@@ -54,6 +57,7 @@ export default function InvoicesPage() {
     selectedInvoices: [] as string[]
   });
   const [selectedInvoices, setSelectedInvoices] = useState<string[]>([]);
+  const [showBatchPaymentModal, setShowBatchPaymentModal] = useState(false);
 
   const loadInvoices = useCallback(async () => {
     try {
@@ -1004,6 +1008,58 @@ export default function InvoicesPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Batch Payment Button - Show when invoices are selected */}
+      {selectedInvoices.length > 0 && (
+        <div className="fixed bottom-6 right-6 z-40">
+          <button
+            onClick={() => {
+              const selectedInvoiceData = invoices.filter((inv) =>
+                inv._id && selectedInvoices.includes(inv._id.toString())
+              );
+              // Filter to only payable invoices
+              const payableInvoices = selectedInvoiceData.filter(
+                (inv) => inv.status === 'sent' || inv.status === 'pending'
+              );
+              if (payableInvoices.length > 0) {
+                setShowBatchPaymentModal(true);
+              } else {
+                alert('Please select invoices with status "sent" or "pending" to pay');
+              }
+            }}
+            className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-lg"
+          >
+            <Wallet className="h-5 w-5" />
+            <span>Pay {selectedInvoices.length} Invoice{selectedInvoices.length !== 1 ? 's' : ''}</span>
+          </button>
+        </div>
+      )}
+
+      {/* Batch Payment Modal */}
+      {showBatchPaymentModal && (
+        <BatchPaymentModal
+          isOpen={showBatchPaymentModal}
+          onClose={() => setShowBatchPaymentModal(false)}
+          invoices={invoices
+            .filter((inv) => inv._id && selectedInvoices.includes(inv._id.toString()))
+            .filter((inv) => inv.status === 'sent' || inv.status === 'pending')
+            .map((inv) => ({
+              _id: inv._id?.toString() || '',
+              invoiceNumber: inv.invoiceNumber || '',
+              total: inv.total || inv.totalAmount || 0,
+              totalAmount: inv.totalAmount || inv.total || 0,
+              currency: inv.currency || 'USD',
+              tokenAddress: inv.tokenAddress,
+              tokenDecimals: inv.tokenDecimals,
+              payeeAddress: inv.payeeAddress,
+              chainId: inv.chainId,
+            }))}
+          onSuccess={() => {
+            setSelectedInvoices([]);
+            loadInvoices();
+          }}
+        />
       )}
 
       {/* Floating Action Button */}

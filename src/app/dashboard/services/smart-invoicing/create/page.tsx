@@ -43,6 +43,9 @@ import { Bank } from '@/data';
 import FloatingActionButton from '@/components/dashboard/FloatingActionButton';
 import { useSubscription } from '@/lib/contexts/SubscriptionContext';
 import { CELO_TOKENS } from '@/lib/chains/celo';
+import PaymentMethodSelector from '@/components/payments/PaymentMethodSelector';
+import SavePaymentMethodButton from '@/components/payments/SavePaymentMethodButton';
+import ReceivingAddressInput from '@/components/wallet/ReceivingAddressInput';
 
 interface Client {
   _id: string;
@@ -91,6 +94,8 @@ interface InvoiceFormData {
   fiatPaymentSubtype?: 'bank' | 'mpesa_paybill' | 'mpesa_till' | 'phone';
   paymentNetwork?: string;
   paymentAddress?: string;
+  receivingMethod?: 'manual' | 'wallet'; // How the receiving address was entered
+  receivingWalletType?: string | null; // Type of wallet if connected (safe, metamask, etc.)
   chainId?: number; // Chain ID for crypto payments (e.g., 42220 for Celo)
   tokenAddress?: string; // Contract address for the crypto token
   bankName?: string;
@@ -169,6 +174,8 @@ const defaultInvoiceData: InvoiceFormData = {
   fiatPaymentSubtype: 'bank',
   paymentNetwork: '',
   paymentAddress: '',
+  receivingMethod: 'manual', // Default to manual entry
+  receivingWalletType: null,
   chainId: undefined, // Optional - only set when Celo is selected
   tokenAddress: undefined, // Optional - only set when Celo is selected
   bankName: '',
@@ -786,6 +793,15 @@ export default function CreateInvoicePage() {
     cryptoDetails?: {
       network: string;
       address: string;
+      currency?: string;
+      chainId?: number;
+      tokenAddress?: string;
+      safeDetails?: {
+        safeAddress: string;
+        owners: string[];
+        threshold: number;
+        chainId?: number;
+      };
     };
   }>>([]);
   const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<string>('');
@@ -835,7 +851,8 @@ export default function CreateInvoicePage() {
     } finally {
       setLoading(false);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router]); // router and setFormData are stable, no need to include
 
   const loadServiceOnboardingData = useCallback(async () => {
     try {
@@ -874,7 +891,23 @@ export default function CreateInvoicePage() {
     } catch (error) {
       console.error('Error loading service onboarding data:', error);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // setFormData and userHasSelectedCurrency are stable, no need to include
+
+  // Load saved payment methods - memoized to prevent infinite re-renders
+  const loadSavedPaymentMethods = useCallback(async () => {
+    try {
+      const response = await fetch('/api/payment-methods');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setSavedPaymentMethods(data.paymentMethods || []);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading payment methods:', error);
+    }
+  }, []); // Empty deps - only load once on mount
 
   const loadOrganizationData = useCallback(async () => {
     try {
@@ -906,7 +939,8 @@ export default function CreateInvoicePage() {
     } catch (error) {
       console.error('Failed to load organization data:', error);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // setFormData is stable from useState, no need to include
 
   const loadLogoFromSettings = useCallback(async () => {
     try {
@@ -940,21 +974,45 @@ export default function CreateInvoicePage() {
     } catch (error) {
       console.error('❌ [Invoice Create] Failed to load logo from settings:', error);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // setFormData is stable from useState, no need to include
 
+  const loadClients = useCallback(async () => {
+    try {
+      const response = await fetch('/api/clients');
+      const data = await response.json();
+      if (data.success && data.data) {
+        setClients(data.data);
+      }
+    } catch (error) {
+      console.error('Failed to load clients:', error);
+    }
+  }, []);
+
+  // Track if initial load has been done to prevent re-renders
+  const initialLoadDone = useRef(false);
+  const lastUserId = useRef<string | undefined>(undefined);
+  
   useEffect(() => {
-    // useEffect triggered
+    // Prevent multiple loads for the same user
+    const currentUserId = session?.user?.id;
     if (invoiceId) {
-      loadInvoice(invoiceId);
-    } else if (session?.user) {
-      // Loading data for user
+      if (!initialLoadDone.current) {
+        initialLoadDone.current = true;
+        loadInvoice(invoiceId);
+      }
+    } else if (currentUserId && currentUserId !== lastUserId.current && !initialLoadDone.current) {
+      // Only load if user changed or hasn't loaded yet, and only once
+      lastUserId.current = currentUserId;
+      initialLoadDone.current = true;
+      // Loading data for user - only once per user
       loadServiceOnboardingData();
       loadOrganizationData();
       loadClients();
       loadLogoFromSettings();
       loadSavedPaymentMethods();
     }
-  }, [invoiceId, session, loadInvoice, loadLogoFromSettings, loadOrganizationData, loadServiceOnboardingData]);
+  }, [invoiceId, session?.user?.id, loadInvoice, loadServiceOnboardingData, loadOrganizationData, loadClients, loadLogoFromSettings, loadSavedPaymentMethods]);
 
   // Set client country to user's country if client country is empty and user has a country
   // This only runs once when session becomes available and formData is initialized
@@ -1006,18 +1064,6 @@ export default function CreateInvoicePage() {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
-
-  const loadClients = async () => {
-    try {
-      const response = await fetch('/api/clients');
-      const data = await response.json();
-      if (data.success && data.data) {
-        setClients(data.data);
-      }
-    } catch (error) {
-      console.error('Failed to load clients:', error);
-    }
-  };
 
   const handleInputChange = (field: keyof InvoiceFormData, value: string | number | boolean) => {
     setFormData(prev => {
@@ -2707,32 +2753,40 @@ export default function CreateInvoicePage() {
             mpesaAccountNumber: selectedMethod.fiatDetails?.mpesaAccountNumber || '',
             tillNumber: selectedMethod.fiatDetails?.tillNumber || '',
             businessName: selectedMethod.fiatDetails?.businessName || '',
-            paymentPhoneNumber: selectedMethod.fiatDetails?.paymentPhoneNumber || ''
+            paymentPhoneNumber: selectedMethod.fiatDetails?.paymentPhoneNumber || '',
+            // Set currency from payment method if available, otherwise keep current
+            // M-Pesa methods should default to KES
+            currency: (() => {
+              const methodCurrency = (selectedMethod.fiatDetails as { currency?: string })?.currency;
+              if (methodCurrency) return methodCurrency;
+              // Auto-set KES for M-Pesa methods
+              if (selectedMethod.fiatDetails?.subtype === 'mpesa_paybill' || selectedMethod.fiatDetails?.subtype === 'mpesa_till') {
+                return 'KES';
+              }
+              return prev.currency;
+            })()
           }));
         } else if (selectedMethod.type === 'crypto') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const isSafeWallet = (selectedMethod.cryptoDetails as any)?.safeDetails;
+          const cryptoCurrency = selectedMethod.cryptoDetails?.currency;
+          const cryptoDetails = selectedMethod.cryptoDetails;
           setFormData(prev => ({
             ...prev,
             paymentMethod: 'crypto',
-            paymentNetwork: selectedMethod.cryptoDetails?.network || '',
-            paymentAddress: selectedMethod.cryptoDetails?.address || ''
+            paymentNetwork: cryptoDetails?.network || '',
+            paymentAddress: cryptoDetails?.address || '',
+            chainId: cryptoDetails?.chainId || prev.chainId,
+            tokenAddress: cryptoDetails?.tokenAddress || prev.tokenAddress,
+            // Set currency if available, default to USDT for crypto
+            currency: cryptoCurrency || 'USDT',
+            // If Safe wallet, preserve Safe-specific details
+            ...(isSafeWallet && {
+              // Safe wallet specific fields are already in cryptoDetails
+            })
           }));
         }
       }
-    }
-  };
-
-  // Load saved payment methods
-  const loadSavedPaymentMethods = async () => {
-    try {
-      const response = await fetch('/api/payment-methods');
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          setSavedPaymentMethods(data.paymentMethods || []);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading payment methods:', error);
     }
   };
 
@@ -3545,25 +3599,45 @@ export default function CreateInvoicePage() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Select Saved Payment Method
               </label>
-              <select
-                value={selectedPaymentMethodId || ''}
-                onChange={(e) => handlePaymentMethodSelect(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white font-medium"
-              >
-                <option value="">-- Select a saved payment method --</option>
-                {savedPaymentMethods.map((method) => (
-                  <option key={method._id} value={method._id}>
-                    {method.name} ({
-                      method.type === 'fiat' ? 
-                        method.fiatDetails?.subtype === 'mpesa_paybill' ? 'M-Pesa Paybill' :
-                        method.fiatDetails?.subtype === 'mpesa_till' ? 'M-Pesa Till' :
-                        'Bank Transfer' : 
-                      method.type === 'crypto' ? 'Crypto' :
-                      'Payment Method'
-                    })
-                  </option>
-                ))}
-              </select>
+              <PaymentMethodSelector
+                methods={savedPaymentMethods.map(method => {
+                  // Type-safe mapping to PaymentMethodSelector's expected format
+                  const methodWithExtras = method as typeof method & {
+                    isDefault?: boolean;
+                    fiatDetails?: typeof method.fiatDetails & { currency?: string };
+                    cryptoDetails?: typeof method.cryptoDetails & { 
+                      currency?: string;
+                      safeDetails?: {
+                        safeAddress: string;
+                        owners: string[];
+                        threshold: number;
+                        chainId?: number;
+                      };
+                    };
+                  };
+                  
+                  return {
+                    _id: methodWithExtras._id,
+                    name: methodWithExtras.name,
+                    type: methodWithExtras.type,
+                    isDefault: methodWithExtras.isDefault,
+                    fiatDetails: methodWithExtras.fiatDetails ? {
+                      subtype: methodWithExtras.fiatDetails.subtype === 'phone' ? undefined : (methodWithExtras.fiatDetails.subtype as 'bank' | 'mpesa_paybill' | 'mpesa_till' | undefined),
+                      bankName: methodWithExtras.fiatDetails.bankName,
+                      currency: methodWithExtras.fiatDetails.currency,
+                    } : undefined,
+                    cryptoDetails: methodWithExtras.cryptoDetails ? {
+                      address: methodWithExtras.cryptoDetails.address,
+                      network: methodWithExtras.cryptoDetails.network,
+                      currency: methodWithExtras.cryptoDetails.currency || 'USDT',
+                      safeDetails: methodWithExtras.cryptoDetails.safeDetails,
+                    } : undefined,
+                  };
+                })}
+                selectedMethodId={selectedPaymentMethodId}
+                onSelect={handlePaymentMethodSelect}
+                showSafeWallets={true}
+              />
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
@@ -3803,6 +3877,39 @@ export default function CreateInvoicePage() {
                         </div>
                       </div>
                     )}
+                    {/* Save Payment Method Button */}
+                    <SavePaymentMethodButton
+                      formData={formData}
+                      isAlreadySaved={(() => {
+                        // Check if current form data matches any saved payment method
+                        return savedPaymentMethods.some(method => {
+                          if (formData.paymentMethod === 'fiat' && method.type === 'fiat') {
+                            if (formData.fiatPaymentSubtype === 'bank') {
+                              return method.fiatDetails?.bankName === formData.bankName &&
+                                     method.fiatDetails?.accountNumber === formData.accountNumber;
+                            } else if (formData.fiatPaymentSubtype === 'mpesa_paybill') {
+                              return method.fiatDetails?.paybillNumber === formData.paybillNumber &&
+                                     method.fiatDetails?.mpesaAccountNumber === formData.mpesaAccountNumber;
+                            } else if (formData.fiatPaymentSubtype === 'mpesa_till') {
+                              return method.fiatDetails?.tillNumber === formData.tillNumber;
+                            } else if (formData.fiatPaymentSubtype === 'phone') {
+                              return method.fiatDetails?.paymentPhoneNumber === formData.paymentPhoneNumber;
+                            }
+                          }
+                          return false;
+                        });
+                      })()}
+                      onSaveSuccess={(savedMethodId) => {
+                        // Refresh payment methods list
+                        loadSavedPaymentMethods().then(() => {
+                          // Auto-select the newly saved payment method
+                          if (savedMethodId) {
+                            setSelectedPaymentMethodId(savedMethodId);
+                            handlePaymentMethodSelect(savedMethodId);
+                          }
+                        });
+                      }}
+                    />
                   </div>
                 ) : formData.paymentMethod === 'crypto' ? (
                   <div className="space-y-4">
@@ -3943,14 +4050,48 @@ export default function CreateInvoicePage() {
                     )}
                     <div>
                       <label className="block text-sm text-gray-600 mb-1">Where do you want to receive your payment?</label>
-                      <input
-                        type="text"
+                      <ReceivingAddressInput
                         value={formData.paymentAddress || ''}
-                        onChange={(e) => handleInputChange('paymentAddress', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                        placeholder="Enter wallet address"
+                        onChange={(address, metadata) => {
+                          setFormData(prev => ({
+                            ...prev,
+                            paymentAddress: address,
+                            receivingMethod: metadata?.mode || 'manual',
+                            receivingWalletType: metadata?.walletType || null,
+                            // Update chain and token if provided by wallet connection
+                            chainId: metadata?.chainId || prev.chainId,
+                            tokenAddress: metadata?.tokenAddress || prev.tokenAddress,
+                          }));
+                        }}
+                        network={formData.paymentNetwork}
+                        chainId={formData.chainId}
+                        tokenAddress={formData.tokenAddress}
                       />
                     </div>
+                    {/* Save Payment Method Button */}
+                    <SavePaymentMethodButton
+                      formData={formData}
+                      isAlreadySaved={(() => {
+                        // Check if current form data matches any saved payment method
+                        return savedPaymentMethods.some(method => {
+                          if (formData.paymentMethod === 'crypto' && method.type === 'crypto') {
+                            return method.cryptoDetails?.address === formData.paymentAddress &&
+                                   method.cryptoDetails?.network === formData.paymentNetwork;
+                          }
+                          return false;
+                        });
+                      })()}
+                      onSaveSuccess={(savedMethodId) => {
+                        // Refresh payment methods list
+                        loadSavedPaymentMethods().then(() => {
+                          // Auto-select the newly saved payment method
+                          if (savedMethodId) {
+                            setSelectedPaymentMethodId(savedMethodId);
+                            handlePaymentMethodSelect(savedMethodId);
+                          }
+                        });
+                      }}
+                    />
                   </div>
                 ) : null}
                     </div>

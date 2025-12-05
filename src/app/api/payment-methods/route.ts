@@ -22,11 +22,22 @@ export async function GET() {
     const db = await connectToDatabase();
     const paymentMethodsCollection = db.collection('paymentMethods');
 
-    // Get payment methods for the user
-    const isOrganization = session.user.organizationId && session.user.organizationId !== session.user.id;
-    const query = isOrganization 
-      ? { organizationId: session.user.organizationId }
-      : { userId: session.user.email };
+    // Get user and organization info (same logic as POST)
+    const user = await UserService.getUserByEmail(session.user.email || '');
+    if (!user) {
+      return NextResponse.json(
+        { success: false, message: 'User not found' },
+        { status: 404 }
+      );
+    }
+
+    // Build query matching POST endpoint logic
+    const query: Record<string, unknown> = {};
+    if (user.organizationId) {
+      query.organizationId = user.organizationId;
+    } else {
+      query.userId = user._id;
+    }
 
     const paymentMethods = await paymentMethodsCollection.find(query).toArray();
 

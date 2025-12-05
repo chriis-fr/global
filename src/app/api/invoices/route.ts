@@ -138,6 +138,8 @@ export async function POST(request: NextRequest) {
       paymentMethod,
       paymentNetwork,
       paymentAddress,
+      receivingMethod,
+      receivingWalletType,
       chainId,
       tokenAddress,
       bankName,
@@ -322,6 +324,9 @@ export async function POST(request: NextRequest) {
       paymentMethod: paymentMethod,
       paymentNetwork: paymentNetwork,
       paymentAddress: paymentAddress,
+      payeeAddress: paymentAddress, // Also store in payeeAddress for backward compatibility
+      receivingMethod: receivingMethod || 'manual', // How receiving address was entered
+      receivingWalletType: receivingWalletType || null, // Wallet type if connected
       bankName: bankName,
       accountNumber: accountNumber,
       routingNumber: routingNumber,

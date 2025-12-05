@@ -66,7 +66,8 @@ export class PaymentMethodService {
     organizationId?: ObjectId,
     userId?: ObjectId,
     type?: PaymentMethodType,
-    activeOnly: boolean = true
+    activeOnly: boolean = true,
+    includeSafeWallets: boolean = true
   ): Promise<PaymentMethod[]> {
     const db = await this.initDatabase();
     
@@ -90,6 +91,97 @@ export class PaymentMethodService {
 
     const results = await collection.find(filter).sort({ isDefault: -1, createdAt: -1 }).toArray();
     return results as PaymentMethod[];
+  }
+
+  // Get Safe wallets specifically
+  async getSafeWallets(
+    organizationId?: ObjectId,
+    userId?: ObjectId,
+    activeOnly: boolean = true
+  ): Promise<PaymentMethod[]> {
+    const db = await this.initDatabase();
+    
+    const collection = db.collection('paymentMethods');
+    
+    const filter: Record<string, unknown> = {
+      type: 'crypto',
+      'cryptoDetails.safeDetails': { $exists: true },
+    };
+    
+    if (organizationId) {
+      filter.organizationId = organizationId;
+    } else if (userId) {
+      filter.userId = userId;
+    }
+    
+    if (activeOnly) {
+      filter.isActive = true;
+    }
+
+    const results = await collection.find(filter).sort({ isDefault: -1, createdAt: -1 }).toArray();
+    return results as PaymentMethod[];
+  }
+
+  // Create a Safe wallet payment method
+  async createSafePaymentMethod(
+    input: {
+      name: string;
+      safeAddress: string;
+      owners: string[];
+      threshold: number;
+      chainId: number;
+      network: string;
+      currency: string;
+      version?: string;
+      modules?: string[];
+      nonce?: number;
+      connectionMethod?: 'safe_app' | 'wallet_connect' | 'manual' | 'imported';
+      isDefault?: boolean;
+      description?: string;
+      tags?: string[];
+    },
+    organizationId?: ObjectId,
+    userId?: ObjectId
+  ): Promise<PaymentMethod> {
+    const db = await this.initDatabase();
+    
+    const collection = db.collection('paymentMethods');
+    
+    // If this is a default method, unset other defaults of the same type
+    if (input.isDefault) {
+      await this.unsetDefaultMethods('crypto', organizationId, userId);
+    }
+
+    const paymentMethod: PaymentMethod = {
+      name: input.name,
+      type: 'crypto',
+      isDefault: input.isDefault || false,
+      isActive: true,
+      description: input.description,
+      tags: input.tags || ['safe', 'multisig'],
+      organizationId,
+      userId,
+      cryptoDetails: {
+        address: input.safeAddress.toLowerCase(),
+        network: input.network,
+        currency: input.currency,
+        safeDetails: {
+          safeAddress: input.safeAddress.toLowerCase(),
+          owners: input.owners.map(addr => addr.toLowerCase()),
+          threshold: input.threshold,
+          version: input.version,
+          modules: input.modules,
+          nonce: input.nonce,
+          connectionMethod: input.connectionMethod || 'imported',
+          chainId: input.chainId,
+        },
+      },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const result = await collection.insertOne(paymentMethod);
+    return { ...paymentMethod, _id: result.insertedId };
   }
 
   // Get a single payment method by ID

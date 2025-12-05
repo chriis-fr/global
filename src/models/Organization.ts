@@ -125,9 +125,10 @@ export interface Organization {
   verified: boolean;
   
   // Safe Wallet (Gnosis Safe) - Optional, for organizations using multisig
-  safeAddress?: string; // Deployed Safe wallet address
-  safeOwners?: string[]; // Array of owner addresses
+  safeAddress?: string; // Deployed Safe wallet address (primary/default)
+  safeOwners?: string[]; // Array of owner addresses (for primary Safe)
   safeThreshold?: number; // Number of signatures required (e.g., 2 of 3)
+  connectedSafeWallets?: ObjectId[]; // Array of PaymentMethod IDs for connected Safe wallets
   
   // Timestamps
   createdAt: Date;
