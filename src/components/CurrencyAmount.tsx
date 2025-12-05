@@ -10,6 +10,8 @@ interface CurrencyAmountProps {
   className?: string;
   showOriginalCurrency?: boolean;
   showConversionRate?: boolean;
+  convertedAmount?: number; // Pre-converted amount from server
+  convertedCurrency?: string; // Currency of pre-converted amount
 }
 
 export default function CurrencyAmount({
@@ -17,12 +19,23 @@ export default function CurrencyAmount({
   currency,
   className = '',
   showOriginalCurrency = false,
-  showConversionRate = false
+  showConversionRate = false,
+  convertedAmount,
+  convertedCurrency,
 }: CurrencyAmountProps) {
   const { preferredCurrency, getCurrencySymbol } = useCurrency();
-  const conversion = useCurrencyConversion(amount, currency, preferredCurrency);
-
-  // Debug logging
+  
+  // If we have a pre-converted amount and it matches preferred currency, use it directly
+  const usePreConverted = convertedAmount !== undefined && 
+                          convertedCurrency === preferredCurrency &&
+                          currency !== preferredCurrency;
+  
+  // Only use hook if we don't have pre-converted amount
+  const conversion = useCurrencyConversion(
+    usePreConverted ? 0 : amount, // Pass 0 to skip conversion if we have pre-converted
+    usePreConverted ? preferredCurrency : currency, // Skip conversion
+    preferredCurrency
+  );
 
   // If currencies are the same, just display the amount
   if (currency === preferredCurrency) {
@@ -32,6 +45,23 @@ export default function CurrencyAmount({
     return (
       <span className={className}>
         {formatted.display}
+      </span>
+    );
+  }
+
+  // Use pre-converted amount if available
+  if (usePreConverted && convertedAmount !== undefined) {
+    const convertedSymbol = getCurrencySymbol(preferredCurrency);
+    const convertedFormatted = formatNumber(convertedAmount, convertedSymbol);
+
+    return (
+      <span className={className}>
+        {convertedFormatted.display}
+        {showOriginalCurrency && (
+          <span className="text-xs text-gray-400 ml-1">
+            ({getCurrencySymbol(currency)}{amount.toLocaleString()})
+          </span>
+        )}
       </span>
     );
   }

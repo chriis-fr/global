@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { 
   Receipt, 
@@ -75,6 +75,7 @@ interface Payable {
   };
   attachedFiles: Record<string, unknown>[];
   relatedInvoiceId?: string;
+  invoiceNumber?: string | null; // Invoice number if related
   ledgerEntryId?: string;
   ledgerStatus: string;
   frequency: string;
@@ -108,15 +109,16 @@ export default function PayableViewPage() {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(`/api/payables/${payableId}`);
-      const data = await response.json();
+      const { getPayableWithInvoice } = await import('@/app/actions/payable-actions');
+      const result = await getPayableWithInvoice(payableId);
 
-      if (data.success) {
-        setPayable(data.data);
+      if (result.success && result.data) {
+        setPayable(result.data);
       } else {
-        setError(data.message || 'Failed to load payable');
+        setError(result.error || 'Failed to load payable');
       }
-    } catch {
+    } catch (err) {
+      console.error('Error loading payable:', err);
       setError('Failed to load payable');
     } finally {
       setLoading(false);
@@ -403,17 +405,32 @@ export default function PayableViewPage() {
     }
   };
 
-  const formatDate = (dateString: string) => {
+  const formatDate = useCallback((dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric'
     });
-  };
+  }, []);
 
-  const getCurrencySymbol = () => {
+  const getCurrencySymbol = useCallback(() => {
     return getCurrencyByCode(payable?.currency || 'USD')?.symbol || '$';
-  };
+  }, [payable?.currency]);
+
+  // Compute display name with invoice prefix (shortened)
+  const displayPayableName = useMemo(() => {
+    if (!payable) return '';
+    
+    // If payable has invoice number, shorten it to "Invoice Payment....{last4}"
+    if (payable.invoiceNumber) {
+      const invoiceNum = payable.invoiceNumber;
+      const last4 = invoiceNum.length > 4 ? invoiceNum.slice(-4) : invoiceNum;
+      return `Invoice Payment....${last4}`;
+    }
+    
+    // Otherwise use the payable name as is
+    return payable.payableName || 'Payable';
+  }, [payable]);
 
   if (loading) {
     return (
@@ -459,8 +476,12 @@ export default function PayableViewPage() {
                 <ArrowLeft className="h-5 w-5" />
               </button>
               <div>
-                <h1 className="text-xl font-semibold text-white">{payable.payableName}</h1>
-                <p className="text-blue-200 text-sm">Payable #{payable.payableNumber}</p>
+                <h1 className="text-xl font-semibold text-white">{displayPayableName}</h1>
+                <p className="text-blue-200 text-sm">
+                  {payable.invoiceNumber 
+                    ? `#${payable.payableNumber}` 
+                    : `Payable #: ${payable.payableNumber}`}
+                </p>
               </div>
             </div>
             
@@ -489,7 +510,7 @@ export default function PayableViewPage() {
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 md:gap-0">
                   {/* Left Side - Payable Name */}
                   <div className="flex-1">
-                    <h1 className="text-3xl font-bold text-gray-900">{payable.payableName}</h1>
+                    <h1 className="text-3xl font-bold text-gray-900">{displayPayableName}</h1>
                     {payable.payableNumber && (
                       <p className="text-lg text-gray-600 mt-2">Payable #: {payable.payableNumber}</p>
                     )}
@@ -580,18 +601,21 @@ export default function PayableViewPage() {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {payable.items.map((item, index) => (
-                        <tr key={index}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.description}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.quantity}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {getCurrencySymbol()}{item.unitPrice.toFixed(2)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {getCurrencySymbol()}{item.amount.toFixed(2)}
-                          </td>
-                        </tr>
-                      ))}
+                      {payable.items.map((item, index) => {
+                        const currencySymbol = getCurrencySymbol();
+                        return (
+                          <tr key={`${item.id || index}-${item.description}`}>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.description}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.quantity}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {currencySymbol}{item.unitPrice.toFixed(2)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {currencySymbol}{item.amount.toFixed(2)}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -601,18 +625,25 @@ export default function PayableViewPage() {
               <div className="p-4 sm:p-8">
                 <div className="flex justify-end">
                   <div className="w-64 space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Subtotal:</span>
-                      <span className="font-medium">{getCurrencySymbol()}{payable.subtotal.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Tax:</span>
-                      <span className="font-medium">{getCurrencySymbol()}{payable.totalTax.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-lg font-semibold border-t pt-2">
-                      <span>Total:</span>
-                      <span>{getCurrencySymbol()}{payable.total.toFixed(2)}</span>
-                    </div>
+                    {(() => {
+                      const currencySymbol = getCurrencySymbol();
+                      return (
+                        <>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Subtotal:</span>
+                            <span className="font-medium">{currencySymbol}{payable.subtotal.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Tax:</span>
+                            <span className="font-medium">{currencySymbol}{payable.totalTax.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between text-lg font-semibold border-t pt-2">
+                            <span>Total:</span>
+                            <span>{currencySymbol}{payable.total.toFixed(2)}</span>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
                 
