@@ -137,13 +137,36 @@ export function useCurrencyConversion(
       return;
     }
 
-    // Add to batch queue
-    setResult(prev => ({ ...prev, isLoading: true, error: null }));
+    // Set initial state with original amount (non-blocking)
+    setResult({
+      originalAmount: amount,
+      convertedAmount: amount, // Show original while converting
+      fromCurrency,
+      toCurrency: targetCurrency,
+      rate: 1,
+      converted: false,
+      isLoading: true, // Still loading but showing original amount
+      error: null
+    });
     
     const queueKey = `${Date.now()}_${Math.random()}`;
+    
+    // Set a timeout to prevent getting stuck in loading state
+    const timeoutId = setTimeout(() => {
+      if (mountedRef.current) {
+        setResult(prev => ({
+          ...prev,
+          isLoading: false,
+          error: 'Conversion timeout - showing original amount'
+        }));
+      }
+      conversionQueue.delete(queueKey);
+    }, 10000); // 10 second timeout
+    
     const promise = new Promise<ConversionResult>((resolve, reject) => {
       conversionQueue.set(queueKey, {
         resolve: (result) => {
+          clearTimeout(timeoutId);
           if (mountedRef.current) {
             // Cache the result
             setCachedConversion(cacheKey, {
@@ -160,6 +183,7 @@ export function useCurrencyConversion(
           resolve(result);
         },
         reject: (error) => {
+          clearTimeout(timeoutId);
           if (mountedRef.current) {
             setResult(prev => ({
               ...prev,
@@ -184,6 +208,7 @@ export function useCurrencyConversion(
     }, BATCH_DELAY);
 
     return () => {
+      clearTimeout(timeoutId);
       conversionQueue.delete(queueKey);
     };
   }, [amount, fromCurrency, toCurrency, preferredCurrency, getCachedConversion, setCachedConversion, getCacheKey]);

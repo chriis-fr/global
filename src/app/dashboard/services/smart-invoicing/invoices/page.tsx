@@ -687,6 +687,7 @@ export default function InvoicesPage() {
                             showOriginalCurrency={true}
                             convertedAmount={(invoice as unknown as { convertedAmount?: number }).convertedAmount}
                             convertedCurrency={(invoice as unknown as { convertedCurrency?: string }).convertedCurrency}
+                            isCrypto={invoice.paymentSettings?.method === 'crypto'}
                           />
                         </p>
                         <div className="flex items-center space-x-2">
@@ -847,6 +848,7 @@ export default function InvoicesPage() {
                             showOriginalCurrency={true}
                             convertedAmount={(invoice as unknown as { convertedAmount?: number }).convertedAmount}
                             convertedCurrency={(invoice as unknown as { convertedCurrency?: string }).convertedCurrency}
+                            isCrypto={invoice.paymentSettings?.method === 'crypto'}
                           />
                         </div>
                       </td>

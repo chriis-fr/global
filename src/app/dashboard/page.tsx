@@ -78,6 +78,7 @@ export default function DashboardPage() {
     return `${subscription.usage.invoicesThisMonth} / ${subscription.limits.invoicesPerMonth === -1 ? '∞' : subscription.limits.invoicesPerMonth}`;
   };
 
+
   // Check subscription type and access
   const isPayablesOnly = subscription?.plan?.type === 'payables';
   const isReceivablesOnly = subscription?.plan?.type === 'receivables';

@@ -29,7 +29,7 @@
     {"name": "Credit Bank Limited", "swift_code": "CRBTKENA", "bank_code": "25"},
     {"name": "Unaitas Sacco", "swift_code": "UNAIKEPC", "bank_code": null},
     {"name": "Guardian Bank Limited", "swift_code": "GUARKENA", "bank_code": "55"},
-    {"name": "Investments & Morgage Limited", "swift_code": "IMBLKENA", "bank_code": "57"},
+    {"name": "I&M Bank", "swift_code": "IMBLKENA", "bank_code": "57"},
     {"name": "Sidian Bank", "swift_code": "SIDNKENA", "bank_code": "66"},
     {"name": "United Bank for Africa", "swift_code": "UNAFKENA", "bank_code": "76"},
     {"name": "Cooperative Bank of Kenya", "swift_code": "KCOOKENA", "bank_code": "11"},

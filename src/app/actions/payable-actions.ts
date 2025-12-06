@@ -117,6 +117,8 @@ export async function getPayableWithInvoice(payableId: string) {
       statusHistory: payable.statusHistory || [],
       lastNotificationSent: payable.lastNotificationSent?.toISOString(),
       notificationCount: payable.notificationCount || 0,
+      txHash: payable.txHash, // Transaction hash for crypto payments
+      chainId: payable.chainId, // Chain ID for crypto payments
       createdAt: payable.createdAt?.toISOString() || new Date().toISOString(),
       updatedAt: payable.updatedAt?.toISOString() || new Date().toISOString(),
     };

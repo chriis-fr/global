@@ -21,15 +21,21 @@ export class LedgerSyncService {
         return await this.updateLedgerEntryFromInvoice(existingEntry._id, invoice);
       }
 
+      // Determine ownerId - for individuals, use email; for organizations, use organizationId
+      const isOrganization = !!(invoice.organizationId as string);
+      const ownerId = isOrganization 
+        ? (invoice.organizationId as string)
+        : ((invoice.ownerId as string) || (invoice.userId as string) || '');
+      
       // Create new ledger entry from invoice
       const ledgerEntry: FinancialLedgerEntry = {
         entryId: (invoice.invoiceNumber as string) || `INV-${invoice._id}`,
         type: 'receivable',
-        ownerId: (invoice.ownerId as string) || (invoice.userId as string),
-        ownerType: (invoice.ownerType as 'individual' | 'organization') || 'individual',
-        userId: invoice.userId as string,
+        ownerId: ownerId,
+        ownerType: isOrganization ? 'organization' : 'individual',
+        userId: (invoice.userId as string) || '',
         organizationId: invoice.organizationId as string,
-        issuerId: (invoice.issuerId as string) || (invoice.userId as string),
+        issuerId: (invoice.issuerId as string) || (invoice.userId as string) || '',
         relatedInvoiceId: new ObjectId(invoice._id as string),
         counterparty: {
           name: (invoice.clientName as string) || ((invoice.clientDetails as Record<string, unknown>)?.firstName as string) || 'Unknown Client',
@@ -109,15 +115,21 @@ export class LedgerSyncService {
         return await this.updateLedgerEntryFromPayable(existingEntry._id, payable);
       }
 
+      // Determine ownerId - for individuals, use email; for organizations, use organizationId
+      const isOrganization = !!(payable.organizationId as string);
+      const ownerId = isOrganization 
+        ? (payable.organizationId as string)
+        : ((payable.ownerId as string) || (payable.userId as string) || '');
+
       // Create new ledger entry from payable
       const ledgerEntry: FinancialLedgerEntry = {
         entryId: (payable.payableNumber as string) || `PAY-${payable._id}`,
         type: 'payable',
-        ownerId: (payable.ownerId as string) || (payable.userId as string),
-        ownerType: (payable.ownerType as 'individual' | 'organization') || 'individual',
-        userId: payable.userId as string,
+        ownerId: ownerId,
+        ownerType: isOrganization ? 'organization' : 'individual',
+        userId: (payable.userId as string) || '',
         organizationId: payable.organizationId as string,
-        issuerId: (payable.issuerId as string) || (payable.userId as string),
+        issuerId: (payable.issuerId as string) || (payable.userId as string) || '',
         relatedPayableId: new ObjectId(payable._id as string),
         counterparty: {
           name: (payable.vendorName as string) || 'Unknown Vendor',
@@ -183,7 +195,15 @@ export class LedgerSyncService {
       const db = await connectToDatabase();
       const ledgerCollection = db.collection('financial_ledger');
 
+      // Determine ownerId - for individuals, use email; for organizations, use organizationId
+      const isOrganization = !!(invoice.organizationId as string);
+      const ownerId = isOrganization 
+        ? (invoice.organizationId as string)
+        : ((invoice.ownerId as string) || (invoice.userId as string) || '');
+
       const updateData = {
+        ownerId: ownerId, // Ensure ownerId is correct
+        ownerType: isOrganization ? 'organization' : 'individual',
         amount: (invoice.total as number) || (invoice.totalAmount as number) || 0,
         currency: (invoice.currency as string) || 'USD',
         subtotal: (invoice.subtotal as number) || 0,
@@ -225,7 +245,15 @@ export class LedgerSyncService {
       const db = await connectToDatabase();
       const ledgerCollection = db.collection('financial_ledger');
 
+      // Determine ownerId - for individuals, use email; for organizations, use organizationId
+      const isOrganization = !!(payable.organizationId as string);
+      const ownerId = isOrganization 
+        ? (payable.organizationId as string)
+        : ((payable.ownerId as string) || (payable.userId as string) || '');
+
       const updateData = {
+        ownerId: ownerId, // Ensure ownerId is correct
+        ownerType: isOrganization ? 'organization' : 'individual',
         amount: (payable.total as number) || 0,
         currency: (payable.currency as string) || 'USD',
         subtotal: (payable.subtotal as number) || 0,

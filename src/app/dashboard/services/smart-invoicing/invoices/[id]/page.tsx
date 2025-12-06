@@ -25,6 +25,9 @@ import html2canvas from 'html2canvas';
 import { countries } from '@/data/countries';
 import { getCurrencyByCode } from '@/data/currencies';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
+import { getExplorerUrl } from '@/lib/utils/blockchain';
+import { ExternalLink } from 'lucide-react';
+import { getChainByNumericId, SUPPORTED_CHAINS } from '@/lib/chains';
 
 interface Invoice {
   _id: string;
@@ -110,7 +113,12 @@ interface Invoice {
     };
     currency?: string;
     enableMultiCurrency?: boolean;
+    chainId?: number;
+    tokenAddress?: string;
   };
+  txHash?: string;
+  chainId?: number;
+  tokenAddress?: string;
 }
 
 export default function InvoiceViewPage() {
@@ -314,6 +322,56 @@ export default function InvoiceViewPage() {
 
   const getCurrencySymbol = (currency: string) => {
     return getCurrencyByCode(currency)?.symbol || currency;
+  };
+
+  // Get the correct currency for display, especially for crypto invoices
+  const getDisplayCurrency = (invoice: Invoice): string => {
+    // Check if it's a crypto invoice
+    const isCrypto = invoice.paymentMethod === 'crypto' || invoice.paymentSettings?.method === 'crypto';
+    
+    if (isCrypto) {
+      // First, check if currency is already set correctly (should be USDT, cUSD, etc. for crypto)
+      const storedCurrency = invoice.currency || invoice.paymentSettings?.currency;
+      if (storedCurrency && storedCurrency !== 'USD' && storedCurrency.toUpperCase() !== 'USD') {
+        // Currency is already set to crypto token (USDT, cUSD, etc.)
+        return storedCurrency;
+      }
+      
+      // If currency is USD or missing, try to get token symbol from tokenAddress
+      const tokenAddress = invoice.paymentSettings?.tokenAddress || invoice.tokenAddress;
+      const chainId = invoice.paymentSettings?.chainId || invoice.chainId;
+      
+      if (tokenAddress) {
+        // Try to find token symbol from chain configuration
+        if (chainId) {
+          const chain = getChainByNumericId(chainId);
+          if (chain?.tokens) {
+            for (const [symbol, token] of Object.entries(chain.tokens)) {
+              if (token.address.toLowerCase() === tokenAddress.toLowerCase()) {
+                return symbol;
+              }
+            }
+          }
+        }
+        
+        // Fallback: check all chains
+        for (const chain of SUPPORTED_CHAINS) {
+          if (chain.tokens) {
+            for (const [symbol, token] of Object.entries(chain.tokens)) {
+              if (token.address.toLowerCase() === tokenAddress.toLowerCase()) {
+                return symbol;
+              }
+            }
+          }
+        }
+      }
+      
+      // If we still can't find it, return the stored currency (even if it's USD)
+      return storedCurrency || 'USD';
+    }
+    
+    // For non-crypto, use the currency field
+    return invoice.currency || invoice.paymentSettings?.currency || 'USD';
   };
 
   const getStatusColor = (status: string) => {
@@ -938,7 +996,7 @@ export default function InvoiceViewPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex rounded-lg items-center justify-center">
         <div className="flex items-center space-x-2">
           <Loader2 className="h-6 w-6 animate-spin" />
           <span>Loading invoice...</span>
@@ -964,7 +1022,7 @@ export default function InvoiceViewPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="min-h-screen rounded-lg bg-gray-50 py-8">
       <div className="max-w-4xl mx-auto px-2 sm:px-4">
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 space-y-4 sm:space-y-0">
@@ -977,7 +1035,7 @@ export default function InvoiceViewPage() {
           </button>
           
           <div className="flex space-x-4">
-            <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(invoice.status || 'draft')}`}>
+            <span className={`inline-flex p-2 text-sm font-semibold rounded-3xl ${getStatusColor(invoice.status || 'draft')}`}>
               {invoice.status === 'sent' ? 'Pending' : 
                invoice.status ? (invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)) : 'Draft'}
             </span>
@@ -1202,10 +1260,45 @@ export default function InvoiceViewPage() {
                 {(invoice.paymentMethod === 'fiat' || invoice.paymentSettings?.method === 'fiat') && (invoice.routingNumber || invoice.paymentSettings?.bankAccount?.routingNumber) && (
                   <p className="text-sm text-gray-600">Routing: {invoice.routingNumber || invoice.paymentSettings?.bankAccount?.routingNumber}</p>
                 )}
+                {/* Transaction Hash (for paid crypto invoices) */}
+                {invoice.status === 'paid' && invoice.txHash && (
+                  <div className="mt-4">
+                    <p className="text-sm text-gray-600 mb-2">Transaction Hash</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {(() => {
+                        const chainId = invoice.chainId || invoice.paymentSettings?.chainId;
+                        const explorerUrl = getExplorerUrl(invoice.txHash, chainId);
+                        // If we have an explorer URL, make the hash itself clickable
+                        if (explorerUrl) {
+                          return (
+                            <a
+                              href={explorerUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 text-blue-600 hover:text-blue-800 transition-colors group"
+                              title="View on blockchain explorer"
+                            >
+                              <code className="text-sm font-mono text-gray-800 bg-gray-100 px-2 py-1 rounded break-all group-hover:bg-gray-200 transition-colors">
+                                {invoice.txHash}
+                              </code>
+                              <ExternalLink className="h-4 w-4 flex-shrink-0" />
+                            </a>
+                          );
+                        }
+                        // If no explorer URL, just show the hash
+                        return (
+                          <code className="text-sm font-mono text-gray-800 bg-gray-100 px-2 py-1 rounded break-all">
+                            {invoice.txHash}
+                          </code>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                )}
               </div>
               <div>
                 <p className="text-sm text-gray-600 mb-2">Currency</p>
-                <p className="font-medium text-gray-600">{invoice.currency || invoice.paymentSettings?.currency || 'USD'}</p>
+                <p className="font-medium text-gray-600">{getDisplayCurrency(invoice)}</p>
                 {(invoice.enableMultiCurrency || invoice.paymentSettings?.enableMultiCurrency) && (
                   <p className="text-sm text-blue-600">Multi-currency enabled</p>
                 )}

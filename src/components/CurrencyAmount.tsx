@@ -12,7 +12,11 @@ interface CurrencyAmountProps {
   showConversionRate?: boolean;
   convertedAmount?: number; // Pre-converted amount from server
   convertedCurrency?: string; // Currency of pre-converted amount
+  isCrypto?: boolean; // Whether this is a crypto currency invoice
 }
+
+// Common crypto currencies
+const CRYPTO_CURRENCIES = ['USDT', 'USDC', 'BTC', 'ETH', 'CELO', 'cUSD', 'cEUR', 'DAI', 'MATIC', 'BNB'];
 
 export default function CurrencyAmount({
   amount,
@@ -22,26 +26,31 @@ export default function CurrencyAmount({
   showConversionRate = false,
   convertedAmount,
   convertedCurrency,
+  isCrypto,
 }: CurrencyAmountProps) {
   const { preferredCurrency, getCurrencySymbol } = useCurrency();
   
-  // If we have a pre-converted amount and it matches preferred currency, use it directly
-  const usePreConverted = convertedAmount !== undefined && 
-                          convertedCurrency === preferredCurrency &&
-                          currency !== preferredCurrency;
+  // Detect if this is crypto (check prop or currency code) - do this early
+  const isCryptoCurrency = isCrypto || CRYPTO_CURRENCIES.includes(currency.toUpperCase());
   
-  // Only use hook if we don't have pre-converted amount
-  const conversion = useCurrencyConversion(
-    usePreConverted ? 0 : amount, // Pass 0 to skip conversion if we have pre-converted
-    usePreConverted ? preferredCurrency : currency, // Skip conversion
-    preferredCurrency
-  );
-
-  // If currencies are the same, just display the amount
+  // If currencies are the same, handle crypto differently
   if (currency === preferredCurrency) {
+    // For crypto, always show format even if same currency (with gray brackets)
+    if (isCryptoCurrency) {
+      const symbol = getCurrencySymbol(currency);
+      const formatted = formatNumber(amount, symbol);
+      return (
+        <span className={className}>
+          {formatted.display}
+          <span className="text-xs text-gray-400 ml-1">
+            ({currency.toUpperCase()})
+          </span>
+        </span>
+      );
+    }
+    // For fiat, just show amount
     const symbol = getCurrencySymbol(currency);
     const formatted = formatNumber(amount, symbol);
-    
     return (
       <span className={className}>
         {formatted.display}
@@ -49,11 +58,29 @@ export default function CurrencyAmount({
     );
   }
 
-  // Use pre-converted amount if available
+  // If we have a pre-converted amount and it matches preferred currency, use it directly
+  const usePreConverted = convertedAmount !== undefined && 
+                          convertedCurrency === preferredCurrency &&
+                          currency !== preferredCurrency;
+  
+  // Use pre-converted amount if available (before calling hook)
   if (usePreConverted && convertedAmount !== undefined) {
     const convertedSymbol = getCurrencySymbol(preferredCurrency);
     const convertedFormatted = formatNumber(convertedAmount, convertedSymbol);
 
+    // For crypto: show converted amount first, then crypto currency in brackets (gray)
+    if (isCryptoCurrency) {
+      return (
+        <span className={className}>
+          {convertedFormatted.display}
+          <span className="text-xs text-gray-400 ml-1">
+            ({currency.toUpperCase()})
+          </span>
+        </span>
+      );
+    }
+
+    // For fiat: show converted amount with original in brackets (gray)
     return (
       <span className={className}>
         {convertedFormatted.display}
@@ -66,31 +93,83 @@ export default function CurrencyAmount({
     );
   }
 
-  // If conversion is loading, show loading state
+  // Only use hook if we don't have pre-converted amount
+  const conversion = useCurrencyConversion(
+    amount,
+    currency,
+    preferredCurrency
+  );
+
+  // If conversion is loading, handle differently for crypto vs fiat
   if (conversion.isLoading) {
-    return (
-      <span className={`${className} text-gray-400`}>
-        Converting...
-      </span>
-    );
+    if (isCryptoCurrency) {
+      // For crypto: show loading with crypto format, use hook's initial convertedAmount if available
+      const convertedSymbol = getCurrencySymbol(preferredCurrency);
+      const displayAmount = conversion.convertedAmount || amount; // Use converted if available, otherwise original
+      const formatted = formatNumber(displayAmount, convertedSymbol);
+      return (
+        <span className={className}>
+          {formatted.display}
+          <span className="text-xs text-gray-400 ml-1">
+            ({currency.toUpperCase()})
+          </span>
+        </span>
+      );
+    } else {
+      // For fiat: show original amount
+      const symbol = getCurrencySymbol(currency);
+      const formatted = formatNumber(amount, symbol);
+      return (
+        <span className={className}>
+          {formatted.display}
+        </span>
+      );
+    }
   }
 
-  // If there's an error, show original amount
+  // If there's an error or timeout, handle differently for crypto vs fiat
   if (conversion.error) {
-    const symbol = getCurrencySymbol(currency);
-    const formatted = formatNumber(amount, symbol);
-    
-    return (
-      <span className={`${className} text-gray-400`} title="Conversion failed">
-        {formatted.display}
-      </span>
-    );
+    if (isCryptoCurrency) {
+      // For crypto: still show format with original amount converted (estimate)
+      const convertedSymbol = getCurrencySymbol(preferredCurrency);
+      const formatted = formatNumber(conversion.convertedAmount || amount, convertedSymbol);
+      return (
+        <span className={className} title={conversion.error}>
+          {formatted.display}
+          <span className="text-xs text-gray-400 ml-1">
+            ({currency.toUpperCase()})
+          </span>
+        </span>
+      );
+    } else {
+      // For fiat: show original amount
+      const symbol = getCurrencySymbol(currency);
+      const formatted = formatNumber(amount, symbol);
+      return (
+        <span className={className} title={conversion.error}>
+          {formatted.display}
+        </span>
+      );
+    }
   }
 
   // Display converted amount
   const convertedSymbol = getCurrencySymbol(preferredCurrency);
   const convertedFormatted = formatNumber(conversion.convertedAmount, convertedSymbol);
 
+  // For crypto: show converted amount first, then crypto currency in brackets (gray)
+  if (isCryptoCurrency) {
+    return (
+      <span className={className}>
+        {convertedFormatted.display}
+        <span className="text-xs text-gray-400 ml-1">
+          ({currency.toUpperCase()})
+        </span>
+      </span>
+    );
+  }
+
+  // For fiat: show converted amount with original in brackets
   return (
     <span className={className}>
       {convertedFormatted.display}

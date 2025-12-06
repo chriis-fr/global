@@ -424,28 +424,33 @@ export async function getInvoicesListMinimal(
         if (batchResult.success && batchResult.data) {
           conversionsNeeded.forEach((conv, index) => {
             const result = batchResult.data[index];
-            if (result && result.convertedAmount !== undefined) {
+            if (result && result.convertedAmount !== undefined && !result.error) {
               conversionMap.set(conv.index, result.convertedAmount);
             } else {
-              // Fallback to original amount on error
-              conversionMap.set(conv.index, conv.amount);
+              // Fallback to original amount on error - don't set convertedAmount
+              // This will make the component show original amount
             }
           });
+        } else {
+          // If batch conversion fails, don't set any conversions
+          // Component will show original amounts
+          console.warn('Batch currency conversion failed, showing original amounts');
         }
       } catch (error) {
         console.error('Error batch converting currencies:', error);
-        // Fallback: use original amounts
-        conversionsNeeded.forEach(conv => {
-          conversionMap.set(conv.index, conv.amount);
-        });
+        // Don't set any conversions - let component show original amounts
       }
     }
 
     // Transform to minimal data structure for list view
     const invoiceList: InvoiceDetails[] = invoices.map((invoice, index) => {
       const originalAmount = invoice.total || invoice.totalAmount || 0;
-      const convertedAmount = conversionMap.get(index) ?? originalAmount;
+      const convertedAmount = conversionMap.get(index);
       const needsConversion = (invoice.currency || 'USD') !== preferredCurrency;
+      
+      // Don't set convertedAmount on server - let client convert in background
+      // This prevents blocking page load
+      const hasValidConversion = false; // Always false - client will handle conversion
       
       return {
         _id: invoice._id.toString(),
@@ -473,16 +478,16 @@ export async function getInvoicesListMinimal(
         subtotal: 0, // Not needed for list view
         totalTax: 0, // Not needed for list view
         total: originalAmount,
-        totalAmount: convertedAmount, // Store converted amount
+        totalAmount: hasValidConversion ? convertedAmount : originalAmount, // Store converted amount or fallback to original
         status: invoice.status || 'draft',
         memo: '', // Not needed for list view
         createdAt: invoice.createdAt?.toISOString() || new Date().toISOString(),
         updatedAt: invoice.updatedAt?.toISOString() || new Date().toISOString(),
         recipientType: invoice.recipientType,
         taxes: undefined, // Not needed for list view
-        // Add converted amount metadata
-        convertedAmount: needsConversion && convertedAmount !== originalAmount ? convertedAmount : undefined,
-        convertedCurrency: needsConversion && convertedAmount !== originalAmount ? preferredCurrency : undefined,
+        // Add converted amount metadata - only if conversion was successful
+        convertedAmount: hasValidConversion ? convertedAmount : undefined,
+        convertedCurrency: hasValidConversion ? preferredCurrency : undefined,
       } as InvoiceDetails & { convertedAmount?: number; convertedCurrency?: string };
     });
 

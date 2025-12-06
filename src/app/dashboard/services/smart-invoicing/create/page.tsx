@@ -441,6 +441,7 @@ export default function CreateInvoicePage() {
   const [showClientEditModal, setShowClientEditModal] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [sendingInvoice, setSendingInvoice] = useState(false);
+  const [creatingClient, setCreatingClient] = useState(false);
   
   // Phone formatting and validation functions
   const formatPhoneForWhatsApp = (phone: string, countryCode: string = '+1') => {
@@ -1327,6 +1328,7 @@ export default function CreateInvoicePage() {
 
   const handleCreateClient = async (clientData: Omit<Client, '_id'>) => {
     try {
+      setCreatingClient(true);
       const response = await fetch('/api/clients', {
         method: 'POST',
         headers: {
@@ -1339,9 +1341,14 @@ export default function CreateInvoicePage() {
         await loadClients();
         selectClient(data.data);
         setShowNewClientModal(false);
+      } else {
+        alert(data.message || 'Failed to create client');
       }
     } catch (error) {
       console.error('Failed to create client:', error);
+      alert('Failed to create client. Please try again.');
+    } finally {
+      setCreatingClient(false);
     }
   };
 
@@ -4411,7 +4418,7 @@ export default function CreateInvoicePage() {
 
         {/* Client Creation Modal */}
         {showNewClientModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-30 z-50 p-4 overflow-y-auto">
+          <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-50 p-4 overflow-y-auto">
             <div className="min-h-full flex items-center justify-center py-4">
               <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative touch-manipulation shadow-xl">
                 <div className="flex justify-between items-center mb-4">
@@ -4427,6 +4434,7 @@ export default function CreateInvoicePage() {
                 <ClientCreationForm 
                   onSubmit={handleCreateClient}
                   onCancel={() => setShowNewClientModal(false)}
+                  isLoading={creatingClient}
                 />
               </div>
             </div>
@@ -4435,7 +4443,7 @@ export default function CreateInvoicePage() {
 
         {/* CC Client Creation Modal */}
         {showCcClientCreationModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-30 z-50 p-4 overflow-y-auto">
+          <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-50 p-4 overflow-y-auto">
             <div className="min-h-full flex items-center justify-center py-4">
               <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative touch-manipulation shadow-xl">
                 <div className="flex justify-between items-center mb-4">
@@ -4548,18 +4556,18 @@ export default function CreateInvoicePage() {
 // Client Creation Form Component
 function ClientCreationForm({ 
   onSubmit, 
-  onCancel 
+  onCancel,
+  isLoading = false
 }: { 
   onSubmit: (clientData: Omit<Client, '_id'>) => void;
   onCancel: () => void;
+  isLoading?: boolean;
 }) {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
     company: '',
-    taxId: '',
-    notes: '',
     address: {
       street: '',
       city: '',
@@ -4570,6 +4578,7 @@ function ClientCreationForm({
   });
   const [showCountryDropdown, setShowCountryDropdown] = useState(false);
   const [countrySearch, setCountrySearch] = useState('');
+  const [showAddressFields, setShowAddressFields] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -4602,13 +4611,26 @@ function ClientCreationForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Name <span className="text-red-500">*</span></label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Client Name <span className="text-red-500">*</span></label>
         <input
           type="text"
           value={formData.name}
           onChange={(e) => handleInputChange('name', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+          disabled={isLoading}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           required
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Company</label>
+        <input
+          type="text"
+          value={formData.company}
+          onChange={(e) => handleInputChange('company', e.target.value)}
+          disabled={isLoading}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          placeholder="Company name (optional)"
         />
       </div>
       
@@ -4618,7 +4640,8 @@ function ClientCreationForm({
           type="email"
           value={formData.email}
           onChange={(e) => handleInputChange('email', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+          disabled={isLoading}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           required
         />
       </div>
@@ -4629,156 +4652,159 @@ function ClientCreationForm({
           type="tel"
           value={formData.phone}
           onChange={(e) => handleInputChange('phone', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-        />
-      </div>
-      
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Company</label>
-        <input
-          type="text"
-          value={formData.company}
-          onChange={(e) => handleInputChange('company', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+          disabled={isLoading}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          placeholder="Phone number"
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Street Address</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
         <input
           type="text"
-          value={formData.address.street}
-          onChange={(e) => handleInputChange('address.street', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+          value={formData.address.city}
+          onChange={(e) => handleInputChange('address.city', e.target.value)}
+          disabled={isLoading}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
-          <input
-            type="text"
-            value={formData.address.city}
-            onChange={(e) => handleInputChange('address.city', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
-          <input
-            type="text"
-            value={formData.address.state}
-            onChange={(e) => handleInputChange('address.state', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">ZIP Code</label>
-          <input
-            type="text"
-            value={formData.address.zipCode}
-            onChange={(e) => handleInputChange('address.zipCode', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setShowCountryDropdown(!showCountryDropdown)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-left flex items-center justify-between bg-white"
-            >
-              <span className={formData.address.country ? 'text-gray-900' : 'text-gray-500'}>
-                {formData.address.country 
-                  ? countries.find(c => c.code === formData.address.country)?.name 
-                  : 'Select Country'}
-              </span>
-              <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${showCountryDropdown ? 'rotate-180' : ''}`} />
-            </button>
-            
-            {showCountryDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md max-h-60 overflow-y-auto z-20 shadow-lg">
-                {/* Search input */}
-                <div className="p-2 border-b border-gray-200 bg-gray-50">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <input
-                      type="text"
-                      value={countrySearch}
-                      onChange={(e) => setCountrySearch(e.target.value)}
-                      placeholder="Search countries..."
-                      className="w-full pl-10 pr-3 py-2 bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-                
-                {/* Country list */}
-                <div className="max-h-48 overflow-y-auto">
-                  {countries
-                    .filter(country => 
-                      country.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
-                      country.phoneCode.includes(countrySearch) ||
-                      country.code.toLowerCase().includes(countrySearch.toLowerCase())
-                    )
-                    .map(country => (
-                    <button
-                      key={country.code}
-                      type="button"
-                      onClick={() => {
-                        handleInputChange('address.country', country.code);
-                        setShowCountryDropdown(false);
-                        setCountrySearch('');
-                      }}
-                      className="w-full px-3 py-2 text-left text-gray-700 hover:bg-gray-100 transition-colors flex items-center justify-between border-b border-gray-100 last:border-b-0"
-                    >
-                      <span className="text-sm">{country.name}</span>
-                      <span className="text-blue-600 text-xs font-medium">{country.phoneCode}</span>
-                    </button>
-                  ))}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowCountryDropdown(!showCountryDropdown)}
+            disabled={isLoading}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-left flex items-center justify-between bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <span className={formData.address.country ? 'text-gray-900' : 'text-gray-500'}>
+              {formData.address.country 
+                ? countries.find(c => c.code === formData.address.country)?.name 
+                : 'Select Country'}
+            </span>
+            <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${showCountryDropdown ? 'rotate-180' : ''}`} />
+          </button>
+          
+          {showCountryDropdown && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md max-h-60 overflow-y-auto z-20 shadow-lg">
+              {/* Search input */}
+              <div className="p-2 border-b border-gray-200 bg-gray-50">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    value={countrySearch}
+                    onChange={(e) => setCountrySearch(e.target.value)}
+                    placeholder="Search countries..."
+                    className="w-full pl-10 pr-3 py-2 bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
               </div>
-            )}
-          </div>
+              
+              {/* Country list */}
+              <div className="max-h-48 overflow-y-auto">
+                {countries
+                  .filter(country => 
+                    country.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                    country.phoneCode.includes(countrySearch) ||
+                    country.code.toLowerCase().includes(countrySearch.toLowerCase())
+                  )
+                  .map(country => (
+                  <button
+                    key={country.code}
+                    type="button"
+                    onClick={() => {
+                      handleInputChange('address.country', country.code);
+                      setShowCountryDropdown(false);
+                      setCountrySearch('');
+                    }}
+                    className="w-full px-3 py-2 text-left text-gray-700 hover:bg-gray-100 transition-colors flex items-center justify-between border-b border-gray-100 last:border-b-0"
+                  >
+                    <span className="text-sm">{country.name}</span>
+                    <span className="text-blue-600 text-xs font-medium">{country.phoneCode}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
-      
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Tax ID</label>
-        <input
-          type="text"
-          value={formData.taxId}
-          onChange={(e) => handleInputChange('taxId', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-        />
-      </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-        <textarea
-          value={formData.notes}
-          onChange={(e) => handleInputChange('notes', e.target.value)}
-          rows={3}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-        />
-      </div>
+      {!showAddressFields && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowAddressFields(true)}
+            disabled={isLoading}
+            className="flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Plus className="h-4 w-4" />
+            Add Address
+          </button>
+        </div>
+      )}
+
+      {showAddressFields && (
+        <>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Street Address</label>
+            <input
+              type="text"
+              value={formData.address.street}
+              onChange={(e) => handleInputChange('address.street', e.target.value)}
+              disabled={isLoading}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+              <input
+                type="text"
+                value={formData.address.state}
+                onChange={(e) => handleInputChange('address.state', e.target.value)}
+                disabled={isLoading}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">ZIP Code</label>
+              <input
+                type="text"
+                value={formData.address.zipCode}
+                onChange={(e) => handleInputChange('address.zipCode', e.target.value)}
+                disabled={isLoading}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+            </div>
+          </div>
+        </>
+      )}
       
       <div className="flex space-x-3 pt-4">
         <button
           type="button"
           onClick={onCancel}
-          className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+          disabled={isLoading}
+          className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Cancel
         </button>
         <button
           type="submit"
-          className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          disabled={isLoading}
+          className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
-          Create Client
+          {isLoading ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Creating...</span>
+            </>
+          ) : (
+            <span>Create Client</span>
+          )}
         </button>
       </div>
     </form>

@@ -79,6 +79,12 @@ export async function markInvoicePaid(
     const db = await connectToDatabase();
     const invoices = db.collection<Invoice>("invoices");
     
+    // Get invoice first to sync to ledger
+    const invoice = await invoices.findOne({ _id: new ObjectId(invoiceId) });
+    if (!invoice) {
+      return false;
+    }
+    
     const update: Partial<Invoice> & { txHash?: string; safeTxHash?: string } = {
       status: (updateData?.status || "paid") as InvoiceStatus,
       updatedAt: new Date(),
@@ -96,6 +102,17 @@ export async function markInvoicePaid(
       { _id: new ObjectId(invoiceId) },
       { $set: update }
     );
+    
+    // Sync to ledger if status is 'paid'
+    if ((updateData?.status || "paid") === "paid" && result.modifiedCount > 0) {
+      try {
+        const { LedgerSyncService } = await import("@/lib/services/ledgerSyncService");
+        await LedgerSyncService.syncInvoiceToLedger(invoice as unknown as Record<string, unknown>);
+      } catch (ledgerError) {
+        console.error("Error syncing invoice to ledger:", ledgerError);
+        // Don't fail the invoice update if ledger sync fails
+      }
+    }
     
     return result.modifiedCount > 0;
   } catch (error) {
