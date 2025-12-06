@@ -7,7 +7,7 @@ import { getChainByNumericId, SUPPORTED_CHAINS } from "@/lib/chains";
 
 interface ReceivingAddressInputProps {
     value: string;
-    onChange: (address: string, metadata?: { 
+    onChangeAction: (address: string, metadata?: { 
         mode: "manual" | "wallet"; 
         walletType: string | null;
         chainId?: number;
@@ -30,7 +30,7 @@ type WalletOption = {
 
 export default function ReceivingAddressInput({
     value,
-    onChange, // Standard React onChange prop - Next.js warning is a false positive for client components
+    onChangeAction,
     network,
     chainId,
     tokenAddress,
@@ -100,7 +100,7 @@ export default function ReceivingAddressInput({
         
         // Only notify if address has actually changed
         if (address !== value) {
-            onChange(address, metadata);
+            onChangeAction(address, metadata);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [mode, manualAddress, connectedWallet, chainId, tokenAddress, network]); // onChange and value excluded to prevent loops

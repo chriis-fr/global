@@ -655,15 +655,15 @@ export default function PayableViewPage() {
                         const currencySymbol = getCurrencySymbol();
                         return (
                           <tr key={`${item.id || index}-${item.description}`}>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.description}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.quantity}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.description}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.quantity}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                               {currencySymbol}{item.unitPrice.toFixed(2)}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                               {currencySymbol}{item.amount.toFixed(2)}
-                            </td>
-                          </tr>
+                          </td>
+                        </tr>
                         );
                       })}
                     </tbody>
@@ -679,18 +679,18 @@ export default function PayableViewPage() {
                       const currencySymbol = getCurrencySymbol();
                       return (
                         <>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Subtotal:</span>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Subtotal:</span>
                             <span className="font-medium">{currencySymbol}{payable.subtotal.toFixed(2)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Tax:</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Tax:</span>
                             <span className="font-medium">{currencySymbol}{payable.totalTax.toFixed(2)}</span>
-                          </div>
-                          <div className="flex justify-between text-lg font-semibold border-t pt-2">
-                            <span>Total:</span>
+                    </div>
+                    <div className="flex justify-between text-lg font-semibold border-t pt-2">
+                      <span>Total:</span>
                             <span>{currencySymbol}{payable.total.toFixed(2)}</span>
-                          </div>
+                    </div>
                         </>
                       );
                     })()}
@@ -830,18 +830,18 @@ export default function PayableViewPage() {
                       </button>
                     )}
                     {/* Mark as Paid button (for fiat or manual marking) */}
-                    <button
-                      onClick={() => handleStatusUpdate('paid')}
-                      disabled={updatingStatus}
-                      className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {updatingStatus ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <CheckCircle className="h-4 w-4" />
-                      )}
-                      <span>{updatingStatus ? 'Updating...' : 'Mark as Paid'}</span>
-                    </button>
+                  <button
+                    onClick={() => handleStatusUpdate('paid')}
+                    disabled={updatingStatus}
+                    className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {updatingStatus ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <CheckCircle className="h-4 w-4" />
+                    )}
+                    <span>{updatingStatus ? 'Updating...' : 'Mark as Paid'}</span>
+                  </button>
                   </>
                 )}
                 {payable.status === 'paid' && (

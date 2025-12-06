@@ -4059,7 +4059,7 @@ export default function CreateInvoicePage() {
                       <label className="block text-sm text-gray-600 mb-1">Where do you want to receive your payment?</label>
                       <ReceivingAddressInput
                         value={formData.paymentAddress || ''}
-                        onChange={(address, metadata) => {
+                        onChangeAction={(address, metadata) => {
                           setFormData(prev => ({
                             ...prev,
                             paymentAddress: address,
