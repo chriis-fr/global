@@ -40,6 +40,9 @@ export const metadata: Metadata = {
     "Christopher Odhiambo",
     "next generation erp"
   ],
+  other: {
+    "safe-apps": "true"
+  },
   authors: [{ name: "Christopher Odhiambo" }],
   creator: "Christopher Odhiambo",
   publisher: "Chains ERP",
@@ -106,6 +109,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <meta name="safe-apps" content="true" />
       <link rel="icon" href="/chains.PNG" />
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}

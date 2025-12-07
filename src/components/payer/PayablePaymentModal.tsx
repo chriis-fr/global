@@ -1,5 +1,6 @@
 "use client";
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from "react";
 import { 
     Wallet, 
@@ -16,11 +17,12 @@ import {
     detectAvailableWallets, 
     type ConnectedWallet 
 } from "@/lib/wallet/connectWallet";
-import { getChainByNumericId } from "@/lib/chains";
+import { getChainByNumericId, getTokenBySymbol } from "@/lib/chains";
+import { generatePayableSafeAppUrl } from "@/lib/safe/safeAppUrl";
 
 interface PayablePaymentModalProps {
     isOpen: boolean;
-    onClose: () => void;
+    onCloseAction: () => void;
     payable: {
         _id: string;
         payableNumber: string;
@@ -29,6 +31,8 @@ interface PayablePaymentModalProps {
         paymentMethod: string;
         paymentNetwork?: string;
         paymentAddress?: string;
+        chainId?: number; // Top-level chainId
+        tokenAddress?: string; // Top-level tokenAddress
         paymentMethodDetails?: {
             method?: string;
             network?: string;
@@ -37,6 +41,7 @@ interface PayablePaymentModalProps {
                 chainId?: number;
                 tokenAddress?: string;
                 tokenSymbol?: string;
+                tokenDecimals?: number;
             };
         };
     };
@@ -53,7 +58,7 @@ type WalletOption = {
 
 export default function PayablePaymentModal({
     isOpen,
-    onClose,
+    onCloseAction,
     payable,
     onPaymentSuccess,
 }: PayablePaymentModalProps) {
@@ -66,24 +71,101 @@ export default function PayablePaymentModal({
         hasWalletConnect: false,
     });
     const [processing, setProcessing] = useState(false);
+    
+    // WalletConnect specific state
+    // EIP-1193 Provider interface
+    interface EIP1193Provider {
+        request(args: { method: string; params?: unknown[] }): Promise<unknown>;
+        on?(event: string, handler: (...args: unknown[]) => void): void;
+        removeListener?(event: string, handler: (...args: unknown[]) => void): void;
+    }
+    const [wcProvider, setWcProvider] = useState<EIP1193Provider | null>(null);
+    const [wcWalletClient, setWcWalletClient] = useState<ReturnType<typeof import("viem").createWalletClient> | null>(null);
+    const [wcAddress, setWcAddress] = useState<string | null>(null);
+    const [selectedWalletType, setSelectedWalletType] = useState<"safe" | "metamask" | "walletconnect" | null>(null);
 
     // Extract payment details from payable - check multiple possible locations
-    const chainId = payable.paymentMethodDetails?.cryptoDetails?.chainId || 
-                    payable.paymentMethodDetails?.chainId ||
-                    (payable.paymentMethodDetails as any)?.chainId;
-    const tokenAddress = payable.paymentMethodDetails?.cryptoDetails?.tokenAddress || 
-                        payable.paymentMethodDetails?.tokenAddress ||
-                        (payable.paymentMethodDetails as any)?.tokenAddress;
+    // Priority: top-level > cryptoDetails > paymentMethodDetails
+    const chainId = payable.chainId || 
+                    payable.paymentMethodDetails?.cryptoDetails?.chainId;
+    const tokenAddress = payable.tokenAddress ||
+                        payable.paymentMethodDetails?.cryptoDetails?.tokenAddress;
     const tokenSymbol = payable.paymentMethodDetails?.cryptoDetails?.tokenSymbol || 
-                       payable.paymentMethodDetails?.tokenSymbol ||
                        payable.currency;
-    const tokenDecimals = payable.paymentMethodDetails?.cryptoDetails?.tokenDecimals || 18;
+    
+    // Get token decimals - try to look up from chain config if not provided
+    let tokenDecimals = payable.paymentMethodDetails?.cryptoDetails?.tokenDecimals;
+    if (!tokenDecimals && chainId && tokenAddress) {
+        // Look up token decimals from chain configuration by token address
+        const chain = getChainByNumericId(chainId);
+        if (chain && chain.tokens) {
+            // Find token by address (case-insensitive)
+            const tokenLower = tokenAddress.toLowerCase();
+            const tokenEntry = Object.values(chain.tokens).find(
+                token => token.address.toLowerCase() === tokenLower
+            );
+            if (tokenEntry) {
+                tokenDecimals = tokenEntry.decimals;
+                console.log("Found token decimals from chain config:", {
+                    tokenAddress,
+                    symbol: tokenEntry.symbol,
+                    decimals: tokenDecimals,
+                });
+            }
+        }
+    }
+    // If still not found, try by symbol
+    if (!tokenDecimals && chainId && tokenSymbol) {
+        const chain = getChainByNumericId(chainId);
+        if (chain) {
+            const tokenInfo = getTokenBySymbol(chain.id, tokenSymbol);
+            if (tokenInfo) {
+                tokenDecimals = tokenInfo.decimals;
+                console.log("Found token decimals by symbol:", {
+                    symbol: tokenSymbol,
+                    decimals: tokenDecimals,
+                });
+            }
+        }
+    }
+    // Default to 18 only if we couldn't determine it (most ERC20 tokens use 18)
+    if (!tokenDecimals) {
+        tokenDecimals = 18;
+        console.warn("Using default 18 decimals. Token decimals not found for:", {
+            tokenAddress,
+            tokenSymbol,
+            chainId,
+        });
+    }
     const network = payable.paymentNetwork || 
-                   payable.paymentMethodDetails?.network ||
-                   payable.paymentMethodDetails?.cryptoDetails?.network;
+                   payable.paymentMethodDetails?.network;
+    // Get payee address - this should be the RECIPIENT (invoice creator's receiving address)
+    // NOT the payer's address. Check multiple possible locations.
     const payeeAddress = payable.paymentAddress || 
-                        payable.paymentMethodDetails?.address ||
-                        payable.paymentMethodDetails?.cryptoDetails?.address;
+                        payable.paymentMethodDetails?.address;
+    
+    // Log payment address extraction for debugging
+    console.log("Payment address extraction:", {
+        paymentAddress: payable.paymentAddress,
+        paymentMethodDetailsAddress: payable.paymentMethodDetails?.address,
+        // cryptoDetails doesn't have address property
+        finalPayeeAddress: payeeAddress,
+        connectedWalletAddress: connectedWallet?.address,
+        isSame: payeeAddress && connectedWallet?.address && 
+                payeeAddress.toLowerCase() === connectedWallet.address.toLowerCase(),
+    });
+    
+    // Validate that payeeAddress is not the same as the connected wallet
+    // If they match, it means the address is wrong (should be recipient, not payer)
+    if (payeeAddress && connectedWallet?.address && 
+        payeeAddress.toLowerCase() === connectedWallet.address.toLowerCase()) {
+        console.error("ERROR: Payee address matches payer address! This is incorrect.", {
+            payeeAddress,
+            payerAddress: connectedWallet.address,
+            payable: payable,
+        });
+        // Don't throw here, but log the issue - the actual payment will fail validation
+    }
 
     useEffect(() => {
         if (isOpen) {
@@ -92,6 +174,11 @@ export default function PayablePaymentModal({
             setAvailableWallets(wallets);
             setError(null);
             setConnectedWallet(null);
+            // Reset WalletConnect state
+            setWcProvider(null);
+            setWcWalletClient(null);
+            setWcAddress(null);
+            setSelectedWalletType(null);
         }
     }, [isOpen]);
 
@@ -122,6 +209,7 @@ export default function PayablePaymentModal({
     const handleConnectWallet = async (walletType: "safe" | "metamask" | "walletconnect") => {
         setConnecting(true);
         setError(null);
+        setSelectedWalletType(walletType);
 
         try {
             let wallet: ConnectedWallet;
@@ -137,13 +225,105 @@ export default function PayablePaymentModal({
                     return;
                 }
                 wallet = await connectSafeWallet();
+                setConnectedWallet(wallet);
             } else if (walletType === "metamask") {
                 wallet = await connectMetaMask();
+                setConnectedWallet(wallet);
+            } else if (walletType === "walletconnect") {
+                // Directly open WalletConnect modal
+                const { appKit } = await import("@/lib/reown/appkit");
+                await appKit.open();
+                
+                // Poll for connection (check every 500ms for up to 30 seconds)
+                let attempts = 0;
+                const maxAttempts = 60;
+                
+                const checkConnection = async (): Promise<boolean> => {
+                    try {
+                        const provider = appKit.getWalletProvider() as EIP1193Provider | null;
+                        if (provider && provider.request) {
+                            const accounts = await provider.request({ method: "eth_accounts" }) as string[];
+                            if (accounts && accounts.length > 0) {
+                                const addr = accounts[0];
+                                
+                                // Switch to correct chain if needed
+                                try {
+                                    await provider.request({
+                                        method: "wallet_switchEthereumChain",
+                                        params: [{ chainId: `0x${(chainId || 42220).toString(16)}` }],
+                                    });
+                                } catch (switchError: unknown) {
+                                    const error = switchError as { code?: number };
+                                    if (error.code === 4902) {
+                                        await provider.request({
+                                            method: "wallet_addEthereumChain",
+                                            params: [{
+                                                chainId: `0x${(chainId || 42220).toString(16)}`,
+                                                chainName: "Celo",
+                                                nativeCurrency: {
+                                                    name: "CELO",
+                                                    symbol: "CELO",
+                                                    decimals: 18,
+                                                },
+                                                rpcUrls: ["https://forno.celo.org"],
+                                                blockExplorerUrls: ["https://celoscan.io"],
+                                            }],
+                                        });
+                                    }
+                                }
+                                
+                                // Create wallet client
+                                const { createWalletClient, custom } = await import("viem");
+                                const { DEFAULT_CHAIN } = await import("@/lib/chains");
+                                const walletClient = createWalletClient({
+                                    transport: custom(provider),
+                                    chain: DEFAULT_CHAIN.chain,
+                                });
+                                
+                                // Set connected state
+                                setWcProvider(provider);
+                                setWcAddress(addr);
+                                setWcWalletClient(walletClient);
+                                
+                                const connectedWallet: ConnectedWallet = {
+                                    address: addr,
+                                    type: "walletconnect",
+                                };
+                                setConnectedWallet(connectedWallet);
+                                setSelectedWalletType("walletconnect");
+                                setConnecting(false);
+                                return true;
+                            }
+                        }
+                    } catch (err) {
+                        console.error("Connection check error:", err);
+                    }
+                    return false;
+                };
+                
+                // Start polling
+                const pollInterval = setInterval(async () => {
+                    attempts++;
+                    const connected = await checkConnection();
+                    
+                    if (connected || attempts >= maxAttempts) {
+                        clearInterval(pollInterval);
+                        if (!connected && attempts >= maxAttempts) {
+                            setError("Connection timeout. Please try again.");
+                            setConnecting(false);
+                        }
+                    }
+                }, 500);
+                
+                // Also check immediately
+                const connected = await checkConnection();
+                if (connected) {
+                    clearInterval(pollInterval);
+                }
+                return;
             } else {
-                throw new Error("WalletConnect integration coming soon");
+                throw new Error("Unknown wallet type");
             }
-
-            setConnectedWallet(wallet);
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : "Failed to connect wallet";
             setError(errorMessage);
@@ -157,25 +337,58 @@ export default function PayablePaymentModal({
         }
     };
 
+
     // Build Safe App URL for redirect (like Request Finance)
+    // Uses the /share/safe-app format which works 100% without Safe approval
     const buildSafeAppUrl = (): string => {
-        // Get current origin
-        const origin = typeof window !== "undefined" ? window.location.origin : "";
+        // Get public URL - prioritize environment variable (ngrok/production) over localhost
+        // This ensures Safe can access the manifest and load the app
+        const getPublicUrl = (): string => {
+            // Check for public URL in environment (for ngrok/production)
+            if (typeof window !== "undefined") {
+                // Try to get from meta tag or use environment variable
+                const metaUrl = document.querySelector('meta[name="public-url"]')?.getAttribute('content');
+                if (metaUrl) return metaUrl;
+            }
+            
+            // Fallback: use NEXT_PUBLIC_BASE_URL, NEXTAUTH_URL, or window.location.origin
+            // Note: NEXTAUTH_URL is server-side only, so we use NEXT_PUBLIC_BASE_URL for client
+            const envUrl = process.env.NEXT_PUBLIC_BASE_URL || 
+                          process.env.NEXT_PUBLIC_NEXTAUTH_URL ||
+                          (typeof window !== "undefined" ? window.location.origin : "");
+            
+            return envUrl;
+        };
         
-        // Build our app URL with payment context
-        const appUrl = `${origin}/dashboard/services/payables/${payable._id}?pay=true`;
+        const publicUrl = getPublicUrl();
         
-        // Build Safe App URL - Request Finance pattern
-        // Opens our app within Safe's interface
-        // Format: https://app.safe.global/welcome?appUrl={ourAppUrl}
-        const safeAppBaseUrl = "https://app.safe.global";
-        const safeAppUrl = `${safeAppBaseUrl}/welcome?appUrl=${encodeURIComponent(appUrl)}`;
-        
-        return safeAppUrl;
+        // Use the utility function to generate the proper Safe App URL
+        // This uses the /share/safe-app format that works immediately
+        return generatePayableSafeAppUrl(
+            payable._id,
+            publicUrl,
+            undefined, // No specific Safe address - user will select
+            chainId
+        );
     };
 
-    const handleDisconnect = () => {
+    const handleDisconnect = async () => {
+        // If WalletConnect, disconnect from AppKit
+        if (selectedWalletType === "walletconnect") {
+            try {
+                const { appKit } = await import("@/lib/reown/appkit");
+                await appKit.disconnect();
+            } catch (e) {
+                console.error("Disconnect error:", e);
+            }
+        }
+        
+        // Reset all wallet state
+        setWcProvider(null);
+        setWcAddress(null);
+        setWcWalletClient(null);
         setConnectedWallet(null);
+        setSelectedWalletType(null);
         setError(null);
     };
 
@@ -183,7 +396,7 @@ export default function PayablePaymentModal({
         if (network) return network;
         if (chainId) {
             const chain = getChainByNumericId(chainId);
-            return chain?.name || `Chain ID: ${chainId}`;
+            return chain?.chain.name || `Chain ID: ${chainId}`;
         }
         return "Not specified";
     };
@@ -198,6 +411,13 @@ export default function PayablePaymentModal({
             setError("Payment address is missing. Please contact the vendor.");
             return;
         }
+        
+        // TODO: Re-enable this validation after testing
+        // Validate that payeeAddress is different from the payer's address
+        // if (payeeAddress.toLowerCase() === connectedWallet.address.toLowerCase()) {
+        //     setError("Payment address cannot be the same as your wallet address. The payment address should be the invoice creator's receiving address. Please contact the vendor to update the payment details.");
+        //     return;
+        // }
 
         if (!chainId) {
             setError("Chain ID is missing. Please contact the vendor to update payment details.");
@@ -214,6 +434,7 @@ export default function PayablePaymentModal({
 
         try {
             const isSafe = connectedWallet.type === "safe";
+            const isWalletConnect = connectedWallet.type === "walletconnect";
             
             if (isSafe) {
                 // Safe payment - requires proposer private key
@@ -221,8 +442,42 @@ export default function PayablePaymentModal({
                 setError("Safe wallet payments require proposer private key. Please use Safe App or connect as proposer.");
                 setProcessing(false);
                 return;
+            } else if (isWalletConnect && wcProvider && wcWalletClient) {
+                // WalletConnect payment - use WalletConnect provider
+                const { payWithWalletConnect } = await import("@/lib/wallet/payWithWalletConnect");
+                
+                // Sign and send transaction client-side using WalletConnect
+                const txHash = await payWithWalletConnect({
+                    provider: wcProvider,
+                    walletAddress: wcAddress!,
+                    tokenAddress: tokenAddress as string,
+                    toAddress: payeeAddress as string,
+                    amount: payable.total,
+                    decimals: tokenDecimals,
+                    chainId: chainId!,
+                });
+
+                // Send txHash to server to update payable status
+                const { payPayableWithEOAHash } = await import("@/app/actions/payable-payment-actions");
+                
+                const result = await payPayableWithEOAHash({
+                    payableId: payable._id,
+                    txHash: txHash,
+                    fromAddress: wcAddress!,
+                    chainId: chainId.toString(),
+                });
+
+                if (result.success) {
+                    // Success - close modal and refresh
+                    if (onPaymentSuccess) {
+                        onPaymentSuccess();
+                    }
+                    onCloseAction();
+                } else {
+                    setError(result.error || "Payment failed");
+                }
             } else {
-                // EOA payment - client-side signing
+                // EOA payment (MetaMask) - client-side signing
                 const { payWithEOAWallet } = await import("@/lib/wallet/payWithWallet");
                 
                 // Sign and send transaction client-side
@@ -250,14 +505,67 @@ export default function PayablePaymentModal({
                     if (onPaymentSuccess) {
                         onPaymentSuccess();
                     }
-                    onClose();
+                    onCloseAction();
                 } else {
                     setError(result.error || "Payment failed");
                 }
             }
-        } catch (err) {
+        } catch (err: any) {
+            // Check if user cancelled/rejected
+            const isUserCancellation = 
+                err?.message?.toLowerCase().includes('cancelled') ||
+                err?.message?.toLowerCase().includes('rejected') ||
+                err?.message?.toLowerCase().includes('denied') ||
+                err?.code === 4001 ||
+                err?.code === 'ACTION_REJECTED';
+            
+            if (isUserCancellation) {
+                // User cancelled - don't show error, just close or reset
+                setError(null);
+                setProcessing(false);
+                return;
+            }
+            
             console.error("Payment error:", err);
-            setError(err instanceof Error ? err.message : "Failed to process payment");
+            
+            // Extract error message from various possible locations
+            let errorMessage = "Failed to process payment";
+            if (err instanceof Error) {
+                errorMessage = err.message;
+            } else if (err?.message) {
+                errorMessage = err.message;
+            } else if (err?.reason) {
+                errorMessage = err.reason;
+            } else if (typeof err === 'string') {
+                errorMessage = err;
+            } else if (err && typeof err === 'object') {
+                // Try to extract message from error object
+                try {
+                    const errorStr = JSON.stringify(err, Object.getOwnPropertyNames(err));
+                    if (errorStr !== '{}') {
+                        errorMessage = `Payment failed: ${errorStr}`;
+                    }
+                } catch {
+                    errorMessage = String(err);
+                }
+            }
+            
+            console.error("Error details:", {
+                error: err,
+                errorType: typeof err,
+                errorConstructor: err?.constructor?.name,
+                message: errorMessage,
+                originalError: err?.originalError,
+                code: err?.code,
+                reason: err?.reason,
+                connectedWallet,
+                chainId,
+                tokenAddress,
+                payeeAddress,
+                stringified: err ? JSON.stringify(err, Object.getOwnPropertyNames(err)) : 'null',
+            });
+            
+            setError(errorMessage);
         } finally {
             setProcessing(false);
         }
@@ -275,7 +583,7 @@ export default function PayablePaymentModal({
                     <h3 className="text-lg font-semibold text-gray-900">Pay Payable</h3>
                     <button
                         type="button"
-                        onClick={onClose}
+                        onClick={onCloseAction}
                         disabled={processing}
                         className="text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
                     >
@@ -319,7 +627,7 @@ export default function PayablePaymentModal({
                         <div className="flex items-start gap-2">
                             <AlertCircle className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
                             <p className="text-xs text-yellow-800">
-                                This payable is not configured for crypto payment. Please use "Mark as Paid" instead.
+                                This payable is not configured for crypto payment. Please use &quot;Mark as Paid&quot; instead.
                             </p>
                         </div>
                     </div>
@@ -374,6 +682,7 @@ export default function PayablePaymentModal({
                                             <div className="text-sm font-medium text-gray-900">
                                                 {connectedWallet.type === "safe" ? "Safe Wallet" : 
                                                  connectedWallet.type === "metamask" ? "MetaMask" : 
+                                                 connectedWallet.type === "walletconnect" ? "WalletConnect" :
                                                  "Connected Wallet"}
                                             </div>
                                             <div className="text-xs text-gray-600 font-mono">

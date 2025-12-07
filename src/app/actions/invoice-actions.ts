@@ -49,6 +49,52 @@ export async function deleteInvoice(invoiceId: string) {
 }
 
 /**
+ * Get a single invoice by ID
+ */
+export async function getInvoiceById(invoiceId: string) {
+  try {
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user) {
+      return null;
+    }
+
+    const db = await connectToDatabase();
+    const invoicesCollection = db.collection('invoices');
+
+    // Build query
+    const isOrganization = !!session.user.organizationId;
+    const isObjectId = /^[0-9a-fA-F]{24}$/.test(session.user.id);
+    const issuerIdQuery = isObjectId 
+      ? { issuerId: new ObjectId(session.user.id) }
+      : { issuerId: session.user.id };
+    
+    const query: Record<string, unknown> = {
+      _id: new ObjectId(invoiceId),
+      ...(isOrganization 
+        ? { organizationId: session.user.organizationId }
+        : { 
+            $or: [
+              issuerIdQuery,
+              { userId: session.user.email }
+            ]
+          })
+    };
+
+    const invoice = await invoicesCollection.findOne(query);
+
+    if (!invoice) {
+      return null;
+    }
+
+    return invoice as Record<string, unknown>;
+  } catch (error) {
+    console.error('Error fetching invoice:', error);
+    return null;
+  }
+}
+
+/**
  * Get invoice statistics (totals, counts) - separate from invoice list
  * This can be called independently and cached
  */

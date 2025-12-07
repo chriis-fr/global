@@ -530,9 +530,17 @@ async function createPayableForRecipient(recipientEmail: string, invoice: Record
         cryptoDetails: invoice.paymentMethod === 'crypto' ? {
           network: invoice.paymentNetwork,
           address: invoice.paymentAddress,
-          token: invoice.currency
+          token: invoice.currency,
+          // Extract chainId and tokenAddress from invoice paymentSettings
+          chainId: invoice.paymentSettings?.chainId || invoice.chainId,
+          tokenAddress: invoice.paymentSettings?.tokenAddress || invoice.tokenAddress,
+          tokenSymbol: invoice.currency,
+          tokenDecimals: invoice.paymentSettings?.tokenDecimals || 18
         } : null
       },
+      // Store chainId and tokenAddress at top level for easy access
+      chainId: invoice.paymentMethod === 'crypto' ? (invoice.paymentSettings?.chainId || invoice.chainId) : undefined,
+      tokenAddress: invoice.paymentMethod === 'crypto' ? (invoice.paymentSettings?.tokenAddress || invoice.tokenAddress) : undefined,
       
       // System tracking
       attachedFiles: [],

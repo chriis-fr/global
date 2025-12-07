@@ -919,7 +919,7 @@ export default function PayableViewPage() {
 
           <PayablePaymentModal
           isOpen={showPaymentModal}
-          onClose={() => setShowPaymentModal(false)}
+          onCloseAction={() => setShowPaymentModal(false)}
           payable={payable}
           onPaymentSuccess={() => {
             loadPayable();
