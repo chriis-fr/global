@@ -1,6 +1,15 @@
 "use client";
 
-import { createWalletClient, custom, parseUnits, encodeFunctionData, type Address } from "viem";
+import { 
+    createWalletClient, 
+    createPublicClient, 
+    custom, 
+    parseUnits, 
+    encodeFunctionData, 
+    http,
+    simulateContract,
+    type Address 
+} from "viem";
 import { getChainByNumericId } from "@/lib/chains";
 
 // ERC20 Transfer ABI
@@ -126,51 +135,168 @@ export async function payWithEOAWallet({
         }
     }
 
-    // Create wallet client with MetaMask provider
+    // Create wallet and public clients
     const walletClient = createWalletClient({
         chain: chainConfig.chain,
         transport: custom(ethereum),
     });
 
-    // Format amount
-    const formattedAmount = parseUnits(amount.toString(), decimals);
-
-    // Encode the ERC20 transfer function data
-    const data = encodeFunctionData({
-        abi: ERC20_ABI,
-        functionName: "transfer",
-        args: [toAddress as Address, formattedAmount],
+    const publicClient = createPublicClient({
+        chain: chainConfig.chain,
+        transport: http(chainConfig.chain.rpcUrls.default.http[0]),
     });
 
+    // Format amount
+    const formattedAmount = parseUnits(amount.toString(), decimals);
+    
+    // Check if this is a native token payment
+    const isNativeToken = tokenAddress.toLowerCase() === 'native' || tokenAddress === '0x0000000000000000000000000000000000000000';
+
+    // Check native token balance
+    try {
+        const nativeBalance = await publicClient.getBalance({ address: account });
+        
+        if (isNativeToken) {
+            // For native token payments, check if balance is sufficient for payment + gas
+            const minBalance = formattedAmount + parseUnits("0.01", chainConfig.chain.nativeCurrency.decimals); // Payment + gas
+            
+            if (nativeBalance < minBalance) {
+                const balanceInNative = Number(nativeBalance) / Number(BigInt(10) ** BigInt(chainConfig.chain.nativeCurrency.decimals));
+                const requiredInNative = Number(minBalance) / Number(BigInt(10) ** BigInt(chainConfig.chain.nativeCurrency.decimals));
+                throw new Error(
+                    `Insufficient ${chainConfig.chain.nativeCurrency.symbol} balance. ` +
+                    `Required: ${requiredInNative.toFixed(4)} ${chainConfig.chain.nativeCurrency.symbol} (payment + gas), ` +
+                    `Available: ${balanceInNative.toFixed(4)} ${chainConfig.chain.nativeCurrency.symbol}`
+                );
+            }
+        } else {
+            // For ERC20 payments, check if balance is sufficient for gas only
+            const minBalance = parseUnits("0.01", chainConfig.chain.nativeCurrency.decimals); // Minimum 0.01 native token for gas
+            
+            if (nativeBalance < minBalance) {
+                const balanceInNative = Number(nativeBalance) / Number(BigInt(10) ** BigInt(chainConfig.chain.nativeCurrency.decimals));
+                throw new Error(
+                    `Insufficient ${chainConfig.chain.nativeCurrency.symbol} for gas. ` +
+                    `You need at least 0.01 ${chainConfig.chain.nativeCurrency.symbol} to cover transaction fees. ` +
+                    `Current balance: ${balanceInNative.toFixed(4)} ${chainConfig.chain.nativeCurrency.symbol}`
+                );
+            }
+        }
+    } catch (balanceError: any) {
+        if (balanceError.message.includes("Insufficient")) {
+            throw balanceError;
+        }
+        console.warn("Could not check native balance:", balanceError);
+        // Continue anyway - wallet will reject if insufficient
+    }
+
+    // Check ERC20 token balance (only for ERC20 tokens)
+    if (!isNativeToken) {
+        try {
+            const tokenBalance = await publicClient.readContract({
+                address: tokenAddress as Address,
+                abi: ERC20_ABI,
+                functionName: "balanceOf",
+                args: [account],
+            });
+
+            if (tokenBalance < formattedAmount) {
+                const availableTokens = Number(tokenBalance) / Number(BigInt(10) ** BigInt(decimals));
+                throw new Error(
+                    `Insufficient token balance. ` +
+                    `Required: ${amount} tokens, ` +
+                    `Available: ${availableTokens.toFixed(4)} tokens`
+                );
+            }
+        } catch (tokenError: any) {
+            if (tokenError.message.includes("Insufficient token balance")) {
+                throw tokenError;
+            }
+            console.warn("Could not check token balance:", tokenError);
+            // Continue anyway - transaction will revert if insufficient
+        }
+
+        // Simulate ERC20 transaction to catch revert reasons before sending
+        try {
+            await publicClient.simulateContract({
+                address: tokenAddress as Address,
+                abi: ERC20_ABI,
+                functionName: "transfer",
+                account,
+                args: [toAddress as Address, formattedAmount],
+            });
+            console.log("Transaction simulation successful");
+        } catch (simulateError: unknown) {
+            // Extract revert reason if available
+            const err = simulateError as { reason?: string; message?: string; data?: { message?: string } };
+            let revertReason = "Transaction would revert";
+            if (err?.reason) {
+                revertReason = err.reason;
+            } else if (err?.message) {
+                revertReason = err.message;
+            } else if (err?.data?.message) {
+                revertReason = err.data.message;
+            }
+            
+            throw new Error(`Transaction simulation failed: ${revertReason}`);
+        }
+    }
+
     console.log("Preparing transaction:", {
-        tokenAddress,
+        tokenAddress: isNativeToken ? "native" : tokenAddress,
         toAddress,
         amount: formattedAmount.toString(),
         decimals,
         account,
         chainId: numericChainId,
-        data,
+        isNativeToken,
     });
 
     // Send transaction using sendTransaction - this will ALWAYS trigger MetaMask popup
     try {
-        console.log("Sending transaction with params:", {
-            account,
-            to: tokenAddress,
-            data,
-            value: 0n,
-            chainId: numericChainId,
-        });
-        
-        const hash = await walletClient.sendTransaction({
-            account,
-            to: tokenAddress as Address,
-            data,
-            value: 0n, // ERC20 transfer doesn't send native token
-        });
+        if (isNativeToken) {
+            // Native token transfer - direct send with value
+            console.log("Sending native token transaction with params:", {
+                account,
+                to: toAddress,
+                value: formattedAmount,
+                chainId: numericChainId,
+            });
+            
+            const hash = await walletClient.sendTransaction({
+                account,
+                to: toAddress as Address,
+                value: formattedAmount, // Send native token
+            });
 
-        console.log("Transaction sent successfully. Hash:", hash);
-        return hash;
+            console.log("Native token transaction sent successfully. Hash:", hash);
+            return hash;
+        } else {
+            // ERC20 token transfer - encode function data
+            const data = encodeFunctionData({
+                abi: ERC20_ABI,
+                functionName: "transfer",
+                args: [toAddress as Address, formattedAmount],
+            });
+
+            console.log("Sending ERC20 transaction with params:", {
+                account,
+                to: tokenAddress,
+                data,
+                value: 0n,
+                chainId: numericChainId,
+            });
+            
+            const hash = await walletClient.sendTransaction({
+                account,
+                to: tokenAddress as Address,
+                data,
+                value: BigInt(0), // ERC20 transfer doesn't send native token
+            });
+
+            console.log("ERC20 transaction sent successfully. Hash:", hash);
+            return hash;
+        }
     } catch (error: any) {
         // Check if user rejected the transaction
         const isUserRejection = 

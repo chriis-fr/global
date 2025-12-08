@@ -20,6 +20,7 @@
     "@types/nodemailer": "^6.4.17",
     "bcryptjs": "^3.0.2",
     "class-variance-authority": "^0.7.1",
+    "dotenv": "^17.2.3",
     "framer-motion": "^12.16.0",
     "gsap": "^3.13.0",
     "html2canvas": "^1.4.1",
@@ -44,6 +45,11 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@nomicfoundation/hardhat-ethers": "^4.0.3",
+    "@nomicfoundation/hardhat-ethers-chai-matchers": "^3.0.2",
+    "@nomicfoundation/hardhat-ignition": "^3.0.6",
+    "@nomicfoundation/hardhat-toolbox-mocha-ethers": "^3.0.2",
+    "@nomicfoundation/hardhat-verify": "^3.0.8",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^3.0.0",
     "@types/node": "^20",
@@ -51,6 +57,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "15.3.3",
+    "hardhat": "^3.0.17",
     "tailwindcss": "^4",
     "typescript": "^5"
   },
@@ -59,5 +66,6 @@
       "react": "^19.0.0",
       "react-dom": "^19.0.0"
     }
-  }
+  },
+  "type": "module"
 }

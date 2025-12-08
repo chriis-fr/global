@@ -275,7 +275,7 @@ export async function broadcastSafeDeployment({
     const chainConfig = DEFAULT_CHAIN; // Use default chain for deployment
     
     const txHash = await externalSigner.sendTransaction({
-        to: deploymentTx.to,
+        to: deploymentTx.to as `0x${string}`,
         value: BigInt(deploymentTx.value),
         data: deploymentTx.data as `0x${string}`,
         chain: chainConfig.chain,

@@ -237,7 +237,9 @@ const useFormPersistence = (key: string, initialData: InvoiceFormData, setAutoSa
           
           // If tokenAddress is set and currency doesn't match, sync it
           if (merged.tokenAddress && merged.paymentNetwork === 'celo') {
-            if (merged.tokenAddress === CELO_TOKENS.USDT.address && merged.currency !== 'USDT') {
+            if (merged.tokenAddress === 'native' && merged.currency !== 'CELO') {
+              merged.currency = 'CELO';
+            } else if (merged.tokenAddress === CELO_TOKENS.USDT.address && merged.currency !== 'USDT') {
               merged.currency = 'USDT';
             } else if (merged.tokenAddress === CELO_TOKENS.cUSD.address && merged.currency !== 'CUSD') {
               merged.currency = 'CUSD';
@@ -1096,7 +1098,9 @@ export default function CreateInvoicePage() {
                   updated.chainId = 42220;
                   // Sync tokenAddress with currency selection for Celo tokens
                   const currencyCode = String(value).toUpperCase();
-                  if (currencyCode === 'USDT') {
+                  if (currencyCode === 'CELO') {
+                    updated.tokenAddress = 'native';
+                  } else if (currencyCode === 'USDT') {
                     updated.tokenAddress = CELO_TOKENS.USDT.address;
                   } else if (currencyCode === 'CUSD') {
                     updated.tokenAddress = CELO_TOKENS.cUSD.address;
@@ -4050,6 +4054,7 @@ export default function CreateInvoicePage() {
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white font-medium"
                         >
                           <option value="">Select token</option>
+                          <option value="native">CELO (Native)</option>
                           <option value={CELO_TOKENS.cUSD.address}>cUSD</option>
                           <option value={CELO_TOKENS.USDT.address}>USDT</option>
                         </select>

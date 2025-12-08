@@ -33,22 +33,12 @@ export default function CurrencyAmount({
   // Detect if this is crypto (check prop or currency code) - do this early
   const isCryptoCurrency = isCrypto || CRYPTO_CURRENCIES.includes(currency.toUpperCase());
   
-  // If currencies are the same, handle crypto differently
-  if (currency === preferredCurrency) {
-    // For crypto, always show format even if same currency (with gray brackets)
-    if (isCryptoCurrency) {
-      const symbol = getCurrencySymbol(currency);
-      const formatted = formatNumber(amount, symbol);
-      return (
-        <span className={className}>
-          {formatted.display}
-          <span className="text-xs text-gray-400 ml-1">
-            ({currency.toUpperCase()})
-          </span>
-        </span>
-      );
-    }
-    // For fiat, just show amount
+  // For crypto currencies, ALWAYS convert to preferred currency (usually USD)
+  // Format: $X.XX(0.4 CELO) where $X.XX is converted USD amount, 0.4 CELO is original crypto amount
+  // We never skip conversion for crypto, even if currency matches preferredCurrency
+  
+  // If currencies are the same and NOT crypto, just show amount (no conversion needed)
+  if (currency === preferredCurrency && !isCryptoCurrency) {
     const symbol = getCurrencySymbol(currency);
     const formatted = formatNumber(amount, symbol);
     return (
@@ -57,6 +47,8 @@ export default function CurrencyAmount({
       </span>
     );
   }
+  
+  // For crypto, always proceed to conversion logic below (don't return early)
 
   // If we have a pre-converted amount and it matches preferred currency, use it directly
   const usePreConverted = convertedAmount !== undefined && 
@@ -68,7 +60,8 @@ export default function CurrencyAmount({
     const convertedSymbol = getCurrencySymbol(preferredCurrency);
     const convertedFormatted = formatNumber(convertedAmount, convertedSymbol);
 
-    // For crypto: show converted amount first, then crypto currency in brackets (gray)
+    // For crypto: show converted amount first, then currency code in brackets (gray)
+    // Format: $0.07(CELO) where $0.07 is converted USD
     if (isCryptoCurrency) {
       return (
         <span className={className}>
@@ -106,10 +99,10 @@ export default function CurrencyAmount({
       // For crypto: show loading with crypto format, use hook's initial convertedAmount if available
       const convertedSymbol = getCurrencySymbol(preferredCurrency);
       const displayAmount = conversion.convertedAmount || amount; // Use converted if available, otherwise original
-      const formatted = formatNumber(displayAmount, convertedSymbol);
+      const convertedFormatted = formatNumber(displayAmount, convertedSymbol);
       return (
         <span className={className}>
-          {formatted.display}
+          {convertedFormatted.display}
           <span className="text-xs text-gray-400 ml-1">
             ({currency.toUpperCase()})
           </span>
@@ -130,12 +123,12 @@ export default function CurrencyAmount({
   // If there's an error or timeout, handle differently for crypto vs fiat
   if (conversion.error) {
     if (isCryptoCurrency) {
-      // For crypto: still show format with original amount converted (estimate)
+      // For crypto: still show format with converted amount (estimate)
       const convertedSymbol = getCurrencySymbol(preferredCurrency);
-      const formatted = formatNumber(conversion.convertedAmount || amount, convertedSymbol);
+      const convertedFormatted = formatNumber(conversion.convertedAmount || amount, convertedSymbol);
       return (
         <span className={className} title={conversion.error}>
-          {formatted.display}
+          {convertedFormatted.display}
           <span className="text-xs text-gray-400 ml-1">
             ({currency.toUpperCase()})
           </span>
@@ -153,11 +146,16 @@ export default function CurrencyAmount({
     }
   }
 
-  // Display converted amount
+  // Display converted amount - always use convertedAmount from hook
+  // The hook should have the correct converted value after conversion completes
   const convertedSymbol = getCurrencySymbol(preferredCurrency);
-  const convertedFormatted = formatNumber(conversion.convertedAmount, convertedSymbol);
+  // Use convertedAmount if available (should always be set after conversion)
+  // For crypto, convertedAmount should be different from amount (e.g., 0.4 CELO -> 0.07 USD)
+  const displayConvertedAmount = conversion.convertedAmount;
+  const convertedFormatted = formatNumber(displayConvertedAmount, convertedSymbol);
 
-  // For crypto: show converted amount first, then crypto currency in brackets (gray)
+  // For crypto: show converted amount first, then currency code in brackets (gray)
+  // Format: $0.07(CELO) where $0.07 is converted USD
   if (isCryptoCurrency) {
     return (
       <span className={className}>

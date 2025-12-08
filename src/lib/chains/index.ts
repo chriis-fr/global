@@ -23,6 +23,7 @@ export interface ChainConfig {
         };
     };
     safeTransactionService?: string; // Safe Transaction Service URL for this chain
+    invoiceManagerAddress?: string; // InvoiceManager contract address on this chain
     enabled: boolean; // Whether this chain is enabled/active
 }
 
@@ -45,6 +46,7 @@ export const SUPPORTED_CHAINS: ChainConfig[] = [
             },
         },
         safeTransactionService: "https://safe-transaction-celo.safe.global/api/v1",
+        invoiceManagerAddress: "0x2F709bC69EB1715114635793B6536e23639527a2", // Deployed InvoiceManager contract
         enabled: true,
     },
     // Add more chains here as needed
@@ -109,6 +111,22 @@ export function getTokenBySymbol(chainId: string, symbol: string) {
 export function getSafeTransactionServiceUrl(chainId: string): string | undefined {
     const chain = getChainById(chainId);
     return chain?.safeTransactionService;
+}
+
+/**
+ * Get InvoiceManager contract address for a chain
+ */
+export function getInvoiceManagerAddress(chainId: string): string | undefined {
+    const chain = getChainById(chainId);
+    return chain?.invoiceManagerAddress;
+}
+
+/**
+ * Get InvoiceManager contract address by numeric chain ID
+ */
+export function getInvoiceManagerAddressByNumericId(numericId: number): string | undefined {
+    const chain = getChainByNumericId(numericId);
+    return chain?.invoiceManagerAddress;
 }
 
 // Export default chain for backward compatibility

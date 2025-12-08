@@ -179,7 +179,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // This prevents blocking the dashboard when session shows it's completed
 
   return (
-    <div className="h-screen flex bg-gradient-to-br from-blue-900 to-blue-950 overflow-hidden">
+    <div className="h-screen flex bg-gradient-to-br from-blue-900 to-blue-950 overflow-hidden" style={{ willChange: 'auto', contain: 'layout style paint' }}>
       <Sidebar />
       <main 
         ref={mainContentRef}
@@ -189,7 +189,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
-        style={{ touchAction: 'pan-y pinch-zoom' }}
+        style={{ touchAction: 'pan-y pinch-zoom', willChange: 'scroll-position', contain: 'layout style' }}
       >
         <div className="max-w-full">
           <Breadcrumb />

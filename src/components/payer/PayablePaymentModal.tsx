@@ -93,9 +93,24 @@ export default function PayablePaymentModal({
     const tokenSymbol = payable.paymentMethodDetails?.cryptoDetails?.tokenSymbol || 
                        payable.currency;
     
+    // Check if this is a native token payment
+    const isNativeToken = tokenAddress?.toLowerCase() === 'native' || tokenAddress === '0x0000000000000000000000000000000000000000';
+    
     // Get token decimals - try to look up from chain config if not provided
     let tokenDecimals = payable.paymentMethodDetails?.cryptoDetails?.tokenDecimals;
-    if (!tokenDecimals && chainId && tokenAddress) {
+    
+    if (isNativeToken && chainId) {
+        // For native tokens, use the chain's native currency decimals
+        const chain = getChainByNumericId(chainId);
+        if (chain) {
+            tokenDecimals = chain.chain.nativeCurrency.decimals;
+            console.log("Using native token decimals from chain config:", {
+                chainId,
+                nativeCurrency: chain.chain.nativeCurrency.symbol,
+                decimals: tokenDecimals,
+            });
+        }
+    } else if (!tokenDecimals && chainId && tokenAddress) {
         // Look up token decimals from chain configuration by token address
         const chain = getChainByNumericId(chainId);
         if (chain && chain.tokens) {
@@ -606,7 +621,9 @@ export default function PayablePaymentModal({
                         </div>
                         <div>
                             Token: <span className="font-medium font-mono text-xs">
-                                {tokenAddress ? `${tokenAddress.slice(0, 6)}...${tokenAddress.slice(-4)}` : 'Not set'}
+                                {tokenAddress ? (
+                                    tokenAddress.toLowerCase() === 'native' ? 'CELO (Native)' : `${tokenAddress.slice(0, 6)}...${tokenAddress.slice(-4)}`
+                                ) : 'Not set'}
                             </span>
                         </div>
                         <div>

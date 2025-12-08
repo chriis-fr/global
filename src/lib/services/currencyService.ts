@@ -17,6 +17,35 @@ export class CurrencyService {
   private static conversionRates: Map<string, CurrencyConversion> = new Map();
   private static readonly API_KEY = process.env.EXCHANGE_RATE_API_KEY;
   private static readonly BASE_URL = 'https://api.exchangerate-api.com/v4/latest';
+  // CoinGecko API for crypto prices (free tier: 10-50 calls/minute)
+  private static readonly COINGECKO_API = 'https://api.coingecko.com/api/v3';
+  
+  // Crypto currency IDs mapping (CoinGecko uses different IDs)
+  private static readonly CRYPTO_IDS: Record<string, string> = {
+    'CELO': 'celo',
+    'CUSD': 'celo-dollar',
+    'CEUR': 'celo-euro',
+    'BTC': 'bitcoin',
+    'ETH': 'ethereum',
+    'USDT': 'tether',
+    'USDC': 'usd-coin',
+    'DAI': 'dai',
+    'BNB': 'binancecoin',
+    'SOL': 'solana',
+    'ADA': 'cardano',
+    'DOT': 'polkadot',
+    'MATIC': 'matic-network',
+    'LINK': 'chainlink',
+    'UNI': 'uniswap',
+    'LTC': 'litecoin',
+    'BCH': 'bitcoin-cash',
+    'XRP': 'ripple',
+    'AVAX': 'avalanche-2',
+    'ATOM': 'cosmos',
+    'FTM': 'fantom',
+    'NEAR': 'near',
+    'ALGO': 'algorand',
+  };
 
   // Get user's preferred currency
   static async getUserPreferredCurrency(userId: string): Promise<UserCurrencyPreferences> {
@@ -69,25 +98,98 @@ export class CurrencyService {
     }
   }
 
-  // Get exchange rate between two currencies
+  // Check if currency is crypto
+  private static isCryptoCurrency(currency: string): boolean {
+    return this.CRYPTO_IDS.hasOwnProperty(currency.toUpperCase());
+  }
+
+  // Get crypto price in USD from CoinGecko
+  private static async getCryptoPriceInUSD(cryptoCode: string): Promise<number> {
+    const cryptoId = this.CRYPTO_IDS[cryptoCode.toUpperCase()];
+    if (!cryptoId) {
+      throw new Error(`Crypto currency ${cryptoCode} not supported`);
+    }
+
+    try {
+      const response = await fetch(
+        `${this.COINGECKO_API}/simple/price?ids=${cryptoId}&vs_currencies=usd`,
+        {
+          headers: {
+            'Accept': 'application/json',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`CoinGecko API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const price = data[cryptoId]?.usd;
+      
+      if (!price || typeof price !== 'number') {
+        throw new Error(`Price not found for ${cryptoCode}`);
+      }
+
+      return price;
+    } catch (error) {
+      console.error(`❌ [CurrencyService] Failed to fetch crypto price for ${cryptoCode}:`, error);
+      throw error;
+    }
+  }
+
+  // Get exchange rate between two currencies (supports both fiat and crypto)
   static async getExchangeRate(fromCurrency: string, toCurrency: string): Promise<number> {
     const key = `${fromCurrency}_${toCurrency}`;
     
+    // Determine cache duration: shorter for crypto (5 minutes) vs fiat (1 hour)
+    const fromIsCrypto = this.isCryptoCurrency(fromCurrency);
+    const toIsCrypto = this.isCryptoCurrency(toCurrency);
+    const isCryptoConversion = fromIsCrypto || toIsCrypto;
+    const cacheDuration = isCryptoConversion ? 300000 : 3600000; // 5 min for crypto, 1 hour for fiat
+    
     // Check if we have a cached rate
     const cached = this.conversionRates.get(key);
-    if (cached && (Date.now() - cached.lastUpdated.getTime()) < 3600000) { // 1 hour cache
+    if (cached && (Date.now() - cached.lastUpdated.getTime()) < cacheDuration) {
       return cached.rate;
     }
 
     try {
-      // Fetch from API
-      const response = await fetch(`${this.BASE_URL}/${fromCurrency}`);
-      const data = await response.json();
-      
-      if (data.rates && data.rates[toCurrency]) {
-        const rate = data.rates[toCurrency];
+      // Handle crypto conversions
+      if (fromIsCrypto && toIsCrypto) {
+        // Crypto to crypto: convert via USD
+        const fromPriceUSD = await this.getCryptoPriceInUSD(fromCurrency);
+        const toPriceUSD = await this.getCryptoPriceInUSD(toCurrency);
+        const rate = fromPriceUSD / toPriceUSD;
         
-        // Cache the rate
+        this.conversionRates.set(key, {
+          fromCurrency,
+          toCurrency,
+          rate,
+          lastUpdated: new Date()
+        });
+        
+        return rate;
+      } else if (fromIsCrypto) {
+        // Crypto to fiat: get crypto price in USD, then convert USD to fiat
+        const cryptoPriceUSD = await this.getCryptoPriceInUSD(fromCurrency);
+        const usdToFiatRate = await this.getFiatExchangeRate('USD', toCurrency);
+        const rate = cryptoPriceUSD * usdToFiatRate;
+        
+        this.conversionRates.set(key, {
+          fromCurrency,
+          toCurrency,
+          rate,
+          lastUpdated: new Date()
+        });
+        
+        return rate;
+      } else if (toIsCrypto) {
+        // Fiat to crypto: convert fiat to USD, then get crypto price
+        const fiatToUSDRate = await this.getFiatExchangeRate(fromCurrency, 'USD');
+        const cryptoPriceUSD = await this.getCryptoPriceInUSD(toCurrency);
+        const rate = fiatToUSDRate / cryptoPriceUSD;
+        
         this.conversionRates.set(key, {
           fromCurrency,
           toCurrency,
@@ -97,7 +199,8 @@ export class CurrencyService {
         
         return rate;
       } else {
-        throw new Error('Exchange rate not found');
+        // Fiat to fiat: use existing API
+        return await this.getFiatExchangeRate(fromCurrency, toCurrency);
       }
     } catch {
       
@@ -152,7 +255,70 @@ export class CurrencyService {
         return fallbackRate;
       }
 
+      // For crypto, try fallback rates if API fails
+      if (fromIsCrypto || toIsCrypto) {
+        const fallbackCryptoRates: Record<string, number> = {
+          'CELO': 0.175, // Approximate: 0.4 CELO = 0.07 USD, so 1 CELO ≈ 0.175 USD
+          'CUSD': 1.0,    // Stablecoin, pegged to USD
+          'CEUR': 1.08,   // Stablecoin, pegged to EUR (≈1.08 USD)
+          'BTC': 43000.0,
+          'ETH': 2500.0,
+          'USDT': 1.0,
+          'USDC': 1.0,
+        };
+        
+        if (fromIsCrypto && toCurrency === 'USD') {
+          const fallbackRate = fallbackCryptoRates[fromCurrency.toUpperCase()];
+          if (fallbackRate) {
+            console.warn(`⚠️ [CurrencyService] Using fallback rate for ${fromCurrency}: ${fallbackRate}`);
+            return fallbackRate;
+          }
+        } else if (fromCurrency === 'USD' && toIsCrypto) {
+          const fallbackRate = 1 / (fallbackCryptoRates[toCurrency.toUpperCase()] || 1);
+          if (fallbackRate !== 1) {
+            console.warn(`⚠️ [CurrencyService] Using fallback rate for ${toCurrency}: ${fallbackRate}`);
+            return fallbackRate;
+          }
+        }
+      }
+      
       return 1; // Return 1:1 if no conversion available
+    }
+  }
+
+  // Get fiat exchange rate (internal method)
+  private static async getFiatExchangeRate(fromCurrency: string, toCurrency: string): Promise<number> {
+    const key = `${fromCurrency}_${toCurrency}`;
+    
+    // Check cache
+    const cached = this.conversionRates.get(key);
+    if (cached && (Date.now() - cached.lastUpdated.getTime()) < 3600000) {
+      return cached.rate;
+    }
+
+    try {
+      // Fetch from API
+      const response = await fetch(`${this.BASE_URL}/${fromCurrency}`);
+      const data = await response.json();
+      
+      if (data.rates && data.rates[toCurrency]) {
+        const rate = data.rates[toCurrency];
+        
+        // Cache the rate
+        this.conversionRates.set(key, {
+          fromCurrency,
+          toCurrency,
+          rate,
+          lastUpdated: new Date()
+        });
+        
+        return rate;
+      } else {
+        throw new Error('Exchange rate not found');
+      }
+    } catch (error) {
+      console.error(`❌ [CurrencyService] Failed to fetch fiat rate ${fromCurrency} to ${toCurrency}:`, error);
+      throw error;
     }
   }
 

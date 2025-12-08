@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { 
@@ -187,6 +187,15 @@ export default function InvoicesPage() {
       return () => clearInterval(interval);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Memoize formatDate to prevent recreation on every render (define early so it can be used in other functions)
+  const formatDate = useCallback((dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
   }, []);
 
   const handleDeleteInvoice = async (id: string) => {
@@ -417,33 +426,32 @@ export default function InvoicesPage() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
+  // Memoize filtered invoices to prevent unnecessary re-renders
+  const filteredInvoices = useMemo(() => {
+    if (!invoices.length) return [];
+    const lowerSearchTerm = searchTerm.toLowerCase();
+    return invoices.filter(invoice =>
+      (invoice.invoiceNumber?.toLowerCase() || '').includes(lowerSearchTerm) ||
+      (invoice.clientDetails?.companyName?.toLowerCase() || '').includes(lowerSearchTerm) ||
+      (invoice.invoiceNumber?.toLowerCase() || '').includes(lowerSearchTerm)
+    );
+  }, [invoices, searchTerm]);
 
-  const filteredInvoices = invoices.filter(invoice =>
-    (invoice.invoiceNumber?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-    (invoice.clientDetails?.companyName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-    (invoice.invoiceNumber?.toLowerCase() || '').includes(searchTerm.toLowerCase())
-  );
+  const statusFilteredInvoices = useMemo(() => {
+    if (statusFilter === 'all') return filteredInvoices;
+    if (statusFilter === 'pending') {
+      return filteredInvoices.filter(invoice => invoice.status === 'sent' || invoice.status === 'pending');
+    }
+    return filteredInvoices.filter(invoice => invoice.status === statusFilter);
+  }, [filteredInvoices, statusFilter]);
 
-  const statusFilteredInvoices = statusFilter === 'all' 
-    ? filteredInvoices 
-    : statusFilter === 'pending'
-    ? filteredInvoices.filter(invoice => invoice.status === 'sent' || invoice.status === 'pending')
-    : filteredInvoices.filter(invoice => invoice.status === statusFilter);
-
-  // Use stats from store (fetched separately)
-  const displayStats = {
+  // Memoize stats to prevent unnecessary recalculations
+  const displayStats = useMemo(() => ({
     totalInvoices: stats?.totalInvoices || totalInvoices,
     totalRevenue: stats?.totalRevenue || 0,
     pendingCount: stats?.statusCounts ? (stats.statusCounts.sent + stats.statusCounts.pending) : (statusCounts.sent + statusCounts.pending),
     paidCount: stats?.statusCounts?.paid || statusCounts.paid
-  };
+  }), [stats, totalInvoices, statusCounts]);
 
   return (
     <div className="space-y-4 sm:space-y-6 px-4 sm:px-6 lg:px-8">
@@ -458,7 +466,8 @@ export default function InvoicesPage() {
           </button>
           <div className="flex-1">
             <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-1 sm:mb-2">Invoices</h1>
-            <p className="text-blue-200 text-sm sm:text-base">Manage your invoices and track payments</p>
+            {/* LCP element - render immediately without waiting for data */}
+            <p className="text-blue-200 text-sm sm:text-base" style={{ contentVisibility: 'auto' }}>Manage your invoices and track payments</p>
           </div>
         </div>
         <div className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-3">
@@ -785,25 +794,31 @@ export default function InvoicesPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/10">
-                  {statusFilteredInvoices.map((invoice) => (
+                  {statusFilteredInvoices.map((invoice) => {
+                    const invoiceId = invoice._id?.toString() || 'unknown';
+                    const isDraft = invoice.status === 'draft';
+                    const isSelected = localSelectedInvoices.includes(invoiceId);
+                    return (
                     <tr 
-                      key={invoice._id?.toString() || 'unknown'} 
-                      className={`hover:bg-white/5 transition-colors ${invoice.status === 'draft' ? 'cursor-pointer' : ''}`}
-                      onClick={invoice.status === 'draft' ? () => router.push(`/dashboard/services/smart-invoicing/create?id=${invoice._id?.toString()}`) : undefined}
+                      key={invoiceId} 
+                      className={`hover:bg-white/5 transition-colors ${isDraft ? 'cursor-pointer' : ''}`}
+                      onClick={isDraft ? () => router.push(`/dashboard/services/smart-invoicing/create?id=${invoiceId}`) : undefined}
                     >
-                      <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
-                          checked={localSelectedInvoices.includes(invoice._id?.toString() || '')}
+                          checked={isSelected}
                           onChange={(e) => {
-                            const invoiceId = invoice._id?.toString();
                             if (!invoiceId) return;
                             
-                            if (e.target.checked) {
-                              setLocalSelectedInvoices(prev => [...prev, invoiceId]);
-                            } else {
-                              setLocalSelectedInvoices(prev => prev.filter(id => id !== invoiceId));
-                            }
+                            // Use functional update to prevent stale closure
+                            setLocalSelectedInvoices(prev => {
+                              if (e.target.checked) {
+                                return prev.includes(invoiceId) ? prev : [...prev, invoiceId];
+                              } else {
+                                return prev.filter(id => id !== invoiceId);
+                              }
+                            });
                           }}
                           className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                         />
@@ -911,7 +926,8 @@ export default function InvoicesPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
