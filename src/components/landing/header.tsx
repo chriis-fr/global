@@ -49,25 +49,25 @@ export function Header() {
       name: 'Smart Invoicing',
       description: 'Create and manage invoices with blockchain security',
       icon: Building,
-      href: '/auth'
+      href: '/use-cases'
     },
     {
       name: 'Accounts Payable',
       description: 'Manage your business payments efficiently',
       icon: Shield,
-      href: '/auth'
+      href: '/use-cases'
     },
     {
       name: 'Accounts Receivable',
       description: 'Get paid in crypto & fiat legally',
       icon: Zap,
-      href: '/auth'
+      href: '/use-cases'
     },
     {
       name: 'Global Payments',
       description: 'Cross-border transactions with minimal fees',
       icon: Globe,
-      href: '/auth'
+      href: '/use-cases'
     }
   ]
 
@@ -76,25 +76,25 @@ export function Header() {
       name: 'For Companies',
       description: 'Enterprise solutions for large organizations',
       icon: Building,
-      href: '/auth'
+      href: '/use-cases'
     },
     {
       name: 'For Freelancers',
       description: 'Simple tools for independent contractors',
       icon: Shield,
-      href: '/auth'
+      href: '/use-cases'
     },
     {
       name: 'For Startups',
       description: 'Scalable solutions for growing businesses',
       icon: Zap,
-      href: '/auth'
+      href: '/use-cases'
     },
     {
       name: 'For Enterprises',
       description: 'Custom solutions for complex needs',
       icon: Globe,
-      href: '/auth'
+      href: '/use-cases'
     }
   ]
 
@@ -251,17 +251,75 @@ export function Header() {
               exit={{ opacity: 0, height: 0 }}
               className="md:hidden border-t border-gray-200"
             >
-              <div className="py-4 space-y-4">
+              <div className="py-4 space-y-2">
                 {navigation.map((item) => (
-                  <Link
-                    key={item.name}
-                    href={item.href}
-                    className="block text-gray-700 hover:text-blue-600 transition-colors touch-manipulation active:scale-[0.98]"
-                    onClick={closeMenu}
-                    style={{ touchAction: 'manipulation' }}
-                  >
-                    {item.name}
-                  </Link>
+                  <div key={item.name}>
+                    {item.hasDropdown ? (
+                      <div>
+                        <button
+                          onClick={() => {
+                            if (item.name === 'Products') {
+                              setIsProductsOpen(!isProductsOpen);
+                            } else if (item.name === 'Solutions') {
+                              setIsSolutionsOpen(!isSolutionsOpen);
+                            }
+                          }}
+                          className="flex items-center justify-between w-full text-gray-700 hover:text-blue-600 transition-colors touch-manipulation active:scale-[0.98] py-2"
+                          style={{ touchAction: 'manipulation' }}
+                        >
+                          <span>{item.name}</span>
+                          <ChevronDown 
+                            className={`h-4 w-4 transition-transform ${
+                              (item.name === 'Products' && isProductsOpen) || 
+                              (item.name === 'Solutions' && isSolutionsOpen)
+                                ? 'rotate-180' : ''
+                            }`}
+                          />
+                        </button>
+                        <AnimatePresence>
+                          {((item.name === 'Products' && isProductsOpen) || 
+                            (item.name === 'Solutions' && isSolutionsOpen)) && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              className="pl-4 space-y-2 mt-2"
+                            >
+                              {(item.name === 'Products' ? products : solutions).map((dropdownItem) => {
+                                const Icon = dropdownItem.icon;
+                                return (
+                                  <Link
+                                    key={dropdownItem.name}
+                                    href={dropdownItem.href}
+                                    className="flex items-start space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors touch-manipulation active:scale-[0.98]"
+                                    onClick={closeMenu}
+                                    style={{ touchAction: 'manipulation' }}
+                                  >
+                                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                      <Icon className="h-5 w-5 text-blue-600" />
+                                    </div>
+                                    <div>
+                                      <h3 className="text-sm font-medium text-gray-900">{dropdownItem.name}</h3>
+                                      <p className="text-xs text-gray-500 mt-1">{dropdownItem.description}</p>
+                                    </div>
+                                  </Link>
+                                );
+                              })}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    ) : (
+                      <Link
+                        href={item.href}
+                        className="block text-gray-700 hover:text-blue-600 transition-colors touch-manipulation active:scale-[0.98] py-2"
+                        onClick={closeMenu}
+                        style={{ touchAction: 'manipulation' }}
+                      >
+                        {item.name}
+                      </Link>
+                    )}
+                  </div>
                 ))}
 
                 {/* Mobile Dashboard button - only show if authenticated */}
