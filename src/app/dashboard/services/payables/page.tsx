@@ -1,8 +1,7 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { 
@@ -14,30 +13,14 @@ import {
   Building2,
   ArrowRight
 } from 'lucide-react';
-import { getOnboardingStatus } from '@/app/actions/payable-actions';
 import PayablesStatsCards from '@/components/payables/PayablesStatsCards';
 import PayablesList from '@/components/payables/PayablesList';
-
-
-
+import { usePayables } from '@/lib/contexts/PayablesContext';
 
 export default function AccountsPayablePage() {
   const router = useRouter();
-  const { data: session } = useSession();
-  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean | null>(null);
+  const { isOnboardingCompleted } = usePayables();
   const [activeTab, setActiveTab] = useState<'bills' | 'direct-payments' | 'vendors'>('bills');
-
-  // Load onboarding status independently (non-blocking)
-  useEffect(() => {
-    if (session?.user) {
-      // Load onboarding status in background - doesn't block page render
-      getOnboardingStatus('accountsPayable').then(result => {
-        if (result.success && result.data) {
-          setIsOnboardingCompleted(result.data.isCompleted);
-        }
-      });
-    }
-  }, [session?.user]);
 
   const handleCreatePayable = () => {
     // Navigate instantly - onboarding check happens in background

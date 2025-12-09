@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense, startTransition } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { 
@@ -11,49 +11,40 @@ import {
   Lock,
   BarChart3
 } from 'lucide-react';
-import DashboardSkeleton from '@/components/ui/DashboardSkeleton';
 import { useSubscription } from '@/lib/contexts/SubscriptionContext';
 import StatsCards from '@/components/dashboard/StatsCards';
 import RecentInvoices from '@/components/dashboard/RecentInvoices';
 import RecentPayables from '@/components/dashboard/RecentPayables';
+import { getUserSettings } from '@/app/actions/user-actions';
 
 export default function DashboardPage() {
   const { data: session } = useSession();
-  const { subscription, loading: subscriptionLoading } = useSubscription();
+  const { subscription } = useSubscription(); // Don't block on loading
   const router = useRouter();
-  // const [usingFallbackData, setUsingFallbackData] = useState(false); // Not needed with independent loading
   const [userName, setUserName] = useState<string>('');
   const [organizationName, setOrganizationName] = useState<string>('');
 
-  // Fetch current user name and organization name
+  // Fetch user data in background - don't block render
   useEffect(() => {
-    const fetchUserData = async () => {
-      if (!session?.user?.email) return;
-      
+    if (!session?.user?.email) return;
+    
+    // Load in background using server action - non-blocking
+    startTransition(async () => {
       try {
-        const response = await fetch('/api/user/settings');
-        const data = await response.json();
-        
-        if (data.success) {
-          if (data.data.profile.name) {
-            setUserName(data.data.profile.name);
+        const result = await getUserSettings();
+        if (result.success && result.data) {
+          if (result.data.profile.name) {
+            setUserName(result.data.profile.name);
           }
-          if (data.data.organization?.name) {
-            setOrganizationName(data.data.organization.name);
+          if (result.data.organization?.name) {
+            setOrganizationName(result.data.organization.name);
           }
         }
       } catch (error) {
         console.error('Failed to fetch user data:', error);
       }
-    };
-
-    fetchUserData();
+    });
   }, [session?.user?.email]);
-
-  // Show loading only if subscription is loading (stats load independently)
-  if (subscriptionLoading) {
-    return <DashboardSkeleton />;
-  }
 
   const getPlanDisplayName = () => {
     if (!subscription?.plan) return 'Free Plan';
@@ -100,18 +91,25 @@ export default function DashboardPage() {
   const canShowCreateInvoice = hasReceivablesAccess && isSmartInvoicingEnabled;
   const canShowCreatePayable = hasPayablesAccess && isAccountsPayableEnabled;
   
-  // Check if user is on a paid plan
+  // Check if user is on a paid plan (non-blocking)
   const isPaidUser = subscription?.plan?.planId && subscription.plan.planId !== 'receivables-free';
+
+  // Use session data immediately - don't wait for API call
+  const displayName = userName || session?.user?.name || 'User';
+  const displayOrgName = organizationName || ''; // Will be populated from server action
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header - Renders immediately with session data */}
       <div className="flex items-center justify-between">
         <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-white mb-2 flex items-center gap-2">
-              {organizationName && (
+            <h1 
+              className="text-2xl md:text-3xl font-bold text-white mb-2 flex items-center gap-2"
+              style={{ contentVisibility: 'auto' }}
+            >
+              {displayOrgName && (
                 <span className="text-blue-300 font-medium">
-                  {organizationName} • 
+                  {displayOrgName} • 
                 </span>
               )}
               Overview
@@ -121,8 +119,7 @@ export default function DashboardPage() {
                 </span>
               )}
             </h1>
-            <p className="text-blue-200">Welcome back, {userName || session?.user?.name || 'User'}!</p>
-            {/* Fallback data warning removed - components handle their own loading states */}
+            <p className="text-blue-200">Welcome back, {displayName}!</p>
         </div>
         <div className="text-right">
             <p className="text-sm text-blue-300">Last updated</p>
@@ -167,8 +164,19 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Stats Cards - Independent Loading */}
-      <StatsCards />
+      {/* Stats Cards - Independent Loading with Suspense */}
+      <Suspense fallback={
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6 animate-pulse">
+              <div className="h-8 w-24 bg-white/20 rounded mb-2"></div>
+              <div className="h-4 w-16 bg-white/20 rounded"></div>
+            </div>
+          ))}
+        </div>
+      }>
+        <StatsCards />
+      </Suspense>
 
       {/* Quick Actions & Alerts */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -238,15 +246,40 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Recent Activity - Independent Loading */}
-      {/* Dynamic grid: full width if only one service, 2 columns if both services */}
+      {/* Recent Activity - Independent Loading with Suspense */}
       <div className={`grid gap-6 ${
         canShowCreateInvoice && canShowCreatePayable 
           ? 'grid-cols-1 lg:grid-cols-2' 
           : 'grid-cols-1'
       }`}>
-        {canShowCreateInvoice && <RecentInvoices />}
-        {canShowCreatePayable && <RecentPayables />}
+        {canShowCreateInvoice && (
+          <Suspense fallback={
+            <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6">
+              <div className="h-6 w-32 bg-white/20 rounded mb-4 animate-pulse"></div>
+              <div className="space-y-4">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="h-16 bg-white/10 rounded-lg animate-pulse"></div>
+                ))}
+              </div>
+            </div>
+          }>
+            <RecentInvoices />
+          </Suspense>
+        )}
+        {canShowCreatePayable && (
+          <Suspense fallback={
+            <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6">
+              <div className="h-6 w-32 bg-white/20 rounded mb-4 animate-pulse"></div>
+              <div className="space-y-4">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="h-16 bg-white/10 rounded-lg animate-pulse"></div>
+                ))}
+              </div>
+            </div>
+          }>
+            <RecentPayables />
+          </Suspense>
+        )}
       </div>
     </div>
   );

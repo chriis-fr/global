@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, memo, startTransition } from 'react';
+import { useState, useEffect, useCallback, useMemo, startTransition } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { usePermissions } from '@/lib/contexts/PermissionContext';
 import Image from 'next/image';
-import dynamic from 'next/dynamic';
 import { 
   ArrowLeft, 
   Edit3,
@@ -242,9 +241,13 @@ export default function InvoiceViewPage() {
     return optimizedCanvas;
   };
 
-  const generateOptimizedPdf = async (pdfContainer: HTMLElement, jsPDF: any, html2canvas: any): Promise<{ pdf: any; base64: string }> => {
+  const generateOptimizedPdf = async (
+    pdfContainer: HTMLElement, 
+    jsPDFLib: typeof import('jspdf')['default'], 
+    html2canvasLib: typeof import('html2canvas')['default']
+  ): Promise<{ pdf: import('jspdf').jsPDF; base64: string }> => {
     // Generate PDF using html2canvas with optimized options
-    const canvas = await html2canvas(pdfContainer, {
+    const canvas = await html2canvasLib(pdfContainer, {
       logging: false,
       useCORS: true,
       allowTaint: true,
@@ -264,7 +267,7 @@ export default function InvoiceViewPage() {
     const optimizedCanvas = optimizeCanvasForPdf(canvas);
     
     // Create PDF with optimized settings
-    const pdf = new jsPDF({
+    const pdf = new jsPDFLib({
       orientation: 'portrait',
       unit: 'mm',
       format: 'a4',
@@ -298,7 +301,7 @@ export default function InvoiceViewPage() {
     return { pdf, base64 };
   };
 
-  const addWatermark = (pdf: any, invoiceNumber?: string) => {
+  const addWatermark = (pdf: import('jspdf').jsPDF, invoiceNumber?: string) => {
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
     

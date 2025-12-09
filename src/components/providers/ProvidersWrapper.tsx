@@ -5,7 +5,9 @@ import { SessionProvider } from "@/components/providers/SessionProvider";
 import { CurrencyProvider } from "@/lib/contexts/CurrencyContext";
 import { SubscriptionProvider } from "@/lib/contexts/SubscriptionContext";
 import { PermissionProvider } from "@/lib/contexts/PermissionContext";
+import { PayablesProvider } from "@/lib/contexts/PayablesContext";
 import CursorManager from "@/components/CursorManager";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 /**
  * Client-side providers wrapper
@@ -14,16 +16,30 @@ import CursorManager from "@/components/CursorManager";
  */
 export function ProvidersWrapper({ children }: { children: ReactNode }) {
   return (
-    <SessionProvider>
-      <CurrencyProvider>
-        <SubscriptionProvider>
-          <PermissionProvider>
-            <CursorManager />
-            {children}
-          </PermissionProvider>
-        </SubscriptionProvider>
-      </CurrencyProvider>
-    </SessionProvider>
+    <ErrorBoundary>
+      <SessionProvider>
+        <ErrorBoundary>
+          <CurrencyProvider>
+            <ErrorBoundary>
+              <SubscriptionProvider>
+                <ErrorBoundary>
+                  <PermissionProvider>
+                    <ErrorBoundary>
+                      <PayablesProvider>
+                        <ErrorBoundary>
+                          <CursorManager />
+                        </ErrorBoundary>
+                        {children}
+                      </PayablesProvider>
+                    </ErrorBoundary>
+                  </PermissionProvider>
+                </ErrorBoundary>
+              </SubscriptionProvider>
+            </ErrorBoundary>
+          </CurrencyProvider>
+        </ErrorBoundary>
+      </SessionProvider>
+    </ErrorBoundary>
   );
 }
 
