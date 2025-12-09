@@ -1,224 +1,47 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { 
   Plus, 
-  Receipt, 
+  Receipt,
   DollarSign, 
   Users,
   LayoutDashboard,
-  Clock,
-  CheckCircle,
-  RotateCcw,
-  Eye,
-  Edit3,
   Building2,
   ArrowRight
 } from 'lucide-react';
-import FormattedNumberDisplay from '@/components/FormattedNumber';
-import PayablesSkeleton from '@/components/ui/PayablesSkeleton';
-import { getPayablesListPaginated } from '@/app/actions/payable-actions';
-import { startTransition } from 'react';
+import { getOnboardingStatus } from '@/app/actions/payable-actions';
+import PayablesStatsCards from '@/components/payables/PayablesStatsCards';
+import PayablesList from '@/components/payables/PayablesList';
 
 
-interface Payable {
-  _id: string;
-  payableNumber: string;
-  companyName?: string; // Sender's company name (who sent the invoice)
-  vendorName: string;
-  vendorCompany?: string;
-  vendorEmail: string;
-  total: number;
-  currency: string;
-  status: 'draft' | 'pending' | 'approved' | 'paid' | 'overdue';
-  dueDate: string;
-  issueDate: string;
-  category?: string;
-  priority?: 'low' | 'medium' | 'high';
-  createdAt: string;
-}
-
-interface PayableStats {
-  totalPayables: number;
-  pendingCount: number;
-  paidCount: number;
-  totalAmount: number;
-}
 
 
 export default function AccountsPayablePage() {
   const router = useRouter();
   const { data: session } = useSession();
-  
-  console.log('🔍 [Payables Page] Component loaded');
-  console.log('🔍 [Payables Page] Session:', session);
-
-  const [payables, setPayables] = useState<Payable[]>([]);
-  const [stats, setStats] = useState<PayableStats>({
-    totalPayables: 0,
-    pendingCount: 0,
-    paidCount: 0,
-    totalAmount: 0
-  });
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [dataLoaded, setDataLoaded] = useState(false);
   const [activeTab, setActiveTab] = useState<'bills' | 'direct-payments' | 'vendors'>('bills');
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalPayablesCount, setTotalPayablesCount] = useState(0);
-  const limit = 6; // Items per page - show 6 payables per page
 
-
-  // Load all data using ultra-fast server action (no API compilation delay)
-  const loadAllData = useCallback(async (page = currentPage) => {
-    if (!session?.user) return;
-    
-    try {
-      setLoading(true);
-      
-      // Use server action for instant response - no API route compilation
-      const result = await getPayablesListPaginated(page, limit);
-      
-      if (result.success && result.data) {
-        const { payables: currentPayables, pagination, stats: apiStats } = result.data;
-        
-        // Set paginated payables (max 6 items)
-        setPayables(currentPayables.slice(0, limit));
-        setTotalPages(pagination?.pages || 1);
-        setTotalPayablesCount(pagination?.total || 0);
-        
-        // Set stats
-        setStats({
-          totalPayables: apiStats.totalPayables || 0,
-          pendingCount: (apiStats.statusCounts?.pending || 0) + (apiStats.statusCounts?.approved || 0),
-          paidCount: apiStats.statusCounts?.paid || 0,
-          totalAmount: apiStats.totalAmount || 0
-        });
-      }
-      
-      // Load onboarding status separately (non-blocking)
-      startTransition(async () => {
-        try {
-          const onboardingResponse = await fetch('/api/onboarding/service?service=accountsPayable');
-          const onboardingData = await onboardingResponse.json();
-          if (onboardingData.success) {
-            setIsOnboardingCompleted(onboardingData.data.isCompleted);
-          }
-        } catch (error) {
-          console.error('Error loading onboarding status:', error);
+  // Load onboarding status independently (non-blocking)
+  useEffect(() => {
+    if (session?.user) {
+      // Load onboarding status in background - doesn't block page render
+      getOnboardingStatus('accountsPayable').then(result => {
+        if (result.success && result.data) {
+          setIsOnboardingCompleted(result.data.isCompleted);
         }
       });
-    } catch (error) {
-      console.error('❌ [Accounts Payable Dashboard] Error loading data:', error);
-    } finally {
-      setLoading(false);
-      setDataLoaded(true);
     }
-  }, [session?.user, currentPage, limit]);
-
-  useEffect(() => {
-    console.log('🔍 [Payables Page] useEffect triggered, session:', session?.user?.email);
-    if (session?.user) {
-      console.log('🔍 [Payables Page] Loading data for user:', session.user.email);
-      
-      // Check if there's a recent payment action that needs immediate refresh
-      const lastAction = sessionStorage.getItem('lastPaymentAction');
-      const now = Date.now();
-      
-      if (lastAction) {
-        const actionTime = parseInt(lastAction);
-        // If last payment action was within last 2 minutes, force refresh
-        if (now - actionTime < 2 * 60 * 1000) {
-          console.log('🔄 [Payables] Force refresh on mount due to recent payment action');
-          loadAllData(currentPage);
-          sessionStorage.removeItem('lastPaymentAction');
-        } else {
-          // Load data
-          loadAllData(currentPage);
-        }
-      } else {
-        // Load data
-        loadAllData(currentPage);
-      }
-    } else {
-      console.log('🔍 [Payables Page] No session user, skipping data load');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.user, currentPage]); // Include currentPage to reload when page changes
-
-  // Refresh completion status when returning from onboarding
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('refresh') === 'true') {
-      // Remove the refresh parameter from URL
-      const newUrl = window.location.pathname;
-      window.history.replaceState({}, '', newUrl);
-      // Force refresh data
-      loadAllData(currentPage);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Intentionally exclude loadAllData to prevent infinite loops
-
-  // Smart refresh when returning from specific actions
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (!document.hidden && dataLoaded) {
-        // Check if we're returning from a payment-related action
-        const lastAction = sessionStorage.getItem('lastPaymentAction');
-        const now = Date.now();
-        
-        if (lastAction) {
-          const actionTime = parseInt(lastAction);
-          // If last payment action was within last 2 minutes, force refresh
-          if (now - actionTime < 2 * 60 * 1000) {
-            console.log('🔄 [Payables] Force refresh due to recent payment action');
-            loadAllData(currentPage);
-            sessionStorage.removeItem('lastPaymentAction');
-            return;
-          }
-        }
-        
-        // Refresh data when page becomes visible (no cache needed with server actions)
-      }
-    };
-
-    // Also check for payment actions when page becomes active (not just visibility change)
-    const handlePageFocus = () => {
-      if (dataLoaded) {
-        const lastAction = sessionStorage.getItem('lastPaymentAction');
-        const now = Date.now();
-        
-        if (lastAction) {
-          const actionTime = parseInt(lastAction);
-          // If last payment action was within last 2 minutes, force refresh
-          if (now - actionTime < 2 * 60 * 1000) {
-            console.log('🔄 [Payables] Force refresh due to recent payment action (page focus)');
-            loadAllData(currentPage);
-            sessionStorage.removeItem('lastPaymentAction');
-          }
-        }
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handlePageFocus);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handlePageFocus);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataLoaded]);
+  }, [session?.user]);
 
   const handleCreatePayable = () => {
-    // Only check onboarding if we have the data, otherwise assume it's completed
-    if (dataLoaded && isOnboardingCompleted === false) {
+    // Navigate instantly - onboarding check happens in background
+    if (isOnboardingCompleted === false) {
       router.push('/dashboard/services/payables/onboarding');
     } else {
       router.push('/dashboard/services/payables/create');
@@ -231,21 +54,6 @@ export default function AccountsPayablePage() {
 
 
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'draft': return 'text-blue-300 bg-blue-500/20';
-      case 'pending': return 'text-yellow-600 bg-yellow-100';
-      case 'approved': return 'text-blue-600 bg-blue-100';
-      case 'paid': return 'text-green-600 bg-green-100';
-      case 'overdue': return 'text-red-600 bg-red-100';
-      default: return 'text-blue-300 bg-blue-500/20';
-    }
-  };
-
-
-  if (loading && !dataLoaded) {
-    return <PayablesSkeleton />;
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br ">
@@ -262,15 +70,9 @@ export default function AccountsPayablePage() {
             </div>
             <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
               <button
-                onClick={() => loadAllData(currentPage)}
-                className="flex items-center justify-center w-8 h-8 text-blue-300 hover:text-blue-200 hover:bg-white/10 rounded-lg transition-colors"
-                title="Refresh data"
-              >
-                <RotateCcw className={`h-3 w-3 ${loading ? 'animate-spin-reverse' : ''}`} />
-              </button>
-              <button
                 onClick={handleCreatePayable}
-                className="flex items-center space-x-1 sm:space-x-2 px-2 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="flex items-center space-x-1 sm:space-x-2 px-2 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors touch-manipulation active:scale-95"
+                style={{ touchAction: 'manipulation' }}
               >
                 <Plus className="h-4 w-4" />
                 <span className="hidden sm:inline">Create Payable</span>
@@ -282,77 +84,8 @@ export default function AccountsPayablePage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-blue-200 text-sm font-medium">Total Payables</p>
-                <p className="text-2xl font-bold text-white">{stats.totalPayables}</p>
-              </div>
-              <div className="p-3 bg-blue-500/20 rounded-lg">
-                <Receipt className="h-6 w-6 text-blue-400" />
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-blue-200 text-sm font-medium">Pending</p>
-                <p className="text-2xl font-bold text-yellow-400">{stats.pendingCount}</p>
-              </div>
-              <div className="p-3 bg-yellow-500/20 rounded-lg">
-                <Clock className="h-6 w-6 text-yellow-400" />
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-blue-200 text-sm font-medium">Paid</p>
-                <p className="text-2xl font-bold text-green-400">{stats.paidCount}</p>
-              </div>
-              <div className="p-3 bg-green-500/20 rounded-lg">
-                <CheckCircle className="h-6 w-6 text-green-400" />
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-blue-200 text-sm font-medium">Total Amount</p>
-                <p className="text-2xl font-bold text-white">
-                  <FormattedNumberDisplay value={stats.totalAmount} />
-                </p>
-              </div>
-              <div className="p-3 bg-blue-500/20 rounded-lg">
-                <DollarSign className="h-6 w-6 text-blue-400" />
-              </div>
-            </div>
-          </motion.div>
-        </div>
+        {/* Stats Cards - Load independently */}
+        <PayablesStatsCards />
 
         {/* Quick Actions - Similar to Smart Invoicing */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
@@ -449,158 +182,18 @@ export default function AccountsPayablePage() {
           {/* Tab Content */}
           <div className="p-6">
             {activeTab === 'bills' && (
-              <div>
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-lg font-semibold text-white">Bills & Invoices</h3>
-                  <button
-                    onClick={handleCreatePayable}
-                    className="flex items-center space-x-1 sm:space-x-2 px-2 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span className="hidden sm:inline">Add Bill</span>
-                    <span className="sm:hidden">Add</span>
-                  </button>
+              <Suspense fallback={
+                <div className="space-y-4">
+                  {[1, 2, 3, 4, 5, 6].map(i => (
+                    <div key={i} className="flex items-center justify-between p-4 bg-white/5 rounded-lg animate-pulse">
+                      <div className="h-4 bg-white/20 rounded w-32"></div>
+                      <div className="h-4 bg-white/20 rounded w-24"></div>
+                    </div>
+                  ))}
                 </div>
-                
-                {payables.length === 0 ? (
-                  <div className="text-center py-12">
-                    <Receipt className="h-12 w-12 text-blue-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-white mb-2">No bills yet</h3>
-                    <p className="text-blue-200 mb-6">Get started by adding your first bill or invoice.</p>
-                    <button
-                      onClick={handleCreatePayable}
-                      className="inline-flex items-center space-x-1 sm:space-x-2 px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                    >
-                      <Plus className="h-4 w-4" />
-                      <span className="hidden sm:inline">Add Bill</span>
-                      <span className="sm:hidden">Add</span>
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {payables.map((payable) => (
-                      <div key={payable._id} className="flex items-center justify-between p-4 bg-white/5 rounded-lg hover:bg-white/10 transition-colors">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center space-x-3">
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium text-white truncate">
-                                {payable.companyName || payable.vendorCompany || payable.vendorName}
-                              </p>
-                              <p className="text-sm text-blue-300">#{payable.payableNumber}</p>
-                            </div>
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${getStatusColor(payable.status)}`}>
-                              {payable.status}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-2 sm:space-x-4 flex-shrink-0">
-                          <div className="text-right">
-                            <p className="text-sm font-medium text-white">
-                              <FormattedNumberDisplay value={payable.total} />
-                            </p>
-                            <p className="text-sm text-blue-300">{payable.currency}</p>
-                          </div>
-                          <div className="flex items-center space-x-1 sm:space-x-2">
-                            <button
-                              onClick={() => {
-                                // Navigate instantly - don't wait for anything
-                                router.push(`/dashboard/services/payables/${payable._id}`);
-                              }}
-                              className="text-blue-600 hover:text-blue-700 transition-colors p-1 rounded-lg hover:bg-blue-50 touch-manipulation active:scale-95"
-                              style={{ touchAction: 'manipulation' }}
-                              title="View Bill"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </button>
-                            {payable.status === 'draft' && (
-                              <button
-                                onClick={() => {
-                                  // Navigate instantly
-                                  router.push(`/dashboard/services/payables/create?id=${payable._id}`);
-                                }}
-                                className="text-blue-600 hover:text-blue-700 transition-colors p-1 rounded-lg hover:bg-blue-50 touch-manipulation active:scale-95"
-                                style={{ touchAction: 'manipulation' }}
-                                title="Edit Bill"
-                              >
-                                <Edit3 className="h-4 w-4" />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    
-                    {/* Pagination Controls - Show if there are more than 6 items */}
-                    {totalPayablesCount > limit && (
-                      <div className="flex items-center justify-between pt-6 border-t border-white/20">
-                        <div className="text-sm text-blue-200">
-                          Showing {((currentPage - 1) * limit) + 1} to {Math.min(currentPage * limit, totalPayablesCount)} of {totalPayablesCount} bills
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <button
-                            onClick={() => {
-                              const newPage = currentPage - 1;
-                              if (newPage >= 1) {
-                                setCurrentPage(newPage);
-                                loadAllData(newPage);
-                              }
-                            }}
-                            disabled={currentPage === 1 || loading}
-                            className="px-3 py-2 text-sm font-medium text-white bg-white/10 rounded-lg hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                          >
-                            Previous
-                          </button>
-                          <div className="flex items-center space-x-1">
-                            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                              let pageNum;
-                              if (totalPages <= 5) {
-                                pageNum = i + 1;
-                              } else if (currentPage <= 3) {
-                                pageNum = i + 1;
-                              } else if (currentPage >= totalPages - 2) {
-                                pageNum = totalPages - 4 + i;
-                              } else {
-                                pageNum = currentPage - 2 + i;
-                              }
-                              
-                              return (
-                                <button
-                                  key={pageNum}
-                                  onClick={() => {
-                                    setCurrentPage(pageNum);
-                                    loadAllData(pageNum);
-                                  }}
-                                  disabled={loading}
-                                  className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                                    currentPage === pageNum
-                                      ? 'bg-blue-600 text-white'
-                                      : 'text-white bg-white/10 hover:bg-white/20'
-                                  } disabled:opacity-50 disabled:cursor-not-allowed`}
-                                >
-                                  {pageNum}
-                                </button>
-                              );
-                            })}
-                          </div>
-                          <button
-                            onClick={() => {
-                              const newPage = currentPage + 1;
-                              if (newPage <= totalPages) {
-                                setCurrentPage(newPage);
-                                loadAllData(newPage);
-                              }
-                            }}
-                            disabled={currentPage === totalPages || loading}
-                            className="px-3 py-2 text-sm font-medium text-white bg-white/10 rounded-lg hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                          >
-                            Next
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+              }>
+                <PayablesList onCreatePayable={handleCreatePayable} />
+              </Suspense>
             )}
 
             {activeTab === 'direct-payments' && (

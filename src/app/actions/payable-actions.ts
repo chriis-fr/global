@@ -4,7 +4,6 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
-import { CurrencyService } from '@/lib/services/currencyService';
 
 /**
  * Get payable details with related invoice number if available
@@ -292,6 +291,161 @@ export async function getPayablesListPaginated(
   } catch (error) {
     console.error('Error getting payables list:', error);
     return { success: false, error: 'Failed to fetch payables' };
+  }
+}
+
+/**
+ * Get onboarding status for a service - Ultra fast server action
+ * Replaces slow API route - no compilation delay
+ */
+export async function getOnboardingStatus(serviceKey: string) {
+  try {
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user?.email) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    // Import services (pre-initialized, not created inside action)
+    const { UserService } = await import('@/lib/services/userService');
+    const { OrganizationService } = await import('@/lib/services/organizationService');
+
+    const user = await UserService.getUserByEmail(session.user.email);
+    if (!user) {
+      return { success: false, error: 'User not found' };
+    }
+
+    // For organization users, check organization onboarding
+    if (user.organizationId) {
+      const organization = await OrganizationService.getOrganizationById(user.organizationId.toString());
+      if (!organization) {
+        return { success: false, error: 'Organization not found' };
+      }
+
+      const organizationServiceOnboarding = organization.onboarding.serviceOnboarding || {};
+      const organizationServices = organization.services || {};
+      const serviceOnboarding = organizationServiceOnboarding[serviceKey];
+      const isServiceEnabled = (organizationServices as unknown as Record<string, unknown>)[serviceKey];
+
+      // Check if completed: service enabled OR onboarding completed
+      let isCompleted = false;
+      if (isServiceEnabled === true) {
+        isCompleted = true;
+      } else if (serviceOnboarding && typeof serviceOnboarding === 'object') {
+        const onboardingData = serviceOnboarding as Record<string, unknown>;
+        const completedValue = onboardingData.completed;
+        if (completedValue === true || completedValue === 'true' || completedValue === 1) {
+          isCompleted = true;
+        }
+      }
+
+      return {
+        success: true,
+        data: {
+          isCompleted,
+          serviceKey,
+          storageLocation: 'organization'
+        }
+      };
+    } else {
+      // For individual users
+      const serviceOnboardingFromDirect = (user.onboarding as unknown as { serviceOnboarding?: Record<string, unknown> }).serviceOnboarding;
+      const serviceOnboardingFromData = (user.onboarding.data as { serviceOnboarding?: Record<string, unknown> })?.serviceOnboarding;
+      const serviceOnboarding = serviceOnboardingFromDirect || serviceOnboardingFromData || {};
+      const serviceOnboardingData = (serviceOnboarding as Record<string, unknown>)[serviceKey];
+
+      let isCompleted = false;
+      if (serviceOnboardingData && typeof serviceOnboardingData === 'object') {
+        const onboardingData = serviceOnboardingData as Record<string, unknown>;
+        const completedValue = onboardingData.completed;
+        if (completedValue === true || completedValue === 'true' || completedValue === 1) {
+          isCompleted = true;
+        }
+      }
+
+      return {
+        success: true,
+        data: {
+          isCompleted,
+          serviceKey,
+          storageLocation: 'user'
+        }
+      };
+    }
+  } catch (error) {
+    console.error('Error getting onboarding status:', error);
+    return { success: false, error: 'Failed to fetch onboarding status' };
+  }
+}
+
+/**
+ * Get payables stats only - Ultra fast, can be cached
+ * Separate from payables list for independent loading
+ */
+export async function getPayablesStats() {
+  try {
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const db = await connectToDatabase();
+    const payablesCollection = db.collection('payables');
+
+    // Build base query
+    const isOrganization = !!(session.user.organizationId && session.user.organizationId !== session.user.id);
+    const isObjectId = /^[0-9a-fA-F]{24}$/.test(session.user.id);
+    const issuerIdQuery = isObjectId 
+      ? { issuerId: new ObjectId(session.user.id) }
+      : { issuerId: session.user.id };
+    
+    const baseQuery = isOrganization 
+      ? { 
+          $or: [
+            { organizationId: session.user.organizationId },
+            { organizationId: new ObjectId(session.user.organizationId) }
+          ]
+        }
+      : { 
+          $or: [
+            issuerIdQuery,
+            { userId: session.user.email }
+          ]
+        };
+
+    // Run all queries in parallel for maximum speed
+    const [total, draftCount, pendingCount, approvedCount, paidCount, overdueCount, allPayables] = await Promise.all([
+      payablesCollection.countDocuments(baseQuery),
+      payablesCollection.countDocuments({ ...baseQuery, status: 'draft' }),
+      payablesCollection.countDocuments({ ...baseQuery, status: 'pending' }),
+      payablesCollection.countDocuments({ ...baseQuery, status: 'approved' }),
+      payablesCollection.countDocuments({ ...baseQuery, status: 'paid' }),
+      payablesCollection.countDocuments({ ...baseQuery, status: 'overdue' }),
+      payablesCollection.find(baseQuery).toArray()
+    ]);
+
+    // Calculate total amount for unpaid payables
+    const unpaidPayables = allPayables.filter(p => p.status !== 'paid');
+    const totalAmount = unpaidPayables.reduce((sum, p) => sum + (p.total || p.amount || 0), 0);
+
+    return {
+      success: true,
+      data: {
+        totalPayables: total,
+        totalAmount,
+        statusCounts: {
+          draft: draftCount,
+          pending: pendingCount,
+          approved: approvedCount,
+          paid: paidCount,
+          overdue: overdueCount
+        }
+      }
+    };
+  } catch (error) {
+    console.error('Error getting payables stats:', error);
+    return { success: false, error: 'Failed to fetch stats' };
   }
 }
 
