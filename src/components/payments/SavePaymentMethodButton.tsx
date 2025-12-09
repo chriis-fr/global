@@ -104,7 +104,7 @@ export default function SavePaymentMethodButton({
 
         try {
             const currency = getDefaultCurrency();
-            const paymentMethodData: any = {
+            const paymentMethodData: Record<string, unknown> = {
                 name: generatePaymentMethodName(),
                 type: formData.paymentMethod,
                 isDefault: false,
@@ -169,7 +169,7 @@ export default function SavePaymentMethodButton({
             } else {
                 setError(data.error || 'Failed to save payment method');
             }
-        } catch (err) {
+        } catch {
             setError('An error occurred while saving the payment method');
         } finally {
             setSaving(false);

@@ -33,6 +33,18 @@ export default function CurrencyAmount({
   // Detect if this is crypto (check prop or currency code) - do this early
   const isCryptoCurrency = isCrypto || CRYPTO_CURRENCIES.includes(currency.toUpperCase());
   
+  // Call hook unconditionally at the top (before any early returns)
+  // Only use hook if we don't have pre-converted amount
+  const shouldUseHook = !(convertedAmount !== undefined && 
+                          convertedCurrency === preferredCurrency &&
+                          currency !== preferredCurrency);
+  
+  const conversion = useCurrencyConversion(
+    shouldUseHook ? amount : 0,
+    shouldUseHook ? currency : preferredCurrency,
+    shouldUseHook ? preferredCurrency : preferredCurrency
+  );
+  
   // For crypto currencies, ALWAYS convert to preferred currency (usually USD)
   // Format: $X.XX(0.4 CELO) where $X.XX is converted USD amount, 0.4 CELO is original crypto amount
   // We never skip conversion for crypto, even if currency matches preferredCurrency
@@ -85,13 +97,6 @@ export default function CurrencyAmount({
       </span>
     );
   }
-
-  // Only use hook if we don't have pre-converted amount
-  const conversion = useCurrencyConversion(
-    amount,
-    currency,
-    preferredCurrency
-  );
 
   // If conversion is loading, handle differently for crypto vs fiat
   if (conversion.isLoading) {

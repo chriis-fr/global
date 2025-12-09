@@ -5,10 +5,8 @@ import { authOptions } from "@/lib/auth";
 import { connectToDatabase } from "@/lib/database";
 import { ObjectId } from "mongodb";
 import type { Invoice } from "@/models/Invoice";
-import { getInvoicesByIds, markInvoicesPaid } from "@/lib/db";
-import { getCompanyById } from "@/lib/db";
+import { getInvoicesByIds } from "@/lib/db";
 import { payInvoicesWithSafe } from "./safe-action";
-import { payInvoiceDirectEOA } from "./eoapay";
 import type { Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
@@ -340,15 +338,16 @@ export async function createBatchPayment({
 /**
  * Get batch payment status
  */
-export async function getBatchPaymentStatus({
-    txHash,
-    safeTxHash,
-    chainId,
-}: {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function getBatchPaymentStatus(_args: {
     txHash?: string;
     safeTxHash?: string;
     chainId?: number;
-}) {
+}): Promise<{
+    success: boolean;
+    status: string;
+    confirmations: number;
+}> {
     // This would poll the blockchain/Safe service for transaction status
     // Implementation depends on your status tracking system
     return {

@@ -43,7 +43,7 @@ export default function SafeWalletCard({
             } else {
                 alert(result.error || "Failed to disconnect Safe wallet");
             }
-        } catch (error) {
+        } catch {
             alert("An error occurred while disconnecting the Safe wallet");
         } finally {
             setDisconnecting(false);

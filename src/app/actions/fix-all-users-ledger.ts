@@ -3,7 +3,6 @@
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
 import { LedgerSyncService } from '@/lib/services/ledgerSyncService';
-import { CurrencyService } from '@/lib/services/currencyService';
 
 /**
  * Fix ledger entries for all users
@@ -25,7 +24,7 @@ export async function fixAllUsersLedgerEntries() {
     let totalInvoicesSynced = 0;
     let totalPayablesSynced = 0;
     let totalEntriesUpdated = 0;
-    let errors: string[] = [];
+    const errors: string[] = [];
 
     for (const user of users) {
       try {

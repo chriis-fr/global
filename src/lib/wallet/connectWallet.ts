@@ -18,9 +18,15 @@ export interface ConnectedWallet {
  */
 export async function connectSafeWallet(): Promise<ConnectedWallet> {
     // Check if running in Safe App environment
-    if (typeof window !== "undefined" && (window as any).safe) {
+    interface WindowWithSafe extends Window {
+        safe?: {
+            getSafeInfo: () => Promise<{ safeAddress: string; chainId: number }>;
+        };
+    }
+    const windowWithSafe = window as unknown as WindowWithSafe;
+    if (typeof window !== "undefined" && windowWithSafe.safe) {
         try {
-            const safe = (window as any).safe;
+            const safe = windowWithSafe.safe;
             const safeInfo = await safe.getSafeInfo();
             return {
                 type: "safe",
@@ -39,23 +45,30 @@ export async function connectSafeWallet(): Promise<ConnectedWallet> {
  * Connect to MetaMask
  */
 export async function connectMetaMask(): Promise<ConnectedWallet> {
-    if (typeof window === "undefined" || !(window as any).ethereum) {
+    interface WindowWithEthereum extends Window {
+        ethereum?: {
+            request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+            isMetaMask?: boolean;
+        };
+    }
+    const windowWithEthereum = window as unknown as WindowWithEthereum;
+    if (typeof window === "undefined" || !windowWithEthereum.ethereum) {
         throw new Error("MetaMask not found. Please install MetaMask extension.");
     }
 
     try {
-        const ethereum = (window as any).ethereum;
-        const accounts = await ethereum.request({ method: "eth_requestAccounts" });
+        const ethereum = windowWithEthereum.ethereum;
+        const accounts = (await ethereum.request({ method: "eth_requestAccounts" })) as string[];
         
         if (!accounts || accounts.length === 0) {
             throw new Error("No accounts found");
         }
 
-        const chainId = await ethereum.request({ method: "eth_chainId" });
+        const chainId = (await ethereum.request({ method: "eth_chainId" })) as string;
         
         return {
             type: "metamask",
-            address: accounts[0],
+            address: accounts[0] as string,
             chainId: parseInt(chainId, 16),
         };
     } catch (error) {
@@ -110,9 +123,16 @@ export function detectAvailableWallets(): {
         };
     }
 
+    interface WindowWithWallets extends Window {
+        safe?: unknown;
+        ethereum?: {
+            isMetaMask?: boolean;
+        };
+    }
+    const windowWithWallets = window as unknown as WindowWithWallets;
     return {
-        hasSafe: !!(window as any).safe,
-        hasMetaMask: !!(window as any).ethereum && !!(window as any).ethereum.isMetaMask,
+        hasSafe: !!windowWithWallets.safe,
+        hasMetaMask: !!windowWithWallets.ethereum && !!windowWithWallets.ethereum.isMetaMask,
         hasWalletConnect: false, // Would need WalletConnect SDK check
     };
 }

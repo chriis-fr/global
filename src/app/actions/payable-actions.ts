@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
+import { CurrencyService } from '@/lib/services/currencyService';
 
 /**
  * Get payable details with related invoice number if available
@@ -159,6 +160,138 @@ export async function getPayableWithInvoice(payableId: string) {
   } catch (error) {
     console.error('Error fetching payable with invoice:', error);
     return { success: false, error: 'Failed to fetch payable' };
+  }
+}
+
+/**
+ * Get paginated payables list with stats - Ultra fast server action
+ * Replaces slow API route calls - no compilation delay
+ */
+export async function getPayablesListPaginated(
+  page: number = 1,
+  limit: number = 6,
+  status?: string
+) {
+  try {
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const db = await connectToDatabase();
+    const payablesCollection = db.collection('payables');
+
+    // Build query
+    const isOrganization = !!(session.user.organizationId && session.user.organizationId !== session.user.id);
+    const isObjectId = /^[0-9a-fA-F]{24}$/.test(session.user.id);
+    const issuerIdQuery = isObjectId 
+      ? { issuerId: new ObjectId(session.user.id) }
+      : { issuerId: session.user.id };
+    
+    let query: Record<string, unknown> = isOrganization 
+      ? { 
+          $or: [
+            { organizationId: session.user.organizationId },
+            { organizationId: new ObjectId(session.user.organizationId) }
+          ]
+        }
+      : { 
+          $or: [
+            issuerIdQuery,
+            { userId: session.user.email }
+          ]
+        };
+
+    // Add status filter
+    if (status && status !== 'all') {
+      query = { ...query, status } as typeof query & { status: string };
+    }
+
+    // Get total count
+    const total = await payablesCollection.countDocuments(query);
+
+    // Get status counts for all payables (not just paginated)
+    const baseQuery = isOrganization 
+      ? { 
+          $or: [
+            { organizationId: session.user.organizationId },
+            { organizationId: new ObjectId(session.user.organizationId) }
+          ]
+        }
+      : { 
+          $or: [
+            issuerIdQuery,
+            { userId: session.user.email }
+          ]
+        };
+
+    const [draftCount, pendingCount, approvedCount, paidCount, overdueCount] = await Promise.all([
+      payablesCollection.countDocuments({ ...baseQuery, status: 'draft' }),
+      payablesCollection.countDocuments({ ...baseQuery, status: 'pending' }),
+      payablesCollection.countDocuments({ ...baseQuery, status: 'approved' }),
+      payablesCollection.countDocuments({ ...baseQuery, status: 'paid' }),
+      payablesCollection.countDocuments({ ...baseQuery, status: 'overdue' })
+    ]);
+
+    // Get paginated payables
+    const skip = (page - 1) * limit;
+    const payables = await payablesCollection
+      .find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .toArray();
+
+    // Calculate total amount for unpaid payables
+    const allPayables = await payablesCollection.find(baseQuery).toArray();
+    const unpaidPayables = allPayables.filter(p => p.status !== 'paid');
+    const totalAmount = unpaidPayables.reduce((sum, p) => sum + (p.total || p.amount || 0), 0);
+
+    // Transform payables
+    const transformedPayables = payables.map(p => ({
+      _id: p._id.toString(),
+      payableNumber: p.payableNumber || 'Payable',
+      companyName: p.companyName,
+      vendorName: p.vendorName || '',
+      vendorCompany: p.vendorCompany,
+      vendorEmail: p.vendorEmail || '',
+      total: p.total || p.amount || 0,
+      currency: p.currency || 'USD',
+      status: p.status || 'pending',
+      dueDate: p.dueDate?.toISOString() || new Date().toISOString(),
+      issueDate: p.issueDate?.toISOString() || new Date().toISOString(),
+      category: p.category,
+      priority: p.priority,
+      createdAt: p.createdAt?.toISOString() || new Date().toISOString(),
+    }));
+
+    return {
+      success: true,
+      data: {
+        payables: transformedPayables,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit)
+        },
+        stats: {
+          totalPayables: total,
+          totalAmount,
+          statusCounts: {
+            draft: draftCount,
+            pending: pendingCount,
+            approved: approvedCount,
+            paid: paidCount,
+            overdue: overdueCount
+          }
+        }
+      }
+    };
+  } catch (error) {
+    console.error('Error getting payables list:', error);
+    return { success: false, error: 'Failed to fetch payables' };
   }
 }
 

@@ -4,7 +4,6 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
-import { payInvoiceDirectEOA } from './eoapay';
 import { payInvoicesWithSafe } from './safe-action';
 import { getInvoiceById } from '@/lib/db';
 
@@ -76,12 +75,9 @@ export async function payPayableWithWallet({
 
         // Extract payment details
         const paymentAddress = payable.paymentAddress || payable.paymentMethodDetails?.address;
-        const paymentNetwork = payable.paymentNetwork || payable.paymentMethodDetails?.network;
         const cryptoDetails = payable.paymentMethodDetails?.cryptoDetails || {};
         const invoiceChainId = invoice?.chainId?.toString() || cryptoDetails.chainId?.toString() || chainId;
         const tokenAddress = invoice?.tokenAddress || cryptoDetails.tokenAddress;
-        const tokenDecimals = invoice?.tokenDecimals || cryptoDetails.tokenDecimals || 18;
-        const amount = payable.total || payable.amount || 0;
 
         if (!paymentAddress) {
             return { success: false, error: 'Payment address not found' };
@@ -108,19 +104,38 @@ export async function payPayableWithWallet({
             }
 
             // Use existing Safe payment action
-            const result = await payInvoicesWithSafe({
-                invoiceIds: [invoice._id.toString()],
-                safeAddress: walletAddress,
-                proposerPrivateKey: proposerPrivateKey,
-                chainId: invoiceChainId,
-            });
-
-            if (!result.success) {
-                return { success: false, error: result.error || 'Safe payment failed' };
+            if (!invoice._id) {
+                return { success: false, error: 'Invoice ID not found' };
             }
+            if (!proposerPrivateKey) {
+                return { success: false, error: 'Proposer private key is required for Safe payments' };
+            }
+            // Get company/organization ID from session
+            const companyId = session.user.organizationId || session.user.id;
+            if (!companyId) {
+                return { success: false, error: 'Company ID not found' };
+            }
+            // Ensure proposerPrivateKey starts with 0x
+            const hexKey = proposerPrivateKey.startsWith('0x') 
+                ? proposerPrivateKey as `0x${string}`
+                : `0x${proposerPrivateKey}` as `0x${string}`;
+            try {
+                const result = await payInvoicesWithSafe({
+                    companyId: companyId.toString(),
+                    invoiceIds: [invoice._id.toString()],
+                    proposerAddress: walletAddress,
+                    proposerPrivateKey: hexKey,
+                    chainId: invoiceChainId,
+                });
 
-            safeTxHash = result.txHash;
-            paymentStatus = 'proposed'; // Safe transactions are proposed first
+                // payInvoicesWithSafe returns { success: true, txHash, safeAddress, invoiceCount }
+                // The txHash is the Safe transaction hash
+                safeTxHash = result.txHash;
+                paymentStatus = 'proposed'; // Safe transactions are proposed first
+            } catch (error: unknown) {
+                const errorMessage = error instanceof Error ? error.message : 'Safe payment failed';
+                return { success: false, error: errorMessage };
+            }
         } else {
             // EOA payment (MetaMask, WalletConnect)
             // Note: For client-side signing, we would need to receive the txHash from the client
@@ -135,7 +150,7 @@ export async function payPayableWithWallet({
         const updateData: Record<string, unknown> = {
             status: paymentStatus === 'proposed' ? 'pending' : 'paid',
             paymentStatus: paymentStatus === 'proposed' ? 'processing' : 'completed',
-            paymentDate: paymentStatus === 'paid' ? new Date() : undefined,
+            paymentDate: paymentStatus !== 'proposed' ? new Date() : undefined,
             paymentMethod: 'crypto',
             updatedAt: new Date(),
         };

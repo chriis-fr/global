@@ -83,6 +83,8 @@ const SectionA = () => {
               src="/laptop.png"
               alt="ChainsERP Dashboard - Desktop View"
               priority
+              fetchPriority="high"
+              quality={85}
             />
           </div>
 
@@ -92,9 +94,10 @@ const SectionA = () => {
               width={600}
               height={1200}
               className="w-full mx-auto rounded-lg relative leading-none flex items- border-secondary border-t-primary/30"
+              priority
+              fetchPriority="high"
               src="/leftmobile.png"
               alt="ChainsERP Dashboard - Mobile View"
-              priority
             />
           </div>
 

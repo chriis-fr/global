@@ -446,7 +446,6 @@ export async function getInvoicesListMinimal(
     const invoiceList: InvoiceDetails[] = invoices.map((invoice, index) => {
       const originalAmount = invoice.total || invoice.totalAmount || 0;
       const convertedAmount = conversionMap.get(index);
-      const needsConversion = (invoice.currency || 'USD') !== preferredCurrency;
       
       // Don't set convertedAmount on server - let client convert in background
       // This prevents blocking page load

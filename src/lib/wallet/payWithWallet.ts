@@ -7,7 +7,6 @@ import {
     parseUnits, 
     encodeFunctionData, 
     http,
-    simulateContract,
     type Address 
 } from "viem";
 import { getChainByNumericId } from "@/lib/chains";
@@ -45,11 +44,17 @@ export async function payWithEOAWallet({
     decimals: number;
     chainId: string;
 }): Promise<string> {
-    if (typeof window === "undefined" || !(window as any).ethereum) {
+    interface WindowWithEthereum extends Window {
+        ethereum?: {
+            request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+        };
+    }
+    const windowWithEthereum = window as unknown as WindowWithEthereum;
+    if (typeof window === "undefined" || !windowWithEthereum.ethereum) {
         throw new Error("MetaMask not found. Please install MetaMask extension.");
     }
 
-    const ethereum = (window as any).ethereum;
+    const ethereum = windowWithEthereum.ethereum;
     
     // Get chain config - chainId is a numeric string (e.g., "42220")
     const numericChainId = parseInt(chainId, 10);
@@ -84,9 +89,10 @@ export async function payWithEOAWallet({
                 method: "wallet_switchEthereumChain",
                 params: [{ chainId: expectedChainId }],
             });
-        } catch (switchError: any) {
+        } catch (switchError: unknown) {
             // If chain doesn't exist, add it
-            if (switchError.code === 4902) {
+            const error = switchError as { code?: number; message?: string };
+            if (error.code === 4902) {
                 const rpcUrls = Array.isArray(chainConfig.chain.rpcUrls.default.http)
                     ? chainConfig.chain.rpcUrls.default.http
                     : [chainConfig.chain.rpcUrls.default.http];
@@ -98,12 +104,9 @@ export async function payWithEOAWallet({
                     chainName = "Celo Mainnet";
                 } else if (numericChainId === 44787) {
                     chainName = "Celo Alfajores";
-                } else if (chainConfig.chain.network) {
-                    // Format network name: "celo-mainnet" -> "Celo Mainnet"
-                    chainName = chainConfig.chain.network
-                        .split('-')
-                        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                        .join(' ');
+                } else {
+                    // Use chain name as-is if it's already formatted
+                    chainName = chainConfig.chain.name;
                 }
                 
                 // Prepare network params matching MetaMask's expected format
@@ -119,18 +122,30 @@ export async function payWithEOAWallet({
                 };
                 
                 // Add block explorer if available
+                interface NetworkParams {
+                    chainId: string;
+                    chainName: string;
+                    nativeCurrency: {
+                        name: string;
+                        symbol: string;
+                        decimals: number;
+                    };
+                    rpcUrls: string[];
+                    blockExplorerUrls?: string[];
+                }
+                const networkParamsTyped = networkParams as NetworkParams;
                 if (chainConfig.chain.blockExplorers?.default?.url) {
-                    (networkParams as any).blockExplorerUrls = [
+                    networkParamsTyped.blockExplorerUrls = [
                         chainConfig.chain.blockExplorers.default.url
                     ];
                 }
                 
                 await ethereum.request({
                     method: "wallet_addEthereumChain",
-                    params: [networkParams],
+                    params: [networkParamsTyped],
                 });
             } else {
-                throw new Error(`Failed to switch chain: ${switchError.message || 'Unknown error'}`);
+                throw new Error(`Failed to switch chain: ${error.message || 'Unknown error'}`);
             }
         }
     }
@@ -182,8 +197,9 @@ export async function payWithEOAWallet({
                 );
             }
         }
-    } catch (balanceError: any) {
-        if (balanceError.message.includes("Insufficient")) {
+    } catch (balanceError: unknown) {
+        const error = balanceError as { message?: string };
+        if (error.message?.includes("Insufficient")) {
             throw balanceError;
         }
         console.warn("Could not check native balance:", balanceError);
@@ -208,8 +224,9 @@ export async function payWithEOAWallet({
                     `Available: ${availableTokens.toFixed(4)} tokens`
                 );
             }
-        } catch (tokenError: any) {
-            if (tokenError.message.includes("Insufficient token balance")) {
+        } catch (tokenError: unknown) {
+            const error = tokenError as { message?: string };
+            if (error.message?.includes("Insufficient token balance")) {
                 throw tokenError;
             }
             console.warn("Could not check token balance:", tokenError);
@@ -283,7 +300,7 @@ export async function payWithEOAWallet({
                 account,
                 to: tokenAddress,
                 data,
-                value: 0n,
+                value: BigInt(0),
                 chainId: numericChainId,
             });
             
@@ -297,15 +314,24 @@ export async function payWithEOAWallet({
             console.log("ERC20 transaction sent successfully. Hash:", hash);
             return hash;
         }
-    } catch (error: any) {
+    } catch (error: unknown) {
+        const err = error as {
+            code?: number | string;
+            message?: string;
+            reason?: string;
+            data?: { message?: string };
+            constructor?: { name?: string };
+            stack?: string;
+        };
+        
         // Check if user rejected the transaction
         const isUserRejection = 
-            error?.code === 4001 || 
-            error?.code === 'ACTION_REJECTED' ||
-            error?.message?.toLowerCase().includes('user rejected') ||
-            error?.message?.toLowerCase().includes('user denied') ||
-            error?.reason?.toLowerCase().includes('user rejected') ||
-            error?.reason?.toLowerCase().includes('user denied');
+            err?.code === 4001 || 
+            err?.code === 'ACTION_REJECTED' ||
+            err?.message?.toLowerCase().includes('user rejected') ||
+            err?.message?.toLowerCase().includes('user denied') ||
+            err?.reason?.toLowerCase().includes('user rejected') ||
+            err?.reason?.toLowerCase().includes('user denied');
         
         if (isUserRejection) {
             // User rejection - don't log as error, just throw a clean message
@@ -315,23 +341,23 @@ export async function payWithEOAWallet({
         console.error("Transaction error details:", {
             error,
             errorType: typeof error,
-            errorConstructor: error?.constructor?.name,
-            message: error?.message,
-            reason: error?.reason,
-            code: error?.code,
-            data: error?.data,
-            stack: error?.stack,
+            errorConstructor: err?.constructor?.name,
+            message: err?.message,
+            reason: err?.reason,
+            code: err?.code,
+            data: err?.data,
+            stack: err?.stack,
             stringified: JSON.stringify(error, Object.getOwnPropertyNames(error)),
         });
         
         // Extract error message from various possible locations
         let errorMessage = "Unknown error";
-        if (error?.message) {
-            errorMessage = error.message;
-        } else if (error?.reason) {
-            errorMessage = error.reason;
-        } else if (error?.data?.message) {
-            errorMessage = error.data.message;
+        if (err?.message) {
+            errorMessage = err.message;
+        } else if (err?.reason) {
+            errorMessage = err.reason;
+        } else if (err?.data?.message) {
+            errorMessage = err.data.message;
         } else if (typeof error === 'string') {
             errorMessage = error;
         } else if (error && typeof error === 'object') {
@@ -344,10 +370,15 @@ export async function payWithEOAWallet({
         }
         
         // Create a proper Error object with all details
-        const enhancedError = new Error(`Transaction failed: ${errorMessage}`);
-        (enhancedError as any).originalError = error;
-        (enhancedError as any).code = error?.code;
-        (enhancedError as any).reason = error?.reason;
+        interface EnhancedError extends Error {
+            originalError?: unknown;
+            code?: number | string;
+            reason?: string;
+        }
+        const enhancedError = new Error(`Transaction failed: ${errorMessage}`) as EnhancedError;
+        enhancedError.originalError = error;
+        enhancedError.code = err?.code;
+        enhancedError.reason = err?.reason;
         throw enhancedError;
     }
 }

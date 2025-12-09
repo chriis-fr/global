@@ -67,7 +67,7 @@ export class PaymentMethodService {
     userId?: ObjectId,
     type?: PaymentMethodType,
     activeOnly: boolean = true,
-    includeSafeWallets: boolean = true
+    includeSafeWallets: boolean = true // eslint-disable-line @typescript-eslint/no-unused-vars
   ): Promise<PaymentMethod[]> {
     const db = await this.initDatabase();
     

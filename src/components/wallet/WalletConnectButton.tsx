@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { appKit } from "@/lib/reown/appkit";
-import { createWalletClient, custom, type Address } from "viem";
+import { createWalletClient, custom } from "viem";
 import { DEFAULT_CHAIN } from "@/lib/chains";
 import { Loader2, Wallet } from "lucide-react";
 
@@ -35,9 +35,9 @@ export default function WalletConnectButton({
     // Check if already connected on mount
     const checkConnection = async () => {
       try {
-        const provider = appKit.getWalletProvider();
+        const provider = appKit.getWalletProvider() as { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } | null;
         if (provider) {
-          const accounts = await provider.request({ method: "eth_accounts" });
+          const accounts = await provider.request({ method: "eth_accounts" }) as string[] | null;
           if (accounts && accounts.length > 0) {
             const addr = accounts[0];
             setAddress(addr);
@@ -52,7 +52,7 @@ export default function WalletConnectButton({
             onConnect(provider, addr, walletClient);
           }
         }
-      } catch (err) {
+      } catch {
         // Not connected, ignore
         console.log('No existing WalletConnect session');
       }
@@ -71,16 +71,16 @@ export default function WalletConnectButton({
 
       // Wait for connection
       // Note: AppKit's API may vary - adjust based on actual @reown/appkit API
-      const provider = appKit.getWalletProvider();
+      const provider = appKit.getWalletProvider() as { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } | null;
       
       if (!provider) {
         throw new Error("Failed to get wallet provider");
       }
 
       // Request accounts
-      const accounts = await provider.request({ 
+      const accounts = (await provider.request({ 
         method: "eth_requestAccounts" 
-      }) as string[];
+      })) as string[];
 
       if (!accounts || accounts.length === 0) {
         throw new Error("No accounts returned");
@@ -94,9 +94,9 @@ export default function WalletConnectButton({
           method: "wallet_switchEthereumChain",
           params: [{ chainId: `0x${chainId.toString(16)}` }],
         });
-      } catch (switchError: any) {
+      } catch (switchError: unknown) {
         // Chain not added, try to add it
-        if (switchError.code === 4902) {
+        if (switchError && typeof switchError === 'object' && 'code' in switchError && (switchError as { code: number }).code === 4902) {
           await provider.request({
             method: "wallet_addEthereumChain",
             params: [{

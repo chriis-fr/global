@@ -38,7 +38,7 @@ export default function PaymentMethodSelector({
     methods,
     selectedMethodId,
     onSelect,
-    showSafeWallets = true,
+    showSafeWallets = true, // eslint-disable-line @typescript-eslint/no-unused-vars
 }: PaymentMethodSelectorProps) {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);

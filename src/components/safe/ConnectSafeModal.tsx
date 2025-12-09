@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { X, Wallet, Shield, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
-import { importExistingSafe, getConnectedSafeWallets } from "@/app/actions/safe-connection";
+import { importExistingSafe } from "@/app/actions/safe-connection";
 import { DEFAULT_CHAIN } from "@/lib/chains";
 
 interface ConnectSafeModalProps {
@@ -29,8 +29,10 @@ export default function ConnectSafeModal({
     const [chainId, setChainId] = useState(DEFAULT_CHAIN.id);
     
     // Deploy form state (for future)
-    const [owners, setOwners] = useState<string[]>([""]);
-    const [threshold, setThreshold] = useState(1);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const [, setOwners] = useState<string[]>([""]);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const [, setThreshold] = useState(1);
 
     if (!isOpen) return null;
 
@@ -139,7 +141,7 @@ export default function ConnectSafeModal({
                                             Import Existing Safe
                                         </div>
                                         <div className="text-sm text-gray-600">
-                                            Connect a Safe wallet that's already deployed
+                                            Connect a Safe wallet that&apos;s already deployed
                                         </div>
                                     </div>
                                 </div>

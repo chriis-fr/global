@@ -1,14 +1,11 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { SessionProvider } from "@/components/providers/SessionProvider";
-import { CurrencyProvider } from "@/lib/contexts/CurrencyContext";
-import { SubscriptionProvider } from "@/lib/contexts/SubscriptionContext";
-import { PermissionProvider } from "@/lib/contexts/PermissionContext";
-import CursorManager from "@/components/CursorManager";
+import { ProvidersWrapper } from "@/components/providers/ProvidersWrapper";
 
-// Initialize database connection on app start
-import '../lib/db-init';
+// DO NOT import database initialization here - it blocks SSR
+// Database connections should be lazy-loaded only when needed in API routes
+// ProvidersWrapper is a client component, so it won't execute server-side code
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -121,16 +118,10 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         {/* Cursor CSS variables are set in globals.css - no script injection needed to prevent hydration flicker */}
-        <SessionProvider>
-          <CurrencyProvider>
-            <SubscriptionProvider>
-              <PermissionProvider>
-                <CursorManager />
-                {children}
-              </PermissionProvider>
-            </SubscriptionProvider>
-          </CurrencyProvider>
-        </SessionProvider>
+        {/* Providers are lazy-loaded client-side only to prevent blocking SSR */}
+        <ProvidersWrapper>
+          {children}
+        </ProvidersWrapper>
       </body>
     </html>
   );

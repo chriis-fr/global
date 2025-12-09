@@ -163,7 +163,7 @@ export function useCurrencyConversion(
       conversionQueue.delete(queueKey);
     }, 10000); // 10 second timeout
     
-    const promise = new Promise<ConversionResult>((resolve, reject) => {
+    new Promise<ConversionResult>((resolve, reject) => {
       conversionQueue.set(queueKey, {
         resolve: (result) => {
           clearTimeout(timeoutId);

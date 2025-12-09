@@ -22,11 +22,21 @@ interface PaymentMethod {
     _id?: string;
     name: string;
     type: 'fiat' | 'crypto';
+    isDefault?: boolean;
+    fiatDetails?: {
+        subtype?: 'bank' | 'mpesa_paybill' | 'mpesa_till';
+        bankName?: string;
+        currency?: string;
+    };
     cryptoDetails?: {
+        address: string;
+        network: string;
+        currency: string;
         safeDetails?: {
             safeAddress: string;
             owners: string[];
             threshold: number;
+            chainId?: number;
         };
     };
 }
@@ -47,14 +57,6 @@ export default function BatchPaymentModal({
     const [step, setStep] = useState<"select" | "confirm" | "processing" | "success">("select");
     const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<string>("");
     const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
-    const [safeWallets, setSafeWallets] = useState<Array<{
-        paymentMethodId: string;
-        name: string;
-        safeAddress: string;
-        owners: string[];
-        threshold: number;
-    }>>([]);
-    const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [txHash, setTxHash] = useState<string | null>(null);
 
@@ -78,10 +80,13 @@ export default function BatchPaymentModal({
     };
 
     const loadSafeWallets = async () => {
+        // Safe wallets are loaded via PaymentMethodSelector component
+        // This function is kept for potential future use
         try {
             const result = await getConnectedSafeWallets({});
             if (result.success) {
-                setSafeWallets(result.safeWallets);
+                // Safe wallets are already included in payment methods
+                console.log('Safe wallets loaded:', result.safeWallets.length);
             }
         } catch (error) {
             console.error('Error loading Safe wallets:', error);

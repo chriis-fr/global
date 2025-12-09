@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback, startTransition } from 'react'
 import { motion } from 'framer-motion'
 import {
   Menu,
@@ -22,6 +22,19 @@ export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isProductsOpen, setIsProductsOpen] = useState(false)
   const [isSolutionsOpen, setIsSolutionsOpen] = useState(false)
+
+  // Optimized handlers for mobile performance
+  const toggleMenu = useCallback(() => {
+    startTransition(() => {
+      setIsMenuOpen(prev => !prev);
+    });
+  }, []);
+
+  const closeMenu = useCallback(() => {
+    startTransition(() => {
+      setIsMenuOpen(false);
+    });
+  }, []);
 
   const navigation = [
     { name: 'Home', href: '/' },
@@ -98,6 +111,8 @@ export function Header() {
                 width={45}
                 height={45}
                 className="bg-white rounded-lg"
+                priority
+                fetchPriority="high"
               />
               <span className="text-xl font-sans font-bold text-gray-900">Global Finance</span>
             </Link>
@@ -214,8 +229,9 @@ export function Header() {
           {/* Mobile menu button */}
           <div className="md:hidden">
             <button
-              onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="text-gray-700 hover:text-blue-600 transition-colors"
+              onClick={toggleMenu}
+              className="text-gray-700 hover:text-blue-600 transition-colors touch-manipulation active:scale-95"
+              style={{ touchAction: 'manipulation' }}
             >
               {isMenuOpen ? (
                 <X className="h-6 w-6" />
@@ -240,8 +256,9 @@ export function Header() {
                   <Link
                     key={item.name}
                     href={item.href}
-                    className="block text-gray-700 hover:text-blue-600 transition-colors"
-                    onClick={() => setIsMenuOpen(false)}
+                    className="block text-gray-700 hover:text-blue-600 transition-colors touch-manipulation active:scale-[0.98]"
+                    onClick={closeMenu}
+                    style={{ touchAction: 'manipulation' }}
                   >
                     {item.name}
                   </Link>
@@ -252,7 +269,7 @@ export function Header() {
                   <Link
                     href="/dashboard"
                     className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 transition-colors"
-                    onClick={() => setIsMenuOpen(false)}
+                    onClick={closeMenu}
                   >
                     <LayoutDashboard className="h-4 w-4" />
                     <span>Dashboard</span>
@@ -274,7 +291,7 @@ export function Header() {
                     <Link
                       href="/auth"
                       className="block text-gray-700 hover:text-blue-600 transition-colors"
-                      onClick={() => setIsMenuOpen(false)}
+                      onClick={closeMenu}
                     >
                       Sign In
                     </Link>
@@ -282,7 +299,7 @@ export function Header() {
                   <Link
                     href="/auth"
                     className="block bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors text-center"
-                    onClick={() => setIsMenuOpen(false)}
+                    onClick={closeMenu}
                   >
                     {session ? 'Go to Dashboard' : 'Get Started'}
                   </Link>

@@ -3,9 +3,8 @@
 import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import SafeAppsSDK from "@safe-global/safe-apps-sdk";
-import { createWalletClient, custom, parseUnits, type Address } from "viem";
-import { Loader2, AlertCircle, CheckCircle2, Wallet, Shield } from "lucide-react";
-import { getChainByNumericId } from "@/lib/chains";
+import { parseUnits } from "viem";
+import { Loader2, AlertCircle, CheckCircle2, Shield } from "lucide-react";
 
 // ERC20 Transfer ABI
 const ERC20_ABI = [
@@ -93,15 +92,29 @@ export default function SafePayPage() {
                 const invoice = await getInvoiceById(invoiceId);
                 
                 if (invoice) {
-                    const chainId = invoice.chainId || 
-                                   invoice.paymentSettings?.chainId || 
+                    const invoiceTyped = invoice as {
+                        chainId?: number;
+                        tokenAddress?: string;
+                        currency?: string;
+                        payeeAddress?: string;
+                        totalAmount?: number;
+                        total?: number;
+                        paymentSettings?: {
+                            chainId?: number;
+                            tokenAddress?: string;
+                            tokenDecimals?: number;
+                            walletAddress?: string;
+                        };
+                    };
+                    const chainId = invoiceTyped.chainId ||
+                                   invoiceTyped.paymentSettings?.chainId ||   
                                    42220;
-                    const tokenAddress = invoice.tokenAddress ||
-                                       invoice.paymentSettings?.tokenAddress;
-                    const tokenSymbol = invoice.currency || "USDT";
-                    const tokenDecimals = invoice.paymentSettings?.tokenDecimals || 18;
-                    const toAddress = invoice.paymentSettings?.walletAddress || 
-                                    invoice.payeeAddress;
+                    const tokenAddress = invoiceTyped.tokenAddress ||
+                                       invoiceTyped.paymentSettings?.tokenAddress;
+                    const tokenSymbol = invoiceTyped.currency || "USDT";
+                    const tokenDecimals = invoiceTyped.paymentSettings?.tokenDecimals || 18;
+                    const toAddress = invoiceTyped.paymentSettings?.walletAddress || 
+                                    invoiceTyped.payeeAddress;
 
                     if (!tokenAddress || !toAddress) {
                         setError("Payment details are incomplete. Missing token address or recipient address.");
@@ -109,7 +122,7 @@ export default function SafePayPage() {
                     }
 
                     setPaymentData({
-                        amount: invoice.totalAmount || invoice.total,
+                        amount: invoiceTyped.totalAmount || invoiceTyped.total || 0,
                         tokenAddress,
                         toAddress,
                         chainId,
@@ -157,7 +170,12 @@ export default function SafePayPage() {
                         setTimeout(() => reject(new Error("Safe connection timeout")), 5000)
                     );
                     
-                    const safe = await Promise.race([safePromise, timeoutPromise]) as any;
+                    const safe = await Promise.race([safePromise, timeoutPromise]) as { 
+                        safeAddress: string; 
+                        chainId: number;
+                        owners: string[];
+                        threshold: number;
+                    };
                     
                     console.log("✅ Safe detected:", {
                         safeAddress: safe.safeAddress,
@@ -172,10 +190,10 @@ export default function SafePayPage() {
                     
                     setSafeInfo({
                         safeAddress: safe.safeAddress,
-                        chainId: parseInt(safe.chainId),
+                        chainId: safe.chainId,
                         owners: safe.owners,
                         threshold: safe.threshold,
-                        isReadOnly: safe.isReadOnly,
+                        isReadOnly: (safe as { isReadOnly?: boolean }).isReadOnly || false,
                     });
 
                     // Fetch payment data from server
@@ -233,7 +251,7 @@ export default function SafePayPage() {
             const transferData = encodeFunctionData({
                 abi: ERC20_ABI,
                 functionName: "transfer",
-                args: [paymentData.toAddress as Address, amount],
+                args: [paymentData.toAddress as `0x${string}`, amount],
             });
 
             // Send transaction via Safe SDK
@@ -242,7 +260,7 @@ export default function SafePayPage() {
             const { safeTxHash } = await appsSdk.txs.send({
                 txs: [
                     {
-                        to: paymentData.tokenAddress as Address,
+                        to: paymentData.tokenAddress as `0x${string}`,
                         value: "0",
                         data: transferData,
                     },
@@ -296,7 +314,7 @@ export default function SafePayPage() {
                         <h2 className="text-xl font-semibold text-gray-900">Not in Safe Environment</h2>
                     </div>
                     <p className="text-gray-600 mb-4">
-                        This page must be opened from Safe App. Please use the "Pay with Safe" button from the payment modal.
+                        This page must be opened from Safe App. Please use the &quot;Pay with Safe&quot; button from the payment modal.
                     </p>
                     <button
                         onClick={() => router.back()}

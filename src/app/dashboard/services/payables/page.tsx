@@ -21,10 +21,9 @@ import {
 } from 'lucide-react';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
 import PayablesSkeleton from '@/components/ui/PayablesSkeleton';
+import { getPayablesListPaginated } from '@/app/actions/payable-actions';
+import { startTransition } from 'react';
 
-// Cache key for localStorage
-const CACHE_KEY = 'payables-cache';
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes - stable cache for good UX
 
 interface Payable {
   _id: string;
@@ -50,12 +49,6 @@ interface PayableStats {
   totalAmount: number;
 }
 
-interface CachedData {
-  payables: Payable[];
-  stats: PayableStats;
-  isOnboardingCompleted: boolean | null;
-  timestamp: number;
-}
 
 export default function AccountsPayablePage() {
   const router = useRouter();
@@ -75,121 +68,59 @@ export default function AccountsPayablePage() {
   const [loading, setLoading] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [activeTab, setActiveTab] = useState<'bills' | 'direct-payments' | 'vendors'>('bills');
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalPayablesCount, setTotalPayablesCount] = useState(0);
+  const limit = 6; // Items per page - show 6 payables per page
 
-  // Load cached data from localStorage
-  const loadCachedData = useCallback(() => {
-    try {
-      const cached = localStorage.getItem(CACHE_KEY);
-      if (cached) {
-        const data: CachedData = JSON.parse(cached);
-        const now = Date.now();
-        
-        if (now - data.timestamp < CACHE_DURATION) {
-          setPayables(data.payables);
-          setStats(data.stats);
-          setIsOnboardingCompleted(data.isOnboardingCompleted);
-          setDataLoaded(true);
-          return true;
-        } else {
-          localStorage.removeItem(CACHE_KEY);
-        }
-      }
-    } catch (error) {
-      console.error('❌ [Accounts Payable] Error loading cache:', error);
-      localStorage.removeItem(CACHE_KEY);
-    }
-    return false;
-  }, []);
 
-  // Save data to cache
-  const saveToCache = useCallback((payables: Payable[], stats: PayableStats, isOnboardingCompleted: boolean | null) => {
-    try {
-      const cacheData: CachedData = {
-        payables,
-        stats,
-        isOnboardingCompleted,
-        timestamp: Date.now()
-      };
-      localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
-    } catch (error) {
-      console.error('❌ [Accounts Payable] Error saving to cache:', error);
-    }
-  }, []);
-
-  // Load all data in parallel
-  const loadAllData = useCallback(async (forceRefresh = false) => {
-    console.log('🔍 [Payables Page] loadAllData called, forceRefresh:', forceRefresh);
-    if (!session?.user) {
-      console.log('🔍 [Payables Page] No session user, returning early');
-      return;
-    }
-    
-    // Try to load from cache first (unless force refresh)
-    if (!forceRefresh && loadCachedData()) {
-      console.log('🔍 [Payables Page] Using cached data, skipping API call');
-      return;
-    }
-    console.log('🔍 [Payables Page] Cache miss or force refresh, calling API');
-    
-    // Don't reload if we already have data and not forcing refresh
-    if (dataLoaded && !forceRefresh) return;
+  // Load all data using ultra-fast server action (no API compilation delay)
+  const loadAllData = useCallback(async (page = currentPage) => {
+    if (!session?.user) return;
     
     try {
       setLoading(true);
       
-      // Load payables with stats and check onboarding status in parallel
-      console.log('🔍 [Frontend] Loading payables for user:', session.user.email);
-      const [payablesResponse, onboardingResponse] = await Promise.all([
-        fetch('/api/payables?convertToPreferred=false'), // Keep original amounts
-        fetch('/api/onboarding/service?service=accountsPayable')
-      ]);
+      // Use server action for instant response - no API route compilation
+      const result = await getPayablesListPaginated(page, limit);
       
-      console.log('🔍 [Frontend] Payables response status:', payablesResponse.status);
-      const payablesData = await payablesResponse.json();
-      console.log('🔍 [Frontend] Payables data:', payablesData);
-      
-      let currentPayables: Payable[] = [];
-      let currentStats: PayableStats = {
-        totalPayables: 0,
-        pendingCount: 0,
-        paidCount: 0,
-        totalAmount: 0
-      };
-      
-      if (payablesData.success) {
-        currentPayables = payablesData.data.payables || [];
-        const apiStats = payablesData.data.stats;
+      if (result.success && result.data) {
+        const { payables: currentPayables, pagination, stats: apiStats } = result.data;
         
-        setPayables(currentPayables);
-        currentStats = {
+        // Set paginated payables (max 6 items)
+        setPayables(currentPayables.slice(0, limit));
+        setTotalPages(pagination?.pages || 1);
+        setTotalPayablesCount(pagination?.total || 0);
+        
+        // Set stats
+        setStats({
           totalPayables: apiStats.totalPayables || 0,
           pendingCount: (apiStats.statusCounts?.pending || 0) + (apiStats.statusCounts?.approved || 0),
           paidCount: apiStats.statusCounts?.paid || 0,
           totalAmount: apiStats.totalAmount || 0
-        };
-        setStats(currentStats);
+        });
       }
       
-      const onboardingData = await onboardingResponse.json();
-      let onboardingCompleted = null;
-      if (onboardingData.success) {
-        onboardingCompleted = onboardingData.data.isCompleted;
-        setIsOnboardingCompleted(onboardingCompleted);
-      }
-      
-      // Save to cache
-      saveToCache(currentPayables, currentStats, onboardingCompleted);
+      // Load onboarding status separately (non-blocking)
+      startTransition(async () => {
+        try {
+          const onboardingResponse = await fetch('/api/onboarding/service?service=accountsPayable');
+          const onboardingData = await onboardingResponse.json();
+          if (onboardingData.success) {
+            setIsOnboardingCompleted(onboardingData.data.isCompleted);
+          }
+        } catch (error) {
+          console.error('Error loading onboarding status:', error);
+        }
+      });
     } catch (error) {
       console.error('❌ [Accounts Payable Dashboard] Error loading data:', error);
-      console.error('❌ [Accounts Payable Dashboard] Error details:', {
-        message: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined
-      });
     } finally {
       setLoading(false);
       setDataLoaded(true);
     }
-  }, [session?.user, dataLoaded, loadCachedData, saveToCache]);
+  }, [session?.user, currentPage, limit]);
 
   useEffect(() => {
     console.log('🔍 [Payables Page] useEffect triggered, session:', session?.user?.email);
@@ -205,21 +136,21 @@ export default function AccountsPayablePage() {
         // If last payment action was within last 2 minutes, force refresh
         if (now - actionTime < 2 * 60 * 1000) {
           console.log('🔄 [Payables] Force refresh on mount due to recent payment action');
-          loadAllData(true);
+          loadAllData(currentPage);
           sessionStorage.removeItem('lastPaymentAction');
         } else {
-          // Load data (will use cache if available and valid)
-          loadAllData(false);
+          // Load data
+          loadAllData(currentPage);
         }
       } else {
-        // Load data (will use cache if available and valid)
-        loadAllData(false);
+        // Load data
+        loadAllData(currentPage);
       }
     } else {
       console.log('🔍 [Payables Page] No session user, skipping data load');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.user]); // Intentionally exclude loadAllData to prevent infinite loops
+  }, [session?.user, currentPage]); // Include currentPage to reload when page changes
 
   // Refresh completion status when returning from onboarding
   useEffect(() => {
@@ -229,7 +160,7 @@ export default function AccountsPayablePage() {
       const newUrl = window.location.pathname;
       window.history.replaceState({}, '', newUrl);
       // Force refresh data
-      loadAllData(true);
+      loadAllData(currentPage);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Intentionally exclude loadAllData to prevent infinite loops
@@ -247,20 +178,13 @@ export default function AccountsPayablePage() {
           // If last payment action was within last 2 minutes, force refresh
           if (now - actionTime < 2 * 60 * 1000) {
             console.log('🔄 [Payables] Force refresh due to recent payment action');
-            loadAllData(true);
+            loadAllData(currentPage);
             sessionStorage.removeItem('lastPaymentAction');
             return;
           }
         }
         
-        // Otherwise, only refresh if cache is expired (5+ minutes old)
-        const cached = localStorage.getItem(CACHE_KEY);
-        if (cached) {
-          const data = JSON.parse(cached);
-          if (now - data.timestamp > CACHE_DURATION) {
-            loadAllData(true);
-          }
-        }
+        // Refresh data when page becomes visible (no cache needed with server actions)
       }
     };
 
@@ -275,7 +199,7 @@ export default function AccountsPayablePage() {
           // If last payment action was within last 2 minutes, force refresh
           if (now - actionTime < 2 * 60 * 1000) {
             console.log('🔄 [Payables] Force refresh due to recent payment action (page focus)');
-            loadAllData(true);
+            loadAllData(currentPage);
             sessionStorage.removeItem('lastPaymentAction');
           }
         }
@@ -338,7 +262,7 @@ export default function AccountsPayablePage() {
             </div>
             <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
               <button
-                onClick={() => loadAllData(true)}
+                onClick={() => loadAllData(currentPage)}
                 className="flex items-center justify-center w-8 h-8 text-blue-300 hover:text-blue-200 hover:bg-white/10 rounded-lg transition-colors"
                 title="Refresh data"
               >
@@ -554,7 +478,7 @@ export default function AccountsPayablePage() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {payables.slice(0, 10).map((payable) => (
+                    {payables.map((payable) => (
                       <div key={payable._id} className="flex items-center justify-between p-4 bg-white/5 rounded-lg hover:bg-white/10 transition-colors">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center space-x-3">
@@ -578,16 +502,24 @@ export default function AccountsPayablePage() {
                           </div>
                           <div className="flex items-center space-x-1 sm:space-x-2">
                             <button
-                              onClick={() => router.push(`/dashboard/services/payables/${payable._id}`)}
-                              className="text-blue-600 hover:text-blue-700 transition-colors p-1 rounded-lg hover:bg-blue-50"
+                              onClick={() => {
+                                // Navigate instantly - don't wait for anything
+                                router.push(`/dashboard/services/payables/${payable._id}`);
+                              }}
+                              className="text-blue-600 hover:text-blue-700 transition-colors p-1 rounded-lg hover:bg-blue-50 touch-manipulation active:scale-95"
+                              style={{ touchAction: 'manipulation' }}
                               title="View Bill"
                             >
                               <Eye className="h-4 w-4" />
                             </button>
                             {payable.status === 'draft' && (
                               <button
-                                onClick={() => router.push(`/dashboard/services/payables/create?id=${payable._id}`)}
-                                className="text-blue-600 hover:text-blue-700 transition-colors p-1 rounded-lg hover:bg-blue-50"
+                                onClick={() => {
+                                  // Navigate instantly
+                                  router.push(`/dashboard/services/payables/create?id=${payable._id}`);
+                                }}
+                                className="text-blue-600 hover:text-blue-700 transition-colors p-1 rounded-lg hover:bg-blue-50 touch-manipulation active:scale-95"
+                                style={{ touchAction: 'manipulation' }}
                                 title="Edit Bill"
                               >
                                 <Edit3 className="h-4 w-4" />
@@ -597,14 +529,73 @@ export default function AccountsPayablePage() {
                         </div>
                       </div>
                     ))}
-                    {payables.length > 10 && (
-                      <div className="text-center pt-4">
-                        <Link
-                          href="/dashboard/services/payables/payables-list"
-                          className="text-blue-600 hover:text-blue-700 text-sm font-medium transition-colors"
-                        >
-                          View all bills →
-                        </Link>
+                    
+                    {/* Pagination Controls - Show if there are more than 6 items */}
+                    {totalPayablesCount > limit && (
+                      <div className="flex items-center justify-between pt-6 border-t border-white/20">
+                        <div className="text-sm text-blue-200">
+                          Showing {((currentPage - 1) * limit) + 1} to {Math.min(currentPage * limit, totalPayablesCount)} of {totalPayablesCount} bills
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => {
+                              const newPage = currentPage - 1;
+                              if (newPage >= 1) {
+                                setCurrentPage(newPage);
+                                loadAllData(newPage);
+                              }
+                            }}
+                            disabled={currentPage === 1 || loading}
+                            className="px-3 py-2 text-sm font-medium text-white bg-white/10 rounded-lg hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            Previous
+                          </button>
+                          <div className="flex items-center space-x-1">
+                            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                              let pageNum;
+                              if (totalPages <= 5) {
+                                pageNum = i + 1;
+                              } else if (currentPage <= 3) {
+                                pageNum = i + 1;
+                              } else if (currentPage >= totalPages - 2) {
+                                pageNum = totalPages - 4 + i;
+                              } else {
+                                pageNum = currentPage - 2 + i;
+                              }
+                              
+                              return (
+                                <button
+                                  key={pageNum}
+                                  onClick={() => {
+                                    setCurrentPage(pageNum);
+                                    loadAllData(pageNum);
+                                  }}
+                                  disabled={loading}
+                                  className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                                    currentPage === pageNum
+                                      ? 'bg-blue-600 text-white'
+                                      : 'text-white bg-white/10 hover:bg-white/20'
+                                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                                >
+                                  {pageNum}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <button
+                            onClick={() => {
+                              const newPage = currentPage + 1;
+                              if (newPage <= totalPages) {
+                                setCurrentPage(newPage);
+                                loadAllData(newPage);
+                              }
+                            }}
+                            disabled={currentPage === totalPages || loading}
+                            className="px-3 py-2 text-sm font-medium text-white bg-white/10 rounded-lg hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            Next
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>

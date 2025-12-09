@@ -20,7 +20,6 @@ import Link from 'next/link';
 import BankSelector from '@/components/BankSelector';
 import { Bank } from '@/data';
 import ConnectSafeModal from '@/components/safe/ConnectSafeModal';
-import SafeWalletCard from '@/components/safe/SafeWalletCard';
 import { getConnectedSafeWallets } from '@/app/actions/safe-connection';
 
 interface PaymentMethod {
@@ -64,7 +63,7 @@ interface PaymentMethod {
 export default function PaymentMethodsPage() {
   const { data: session } = useSession();
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
-  const [safeWallets, setSafeWallets] = useState<Array<{
+  const [, setSafeWallets] = useState<Array<{
     paymentMethodId: string;
     name: string;
     safeAddress: string;
@@ -113,7 +112,19 @@ export default function PaymentMethodsPage() {
     try {
       const result = await getConnectedSafeWallets({});
       if (result.success) {
-        setSafeWallets(result.safeWallets);
+        // Filter out wallets with undefined safeAddress and map to expected type
+        const validWallets = result.safeWallets
+          .filter(wallet => wallet.safeAddress !== undefined)
+          .map(wallet => ({
+            paymentMethodId: wallet.paymentMethodId,
+            name: wallet.name,
+            safeAddress: wallet.safeAddress as string, // We've filtered out undefined
+            owners: wallet.owners,
+            threshold: wallet.threshold,
+            chainId: wallet.chainId,
+            isDefault: wallet.isDefault,
+          }));
+        setSafeWallets(validWallets);
       }
     } catch (error) {
       console.error('Error loading Safe wallets:', error);

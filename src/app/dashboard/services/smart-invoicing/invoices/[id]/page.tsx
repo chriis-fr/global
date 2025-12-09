@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo, startTransition } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { usePermissions } from '@/lib/contexts/PermissionContext';
 import Image from 'next/image';
+import dynamic from 'next/dynamic';
 import { 
   ArrowLeft, 
   Edit3,
@@ -20,8 +21,14 @@ import {
   ChevronDown as ChevronDownIcon,
   Receipt
 } from 'lucide-react';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+// Lazy load heavy PDF libraries - they're only needed when downloading
+const loadPdfLibraries = async () => {
+  const [jsPDF, html2canvas] = await Promise.all([
+    import('jspdf'),
+    import('html2canvas')
+  ]);
+  return { jsPDF: jsPDF.default, html2canvas: html2canvas.default };
+};
 import { countries } from '@/data/countries';
 import { getCurrencyByCode } from '@/data/currencies';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
@@ -133,11 +140,87 @@ export default function InvoiceViewPage() {
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [downloadingReceipt, setDownloadingReceipt] = useState(false);
 
-  // Check if any items have discounts or taxes
-  const hasAnyDiscounts = invoice?.items?.some(item => (item.discount || 0) > 0) || false;
-  const hasAnyTaxes = invoice?.items?.some(item => (item.tax || 0) > 0) || false;
+  // Memoize expensive calculations to prevent re-computation on every render
+  const hasAnyDiscounts = useMemo(() => 
+    invoice?.items?.some(item => (item.discount || 0) > 0) || false,
+    [invoice?.items]
+  );
+  const hasAnyTaxes = useMemo(() => 
+    invoice?.items?.some(item => (item.tax || 0) > 0) || false,
+    [invoice?.items]
+  );
 
-  // PDF generation functions
+  // Memoize formatDate to prevent recreation on every render
+  const formatDate = useCallback((dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+  }, []);
+
+  // Memoize getCurrencySymbol
+  const getCurrencySymbol = useCallback((currency: string) => {
+    return getCurrencyByCode(currency)?.symbol || currency;
+  }, []);
+
+  // Memoize getDisplayCurrency - expensive computation
+  const getDisplayCurrency = useCallback((invoice: Invoice): string => {
+    // Check if it's a crypto invoice
+    const isCrypto = invoice.paymentMethod === 'crypto' || invoice.paymentSettings?.method === 'crypto';
+    
+    if (isCrypto) {
+      // First, check if currency is already set correctly (should be USDT, cUSD, etc. for crypto)
+      const storedCurrency = invoice.currency || invoice.paymentSettings?.currency;
+      if (storedCurrency && storedCurrency !== 'USD' && storedCurrency.toUpperCase() !== 'USD') {
+        // Currency is already set to crypto token (USDT, cUSD, etc.)
+        return storedCurrency;
+      }
+      
+      // If currency is USD or missing, try to get token symbol from tokenAddress
+      const tokenAddress = invoice.paymentSettings?.tokenAddress || invoice.tokenAddress;
+      const chainId = invoice.paymentSettings?.chainId || invoice.chainId;
+      
+      if (tokenAddress) {
+        // Try to find token symbol from chain configuration
+        if (chainId) {
+          const chain = getChainByNumericId(chainId);
+          if (chain?.tokens) {
+            for (const [symbol, token] of Object.entries(chain.tokens)) {
+              if (token.address.toLowerCase() === tokenAddress.toLowerCase()) {
+                return symbol;
+              }
+            }
+          }
+        }
+        
+        // Fallback: check all chains
+        for (const chain of SUPPORTED_CHAINS) {
+          if (chain.tokens) {
+            for (const [symbol, token] of Object.entries(chain.tokens)) {
+              if (token.address.toLowerCase() === tokenAddress.toLowerCase()) {
+                return symbol;
+              }
+            }
+          }
+        }
+      }
+      
+      // If we still can't find it, return the stored currency (even if it's USD)
+      return storedCurrency || 'USD';
+    }
+    
+    // For non-crypto, use the currency field
+    return invoice.currency || invoice.paymentSettings?.currency || 'USD';
+  }, []);
+
+  const displayCurrency = useMemo(() => {
+    if (!invoice) return 'USD';
+    return getDisplayCurrency(invoice);
+  }, [invoice, getDisplayCurrency]);
+
+  // PDF generation functions - only load when needed
   const optimizeCanvasForPdf = (canvas: HTMLCanvasElement): HTMLCanvasElement => {
     const optimizedCanvas = document.createElement('canvas');
     const ctx = optimizedCanvas.getContext('2d');
@@ -159,7 +242,7 @@ export default function InvoiceViewPage() {
     return optimizedCanvas;
   };
 
-  const generateOptimizedPdf = async (pdfContainer: HTMLElement): Promise<{ pdf: jsPDF; base64: string }> => {
+  const generateOptimizedPdf = async (pdfContainer: HTMLElement, jsPDF: any, html2canvas: any): Promise<{ pdf: any; base64: string }> => {
     // Generate PDF using html2canvas with optimized options
     const canvas = await html2canvas(pdfContainer, {
       logging: false,
@@ -215,7 +298,7 @@ export default function InvoiceViewPage() {
     return { pdf, base64 };
   };
 
-  const addWatermark = (pdf: jsPDF, invoiceNumber?: string) => {
+  const addWatermark = (pdf: any, invoiceNumber?: string) => {
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
     
@@ -311,69 +394,6 @@ export default function InvoiceViewPage() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    });
-  };
-
-  const getCurrencySymbol = (currency: string) => {
-    return getCurrencyByCode(currency)?.symbol || currency;
-  };
-
-  // Get the correct currency for display, especially for crypto invoices
-  const getDisplayCurrency = (invoice: Invoice): string => {
-    // Check if it's a crypto invoice
-    const isCrypto = invoice.paymentMethod === 'crypto' || invoice.paymentSettings?.method === 'crypto';
-    
-    if (isCrypto) {
-      // First, check if currency is already set correctly (should be USDT, cUSD, etc. for crypto)
-      const storedCurrency = invoice.currency || invoice.paymentSettings?.currency;
-      if (storedCurrency && storedCurrency !== 'USD' && storedCurrency.toUpperCase() !== 'USD') {
-        // Currency is already set to crypto token (USDT, cUSD, etc.)
-        return storedCurrency;
-      }
-      
-      // If currency is USD or missing, try to get token symbol from tokenAddress
-      const tokenAddress = invoice.paymentSettings?.tokenAddress || invoice.tokenAddress;
-      const chainId = invoice.paymentSettings?.chainId || invoice.chainId;
-      
-      if (tokenAddress) {
-        // Try to find token symbol from chain configuration
-        if (chainId) {
-          const chain = getChainByNumericId(chainId);
-          if (chain?.tokens) {
-            for (const [symbol, token] of Object.entries(chain.tokens)) {
-              if (token.address.toLowerCase() === tokenAddress.toLowerCase()) {
-                return symbol;
-              }
-            }
-          }
-        }
-        
-        // Fallback: check all chains
-        for (const chain of SUPPORTED_CHAINS) {
-          if (chain.tokens) {
-            for (const [symbol, token] of Object.entries(chain.tokens)) {
-              if (token.address.toLowerCase() === tokenAddress.toLowerCase()) {
-                return symbol;
-              }
-            }
-          }
-        }
-      }
-      
-      // If we still can't find it, return the stored currency (even if it's USD)
-      return storedCurrency || 'USD';
-    }
-    
-    // For non-crypto, use the currency field
-    return invoice.currency || invoice.paymentSettings?.currency || 'USD';
-  };
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'draft': return 'bg-gray-100 text-gray-800';
@@ -414,11 +434,13 @@ export default function InvoiceViewPage() {
     return allowedStatuses.includes(invoice.status || '') && canMarkAsPaid();
   };
 
-  const handleMarkAsPaid = async () => {
+  const handleMarkAsPaid = useCallback(async () => {
     if (!invoice || !canMarkInvoiceAsPaid() || !confirm('Are you sure you want to mark this invoice as paid?')) return;
     
     try {
-      setUpdatingStatus(true);
+      startTransition(() => {
+        setUpdatingStatus(true);
+      });
       const response = await fetch(`/api/invoices/${invoice._id}`, {
         method: 'PUT',
         headers: {
@@ -443,9 +465,11 @@ export default function InvoiceViewPage() {
       console.error('Failed to mark invoice as paid:', error);
       alert('Failed to mark invoice as paid');
     } finally {
-      setUpdatingStatus(false);
+      startTransition(() => {
+        setUpdatingStatus(false);
+      });
     }
-  };
+  }, [invoice, canMarkInvoiceAsPaid, loadInvoice]);
 
   // Handle CSV download
   const handleDownloadCsv = () => {
@@ -598,12 +622,17 @@ export default function InvoiceViewPage() {
     }
   };
 
-  // Handle PDF download
-  const handleDownloadPdf = async () => {
+  // Handle PDF download - lazy load libraries
+  const handleDownloadPdf = useCallback(async () => {
     if (!invoice) return;
 
     try {
-      setDownloadingPdf(true);
+      startTransition(() => {
+        setDownloadingPdf(true);
+      });
+      
+      // Lazy load PDF libraries
+      const { jsPDF, html2canvas } = await loadPdfLibraries();
       console.log('📤 [Smart Invoicing] Starting PDF download for invoice:', invoice.invoiceNumber);
 
       // Create a temporary container for PDF generation
@@ -800,7 +829,7 @@ export default function InvoiceViewPage() {
       }
 
       // Generate optimized PDF
-      const { pdf } = await generateOptimizedPdf(pdfContainer);
+      const { pdf } = await generateOptimizedPdf(pdfContainer, jsPDF, html2canvas);
 
       // Remove the temporary element
       document.body.removeChild(pdfContainer);
@@ -822,16 +851,23 @@ export default function InvoiceViewPage() {
       console.error('❌ [Smart Invoicing] Failed to download PDF:', error);
       alert('Failed to download PDF. Please try again.');
     } finally {
-      setDownloadingPdf(false);
+      startTransition(() => {
+        setDownloadingPdf(false);
+      });
     }
-  };
+  }, [invoice, formatDate, getCurrencySymbol, hasAnyDiscounts, hasAnyTaxes]);
 
-  // Handle Receipt download
-  const handleDownloadReceipt = async () => {
+  // Handle Receipt download - lazy load libraries
+  const handleDownloadReceipt = useCallback(async () => {
     if (!invoice) return;
 
     try {
-      setDownloadingReceipt(true);
+      startTransition(() => {
+        setDownloadingReceipt(true);
+      });
+      
+      // Lazy load PDF libraries
+      const { jsPDF, html2canvas } = await loadPdfLibraries();
       console.log('📤 [Smart Invoicing] Starting receipt download for invoice:', invoice.invoiceNumber);
 
       // Create a temporary container for receipt generation
@@ -949,7 +985,7 @@ export default function InvoiceViewPage() {
 
       receiptContainer.innerHTML = receiptHTML;
 
-      // Generate PDF
+      // Generate PDF with lazy-loaded library
       const canvas = await html2canvas(receiptContainer, {
         scale: 1.5,
         useCORS: true,
@@ -990,9 +1026,11 @@ export default function InvoiceViewPage() {
       console.error('❌ [Smart Invoicing] Error downloading receipt:', error);
       alert('Failed to download receipt. Please try again.');
     } finally {
-      setDownloadingReceipt(false);
+      startTransition(() => {
+        setDownloadingReceipt(false);
+      });
     }
-  };
+  }, [invoice, formatDate]);
 
   if (loading) {
     return (
@@ -1022,44 +1060,63 @@ export default function InvoiceViewPage() {
   }
 
   return (
-    <div className="min-h-screen rounded-lg bg-gray-50 py-8">
+    <div 
+      className="min-h-screen rounded-lg bg-gray-50 py-8"
+      style={{
+        WebkitOverflowScrolling: 'touch',
+        overscrollBehavior: 'contain'
+      }}
+    >
       <div className="max-w-4xl mx-auto px-2 sm:px-4">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 space-y-4 sm:space-y-0">
-          <button
-            onClick={() => router.back()}
-            className="flex items-center space-x-2 px-4 py-3 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm touch-manipulation active:scale-95 min-h-[44px]"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span>Back</span>
-          </button>
-          
-          <div className="flex space-x-4">
-            <span className={`inline-flex p-2 text-sm font-semibold rounded-3xl ${getStatusColor(invoice.status || 'draft')}`}>
+        <div className="mb-8">
+          {/* Top Row: Back Button and Status */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+            <button
+              onClick={() => router.push('/dashboard/services/smart-invoicing/invoices')}
+              className="flex items-center space-x-2 px-4 py-2 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm touch-manipulation active:scale-95 min-h-[44px]"
+              style={{ touchAction: 'manipulation' }}
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Back</span>
+            </button>
+            
+            <span className={`inline-flex items-center justify-center px-3 py-1.5 text-sm font-semibold rounded-full ${getStatusColor(invoice.status || 'draft')}`}>
               {invoice.status === 'sent' ? 'Pending' : 
                invoice.status ? (invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)) : 'Draft'}
             </span>
-            
+          </div>
+          
+          {/* Action Buttons Row - Wrapped for mobile */}
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             {/* Download Dropdown */}
             <div className="relative download-dropdown-container">
               <button
-                onClick={() => setShowDownloadDropdown(!showDownloadDropdown)}
-                className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                onClick={() => {
+                  startTransition(() => {
+                    setShowDownloadDropdown(prev => !prev);
+                  });
+                }}
+                className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors touch-manipulation active:scale-95 whitespace-nowrap"
+                style={{ touchAction: 'manipulation' }}
               >
                 <Download className="h-4 w-4" />
-                <span>Download</span>
+                <span className="hidden sm:inline">Download</span>
                 <ChevronDownIcon className="h-4 w-4" />
               </button>
               
               {showDownloadDropdown && (
-                <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                <div className="absolute top-full right-0 sm:left-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
                   <button
                     onClick={() => {
                       handleDownloadPdf();
-                      setShowDownloadDropdown(false);
+                      startTransition(() => {
+                        setShowDownloadDropdown(false);
+                      });
                     }}
                     disabled={downloadingPdf}
-                    className="w-full flex items-center space-x-2 px-4 py-2 text-left hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full flex items-center space-x-2 px-4 py-2 text-left hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation active:scale-95"
+                    style={{ touchAction: 'manipulation' }}
                   >
                     {downloadingPdf ? (
                       <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
@@ -1071,9 +1128,12 @@ export default function InvoiceViewPage() {
                   <button
                     onClick={() => {
                       handleDownloadCsv();
-                      setShowDownloadDropdown(false);
+                      startTransition(() => {
+                        setShowDownloadDropdown(false);
+                      });
                     }}
-                    className="w-full flex items-center space-x-2 px-4 py-2 text-left hover:bg-gray-50 transition-colors"
+                    className="w-full flex items-center space-x-2 px-4 py-2 text-left hover:bg-gray-50 transition-colors touch-manipulation active:scale-95"
+                    style={{ touchAction: 'manipulation' }}
                   >
                     <File className="h-4 w-4 text-blue-500" />
                     <span>Download as CSV</span>
@@ -1085,52 +1145,63 @@ export default function InvoiceViewPage() {
             {invoice.status === 'draft' && (
               <button
                 onClick={() => router.push(`/dashboard/services/smart-invoicing/create?id=${invoice._id}`)}
-                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors touch-manipulation active:scale-95 whitespace-nowrap"
+                style={{ touchAction: 'manipulation' }}
               >
                 <Edit3 className="h-4 w-4" />
-                <span>Edit</span>
+                <span className="hidden sm:inline">Edit</span>
               </button>
             )}
             {canMarkInvoiceAsPaid() && (
               <button
                 onClick={handleMarkAsPaid}
                 disabled={updatingStatus}
-                className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation active:scale-95 whitespace-nowrap"
+                style={{ touchAction: 'manipulation' }}
               >
                 {updatingStatus ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <CheckCircle className="h-4 w-4" />
                 )}
-                <span>{updatingStatus ? 'Updating...' : 'Mark as Paid'}</span>
+                <span className="hidden sm:inline">{updatingStatus ? 'Updating...' : 'Mark as Paid'}</span>
               </button>
             )}
             {invoice?.status === 'paid' && (
               <button
                 onClick={handleDownloadReceipt}
                 disabled={downloadingReceipt}
-                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation active:scale-95 whitespace-nowrap"
+                style={{ touchAction: 'manipulation' }}
               >
                 {downloadingReceipt ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Receipt className="h-4 w-4" />
                 )}
-                <span>{downloadingReceipt ? 'Generating...' : 'Download Receipt'}</span>
+                <span className="hidden sm:inline">{downloadingReceipt ? 'Generating...' : 'Download Receipt'}</span>
               </button>
             )}
             <button
               onClick={handleDeleteInvoice}
-              className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors touch-manipulation active:scale-95 whitespace-nowrap"
+              style={{ touchAction: 'manipulation' }}
             >
               <Trash2 className="h-4 w-4" />
-              <span>Delete</span>
+              <span className="hidden sm:inline">Delete</span>
             </button>
           </div>
         </div>
 
-        {/* Invoice Document */}
-        <div className="bg-white rounded-lg shadow-lg border max-w-4xl mx-auto">
+        {/* Invoice Document - Optimized for mobile rendering */}
+        <div 
+          className="bg-white rounded-lg shadow-lg border max-w-4xl mx-auto"
+          style={{
+            willChange: 'contents',
+            contain: 'layout style paint',
+            contentVisibility: 'auto'
+          }}
+        >
           {/* Document Header */}
           <div className="p-4 sm:p-8 border-b border-gray-200">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 md:gap-0">
@@ -1298,7 +1369,7 @@ export default function InvoiceViewPage() {
               </div>
               <div>
                 <p className="text-sm text-gray-600 mb-2">Currency</p>
-                <p className="font-medium text-gray-600">{getDisplayCurrency(invoice)}</p>
+                <p className="font-medium text-gray-600">{displayCurrency}</p>
                 {(invoice.enableMultiCurrency || invoice.paymentSettings?.enableMultiCurrency) && (
                   <p className="text-sm text-blue-600">Multi-currency enabled</p>
                 )}
@@ -1310,9 +1381,16 @@ export default function InvoiceViewPage() {
           <div className="p-4 sm:p-8 border-b border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900 mb-6">Invoice Items</h3>
             
-            {/* Items Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[600px]">
+            {/* Items Table - Optimized for mobile */}
+            <div className="overflow-x-auto" style={{ 
+              WebkitOverflowScrolling: 'touch',
+              willChange: 'scroll-position',
+              contain: 'layout style paint'
+            }}>
+              <table className="w-full min-w-[600px]" style={{ 
+                tableLayout: 'fixed',
+                willChange: 'contents'
+              }}>
                 <thead>
                   <tr className="border-b border-gray-200">
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Description</th>
@@ -1329,8 +1407,21 @@ export default function InvoiceViewPage() {
                 </thead>
                 <tbody>
                   {invoice.items?.map((item, index) => {
+                    // Pre-compute values to avoid recalculation during render
+                    const discount = item.discount || 0;
+                    const tax = item.tax || 0;
+                    const hasDiscount = discount > 0;
+                    const hasTax = tax > 0;
+                    
                     return (
-                      <tr key={item.id || `item-${index}`} className="border-b border-gray-100">
+                      <tr 
+                        key={item.id || `item-${index}`} 
+                        className="border-b border-gray-100"
+                        style={{ 
+                          contentVisibility: 'auto',
+                          contain: 'layout style paint'
+                        }}
+                      >
                         <td className="py-3 px-4">
                           <div className="text-gray-900">{item.description}</div>
                         </td>
@@ -1346,12 +1437,12 @@ export default function InvoiceViewPage() {
                         </td>
                         {hasAnyDiscounts && (
                           <td className="py-3 px-4">
-                            <div className="text-gray-900">{(item.discount || 0) > 0 ? `${item.discount || 0}%` : ''}</div>
+                            <div className="text-gray-900">{hasDiscount ? `${discount}%` : ''}</div>
                           </td>
                         )}
                         {hasAnyTaxes && (
                           <td className="py-3 px-4">
-                            <div className="text-gray-900">{(item.tax || 0) > 0 ? `${item.tax || 0}%` : ''}</div>
+                            <div className="text-gray-900">{hasTax ? `${tax}%` : ''}</div>
                           </td>
                         )}
                         <td className="py-3 px-4 font-medium">
