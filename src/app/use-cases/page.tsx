@@ -1,6 +1,5 @@
 'use client'
 
-import { motion } from 'framer-motion'
 import { 
   Building, 
   User, 
@@ -13,8 +12,11 @@ import {
 } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Header } from '@/components/landing/header'
-import { Footer } from '@/components/landing/footer'
+import dynamic from 'next/dynamic'
+
+// Lazy load heavy components
+const Header = dynamic(() => import('@/components/landing/header').then(mod => ({ default: mod.Header })), { ssr: true })
+const Footer = dynamic(() => import('@/components/landing/footer').then(mod => ({ default: mod.Footer })), { ssr: true })
 
 // Products - matching header dropdown
 const products = [
@@ -28,7 +30,7 @@ const products = [
       'Automated payment tracking',
       'Professional invoice templates'
     ],
-    color: 'from-blue-500 to-blue-600'
+    color: 'from-blue-300 to-blue-900'
   },
   {
     title: 'Accounts Payable',
@@ -40,7 +42,7 @@ const products = [
       'Vendor relationship management',
       'Payment approval workflows'
     ],
-    color: 'from-blue-100 to-blue-900'
+    color: 'from-blue-300 to-blue-900'
   },
   {
     title: 'Accounts Receivable',
@@ -52,7 +54,7 @@ const products = [
       'Real-time payment tracking',
       'Multi-currency invoicing'
     ],
-    color: 'from-blue-500 to-blue-600'
+    color: 'from-blue-300 to-blue-900'
   },
   {
     title: 'Global Payments',
@@ -64,7 +66,7 @@ const products = [
       'Multi-currency support',
       'Real-time exchange rates'
     ],
-    color: 'from-blue-500 to-blue-600'
+    color: 'from-blue-300 to-blue-900'
   }
 ]
 
@@ -80,7 +82,7 @@ const solutions = [
       'Compliance and audit trails',
       'Integration with existing ERP systems'
     ],
-    color: 'from-blue-500 to-blue-600'
+    color: 'from-blue-300 to-blue-900'
   },
   {
     title: 'For Freelancers',
@@ -92,7 +94,7 @@ const solutions = [
       'Automated payment reminders',
       'Professional invoice templates'
     ],
-    color: 'from-blue-500 to-blue-600'
+    color: 'from-blue-300 to-blue-900'
   },
   {
     title: 'For Startups',
@@ -104,7 +106,7 @@ const solutions = [
       'Real-time financial reporting',
       'API integration capabilities'
     ],
-    color: 'from-blue-500 to-blue-600'
+    color: 'from-blue-300 to-blue-900'
   },
   {
     title: 'For Enterprises',
@@ -116,7 +118,7 @@ const solutions = [
       'Custom integration APIs',
       'White-label solutions'
     ],
-    color: 'from-blue-500 to-blue-600'
+    color: 'from-blue-300 to-blue-900'
   }
 ]
 
@@ -125,15 +127,11 @@ export default function UseCasesPage() {
     <div className="min-h-screen bg-gradient-to-br crossBg from-gray-50 to-gray-100">
       <Header />
       
-      {/* Hero Section - Matching landing page theme */}
+      {/* Hero Section - Matching landing page theme - Render immediately for LCP */}
       <div className="pt-16 bg-gradient-to-br from-blue-900 to-blue-950 text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
           <div className="text-center">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex justify-center mb-6"
-            >
+            <div className="flex justify-center mb-6">
               <Image
                 src="/chainsnobg.png"
                 alt="Global Finance"
@@ -141,52 +139,40 @@ export default function UseCasesPage() {
                 height={80}
                 className="bg-white rounded-xl"
                 priority
+                fetchPriority="high"
+                quality={90}
               />
-            </motion.div>
-            <motion.h1
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
+            </div>
+            <h1 
               className="text-4xl md:text-6xl font-bold mb-6"
+              style={{ contentVisibility: 'auto' }}
             >
               Products & Solutions
-            </motion.h1>
-            <motion.p
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className="text-xl text-blue-100 max-w-3xl mx-auto"
-            >
+            </h1>
+            <p className="text-xl text-blue-100 max-w-3xl mx-auto">
               Discover how Global Finance transforms business operations with blockchain-secured financial solutions
-            </motion.p>
+            </p>
           </div>
         </div>
       </div>
 
       {/* Products Section */}
       <div className="max-w-7xl mx-auto px-4 crossB sm:px-6 lg:px-8 py-16">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="text-center mb-12"
-        >
+        <div className="text-center mb-12">
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Our Products</h2>
           <p className="text-gray-600 max-w-2xl mx-auto">
             Powerful tools designed to streamline your financial operations
           </p>
-        </motion.div>
+        </div>
 
         <div className="grid md:grid-cols-2 gap-8 mb-20">
-          {products.map((product, index) => {
+          {products.map((product) => {
             const Icon = product.icon
             return (
-              <motion.div
+              <div
                 key={product.title}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.4 + index * 0.1 }}
                 className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden hover:shadow-xl transition-all duration-300"
+                style={{ contentVisibility: 'auto' }}
               >
                 <div className={`bg-gradient-to-r ${product.color} p-6 text-white`}>
                   <div className="flex items-center space-x-4">
@@ -211,34 +197,27 @@ export default function UseCasesPage() {
                     ))}
                   </ul>
                 </div>
-              </motion.div>
+              </div>
             )
           })}
         </div>
 
         {/* Solutions Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.8 }}
-          className="text-center mb-12"
-        >
+        <div className="text-center mb-12">
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Solutions by Business Type</h2>
           <p className="text-gray-600 max-w-2xl mx-auto">
             Tailored solutions for different business sizes and needs
           </p>
-        </motion.div>
+        </div>
 
         <div className="grid md:grid-cols-2 gap-8 mb-20">
-          {solutions.map((solution, index) => {
+          {solutions.map((solution) => {
             const Icon = solution.icon
             return (
-              <motion.div
+              <div
                 key={solution.title}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.9 + index * 0.1 }}
                 className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden hover:shadow-xl transition-all duration-300"
+                style={{ contentVisibility: 'auto' }}
               >
                 <div className={`bg-gradient-to-r ${solution.color} p-6 text-white`}>
                   <div className="flex items-center space-x-4">
@@ -263,18 +242,13 @@ export default function UseCasesPage() {
                     ))}
                   </ul>
                 </div>
-              </motion.div>
+              </div>
             )
           })}
         </div>
 
         {/* CTA Section - Matching pricing page style */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 1.3 }}
-          className="text-center bg-white rounded-2xl shadow-lg border border-gray-200 p-12"
-        >
+        <div className="text-center bg-white rounded-2xl shadow-lg border border-gray-200 p-12">
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
             Ready to Transform Your Business?
           </h2>
@@ -295,7 +269,7 @@ export default function UseCasesPage() {
               Get Started Free
             </Link>
           </div>
-        </motion.div>
+        </div>
       </div>
 
       <Footer />

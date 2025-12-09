@@ -125,16 +125,23 @@ export function Header() {
                 {item.hasDropdown ? (
                   <div
                     onMouseEnter={() => {
-                      if (item.name === 'Products') setIsProductsOpen(true)
-                      if (item.name === 'Solutions') setIsSolutionsOpen(true)
+                      startTransition(() => {
+                        if (item.name === 'Products') setIsProductsOpen(true)
+                        if (item.name === 'Solutions') setIsSolutionsOpen(true)
+                      });
                     }}
                     onMouseLeave={() => {
-                      if (item.name === 'Products') setIsProductsOpen(false)
-                      if (item.name === 'Solutions') setIsSolutionsOpen(false)
+                      startTransition(() => {
+                        if (item.name === 'Products') setIsProductsOpen(false)
+                        if (item.name === 'Solutions') setIsSolutionsOpen(false)
+                      });
                     }}
                     className="relative"
                   >
-                    <button className="flex items-center space-x-1 text-gray-700 hover:text-blue-600 transition-colors">
+                    <button 
+                      className="flex items-center space-x-1 text-gray-700 hover:text-blue-600 transition-colors touch-manipulation active:scale-95"
+                      style={{ touchAction: 'manipulation' }}
+                    >
                       <span>{item.name}</span>
                       <ChevronDown className="h-4 w-4" />
                     </button>
@@ -155,7 +162,8 @@ export function Header() {
                                 <Link
                                   key={item.name}
                                   href={item.href}
-                                  className="flex items-start space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors"
+                                  className="flex items-start space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors touch-manipulation active:scale-95"
+                                  style={{ touchAction: 'manipulation' }}
                                 >
                                   <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
                                     <Icon className="h-5 w-5 text-blue-600" />
@@ -258,11 +266,13 @@ export function Header() {
                       <div>
                         <button
                           onClick={() => {
-                            if (item.name === 'Products') {
-                              setIsProductsOpen(!isProductsOpen);
-                            } else if (item.name === 'Solutions') {
-                              setIsSolutionsOpen(!isSolutionsOpen);
-                            }
+                            startTransition(() => {
+                              if (item.name === 'Products') {
+                                setIsProductsOpen(!isProductsOpen);
+                              } else if (item.name === 'Solutions') {
+                                setIsSolutionsOpen(!isSolutionsOpen);
+                              }
+                            });
                           }}
                           className="flex items-center justify-between w-full text-gray-700 hover:text-blue-600 transition-colors touch-manipulation active:scale-[0.98] py-2"
                           style={{ touchAction: 'manipulation' }}
@@ -292,7 +302,11 @@ export function Header() {
                                     key={dropdownItem.name}
                                     href={dropdownItem.href}
                                     className="flex items-start space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors touch-manipulation active:scale-[0.98]"
-                                    onClick={closeMenu}
+                                    onClick={() => {
+                                      startTransition(() => {
+                                        closeMenu();
+                                      });
+                                    }}
                                     style={{ touchAction: 'manipulation' }}
                                   >
                                     <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -313,7 +327,11 @@ export function Header() {
                       <Link
                         href={item.href}
                         className="block text-gray-700 hover:text-blue-600 transition-colors touch-manipulation active:scale-[0.98] py-2"
-                        onClick={closeMenu}
+                        onClick={() => {
+                          startTransition(() => {
+                            closeMenu();
+                          });
+                        }}
                         style={{ touchAction: 'manipulation' }}
                       >
                         {item.name}
@@ -326,8 +344,13 @@ export function Header() {
                 {session && (
                   <Link
                     href="/dashboard"
-                    className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 transition-colors"
-                    onClick={closeMenu}
+                    className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 transition-colors touch-manipulation active:scale-95"
+                    onClick={() => {
+                      startTransition(() => {
+                        closeMenu();
+                      });
+                    }}
+                    style={{ touchAction: 'manipulation' }}
                   >
                     <LayoutDashboard className="h-4 w-4" />
                     <span>Dashboard</span>
@@ -338,26 +361,39 @@ export function Header() {
                   {session ? (
                     <button
                       onClick={() => {
-                        signOut({ callbackUrl: '/' });
-                        setIsMenuOpen(false);
+                        startTransition(() => {
+                          signOut({ callbackUrl: '/' });
+                          setIsMenuOpen(false);
+                        });
                       }}
-                      className="block text-gray-700 hover:text-blue-600 transition-colors w-full text-left"
+                      className="block text-gray-700 hover:text-blue-600 transition-colors w-full text-left touch-manipulation active:scale-95"
+                      style={{ touchAction: 'manipulation' }}
                     >
                       Sign Out
                     </button>
                   ) : (
                     <Link
                       href="/auth"
-                      className="block text-gray-700 hover:text-blue-600 transition-colors"
-                      onClick={closeMenu}
+                      className="block text-gray-700 hover:text-blue-600 transition-colors touch-manipulation active:scale-95"
+                      onClick={() => {
+                        startTransition(() => {
+                          closeMenu();
+                        });
+                      }}
+                      style={{ touchAction: 'manipulation' }}
                     >
                       Sign In
                     </Link>
                   )}
                   <Link
                     href="/auth"
-                    className="block bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors text-center"
-                    onClick={closeMenu}
+                    className="block bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors text-center touch-manipulation active:scale-95"
+                    onClick={() => {
+                      startTransition(() => {
+                        closeMenu();
+                      });
+                    }}
+                    style={{ touchAction: 'manipulation' }}
                   >
                     {session ? 'Go to Dashboard' : 'Get Started'}
                   </Link>

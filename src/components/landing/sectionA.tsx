@@ -28,9 +28,9 @@ const SectionA = () => {
             </span>
           </Badge>
 
-          {/* Heading */}
-          <div className="max-w-screen-md mx-auto  text-black text-center text-3xl md:text-5xl font-bold">
-            <h1>
+          {/* Heading - LCP element, render immediately */}
+          <div className="max-w-screen-md mx-auto text-black text-center text-3xl md:text-5xl font-bold">
+            <h1 style={{ contentVisibility: 'auto' }}>
               Upgrade Your Business with
               <span className="text-transparent px-2 bg-gradient-to-r from-[#D247BF] to-primary bg-clip-text">
                 The-all-in-one
@@ -85,6 +85,8 @@ const SectionA = () => {
               priority
               fetchPriority="high"
               quality={85}
+              loading="eager"
+              decoding="async"
             />
           </div>
 
@@ -98,6 +100,8 @@ const SectionA = () => {
               fetchPriority="high"
               src="/leftmobile.png"
               alt="ChainsERP Dashboard - Mobile View"
+              loading="eager"
+              decoding="async"
             />
           </div>
 

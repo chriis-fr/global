@@ -226,6 +226,28 @@ button, a, [role="button"], input[type="button"], input[type="submit"] {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Optimize images for LCP - critical for performance */
+img[priority], img[data-priority], img[fetchpriority="high"] {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 500px;
+}
+
+/* Optimize hero sections for faster LCP */
+section:first-of-type h1,
+section:first-of-type img[priority] {
+  content-visibility: auto;
+}
+
+/* Reduce layout shifts - contain layout calculations */
+h1, h2, h3 {
+  contain: layout style;
+}
+
+/* Optimize motion animations for INP */
+[style*="content-visibility"] {
+  will-change: contents;
+}
+
 /* Prevent layout shifts on button clicks */
 button:active {
   transform: scale(0.98);
