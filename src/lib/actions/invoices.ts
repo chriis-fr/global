@@ -386,41 +386,109 @@ export async function getInvoicesListMinimal(
       })
       .toArray();
 
+    // Batch convert all invoice amounts to preferred currency
+    const conversionMap = new Map<number, number>(); // Map invoice index to converted amount
+    
+    // Prepare conversions needed
+    const conversionsNeeded: Array<{ index: number; amount: number; fromCurrency: string; toCurrency: string }> = [];
+    
+    invoices.forEach((inv, index) => {
+      const amount = inv.total || inv.totalAmount || 0;
+      const fromCurrency = inv.currency || 'USD';
+      
+      if (fromCurrency !== preferredCurrency && amount > 0) {
+        conversionsNeeded.push({
+          index,
+          amount,
+          fromCurrency,
+          toCurrency: preferredCurrency,
+        });
+      } else {
+        // Same currency or zero amount - no conversion needed
+        conversionMap.set(index, amount);
+      }
+    });
+
+    // Batch convert all at once if needed
+    if (conversionsNeeded.length > 0) {
+      try {
+        const { batchConvertCurrency } = await import('@/app/actions/currency-actions');
+        const batchResult = await batchConvertCurrency(
+          conversionsNeeded.map(c => ({
+            amount: c.amount,
+            fromCurrency: c.fromCurrency,
+            toCurrency: c.toCurrency,
+          }))
+        );
+        
+        if (batchResult.success && batchResult.data) {
+          conversionsNeeded.forEach((conv, index) => {
+            const result = batchResult.data[index];
+            if (result && result.convertedAmount !== undefined && !result.error) {
+              conversionMap.set(conv.index, result.convertedAmount);
+            } else {
+              // Fallback to original amount on error - don't set convertedAmount
+              // This will make the component show original amount
+            }
+          });
+        } else {
+          // If batch conversion fails, don't set any conversions
+          // Component will show original amounts
+          console.warn('Batch currency conversion failed, showing original amounts');
+        }
+      } catch (error) {
+        console.error('Error batch converting currencies:', error);
+        // Don't set any conversions - let component show original amounts
+      }
+    }
+
     // Transform to minimal data structure for list view
-    const invoiceList: InvoiceDetails[] = invoices.map(invoice => ({
-      _id: invoice._id.toString(),
-      invoiceNumber: invoice.invoiceNumber || 'Invoice',
-      invoiceName: invoice.invoiceName,
-      issueDate: invoice.issueDate ? new Date(invoice.issueDate).toISOString() : new Date().toISOString() || new Date().toISOString(),
-      dueDate: invoice.dueDate ? new Date(invoice.dueDate).toISOString() : new Date().toISOString() || new Date().toISOString(),
-      organizationId: invoice.organizationId?.toString(),
-      issuerId: invoice.issuerId?.toString(),
-      type: invoice.type,
-      companyDetails: {
-        name: invoice.companyDetails?.name || '',
-        email: invoice.companyDetails?.email || ''
-      },
-      clientDetails: {
-        name: invoice.clientDetails?.name || '',
-        email: invoice.clientDetails?.email || '',
-        companyName: invoice.clientDetails?.companyName,
-        firstName: invoice.clientDetails?.firstName,
-        lastName: invoice.clientDetails?.lastName
-      },
-      currency: invoice.currency || 'USD',
-      items: [], // Empty for list view - only load when viewing details
-      paymentSettings: {}, // Empty for list view - only load when viewing details
-      subtotal: 0, // Not needed for list view
-      totalTax: 0, // Not needed for list view
-      total: invoice.total || invoice.totalAmount || 0,
-      totalAmount: invoice.totalAmount || invoice.total || 0,
-      status: invoice.status || 'draft',
-      memo: '', // Not needed for list view
-      createdAt: invoice.createdAt?.toISOString() || new Date().toISOString(),
-      updatedAt: invoice.updatedAt?.toISOString() || new Date().toISOString(),
-      recipientType: invoice.recipientType,
-      taxes: undefined // Not needed for list view
-    }));
+    const invoiceList: InvoiceDetails[] = invoices.map((invoice, index) => {
+      const originalAmount = invoice.total || invoice.totalAmount || 0;
+      const convertedAmount = conversionMap.get(index);
+      
+      // Don't set convertedAmount on server - let client convert in background
+      // This prevents blocking page load
+      const hasValidConversion = false; // Always false - client will handle conversion
+      
+      return {
+        _id: invoice._id.toString(),
+        invoiceNumber: invoice.invoiceNumber || 'Invoice',
+        invoiceName: invoice.invoiceName,
+        issueDate: invoice.issueDate ? new Date(invoice.issueDate).toISOString() : new Date().toISOString() || new Date().toISOString(),
+        dueDate: invoice.dueDate ? new Date(invoice.dueDate).toISOString() : new Date().toISOString() || new Date().toISOString(),
+        organizationId: invoice.organizationId?.toString(),
+        issuerId: invoice.issuerId?.toString(),
+        type: invoice.type,
+        companyDetails: {
+          name: invoice.companyDetails?.name || '',
+          email: invoice.companyDetails?.email || ''
+        },
+        clientDetails: {
+          name: invoice.clientDetails?.name || '',
+          email: invoice.clientDetails?.email || '',
+          companyName: invoice.clientDetails?.companyName,
+          firstName: invoice.clientDetails?.firstName,
+          lastName: invoice.clientDetails?.lastName
+        },
+        currency: invoice.currency || 'USD',
+        items: [], // Empty for list view - only load when viewing details
+        paymentSettings: {}, // Empty for list view - only load when viewing details
+        subtotal: 0, // Not needed for list view
+        totalTax: 0, // Not needed for list view
+        total: originalAmount,
+        totalAmount: hasValidConversion ? convertedAmount : originalAmount, // Store converted amount or fallback to original
+        status: invoice.status || 'draft',
+        memo: '', // Not needed for list view
+        createdAt: invoice.createdAt?.toISOString() || new Date().toISOString(),
+        updatedAt: invoice.updatedAt?.toISOString() || new Date().toISOString(),
+        recipientType: invoice.recipientType,
+        taxes: undefined, // Not needed for list view
+        // Add converted amount metadata - only if conversion was successful
+        convertedAmount: hasValidConversion ? convertedAmount : undefined,
+        convertedCurrency: hasValidConversion ? preferredCurrency : undefined,
+      } as InvoiceDetails & { convertedAmount?: number; convertedCurrency?: string };
+    });
 
     // Calculate total revenue (only approved invoices)
     const revenueQuery = {

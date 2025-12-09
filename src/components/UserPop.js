@@ -1,3 +1,5 @@
+"use client";
+
 import Face1 from "../../public/globeImages/enterprise.png";
 import Face2 from "../../public/globeImages/freelance.png";
 import Face3 from "../../public/globeImages/meeting.png";
@@ -7,9 +9,10 @@ import GlobeIcon from "../../public/icons/globeIcon";
 import Image from "next/image";
 import dynamic from "next/dynamic";
 
-const Xarrow = dynamic(() => import("react-xarrows"), {
-    ssr: false,
-});
+const Xarrow = dynamic(
+    () => import("react-xarrows").then((mod) => mod.default),
+    { ssr: false }
+);
 
 
 export default function UserPop() {

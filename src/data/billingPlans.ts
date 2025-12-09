@@ -49,6 +49,7 @@ export const BILLING_PLANS: BillingPlan[] = [
       { id: 'invoices', name: 'Up to 5 invoices per month', description: 'Create and send invoices', included: true, limit: 5, unit: 'invoices' },
       { id: 'reconciliation', name: 'Real-time payment reconciliation', description: 'Automatic payment tracking', included: true },
       { id: 'receivables-tab', name: 'Receivables dashboard', description: 'Manage your incoming payments', included: true },
+      { id: 'wallet', name: '1 User', description: 'Supports Safe & Metamask', included: true },
     ],
     limits: {
       invoicesPerMonth: 5,
@@ -62,7 +63,7 @@ export const BILLING_PLANS: BillingPlan[] = [
     tier: 'pro',
     name: 'Pro',
     description: 'Ideal for growing businesses',
-    monthlyPrice: 11.99,
+    monthlyPrice: 13.99,
     yearlyPrice: 119.99,
     monthlyPriceId: 'price_1SAV6rAGa3OwCLplontxFK5u', // Monthly
     yearlyPriceId: 'price_1SAV6sAGa3OwCLplFnkyUqrm', // Yearly
@@ -88,8 +89,8 @@ export const BILLING_PLANS: BillingPlan[] = [
     tier: 'basic',
     name: 'Basic',
     description: 'Essential payables management',
-    monthlyPrice: 170,
-    yearlyPrice: 1700,
+    monthlyPrice: 119.99,
+    yearlyPrice: 1200,
     monthlyPriceId: 'price_1SAV9LAGa3OwCLplsqx52qBE', // Monthly
     yearlyPriceId: 'price_1SAV9MAGa3OwCLplIUXMfXdp', // Yearly
     currency: 'USD',
@@ -110,8 +111,8 @@ export const BILLING_PLANS: BillingPlan[] = [
     tier: 'pro',
     name: 'Pro',
     description: 'Advanced payables with custom features',
-    monthlyPrice: 270,
-    yearlyPrice: 2700,
+    monthlyPrice: 220,
+    yearlyPrice: 2500,
     monthlyPriceId: 'price_1SAVArAGa3OwCLplL6B9kssy', // Monthly
     yearlyPriceId: 'price_1SAVAqAGa3OwCLplNJMxJyJp', // Yearly
     currency: 'USD',
@@ -136,8 +137,8 @@ export const BILLING_PLANS: BillingPlan[] = [
     tier: 'basic',
     name: 'Basic',
     description: 'Ideal for small businesses',
-    monthlyPrice: 200,
-    yearlyPrice: 2000,
+    monthlyPrice: 149.99,
+    yearlyPrice: 1700,
     monthlyPriceId: 'price_1SAVMIAGa3OwCLplJQvi7jk1', // Monthly
     yearlyPriceId: 'price_1SAVMIAGa3OwCLplHGrhqv40', // Yearly
     currency: 'USD',
@@ -163,8 +164,8 @@ export const BILLING_PLANS: BillingPlan[] = [
     tier: 'pro',
     name: 'Pro',
     description: 'Complete business solution',
-    monthlyPrice: 299,
-    yearlyPrice: 2990,
+    monthlyPrice: 295.99,
+    yearlyPrice: 2800,
     monthlyPriceId: 'price_1SAVOJAGa3OwCLplq1QNRWcX', // Monthly
     yearlyPriceId: 'price_1SAVOJAGa3OwCLpltlUKBtbk', // Yearly
     currency: 'USD',

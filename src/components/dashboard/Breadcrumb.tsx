@@ -20,11 +20,9 @@ export default function Breadcrumb() {
 
     let currentPath = '/dashboard';
     
-    segments.forEach((segment, index) => {
+    // Start from index 1 to skip 'dashboard' segment (already in breadcrumbs)
+    segments.slice(1).forEach((segment, index) => {
       currentPath += `/${segment}`;
-      
-      // Skip the first segment (dashboard) as it's already added
-      if (index === 0) return;
       
       let label = segment;
       
@@ -77,7 +75,8 @@ export default function Breadcrumb() {
           label = segment.charAt(0).toUpperCase() + segment.slice(1).replace(/-/g, ' ');
       }
       
-      const isActive = index === segments.length - 1;
+      // isActive is true for the last segment
+      const isActive = index === segments.slice(1).length - 1;
       breadcrumbs.push({
         label,
         href: currentPath,

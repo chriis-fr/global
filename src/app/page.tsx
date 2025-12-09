@@ -7,7 +7,10 @@ import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
 import Preloader from "@/components/preloader";
 import { usePathname } from 'next/navigation';
-import AnimatedCursor from 'react-animated-cursor';
+import dynamic from 'next/dynamic';
+
+// Lazy load AnimatedCursor - it's heavy and not needed for initial render
+const AnimatedCursor = dynamic(() => import('react-animated-cursor'), { ssr: false });
 
 export default function Home() {
   const { status } = useSession();

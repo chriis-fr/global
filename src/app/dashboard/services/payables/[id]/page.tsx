@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { 
   Receipt, 
@@ -17,11 +17,17 @@ import {
   AlertTriangle,
   CheckCircle2,
   XCircle,
-  Clock3
+  Clock3,
+  Wallet
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { getCurrencyByCode } from '@/data/currencies';
+import PayablePaymentModal from '@/components/payer/PayablePaymentModal';
+import MarkPaidModal from '@/components/payables/MarkPaidModal';
+import { markPayableAsPaid } from '@/app/actions/mark-payable-paid';
+import { getExplorerUrl } from '@/lib/utils/blockchain';
+import { ExternalLink } from 'lucide-react';
 
 interface Payable {
   _id: string;
@@ -75,8 +81,11 @@ interface Payable {
   };
   attachedFiles: Record<string, unknown>[];
   relatedInvoiceId?: string;
+  invoiceNumber?: string | null; // Invoice number if related
   ledgerEntryId?: string;
   ledgerStatus: string;
+  txHash?: string;
+  chainId?: number;
   frequency: string;
   recurringEndDate?: string;
   statusHistory: Array<{
@@ -100,6 +109,8 @@ export default function PayableViewPage() {
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [showStatusHistory, setShowStatusHistory] = useState(false);
   const [downloadingReceipt, setDownloadingReceipt] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showMarkPaidModal, setShowMarkPaidModal] = useState(false);
 
   const payableId = params.id as string;
 
@@ -108,15 +119,24 @@ export default function PayableViewPage() {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(`/api/payables/${payableId}`);
-      const data = await response.json();
+      const { getPayableWithInvoice } = await import('@/app/actions/payable-actions');
+      const result = await getPayableWithInvoice(payableId);
 
-      if (data.success) {
-        setPayable(data.data);
+      if (result.success && result.data) {
+        console.log('📊 [Payable View] Loaded payable data:', {
+          id: result.data._id,
+          payableNumber: result.data.payableNumber,
+          status: result.data.status,
+          txHash: (result.data as { txHash?: string }).txHash,
+          chainId: (result.data as { chainId?: number }).chainId,
+          paymentMethod: result.data.paymentMethod
+        });
+        setPayable(result.data);
       } else {
-        setError(data.message || 'Failed to load payable');
+        setError(result.error || 'Failed to load payable');
       }
-    } catch {
+    } catch (err) {
+      console.error('Error loading payable:', err);
       setError('Failed to load payable');
     } finally {
       setLoading(false);
@@ -132,10 +152,16 @@ export default function PayableViewPage() {
   const handleStatusUpdate = async (newStatus: string) => {
     if (!payable) return;
 
+    // For crypto payments, show modal to enter transaction hash
+    if (newStatus === 'paid' && payable.paymentMethod === 'crypto') {
+      setShowMarkPaidModal(true);
+      return;
+    }
+
+    // For non-crypto or other status updates, use the old flow
     try {
       setUpdatingStatus(true);
 
-      // Use markAsPaid for payment status updates
       const requestBody = newStatus === 'paid' 
         ? { markAsPaid: true }
         : { 
@@ -170,16 +196,42 @@ export default function PayableViewPage() {
         
         setPayable(updatedPayable);
         
-        // Show success message and set payment action flag
         if (newStatus === 'paid') {
           alert('Payable marked as paid successfully!');
-          // Set flag for immediate refresh on other side
           sessionStorage.setItem('lastPaymentAction', Date.now().toString());
         }
       } else {
         alert('Failed to update payable status. Please try again.');
       }
     } catch {
+    } finally {
+      setUpdatingStatus(false);
+    }
+  };
+
+  const handleMarkPaidConfirm = async (txHash?: string, chainId?: number) => {
+    if (!payable) return;
+
+    try {
+      setUpdatingStatus(true);
+
+      const result = await markPayableAsPaid({
+        payableId,
+        txHash,
+        chainId,
+      });
+
+      if (result.success) {
+        // Reload payable to get updated data
+        await loadPayable();
+        alert('Payable marked as paid successfully!');
+        sessionStorage.setItem('lastPaymentAction', Date.now().toString());
+      } else {
+        alert(result.error || 'Failed to mark payable as paid');
+      }
+    } catch (error) {
+      console.error('Error marking payable as paid:', error);
+      alert('Failed to mark payable as paid. Please try again.');
     } finally {
       setUpdatingStatus(false);
     }
@@ -403,17 +455,32 @@ export default function PayableViewPage() {
     }
   };
 
-  const formatDate = (dateString: string) => {
+  const formatDate = useCallback((dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric'
     });
-  };
+  }, []);
 
-  const getCurrencySymbol = () => {
+  const getCurrencySymbol = useCallback(() => {
     return getCurrencyByCode(payable?.currency || 'USD')?.symbol || '$';
-  };
+  }, [payable?.currency]);
+
+  // Compute display name with invoice prefix (shortened)
+  const displayPayableName = useMemo(() => {
+    if (!payable) return '';
+    
+    // If payable has invoice number, shorten it to "Invoice Payment....{last4}"
+    if (payable.invoiceNumber) {
+      const invoiceNum = payable.invoiceNumber;
+      const last4 = invoiceNum.length > 4 ? invoiceNum.slice(-4) : invoiceNum;
+      return `Invoice Payment....${last4}`;
+    }
+    
+    // Otherwise use the payable name as is
+    return payable.payableName || 'Payable';
+  }, [payable]);
 
   if (loading) {
     return (
@@ -450,27 +517,31 @@ export default function PayableViewPage() {
       {/* Header */}
       <div className="bg-white/10 backdrop-blur-sm border-b border-white/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-3 sm:py-0 sm:h-16 gap-3 sm:gap-0">
+            <div className="flex items-center space-x-3 sm:space-x-4 min-w-0 flex-1">
               <button
                 onClick={() => router.push('/dashboard/services/payables?refresh=true')}
-                className="p-2 text-blue-200 hover:text-white transition-colors"
+                className="p-2 text-blue-200 hover:text-white transition-colors flex-shrink-0"
               >
                 <ArrowLeft className="h-5 w-5" />
               </button>
-              <div>
-                <h1 className="text-xl font-semibold text-white">{payable.payableName}</h1>
-                <p className="text-blue-200 text-sm">Payable #{payable.payableNumber}</p>
+              <div className="min-w-0 flex-1">
+                <h1 className="text-base sm:text-xl font-semibold text-white truncate">{displayPayableName}</h1>
+                <p className="text-blue-200 text-xs sm:text-sm truncate">
+                  {payable.invoiceNumber 
+                    ? `#${payable.payableNumber}` 
+                    : `Payable #: ${payable.payableNumber}`}
+                </p>
               </div>
             </div>
             
-            <div className="flex items-center space-x-3">
-              <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(payable.status)}`}>
+            <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
+              <span className={`inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${getStatusColor(payable.status)}`}>
                 {getStatusIcon(payable.status)}
                 <span className="ml-1 capitalize">{payable.status}</span>
               </span>
               
-              <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getPriorityColor(payable.priority)}`}>
+              <span className={`inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${getPriorityColor(payable.priority)}`}>
                 <span className="capitalize">{payable.priority}</span>
               </span>
             </div>
@@ -489,7 +560,7 @@ export default function PayableViewPage() {
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 md:gap-0">
                   {/* Left Side - Payable Name */}
                   <div className="flex-1">
-                    <h1 className="text-3xl font-bold text-gray-900">{payable.payableName}</h1>
+                    <h1 className="text-3xl font-bold text-gray-900">{displayPayableName}</h1>
                     {payable.payableNumber && (
                       <p className="text-lg text-gray-600 mt-2">Payable #: {payable.payableNumber}</p>
                     )}
@@ -580,18 +651,21 @@ export default function PayableViewPage() {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {payable.items.map((item, index) => (
-                        <tr key={index}>
+                      {payable.items.map((item, index) => {
+                        const currencySymbol = getCurrencySymbol();
+                        return (
+                          <tr key={`${item.id || index}-${item.description}`}>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.description}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.quantity}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {getCurrencySymbol()}{item.unitPrice.toFixed(2)}
+                              {currencySymbol}{item.unitPrice.toFixed(2)}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {getCurrencySymbol()}{item.amount.toFixed(2)}
+                              {currencySymbol}{item.amount.toFixed(2)}
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -601,18 +675,25 @@ export default function PayableViewPage() {
               <div className="p-4 sm:p-8">
                 <div className="flex justify-end">
                   <div className="w-64 space-y-2">
+                    {(() => {
+                      const currencySymbol = getCurrencySymbol();
+                      return (
+                        <>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Subtotal:</span>
-                      <span className="font-medium">{getCurrencySymbol()}{payable.subtotal.toFixed(2)}</span>
+                            <span className="font-medium">{currencySymbol}{payable.subtotal.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Tax:</span>
-                      <span className="font-medium">{getCurrencySymbol()}{payable.totalTax.toFixed(2)}</span>
+                            <span className="font-medium">{currencySymbol}{payable.totalTax.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-lg font-semibold border-t pt-2">
                       <span>Total:</span>
-                      <span>{getCurrencySymbol()}{payable.total.toFixed(2)}</span>
+                            <span>{currencySymbol}{payable.total.toFixed(2)}</span>
                     </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
                 
@@ -663,6 +744,42 @@ export default function PayableViewPage() {
                   </div>
                 )}
                 
+                {/* Transaction Hash (for paid crypto payables) */}
+                {payable.status === 'paid' && payable.txHash && (
+                  <div>
+                    <p className="text-sm text-gray-500 mb-2">Transaction Hash</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {(() => {
+                        const chainId = payable.chainId || (payable.paymentMethodDetails?.cryptoDetails as { chainId?: number })?.chainId;
+                        const explorerUrl = getExplorerUrl(payable.txHash, chainId);
+                        // If we have an explorer URL, make the hash itself clickable
+                        if (explorerUrl) {
+                          return (
+                            <a
+                              href={explorerUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 text-blue-600 hover:text-blue-800 transition-colors group"
+                              title="View on blockchain explorer"
+                            >
+                              <code className="text-sm font-mono text-gray-800 bg-gray-100 px-2 py-1 rounded break-all group-hover:bg-gray-200 transition-colors">
+                                {payable.txHash}
+                              </code>
+                              <ExternalLink className="h-4 w-4 flex-shrink-0" />
+                            </a>
+                          );
+                        }
+                        // If no explorer URL, just show the hash
+                        return (
+                          <code className="text-sm font-mono text-gray-800 bg-gray-100 px-2 py-1 rounded break-all">
+                            {payable.txHash}
+                          </code>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                )}
+                
                 <div>
                   <p className="text-sm text-gray-500">Currency</p>
                   <p className="font-medium text-gray-900">{payable.currency}</p>
@@ -699,6 +816,20 @@ export default function PayableViewPage() {
                 )}
                 
                 {(payable.status === 'approved' || payable.status === 'pending') && (
+                  <>
+                    {/* Pay Now button for crypto payables */}
+                    {(payable.paymentMethod === 'crypto' || payable.paymentMethodDetails?.method === 'crypto') && 
+                     payable.paymentAddress && (
+                      <button
+                        onClick={() => setShowPaymentModal(true)}
+                        disabled={updatingStatus}
+                        className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed mb-3"
+                      >
+                        <Wallet className="h-4 w-4" />
+                        <span>Pay Now</span>
+                      </button>
+                    )}
+                    {/* Mark as Paid button (for fiat or manual marking) */}
                   <button
                     onClick={() => handleStatusUpdate('paid')}
                     disabled={updatingStatus}
@@ -711,6 +842,7 @@ export default function PayableViewPage() {
                     )}
                     <span>{updatingStatus ? 'Updating...' : 'Mark as Paid'}</span>
                   </button>
+                  </>
                 )}
                 {payable.status === 'paid' && (
                   <button
@@ -771,6 +903,31 @@ export default function PayableViewPage() {
           </div>
         </div>
       </div>
+
+      {/* Payment Modal */}
+      {payable && (
+        <>
+          {/* Mark as Paid Modal (for crypto payments) */}
+          <MarkPaidModal
+            isOpen={showMarkPaidModal}
+            onClose={() => setShowMarkPaidModal(false)}
+            onConfirm={handleMarkPaidConfirm}
+            isCrypto={payable.paymentMethod === 'crypto'}
+            chainId={(payable.paymentMethodDetails?.cryptoDetails as { chainId?: number })?.chainId || payable.chainId}
+            network={payable.paymentMethodDetails?.network || payable.paymentNetwork}
+          />
+
+          <PayablePaymentModal
+          isOpen={showPaymentModal}
+          onCloseAction={() => setShowPaymentModal(false)}
+          payable={payable}
+          onPaymentSuccess={() => {
+            loadPayable();
+            setShowPaymentModal(false);
+          }}
+          />
+        </>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { 
@@ -17,134 +17,203 @@ import {
   Download,
   ArrowLeft,
   CheckCircle,
-  MessageCircle
+  MessageCircle,
+  Wallet
 } from 'lucide-react';
 import CurrencyAmount from '@/components/CurrencyAmount';
 import FloatingActionButton from '@/components/dashboard/FloatingActionButton';
 import PendingInvoiceApprovals from '@/components/dashboard/PendingInvoiceApprovals';
 import { getInvoicesListMinimal, getFullInvoicesForExport, InvoiceDetails } from '@/lib/actions/invoices';
+import { deleteInvoice, getInvoiceStats } from '@/app/actions/invoice-actions';
+import { useInvoiceStore } from '@/lib/stores/invoiceStore';
+import BatchPaymentModal from '@/components/payments/BatchPaymentModal';
 
 export default function InvoicesPage() {
   const router = useRouter();
   const { data: session } = useSession();
-  const [invoices, setInvoices] = useState<InvoiceDetails[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'sent' | 'pending' | 'paid' | 'overdue' | 'pending_approval' | 'rejected'>('all');
-  const [totalRevenue, setTotalRevenue] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalInvoices, setTotalInvoices] = useState(0);
-  const [showAll, setShowAll] = useState(false);
-  const [statusCounts, setStatusCounts] = useState({
-    draft: 0,
-    sent: 0,
-    pending: 0,
-    pending_approval: 0,
-    rejected: 0,
-    paid: 0,
-    overdue: 0
-  });
+  
+  // Zustand store
+  const {
+    invoices,
+    stats,
+    loading,
+    searchTerm,
+    statusFilter,
+    currentPage,
+    totalPages,
+    totalInvoices,
+    showAll,
+    statusCounts,
+    setInvoices,
+    setStats,
+    setLoading,
+    setStatsLoading,
+    setSearchTerm,
+    setStatusFilter,
+    setCurrentPage,
+    setTotalPages,
+    setTotalInvoices,
+    setShowAll,
+    removeInvoice,
+    shouldRefetch,
+    shouldRefetchStats,
+  } = useInvoiceStore();
+
+  // Local UI state (not in store)
+  const [localSelectedInvoices, setLocalSelectedInvoices] = useState<string[]>([]);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [downloadCriteria, setDownloadCriteria] = useState({
-    type: 'current', // 'current', 'all', 'selected', 'dateRange', 'status'
+    type: 'current',
     dateFrom: '',
     dateTo: '',
     status: 'all',
     selectedInvoices: [] as string[]
   });
-  const [selectedInvoices, setSelectedInvoices] = useState<string[]>([]);
+  const [showBatchPaymentModal, setShowBatchPaymentModal] = useState(false);
 
-  const loadInvoices = useCallback(async () => {
+  // Refs to prevent unnecessary refetches
+  const initialLoadDone = useRef(false);
+  const lastFilters = useRef({ searchTerm: '', statusFilter: 'all', currentPage: 1, showAll: false });
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Load invoices list (separate from stats)
+  const loadInvoices = useCallback(async (force = false) => {
+    // Check if we need to refetch
+    if (!force && !shouldRefetch(30000)) {
+      return;
+    }
+
+    // Check if filters actually changed
+    const currentFilters = { searchTerm, statusFilter, currentPage, showAll };
+    const filtersChanged = JSON.stringify(currentFilters) !== JSON.stringify(lastFilters.current);
+    
+    if (!force && !filtersChanged && !shouldRefetch()) {
+      return;
+    }
+
+    lastFilters.current = currentFilters;
+
     try {
       setLoading(true);
       
-      let result;
       const limit = showAll ? 1000 : 10;
+      let result;
       
       if (searchTerm.trim()) {
-        // Use search server action with minimal data
-        result = await getInvoicesListMinimal(currentPage, limit, statusFilter, searchTerm.trim());
+        result = await getInvoicesListMinimal(currentPage, limit, statusFilter === 'all' ? undefined : statusFilter, searchTerm.trim());
       } else {
-        // Use paginated list server action with minimal data
-        result = await getInvoicesListMinimal(currentPage, limit, statusFilter);
+        result = await getInvoicesListMinimal(currentPage, limit, statusFilter === 'all' ? undefined : statusFilter);
       }
       
       if (result.success && result.data) {
         setInvoices(result.data.invoices || []);
         setTotalPages(result.data.pagination?.pages || 1);
         setTotalInvoices(result.data.pagination?.total || 0);
-        
-        // Calculate total revenue from loaded invoices
-        const revenue = result.data.invoices?.reduce((sum, invoice) => {
-          if (invoice.status === 'paid') {
-            return sum + (invoice.total || 0);
-          }
-          return sum;
-        }, 0) || 0;
-        setTotalRevenue(revenue);
-        
-        // Calculate status counts
-        const counts = result.data.invoices?.reduce((acc, invoice) => {
-          acc[invoice.status as keyof typeof acc] = (acc[invoice.status as keyof typeof acc] || 0) + 1;
-          return acc;
-        }, {
-          draft: 0,
-          sent: 0,
-          pending: 0,
-          pending_approval: 0,
-          rejected: 0,
-          paid: 0,
-          overdue: 0
-        }) || {
-          draft: 0,
-          sent: 0,
-          pending: 0,
-          pending_approval: 0,
-          rejected: 0,
-          paid: 0,
-          overdue: 0
-        };
-        setStatusCounts(counts);
       } else {
         console.error('❌ [Invoices Page] Server action failed:', result.error);
-        // Fallback to empty state
         setInvoices([]);
-        setTotalRevenue(0);
         setTotalPages(1);
         setTotalInvoices(0);
       }
     } catch (error) {
       console.error('❌ [Invoices Page] Error loading invoices:', error);
-      // Fallback to empty state
       setInvoices([]);
-      setTotalRevenue(0);
       setTotalPages(1);
       setTotalInvoices(0);
     } finally {
       setLoading(false);
     }
-  }, [currentPage, searchTerm, statusFilter, showAll]);
+  }, [searchTerm, statusFilter, currentPage, showAll, setInvoices, setTotalPages, setTotalInvoices, setLoading, shouldRefetch]);
 
-  useEffect(() => {
-    if (session?.user) {
-      loadInvoices();
+  // Load stats separately (can be cached longer)
+  const loadStats = useCallback(async (force = false) => {
+    if (!force && !shouldRefetchStats(60000)) {
+      return;
     }
-  }, [session, loadInvoices]);
+
+    try {
+      setStatsLoading(true);
+      const result = await getInvoiceStats();
+      
+      if (result.success && result.data) {
+        setStats(result.data);
+        setTotalInvoices(result.data.totalInvoices);
+      }
+    } catch (error) {
+      console.error('❌ [Invoices Page] Error loading stats:', error);
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [setStats, setTotalInvoices, setStatsLoading, shouldRefetchStats]);
+
+  // Initial load - only once
+  useEffect(() => {
+    if (session?.user && !initialLoadDone.current) {
+      initialLoadDone.current = true;
+      loadInvoices(true);
+      loadStats(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user]); // Only depend on session, not the functions
+
+  // Load when filters change (debounced)
+  useEffect(() => {
+    if (initialLoadDone.current) {
+      // Clear previous timeout
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+      
+      // Debounce filter changes
+      searchTimeoutRef.current = setTimeout(() => {
+        loadInvoices(true);
+      }, 300);
+      
+      return () => {
+        if (searchTimeoutRef.current) {
+          clearTimeout(searchTimeoutRef.current);
+        }
+      };
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm, statusFilter, currentPage, showAll]);
+
+  // Refresh stats periodically (less frequent)
+  useEffect(() => {
+    if (initialLoadDone.current) {
+      const interval = setInterval(() => {
+        loadStats(false); // Only if needed
+      }, 60000); // Check every minute
+      return () => clearInterval(interval);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Memoize formatDate to prevent recreation on every render (define early so it can be used in other functions)
+  const formatDate = useCallback((dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  }, []);
 
   const handleDeleteInvoice = async (id: string) => {
     if (!confirm('Are you sure you want to delete this invoice?')) return;
     
     try {
-      const response = await fetch(`/api/invoices/${id}`, {
-        method: 'DELETE'
-      });
+      const result = await deleteInvoice(id);
       
-      if (response.ok) {
-        loadInvoices(); // Reload the list
+      if (result.success) {
+        removeInvoice(id);
+        // Optionally refresh stats
+        loadStats(true);
+      } else {
+        alert(result.error || 'Failed to delete invoice');
       }
     } catch (error) {
       console.error('Failed to delete invoice:', error);
+      alert('Failed to delete invoice');
     }
   };
 
@@ -190,9 +259,9 @@ export default function InvoicesPage() {
       let invoicesToDownload = result.data;
 
       // Filter by selected invoices if needed
-      if (downloadCriteria.type === 'selected' && selectedInvoices.length > 0) {
+      if (downloadCriteria.type === 'selected' && localSelectedInvoices.length > 0) {
         invoicesToDownload = invoicesToDownload.filter((invoice: InvoiceDetails) => 
-          invoice._id && selectedInvoices.includes(invoice._id.toString())
+          invoice._id && localSelectedInvoices.includes(invoice._id.toString())
         );
       }
 
@@ -317,7 +386,7 @@ export default function InvoicesPage() {
           filename = `invoices_${downloadCriteria.status}`;
           break;
         case 'selected':
-          filename = `invoices_selected_${selectedInvoices.length}`;
+          filename = `invoices_selected_${localSelectedInvoices.length}`;
           break;
         case 'all':
         default:
@@ -357,33 +426,32 @@ export default function InvoicesPage() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
+  // Memoize filtered invoices to prevent unnecessary re-renders
+  const filteredInvoices = useMemo(() => {
+    if (!invoices.length) return [];
+    const lowerSearchTerm = searchTerm.toLowerCase();
+    return invoices.filter(invoice =>
+      (invoice.invoiceNumber?.toLowerCase() || '').includes(lowerSearchTerm) ||
+      (invoice.clientDetails?.companyName?.toLowerCase() || '').includes(lowerSearchTerm) ||
+      (invoice.invoiceNumber?.toLowerCase() || '').includes(lowerSearchTerm)
+    );
+  }, [invoices, searchTerm]);
 
-  const filteredInvoices = invoices.filter(invoice =>
-    (invoice.invoiceNumber?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-    (invoice.clientDetails?.companyName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-    (invoice.invoiceNumber?.toLowerCase() || '').includes(searchTerm.toLowerCase())
-  );
+  const statusFilteredInvoices = useMemo(() => {
+    if (statusFilter === 'all') return filteredInvoices;
+    if (statusFilter === 'pending') {
+      return filteredInvoices.filter(invoice => invoice.status === 'sent' || invoice.status === 'pending');
+    }
+    return filteredInvoices.filter(invoice => invoice.status === statusFilter);
+  }, [filteredInvoices, statusFilter]);
 
-  const statusFilteredInvoices = statusFilter === 'all' 
-    ? filteredInvoices 
-    : statusFilter === 'pending'
-    ? filteredInvoices.filter(invoice => invoice.status === 'sent' || invoice.status === 'pending')
-    : filteredInvoices.filter(invoice => invoice.status === statusFilter);
-
-  // Calculate stats for the header using accurate counts from API
-  const stats = {
-    totalInvoices: totalInvoices, // Use total count from API instead of just loaded invoices
-    totalRevenue: totalRevenue, // Use total revenue from API (all invoices) instead of just loaded invoices
-    pendingCount: statusCounts.sent + statusCounts.pending, // Use accurate counts from API
-    paidCount: statusCounts.paid // Use accurate counts from API
-  };
+  // Memoize stats to prevent unnecessary recalculations
+  const displayStats = useMemo(() => ({
+    totalInvoices: stats?.totalInvoices || totalInvoices,
+    totalRevenue: stats?.totalRevenue || 0,
+    pendingCount: stats?.statusCounts ? (stats.statusCounts.sent + stats.statusCounts.pending) : (statusCounts.sent + statusCounts.pending),
+    paidCount: stats?.statusCounts?.paid || statusCounts.paid
+  }), [stats, totalInvoices, statusCounts]);
 
   return (
     <div className="space-y-4 sm:space-y-6 px-4 sm:px-6 lg:px-8">
@@ -398,7 +466,8 @@ export default function InvoicesPage() {
           </button>
           <div className="flex-1">
             <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-1 sm:mb-2">Invoices</h1>
-            <p className="text-blue-200 text-sm sm:text-base">Manage your invoices and track payments</p>
+            {/* LCP element - render immediately without waiting for data */}
+            <p className="text-blue-200 text-sm sm:text-base" style={{ contentVisibility: 'auto' }}>Manage your invoices and track payments</p>
           </div>
         </div>
         <div className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-3">
@@ -419,32 +488,62 @@ export default function InvoicesPage() {
         </div>
       </div>
 
-      {/* Search and Filters - Moved to top for better UX */}
-      <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-white/20">
-        <div className="flex flex-col space-y-3 sm:flex-row sm:space-y-0 sm:space-x-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4 sm:h-5 sm:w-5" />
-            <input
-              type="text"
-              placeholder="Search invoices by number or client..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-black placeholder-gray-600 font-medium text-sm sm:text-base min-h-[44px]"
-            />
-          </div>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as 'all' | 'draft' | 'sent' | 'pending' | 'paid' | 'overdue')}
-            className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-900 text-sm sm:text-base min-h-[44px] w-full sm:w-auto"
-          >
-            <option value="all">All Status</option>
-            <option value="draft">Draft</option>
-            <option value="pending">Pending</option>
-            <option value="paid">Paid</option>
-            <option value="overdue">Overdue</option>
-          </select>
-        </div>
-      </div>
+      {/* Search & Filters */}
+<div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl px-4 py-3 sm:px-5 sm:py-4 shadow-sm">
+  <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3 space-y-3 sm:space-y-0">
+
+    {/* Search */}
+    <div className="flex-1 relative group">
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 h-4 w-4 transition-opacity group-focus-within:text-blue-500" />
+      <input
+        type="text"
+        placeholder="Search invoices…"
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        className="
+          w-full bg-white/80 text-gray-900 placeholder-gray-500 
+          pl-10 pr-4 py-2.5 rounded-lg border border-gray-300 
+          focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 
+          shadow-sm transition-all text-sm
+        "
+      />
+    </div>
+
+    {/* Status Filter */}
+    <div>
+      <select
+        value={statusFilter}
+        onChange={(e) =>
+          setStatusFilter(
+            e.target.value as
+              | "all"
+              | "draft"
+              | "sent"
+              | "pending"
+              | "paid"
+              | "overdue"
+              | "pending_approval"
+              | "rejected"
+          )
+        }
+        className="
+          bg-white/80 text-gray-900 border border-gray-300 
+          py-2.5 px-4 rounded-lg shadow-sm 
+          focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 
+          text-sm w-full sm:w-auto
+        "
+      >
+        <option value="all">All Status</option>
+        <option value="draft">Draft</option>
+        <option value="pending">Pending</option>
+        <option value="paid">Paid</option>
+        <option value="overdue">Overdue</option>
+      </select>
+    </div>
+
+  </div>
+</div>
+
 
       {/* Stats Cards - Mobile Optimized */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
@@ -452,7 +551,7 @@ export default function InvoicesPage() {
           <div className="flex items-center justify-between">
             <div className="flex-1">
               <p className="text-blue-200 text-xs sm:text-sm font-medium">Total Invoices</p>
-              <p className="text-lg sm:text-2xl font-bold text-white">{stats.totalInvoices}</p>
+              <p className="text-lg sm:text-2xl font-bold text-white">{displayStats.totalInvoices}</p>
             </div>
             <div className="p-2 sm:p-3 bg-blue-500/20 rounded-lg flex-shrink-0">
               <FileText className="h-4 w-4 sm:h-6 sm:w-6 text-blue-400" />
@@ -466,7 +565,7 @@ export default function InvoicesPage() {
               <p className="text-blue-200 text-xs sm:text-sm font-medium">Total Revenue</p>
               <p className="text-lg sm:text-2xl font-bold text-white">
                 <CurrencyAmount 
-                  amount={stats.totalRevenue} 
+                  amount={displayStats.totalRevenue} 
                   currency="USD"
                   showOriginalCurrency={false}
                 />
@@ -482,7 +581,7 @@ export default function InvoicesPage() {
           <div className="flex items-center justify-between">
             <div className="flex-1">
               <p className="text-blue-200 text-xs sm:text-sm font-medium">Pending</p>
-              <p className="text-lg sm:text-2xl font-bold text-white">{stats.pendingCount}</p>
+              <p className="text-lg sm:text-2xl font-bold text-white">{displayStats.pendingCount}</p>
             </div>
             <div className="p-2 sm:p-3 bg-yellow-500/20 rounded-lg flex-shrink-0">
               <Calendar className="h-4 w-4 sm:h-6 sm:w-6 text-yellow-400" />
@@ -494,7 +593,7 @@ export default function InvoicesPage() {
           <div className="flex items-center justify-between">
             <div className="flex-1">
               <p className="text-blue-200 text-xs sm:text-sm font-medium">Paid</p>
-              <p className="text-lg sm:text-2xl font-bold text-white">{stats.paidCount}</p>
+              <p className="text-lg sm:text-2xl font-bold text-white">{displayStats.paidCount}</p>
             </div>
             <div className="p-2 sm:p-3 bg-green-500/20 rounded-lg flex-shrink-0">
               <TrendingUp className="h-4 w-4 sm:h-6 sm:w-6 text-green-400" />
@@ -550,15 +649,15 @@ export default function InvoicesPage() {
                         <div className="flex items-center space-x-2 mb-1">
                           <input
                             type="checkbox"
-                            checked={selectedInvoices.includes(invoice._id?.toString() || '')}
+                            checked={localSelectedInvoices.includes(invoice._id?.toString() || '')}
                             onChange={(e) => {
                               const invoiceId = invoice._id?.toString();
                               if (!invoiceId) return;
                               
                               if (e.target.checked) {
-                                setSelectedInvoices(prev => [...prev, invoiceId]);
+                                setLocalSelectedInvoices(prev => [...prev, invoiceId]);
                               } else {
-                                setSelectedInvoices(prev => prev.filter(id => id !== invoiceId));
+                                setLocalSelectedInvoices(prev => prev.filter(id => id !== invoiceId));
                               }
                             }}
                             className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
@@ -595,6 +694,9 @@ export default function InvoicesPage() {
                             amount={invoice.total || invoice.totalAmount || 0} 
                             currency={invoice.currency || 'USD'}
                             showOriginalCurrency={true}
+                            convertedAmount={(invoice as unknown as { convertedAmount?: number }).convertedAmount}
+                            convertedCurrency={(invoice as unknown as { convertedCurrency?: string }).convertedCurrency}
+                            isCrypto={invoice.paymentSettings?.method === 'crypto'}
                           />
                         </p>
                         <div className="flex items-center space-x-2">
@@ -660,12 +762,12 @@ export default function InvoicesPage() {
                     <th className="px-6 py-4 text-left text-xs font-semibold text-blue-200 uppercase tracking-wider">
                       <input
                         type="checkbox"
-                        checked={selectedInvoices.length === statusFilteredInvoices.length && statusFilteredInvoices.length > 0}
+                        checked={localSelectedInvoices.length === statusFilteredInvoices.length && statusFilteredInvoices.length > 0}
                         onChange={(e) => {
                           if (e.target.checked) {
-                            setSelectedInvoices(statusFilteredInvoices.map(inv => inv._id?.toString()).filter(Boolean) as string[]);
+                            setLocalSelectedInvoices(statusFilteredInvoices.map(inv => inv._id?.toString()).filter(Boolean) as string[]);
                           } else {
-                            setSelectedInvoices([]);
+                            setLocalSelectedInvoices([]);
                           }
                         }}
                         className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
@@ -692,25 +794,31 @@ export default function InvoicesPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/10">
-                  {statusFilteredInvoices.map((invoice) => (
+                  {statusFilteredInvoices.map((invoice) => {
+                    const invoiceId = invoice._id?.toString() || 'unknown';
+                    const isDraft = invoice.status === 'draft';
+                    const isSelected = localSelectedInvoices.includes(invoiceId);
+                    return (
                     <tr 
-                      key={invoice._id?.toString() || 'unknown'} 
-                      className={`hover:bg-white/5 transition-colors ${invoice.status === 'draft' ? 'cursor-pointer' : ''}`}
-                      onClick={invoice.status === 'draft' ? () => router.push(`/dashboard/services/smart-invoicing/create?id=${invoice._id?.toString()}`) : undefined}
+                      key={invoiceId} 
+                      className={`hover:bg-white/5 transition-colors ${isDraft ? 'cursor-pointer' : ''}`}
+                      onClick={isDraft ? () => router.push(`/dashboard/services/smart-invoicing/create?id=${invoiceId}`) : undefined}
                     >
-                      <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
-                          checked={selectedInvoices.includes(invoice._id?.toString() || '')}
+                          checked={isSelected}
                           onChange={(e) => {
-                            const invoiceId = invoice._id?.toString();
                             if (!invoiceId) return;
                             
-                            if (e.target.checked) {
-                              setSelectedInvoices(prev => [...prev, invoiceId]);
-                            } else {
-                              setSelectedInvoices(prev => prev.filter(id => id !== invoiceId));
-                            }
+                            // Use functional update to prevent stale closure
+                            setLocalSelectedInvoices(prev => {
+                              if (e.target.checked) {
+                                return prev.includes(invoiceId) ? prev : [...prev, invoiceId];
+                              } else {
+                                return prev.filter(id => id !== invoiceId);
+                              }
+                            });
                           }}
                           className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                         />
@@ -753,6 +861,9 @@ export default function InvoicesPage() {
                             amount={invoice.totalAmount || 0} 
                             currency={invoice.currency || 'USD'}
                             showOriginalCurrency={true}
+                            convertedAmount={(invoice as unknown as { convertedAmount?: number }).convertedAmount}
+                            convertedCurrency={(invoice as unknown as { convertedCurrency?: string }).convertedCurrency}
+                            isCrypto={invoice.paymentSettings?.method === 'crypto'}
                           />
                         </div>
                       </td>
@@ -815,7 +926,8 @@ export default function InvoicesPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -840,7 +952,7 @@ export default function InvoicesPage() {
           
           <div className="flex items-center space-x-2">
             <button
-              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
               disabled={currentPage === 1}
               className="px-3 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -869,7 +981,7 @@ export default function InvoicesPage() {
             </div>
             
             <button
-              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
               disabled={currentPage === totalPages}
               className="px-3 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -980,7 +1092,7 @@ export default function InvoicesPage() {
                       Select invoices from the table below by clicking the checkboxes, then use this download option.
                     </p>
                     <p className="text-sm text-gray-500 mt-1">
-                      Selected: {selectedInvoices.length} invoices
+                      Selected: {localSelectedInvoices.length} invoices
                     </p>
                   </div>
                 )}
@@ -1004,6 +1116,67 @@ export default function InvoicesPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Batch Payment Button - Show when invoices are selected */}
+      {localSelectedInvoices.length > 0 && (
+        <div className="fixed bottom-6 right-6 z-40">
+          <button
+            onClick={() => {
+              const selectedInvoiceData = invoices.filter((inv) =>
+                inv._id && localSelectedInvoices.includes(inv._id.toString())
+              );
+              // Filter to only payable invoices
+              const payableInvoices = selectedInvoiceData.filter(
+                (inv) => inv.status === 'sent' || inv.status === 'pending'
+              );
+              if (payableInvoices.length > 0) {
+                setShowBatchPaymentModal(true);
+              } else {
+                alert('Please select invoices with status "sent" or "pending" to pay');
+              }
+            }}
+            className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-lg"
+          >
+            <Wallet className="h-5 w-5" />
+            <span>Pay {localSelectedInvoices.length} Invoice{localSelectedInvoices.length !== 1 ? 's' : ''}</span>
+          </button>
+        </div>
+      )}
+
+      {/* Batch Payment Modal */}
+      {showBatchPaymentModal && (
+        <BatchPaymentModal
+          isOpen={showBatchPaymentModal}
+          onClose={() => setShowBatchPaymentModal(false)}
+          invoices={invoices
+            .filter((inv) => inv._id && localSelectedInvoices.includes(inv._id.toString()))
+            .filter((inv) => inv.status === 'sent' || inv.status === 'pending')
+            .map((inv) => {
+              const invAny = inv as unknown as {
+                tokenAddress?: string;
+                tokenDecimals?: number;
+                payeeAddress?: string;
+                chainId?: number;
+              };
+              return {
+                _id: inv._id?.toString() || '',
+                invoiceNumber: inv.invoiceNumber || '',
+                total: inv.total || inv.totalAmount || 0,
+                totalAmount: inv.totalAmount || inv.total || 0,
+                currency: inv.currency || 'USD',
+                tokenAddress: invAny.tokenAddress,
+                tokenDecimals: invAny.tokenDecimals,
+                payeeAddress: invAny.payeeAddress,
+                chainId: invAny.chainId,
+              };
+            })}
+          onSuccess={() => {
+            setLocalSelectedInvoices([]);
+            loadInvoices(true);
+            loadStats(true);
+          }}
+        />
       )}
 
       {/* Floating Action Button */}

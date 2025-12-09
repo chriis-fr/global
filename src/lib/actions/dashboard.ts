@@ -6,6 +6,10 @@ import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
 import { CurrencyService } from '@/lib/services/currencyService';
 
+// Simple in-memory cache for dashboard stats (5 minutes)
+const statsCache = new Map<string, { data: DashboardStats; timestamp: number }>();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
 // Dashboard Stats Interface (minimal data for display only)
 export interface DashboardStats {
   totalReceivables: number; // Expected revenue from all invoices
@@ -62,6 +66,13 @@ export async function getDashboardStats(): Promise<{ success: boolean; data?: Da
       return { success: false, error: 'Unauthorized' };
     }
 
+    // Check cache first
+    const cacheKey = `dashboard_stats_${session.user.id}_${session.user.organizationId || 'individual'}`;
+    const cached = statsCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
+      return { success: true, data: cached.data };
+    }
+
     const db = await connectToDatabase();
     const invoicesCollection = db.collection('invoices');
     const clientsCollection = db.collection('clients');
@@ -99,23 +110,64 @@ export async function getDashboardStats(): Promise<{ success: boolean; data?: Da
     const pendingInvoices = sentCount + pendingCount;
     const paidInvoicesCount = paidCount;
 
-    // Get receivables (expected revenue from all invoices - sent, pending, approved)
+    // Get receivables using aggregation - group by currency and sum amounts
+    // Receivables = UNPAID invoices only (money you're expecting to receive)
     const receivablesQuery = {
       ...baseQuery,
-      status: { $in: ['sent', 'pending', 'approved', 'paid'] } // All invoices that represent expected revenue
+      status: { $in: ['sent', 'pending', 'approved'] } // Only unpaid invoices (exclude 'paid' - those are already received)
     };
     
-    const receivablesInvoices = await invoicesCollection.find(receivablesQuery).toArray();
-    const totalReceivables = await CurrencyService.calculateTotalRevenue(receivablesInvoices as { [key: string]: unknown }[], preferredCurrency);
+    const receivablesByCurrency = await invoicesCollection.aggregate([
+      { $match: receivablesQuery },
+      {
+        $group: {
+          _id: '$currency',
+          total: { $sum: { $ifNull: ['$totalAmount', '$total', 0] } }
+        }
+      }
+    ]).toArray();
     
-    // Get paid revenue (only PAID invoices - money actually received)
+    // Batch convert all currencies at once
+    let totalReceivables = 0;
+    const conversionPromises = receivablesByCurrency.map(async (item) => {
+      const currency = item._id || 'USD';
+      const amount = item.total || 0;
+      if (currency === preferredCurrency) {
+        return amount;
+      }
+      return CurrencyService.convertCurrency(amount, currency, preferredCurrency);
+    });
+    const convertedAmounts = await Promise.all(conversionPromises);
+    totalReceivables = convertedAmounts.reduce((sum, amount) => sum + amount, 0);
+    
+    // Get paid revenue using aggregation - group by currency and sum amounts
     const paidRevenueQuery = {
       ...baseQuery,
       status: 'paid'
     };
     
-    const paidInvoices = await invoicesCollection.find(paidRevenueQuery).toArray();
-    const totalPaidRevenue = await CurrencyService.calculateTotalRevenue(paidInvoices as { [key: string]: unknown }[], preferredCurrency);
+    const paidByCurrency = await invoicesCollection.aggregate([
+      { $match: paidRevenueQuery },
+      {
+        $group: {
+          _id: '$currency',
+          total: { $sum: { $ifNull: ['$totalAmount', '$total', 0] } }
+        }
+      }
+    ]).toArray();
+    
+    // Batch convert all currencies at once
+    let totalPaidRevenue = 0;
+    const paidConversionPromises = paidByCurrency.map(async (item) => {
+      const currency = item._id || 'USD';
+      const amount = item.total || 0;
+      if (currency === preferredCurrency) {
+        return amount;
+      }
+      return CurrencyService.convertCurrency(amount, currency, preferredCurrency);
+    });
+    const paidConvertedAmounts = await Promise.all(paidConversionPromises);
+    totalPaidRevenue = paidConvertedAmounts.reduce((sum, amount) => sum + amount, 0);
 
     // Get client count (only count, no client data)
     const totalClients = await clientsCollection.countDocuments(baseQuery);
@@ -138,14 +190,34 @@ export async function getDashboardStats(): Promise<{ success: boolean; data?: Da
           ]
         };
 
-    // Get all payables first
-    const allPayables = await payablesCollection.find(payablesQuery).toArray();
+    // Get unpaid payables using aggregation - group by currency and sum amounts
+    const unpaidPayablesByCurrency = await payablesCollection.aggregate([
+      { 
+        $match: {
+          ...payablesQuery,
+          status: { $ne: 'paid' }
+        }
+      },
+      {
+        $group: {
+          _id: '$currency',
+          total: { $sum: { $ifNull: ['$total', '$amount', 0] } }
+        }
+      }
+    ]).toArray();
     
-    // Sum only unpaid payables (exclude paid ones)
-    const unpaidPayables = allPayables.filter(payable => 
-      payable.status !== 'paid'
-    );
-    const totalPayablesAmount = unpaidPayables.reduce((sum, payable) => sum + (payable.total || payable.amount || 0), 0);
+    // Batch convert all currencies at once
+    let totalPayablesAmount = 0;
+    const payablesConversionPromises = unpaidPayablesByCurrency.map(async (item) => {
+      const currency = item._id || 'USD';
+      const amount = item.total || 0;
+      if (currency === preferredCurrency) {
+        return amount;
+      }
+      return CurrencyService.convertCurrency(amount, currency, preferredCurrency);
+    });
+    const payablesConvertedAmounts = await Promise.all(payablesConversionPromises);
+    totalPayablesAmount = payablesConvertedAmounts.reduce((sum, amount) => sum + amount, 0);
     
     // Only count approved payables as bills ready to be paid (not needed in this response)
     // Get ledger stats for net balance and overdue counts
@@ -178,104 +250,141 @@ export async function getDashboardStats(): Promise<{ success: boolean; data?: Da
           ownerId: session.user.email
         };
     
-    // First, let's see what entries exist for debugging
-    const allUserEntries = await ledgerCollection.find({
-      ...ledgerQuery,
-      $or: [
-        { type: 'receivable', status: 'paid' },
-        { type: 'payable', status: 'paid' }
-      ]
-    }).toArray();
+    // Calculate net balance from invoices and payables directly
+    // Net Balance = (Paid Receivables) - (Paid Payables) - (Approved Payables for organizations)
     
-    // Also check if there are any entries with wrong ownerId that might be matching
-    const wrongOwnerEntries = await ledgerCollection.find({
-      $or: [
-        { type: 'receivable', status: 'paid' },
-        { type: 'payable', status: 'paid' }
-      ],
-      $and: [
-        { ownerId: { $exists: true } },
-        { 
-          $or: [
-            { ownerId: { $ne: session.user.email } },
-            { ownerId: null },
-            { ownerId: '' }
-          ]
+    // Get paid receivables from invoices (money actually received)
+    const paidReceivablesByCurrency = await invoicesCollection.aggregate([
+      { 
+        $match: {
+          ...baseQuery,
+          status: 'paid' // Only PAID invoices (money actually received)
         }
-      ]
-    }).limit(5).toArray();
+      },
+      {
+        $group: {
+          _id: '$currency',
+          total: { $sum: { $ifNull: ['$totalAmount', '$total', 0] } }
+        }
+      }
+    ]).toArray();
     
-    console.log('🔍 [Dashboard Stats] Matching ledger entries:', {
-      userId: session.user.id,
-      userEmail: session.user.email,
-      isOrganization,
-      query: ledgerQuery,
-      entriesFound: allUserEntries.length,
-      entries: allUserEntries.map(e => ({
-        entryId: e.entryId,
-        type: e.type,
-        status: e.status,
-        amount: e.amount,
-        currency: e.currency,
-        ownerId: e.ownerId,
-        userId: e.userId,
-        issuerId: e.issuerId,
-        organizationId: e.organizationId,
-        relatedInvoiceId: e.relatedInvoiceId
-      })),
-      wrongOwnerEntriesSample: wrongOwnerEntries.length > 0 ? wrongOwnerEntries.map(e => ({
-        entryId: e.entryId,
-        ownerId: e.ownerId,
-        userId: e.userId,
-        amount: e.amount
-      })) : 'none'
+    // Batch convert paid receivables
+    let paidReceivablesAmount = 0;
+    const paidReceivablesConversionPromises = paidReceivablesByCurrency.map(async (item) => {
+      const currency = item._id || 'USD';
+      const amount = item.total || 0;
+      if (currency === preferredCurrency) {
+        return amount;
+      }
+      return CurrencyService.convertCurrency(amount, currency, preferredCurrency);
     });
+    const paidReceivablesConverted = await Promise.all(paidReceivablesConversionPromises);
+    paidReceivablesAmount = paidReceivablesConverted.reduce((sum, amount) => sum + amount, 0);
     
+    // Get paid payables (money actually paid out)
+    const paidPayablesByCurrency = await payablesCollection.aggregate([
+      { 
+        $match: {
+          ...payablesQuery,
+          status: 'paid' // Only PAID payables (money actually paid out)
+        }
+      },
+      {
+        $group: {
+          _id: '$currency',
+          total: { $sum: { $ifNull: ['$total', '$amount', 0] } }
+        }
+      }
+    ]).toArray();
+    
+    // Batch convert paid payables
+    let paidPayablesAmount = 0;
+    const paidPayablesConversionPromises = paidPayablesByCurrency.map(async (item) => {
+      const currency = item._id || 'USD';
+      const amount = item.total || 0;
+      if (currency === preferredCurrency) {
+        return amount;
+      }
+      return CurrencyService.convertCurrency(amount, currency, preferredCurrency);
+    });
+    const paidPayablesConverted = await Promise.all(paidPayablesConversionPromises);
+    paidPayablesAmount = paidPayablesConverted.reduce((sum, amount) => sum + amount, 0);
+    
+    // For organizations, also subtract approved payables (committed expenses)
+    let approvedPayablesAmount = 0;
+    if (isOrganization) {
+      const approvedPayablesByCurrency = await payablesCollection.aggregate([
+        { 
+          $match: {
+            ...payablesQuery,
+            status: 'approved' // Approved payables are committed expenses for organizations
+          }
+        },
+        {
+          $group: {
+            _id: '$currency',
+            total: { $sum: { $ifNull: ['$total', '$amount', 0] } }
+          }
+        }
+      ]).toArray();
+      
+      // Batch convert approved payables
+      const approvedPayablesConversionPromises = approvedPayablesByCurrency.map(async (item) => {
+        const currency = item._id || 'USD';
+        const amount = item.total || 0;
+        if (currency === preferredCurrency) {
+          return amount;
+        }
+        return CurrencyService.convertCurrency(amount, currency, preferredCurrency);
+      });
+      const approvedPayablesConverted = await Promise.all(approvedPayablesConversionPromises);
+      approvedPayablesAmount = approvedPayablesConverted.reduce((sum, amount) => sum + amount, 0);
+    }
+    
+    // Calculate net balance: Paid Receivables - Paid Payables - Approved Payables (for orgs)
+    const calculatedNetBalance = paidReceivablesAmount - paidPayablesAmount - approvedPayablesAmount;
+    
+    // Get overdue counts from ledger (still useful for stats)
     const ledgerStats = await ledgerCollection.aggregate([
       { 
         $match: {
-          ...ledgerQuery,
-          $or: [
-            { type: 'receivable', status: 'paid' }, // Only paid receivables
-            { type: 'payable', status: 'paid' }  // Only paid payables (actual money out)
-          ]
+          ...ledgerQuery
         }
       },
       {
         $group: {
           _id: null,
-          netBalance: { $sum: { $cond: [{ $eq: ['$type', 'receivable'] }, '$amount', { $multiply: ['$amount', -1] }] } },
           overdueReceivables: { $sum: { $cond: [{ $and: [{ $eq: ['$type', 'receivable'] }, { $eq: ['$status', 'overdue'] }] }, 1, 0] } },
           overduePayables: { $sum: { $cond: [{ $and: [{ $eq: ['$type', 'payable'] }, { $eq: ['$status', 'overdue'] }] }, 1, 0] } }
         }
       }
     ]).toArray();
 
-    const ledgerData = ledgerStats[0] || { netBalance: 0, overdueReceivables: 0, overduePayables: 0 };
-
-    // Debug logging to help diagnose net balance issues
-    console.log('📊 [Dashboard Stats] Net balance calculation:', {
-      userId: session.user.id,
-      userEmail: session.user.email,
-      isOrganization,
-      organizationId: session.user.organizationId,
-      ledgerQuery,
-      netBalance: ledgerData.netBalance,
-      entryCount: ledgerStats.length
-    });
+    const ledgerData = ledgerStats[0] || { overdueReceivables: 0, overduePayables: 0 };
 
     const stats: DashboardStats = {
-      totalReceivables, // Expected revenue from all invoices
-      totalPaidRevenue, // Money actually received
+      totalReceivables, // Expected revenue from all invoices (sent, pending, approved, paid)
+      totalPaidRevenue, // Money actually received (paid invoices only)
       totalExpenses: 0, // Will be implemented when expenses service is ready
       pendingInvoices,
       paidInvoices: paidInvoicesCount,
       totalClients,
-      netBalance: ledgerData.netBalance || 0,
-      totalPayables: totalPayablesAmount, // Use the correct payables calculation
+      netBalance: calculatedNetBalance, // Paid Receivables - Paid Payables - Approved Payables (for orgs)
+      totalPayables: totalPayablesAmount, // Unpaid payables (bills to pay)
       overdueCount: (ledgerData.overdueReceivables || 0) + (ledgerData.overduePayables || 0)
     };
 
+    // Cache the result
+    statsCache.set(cacheKey, { data: stats, timestamp: Date.now() });
+    
+    // Clean up old cache entries (keep only last 100 entries)
+    if (statsCache.size > 100) {
+      const entries = Array.from(statsCache.entries());
+      entries.sort((a, b) => b[1].timestamp - a[1].timestamp);
+      statsCache.clear();
+      entries.slice(0, 100).forEach(([key, value]) => statsCache.set(key, value));
+    }
 
     return { success: true, data: stats };
 

@@ -14,7 +14,7 @@ export interface InvoiceTax {
   amount: number;
 }
 
-export type InvoiceStatus = 'draft' | 'sent' | 'pending' | 'paid' | 'overdue' | 'cancelled' | 'pending_approval' | 'approved' | 'rejected';
+export type InvoiceStatus = 'draft' | 'sent' | 'pending' | 'paid' | 'overdue' | 'cancelled' | 'pending_approval' | 'approved' | 'rejected' | 'proposed';
 export type PaymentMethod = 'crypto' | 'fiat';
 export type InvoiceType = 'regular' | 'recurring';
 export type RecurringFrequency = 'weekly' | 'monthly' | 'quarterly' | 'yearly';
@@ -56,6 +56,7 @@ export interface PaymentSettings {
   cryptoNetwork?: string;
   cryptoCurrency?: string;
   walletAddress?: string;
+  chainId?: number; // Chain ID for crypto payments (e.g., 42220 for Celo)
   tokenAddress?: string; // Contract address for the crypto token
   bankAccount?: {
     accountNumber: string;
@@ -144,6 +145,18 @@ export interface Invoice {
   
   // Delivery method
   sentVia?: 'email' | 'whatsapp';
+  
+  // Blockchain Payment Fields (for crypto payments)
+  tokenAddress?: string; // ERC20 token contract address
+  tokenDecimals?: number; // Token decimals (e.g., 18 for most tokens)
+  payeeAddress?: string; // Recipient wallet address for crypto payments
+  chainId?: number; // Blockchain network ID (e.g., 42220 for Celo)
+  txHash?: string; // Transaction hash after payment
+  safeTxHash?: string; // Safe transaction hash (for multisig payments)
+  
+  // Receiving Address Metadata (Request Finance pattern)
+  receivingMethod?: 'manual' | 'wallet'; // How the receiving address was entered
+  receivingWalletType?: string | null; // Type of wallet if connected (safe, metamask, walletconnect, etc.)
 }
 
 export interface CreateInvoiceInput {

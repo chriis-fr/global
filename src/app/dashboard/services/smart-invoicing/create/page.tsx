@@ -42,6 +42,10 @@ import BankSelector from '@/components/BankSelector';
 import { Bank } from '@/data';
 import FloatingActionButton from '@/components/dashboard/FloatingActionButton';
 import { useSubscription } from '@/lib/contexts/SubscriptionContext';
+import { CELO_TOKENS } from '@/lib/chains/celo';
+import PaymentMethodSelector from '@/components/payments/PaymentMethodSelector';
+import SavePaymentMethodButton from '@/components/payments/SavePaymentMethodButton';
+import ReceivingAddressInput from '@/components/wallet/ReceivingAddressInput';
 
 interface Client {
   _id: string;
@@ -90,6 +94,10 @@ interface InvoiceFormData {
   fiatPaymentSubtype?: 'bank' | 'mpesa_paybill' | 'mpesa_till' | 'phone';
   paymentNetwork?: string;
   paymentAddress?: string;
+  receivingMethod?: 'manual' | 'wallet'; // How the receiving address was entered
+  receivingWalletType?: string | null; // Type of wallet if connected (safe, metamask, etc.)
+  chainId?: number; // Chain ID for crypto payments (e.g., 42220 for Celo)
+  tokenAddress?: string; // Contract address for the crypto token
   bankName?: string;
   swiftCode?: string;
   bankCode?: string;
@@ -166,6 +174,10 @@ const defaultInvoiceData: InvoiceFormData = {
   fiatPaymentSubtype: 'bank',
   paymentNetwork: '',
   paymentAddress: '',
+  receivingMethod: 'manual', // Default to manual entry
+  receivingWalletType: null,
+  chainId: undefined, // Optional - only set when Celo is selected
+  tokenAddress: undefined, // Optional - only set when Celo is selected
   bankName: '',
   swiftCode: '',
   bankCode: '',
@@ -208,8 +220,33 @@ const useFormPersistence = (key: string, initialData: InvoiceFormData, setAutoSa
         const saved = localStorage.getItem(key);
         if (saved) {
           const parsed = JSON.parse(saved);
-          // Merge with default data to handle new fields
-          return { ...initialData, ...parsed };
+          // Merge with default data to handle new fields, but preserve user selections
+          // Prioritize saved data over defaults, especially for currency and payment settings
+          // CRITICAL: If tokenAddress is set, preserve the currency that was synced with it
+          const merged = { 
+            ...initialData, 
+            ...parsed,
+            // Explicitly preserve currency and payment-related fields from saved data
+            currency: parsed.currency || initialData.currency,
+            paymentMethod: parsed.paymentMethod || initialData.paymentMethod,
+            paymentNetwork: parsed.paymentNetwork || initialData.paymentNetwork,
+            chainId: parsed.chainId || initialData.chainId,
+            tokenAddress: parsed.tokenAddress || initialData.tokenAddress,
+            paymentAddress: parsed.paymentAddress || initialData.paymentAddress
+          };
+          
+          // If tokenAddress is set and currency doesn't match, sync it
+          if (merged.tokenAddress && merged.paymentNetwork === 'celo') {
+            if (merged.tokenAddress === 'native' && merged.currency !== 'CELO') {
+              merged.currency = 'CELO';
+            } else if (merged.tokenAddress === CELO_TOKENS.USDT.address && merged.currency !== 'USDT') {
+              merged.currency = 'USDT';
+            } else if (merged.tokenAddress === CELO_TOKENS.cUSD.address && merged.currency !== 'CUSD') {
+              merged.currency = 'CUSD';
+            }
+          }
+          
+          return merged;
         }
       } catch (error) {
         console.warn('Failed to load saved form data:', error);
@@ -406,6 +443,7 @@ export default function CreateInvoicePage() {
   const [showClientEditModal, setShowClientEditModal] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [sendingInvoice, setSendingInvoice] = useState(false);
+  const [creatingClient, setCreatingClient] = useState(false);
   
   // Phone formatting and validation functions
   const formatPhoneForWhatsApp = (phone: string, countryCode: string = '+1') => {
@@ -621,49 +659,111 @@ export default function CreateInvoicePage() {
   const [currencySearch, setCurrencySearch] = useState('');
   const [userHasSelectedCurrency, setUserHasSelectedCurrency] = useState(false);
   const [isAutoSelectingCurrency, setIsAutoSelectingCurrency] = useState(false);
+  
+  // Check saved data on mount to preserve currency selection
+  useEffect(() => {
+    if (typeof window !== 'undefined' && session?.user?.email) {
+      try {
+        const saved = localStorage.getItem(`invoice-draft-${session.user.email}`);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          // If currency exists and is not the default USD, user has selected it
+          if (parsed.currency && parsed.currency !== 'USD' && parsed.currency !== defaultInvoiceData.currency) {
+            setUserHasSelectedCurrency(true);
+          }
+        }
+      } catch {
+        // Ignore errors
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run on mount
 
-  // Auto-select currency based on payment method
+  // Auto-select currency based on payment method (only if user hasn't manually selected)
   const autoSelectCurrencyForPaymentMethod = (paymentMethod: string) => {
+    // Don't auto-select if user has already manually selected a currency
+    if (userHasSelectedCurrency) {
+      return;
+    }
+    
+    // Don't auto-select if we're currently syncing from token selection
+    if (isAutoSelectingCurrency) {
+      return;
+    }
     
     if (paymentMethod === 'crypto') {
-      // Auto-select USDT for crypto payments
+      // Auto-select USDT for crypto payments only if no currency is selected
       const usdtCurrency = cryptoCurrencies.find((c: { code: string }) => c.code === 'USDT');
       
       if (usdtCurrency) {
         setIsAutoSelectingCurrency(true);
-        setFormData(prev => ({
-          ...prev,
-          currency: usdtCurrency.code,
-          currencySymbol: usdtCurrency.symbol,
-          currencyName: usdtCurrency.name,
-          currencyLogo: usdtCurrency.logo,
-          currencyType: usdtCurrency.type,
-          currencyNetwork: usdtCurrency.network
-        }));
-        setUserHasSelectedCurrency(true);
+        setFormData(prev => {
+          // CRITICAL: Don't override if tokenAddress is set (user selected via token)
+          if (prev.tokenAddress && prev.paymentNetwork === 'celo') {
+            // User has selected a token, don't override the currency
+            return prev;
+          }
+          
+          // Don't auto-select if currency is already a crypto currency (user has selected it)
+          const currentCurrency = getCurrencyByCode(prev.currency);
+          if (currentCurrency && currentCurrency.type === 'crypto') {
+            // User has already selected a crypto currency, don't override
+            return prev;
+          }
+          
+          // Only auto-select if currency is default (USD) or empty
+          if (prev.currency === 'USD' || !prev.currency || prev.currency === defaultInvoiceData.currency) {
+            return {
+              ...prev,
+              currency: usdtCurrency.code,
+              currencySymbol: usdtCurrency.symbol,
+              currencyName: usdtCurrency.name,
+              currencyLogo: usdtCurrency.logo,
+              currencyType: usdtCurrency.type,
+              currencyNetwork: usdtCurrency.network
+            };
+          }
+          return prev; // Keep existing currency if user has selected something else
+        });
         // Reset the flag after a short delay
         setTimeout(() => setIsAutoSelectingCurrency(false), 100);
-      } else {
       }
     } else if (paymentMethod === 'fiat') {
-      // Auto-select USD for fiat payments
+      // Auto-select USD for fiat payments only if no currency is selected
       const usdCurrency = fiatCurrencies.find((c: { code: string }) => c.code === 'USD');
       
       if (usdCurrency) {
         setIsAutoSelectingCurrency(true);
-        setFormData(prev => ({
-          ...prev,
-          currency: usdCurrency.code,
-          currencySymbol: usdCurrency.symbol,
-          currencyName: usdCurrency.name,
-          currencyLogo: usdCurrency.logo,
-          currencyType: usdCurrency.type,
-          currencyNetwork: usdCurrency.network
-        }));
-        setUserHasSelectedCurrency(true);
+        setFormData(prev => {
+          // CRITICAL: Don't override if tokenAddress is set (user selected via token)
+          if (prev.tokenAddress && prev.paymentNetwork === 'celo') {
+            // User has selected a token, don't override the currency
+            return prev;
+          }
+          
+          // Don't auto-select if currency is already a fiat currency (user has selected it)
+          const currentCurrency = getCurrencyByCode(prev.currency);
+          if (currentCurrency && currentCurrency.type === 'fiat' && prev.currency !== 'USD') {
+            // User has already selected a fiat currency, don't override
+            return prev;
+          }
+          
+          // Only auto-select if currency is a crypto currency or empty
+          if (!prev.currency || (currentCurrency && currentCurrency.type === 'crypto')) {
+            return {
+              ...prev,
+              currency: usdCurrency.code,
+              currencySymbol: usdCurrency.symbol,
+              currencyName: usdCurrency.name,
+              currencyLogo: usdCurrency.logo,
+              currencyType: usdCurrency.type,
+              currencyNetwork: usdCurrency.network
+            };
+          }
+          return prev; // Keep existing currency if user has selected something else
+        });
         // Reset the flag after a short delay
         setTimeout(() => setIsAutoSelectingCurrency(false), 100);
-      } else {
       }
     }
   };
@@ -696,6 +796,15 @@ export default function CreateInvoicePage() {
     cryptoDetails?: {
       network: string;
       address: string;
+      currency?: string;
+      chainId?: number;
+      tokenAddress?: string;
+      safeDetails?: {
+        safeAddress: string;
+        owners: string[];
+        threshold: number;
+        chainId?: number;
+      };
     };
   }>>([]);
   const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<string>('');
@@ -729,7 +838,10 @@ export default function CreateInvoicePage() {
           ...defaultInvoiceData,
           ...data.data,
           attachedFiles: data.data.attachedFiles || [],
-          ccClients: data.data.ccClients || []
+          ccClients: data.data.ccClients || [],
+          // Map chainId and tokenAddress from paymentSettings if they exist
+          chainId: data.data.paymentSettings?.chainId || data.data.chainId,
+          tokenAddress: data.data.paymentSettings?.tokenAddress || data.data.tokenAddress
         };
         
         // Keep amounts exactly as stored - no recalculation
@@ -742,7 +854,8 @@ export default function CreateInvoicePage() {
     } finally {
       setLoading(false);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router]); // router and setFormData are stable, no need to include
 
   const loadServiceOnboardingData = useCallback(async () => {
     try {
@@ -781,7 +894,23 @@ export default function CreateInvoicePage() {
     } catch (error) {
       console.error('Error loading service onboarding data:', error);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // setFormData and userHasSelectedCurrency are stable, no need to include
+
+  // Load saved payment methods - memoized to prevent infinite re-renders
+  const loadSavedPaymentMethods = useCallback(async () => {
+    try {
+      const response = await fetch('/api/payment-methods');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setSavedPaymentMethods(data.paymentMethods || []);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading payment methods:', error);
+    }
+  }, []); // Empty deps - only load once on mount
 
   const loadOrganizationData = useCallback(async () => {
     try {
@@ -813,7 +942,8 @@ export default function CreateInvoicePage() {
     } catch (error) {
       console.error('Failed to load organization data:', error);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // setFormData is stable from useState, no need to include
 
   const loadLogoFromSettings = useCallback(async () => {
     try {
@@ -847,21 +977,45 @@ export default function CreateInvoicePage() {
     } catch (error) {
       console.error('❌ [Invoice Create] Failed to load logo from settings:', error);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // setFormData is stable from useState, no need to include
 
+  const loadClients = useCallback(async () => {
+    try {
+      const response = await fetch('/api/clients');
+      const data = await response.json();
+      if (data.success && data.data) {
+        setClients(data.data);
+      }
+    } catch (error) {
+      console.error('Failed to load clients:', error);
+    }
+  }, []);
+
+  // Track if initial load has been done to prevent re-renders
+  const initialLoadDone = useRef(false);
+  const lastUserId = useRef<string | undefined>(undefined);
+  
   useEffect(() => {
-    // useEffect triggered
+    // Prevent multiple loads for the same user
+    const currentUserId = session?.user?.id;
     if (invoiceId) {
-      loadInvoice(invoiceId);
-    } else if (session?.user) {
-      // Loading data for user
+      if (!initialLoadDone.current) {
+        initialLoadDone.current = true;
+        loadInvoice(invoiceId);
+      }
+    } else if (currentUserId && currentUserId !== lastUserId.current && !initialLoadDone.current) {
+      // Only load if user changed or hasn't loaded yet, and only once
+      lastUserId.current = currentUserId;
+      initialLoadDone.current = true;
+      // Loading data for user - only once per user
       loadServiceOnboardingData();
       loadOrganizationData();
       loadClients();
       loadLogoFromSettings();
       loadSavedPaymentMethods();
     }
-  }, [invoiceId, session, loadInvoice, loadLogoFromSettings, loadOrganizationData, loadServiceOnboardingData]);
+  }, [invoiceId, session?.user?.id, loadInvoice, loadServiceOnboardingData, loadOrganizationData, loadClients, loadLogoFromSettings, loadSavedPaymentMethods]);
 
   // Set client country to user's country if client country is empty and user has a country
   // This only runs once when session becomes available and formData is initialized
@@ -914,18 +1068,6 @@ export default function CreateInvoicePage() {
     };
   }, []);
 
-  const loadClients = async () => {
-    try {
-      const response = await fetch('/api/clients');
-      const data = await response.json();
-      if (data.success && data.data) {
-        setClients(data.data);
-      }
-    } catch (error) {
-      console.error('Failed to load clients:', error);
-    }
-  };
-
   const handleInputChange = (field: keyof InvoiceFormData, value: string | number | boolean) => {
     setFormData(prev => {
       const updated = { ...prev, [field]: value };
@@ -947,15 +1089,73 @@ export default function CreateInvoicePage() {
               const matchingNetwork = networks.find(network => network.name === selectedCurrency.network);
               if (matchingNetwork) {
                 updated.paymentNetwork = matchingNetwork.id;
+                // Clear chainId and tokenAddress if not Celo
+                if (matchingNetwork.id !== 'celo') {
+                  updated.chainId = undefined;
+                  updated.tokenAddress = undefined;
+                } else {
+                  // Set chainId and sync tokenAddress based on currency
+                  updated.chainId = 42220;
+                  // Sync tokenAddress with currency selection for Celo tokens
+                  const currencyCode = String(value).toUpperCase();
+                  if (currencyCode === 'CELO') {
+                    updated.tokenAddress = 'native';
+                  } else if (currencyCode === 'USDT') {
+                    updated.tokenAddress = CELO_TOKENS.USDT.address;
+                  } else if (currencyCode === 'CUSD') {
+                    updated.tokenAddress = CELO_TOKENS.cUSD.address;
+                  } else {
+                    // Default to cUSD for other Celo currencies
+                    updated.tokenAddress = CELO_TOKENS.cUSD.address;
+                  }
+                }
               }
             }
           } else if (selectedCurrency && selectedCurrency.type === 'fiat') {
             // Automatically switch payment method to fiat for fiat currencies
             updated.paymentMethod = 'fiat';
-            // Clear the payment network for fiat currencies
+            // Clear the payment network and chain/token fields for fiat currencies
             updated.paymentNetwork = '';
+            updated.chainId = undefined;
+            updated.tokenAddress = undefined;
           }
         } else {
+        }
+      }
+      
+      // Sync currency when token is selected (if Celo network is active)
+      // This MUST happen BEFORE any other currency logic to prevent resets
+      if (field === 'tokenAddress' && updated.paymentNetwork === 'celo' && value) {
+        // Immediately set the flag to prevent ANY auto-select from interfering
+        setUserHasSelectedCurrency(true);
+        setIsAutoSelectingCurrency(true);
+        
+        if (String(value) === CELO_TOKENS.USDT.address) {
+          updated.currency = 'USDT';
+        } else if (String(value) === CELO_TOKENS.cUSD.address) {
+          updated.currency = 'CUSD';
+        }
+        
+        // Keep the flag set longer to prevent any race conditions
+        setTimeout(() => {
+          setIsAutoSelectingCurrency(false);
+          // Ensure the flag stays true - user has selected via token
+          setUserHasSelectedCurrency(true);
+        }, 500);
+      }
+      
+      // Sync tokenAddress when network changes to Celo (if currency is a Celo token)
+      if (field === 'paymentNetwork' && value === 'celo') {
+        updated.chainId = 42220;
+        // Sync tokenAddress based on current currency
+        const currentCurrency = String(updated.currency || '').toUpperCase();
+        if (currentCurrency === 'USDT') {
+          updated.tokenAddress = CELO_TOKENS.USDT.address;
+        } else if (currentCurrency === 'CUSD') {
+          updated.tokenAddress = CELO_TOKENS.cUSD.address;
+        } else {
+          // Default to cUSD if currency doesn't match
+          updated.tokenAddress = CELO_TOKENS.cUSD.address;
         }
       }
       
@@ -1132,6 +1332,7 @@ export default function CreateInvoicePage() {
 
   const handleCreateClient = async (clientData: Omit<Client, '_id'>) => {
     try {
+      setCreatingClient(true);
       const response = await fetch('/api/clients', {
         method: 'POST',
         headers: {
@@ -1144,9 +1345,14 @@ export default function CreateInvoicePage() {
         await loadClients();
         selectClient(data.data);
         setShowNewClientModal(false);
+      } else {
+        alert(data.message || 'Failed to create client');
       }
     } catch (error) {
       console.error('Failed to create client:', error);
+      alert('Failed to create client. Please try again.');
+    } finally {
+      setCreatingClient(false);
     }
   };
 
@@ -2558,32 +2764,40 @@ export default function CreateInvoicePage() {
             mpesaAccountNumber: selectedMethod.fiatDetails?.mpesaAccountNumber || '',
             tillNumber: selectedMethod.fiatDetails?.tillNumber || '',
             businessName: selectedMethod.fiatDetails?.businessName || '',
-            paymentPhoneNumber: selectedMethod.fiatDetails?.paymentPhoneNumber || ''
+            paymentPhoneNumber: selectedMethod.fiatDetails?.paymentPhoneNumber || '',
+            // Set currency from payment method if available, otherwise keep current
+            // M-Pesa methods should default to KES
+            currency: (() => {
+              const methodCurrency = (selectedMethod.fiatDetails as { currency?: string })?.currency;
+              if (methodCurrency) return methodCurrency;
+              // Auto-set KES for M-Pesa methods
+              if (selectedMethod.fiatDetails?.subtype === 'mpesa_paybill' || selectedMethod.fiatDetails?.subtype === 'mpesa_till') {
+                return 'KES';
+              }
+              return prev.currency;
+            })()
           }));
         } else if (selectedMethod.type === 'crypto') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const isSafeWallet = (selectedMethod.cryptoDetails as any)?.safeDetails;
+          const cryptoCurrency = selectedMethod.cryptoDetails?.currency;
+          const cryptoDetails = selectedMethod.cryptoDetails;
           setFormData(prev => ({
             ...prev,
             paymentMethod: 'crypto',
-            paymentNetwork: selectedMethod.cryptoDetails?.network || '',
-            paymentAddress: selectedMethod.cryptoDetails?.address || ''
+            paymentNetwork: cryptoDetails?.network || '',
+            paymentAddress: cryptoDetails?.address || '',
+            chainId: cryptoDetails?.chainId || prev.chainId,
+            tokenAddress: cryptoDetails?.tokenAddress || prev.tokenAddress,
+            // Set currency if available, default to USDT for crypto
+            currency: cryptoCurrency || 'USDT',
+            // If Safe wallet, preserve Safe-specific details
+            ...(isSafeWallet && {
+              // Safe wallet specific fields are already in cryptoDetails
+            })
           }));
         }
       }
-    }
-  };
-
-  // Load saved payment methods
-  const loadSavedPaymentMethods = async () => {
-    try {
-      const response = await fetch('/api/payment-methods');
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          setSavedPaymentMethods(data.paymentMethods || []);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading payment methods:', error);
     }
   };
 
@@ -3396,25 +3610,45 @@ export default function CreateInvoicePage() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Select Saved Payment Method
               </label>
-              <select
-                value={selectedPaymentMethodId || ''}
-                onChange={(e) => handlePaymentMethodSelect(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white font-medium"
-              >
-                <option value="">-- Select a saved payment method --</option>
-                {savedPaymentMethods.map((method) => (
-                  <option key={method._id} value={method._id}>
-                    {method.name} ({
-                      method.type === 'fiat' ? 
-                        method.fiatDetails?.subtype === 'mpesa_paybill' ? 'M-Pesa Paybill' :
-                        method.fiatDetails?.subtype === 'mpesa_till' ? 'M-Pesa Till' :
-                        'Bank Transfer' : 
-                      method.type === 'crypto' ? 'Crypto' :
-                      'Payment Method'
-                    })
-                  </option>
-                ))}
-              </select>
+              <PaymentMethodSelector
+                methods={savedPaymentMethods.map(method => {
+                  // Type-safe mapping to PaymentMethodSelector's expected format
+                  const methodWithExtras = method as typeof method & {
+                    isDefault?: boolean;
+                    fiatDetails?: typeof method.fiatDetails & { currency?: string };
+                    cryptoDetails?: typeof method.cryptoDetails & { 
+                      currency?: string;
+                      safeDetails?: {
+                        safeAddress: string;
+                        owners: string[];
+                        threshold: number;
+                        chainId?: number;
+                      };
+                    };
+                  };
+                  
+                  return {
+                    _id: methodWithExtras._id,
+                    name: methodWithExtras.name,
+                    type: methodWithExtras.type,
+                    isDefault: methodWithExtras.isDefault,
+                    fiatDetails: methodWithExtras.fiatDetails ? {
+                      subtype: methodWithExtras.fiatDetails.subtype === 'phone' ? undefined : (methodWithExtras.fiatDetails.subtype as 'bank' | 'mpesa_paybill' | 'mpesa_till' | undefined),
+                      bankName: methodWithExtras.fiatDetails.bankName,
+                      currency: methodWithExtras.fiatDetails.currency,
+                    } : undefined,
+                    cryptoDetails: methodWithExtras.cryptoDetails ? {
+                      address: methodWithExtras.cryptoDetails.address,
+                      network: methodWithExtras.cryptoDetails.network,
+                      currency: methodWithExtras.cryptoDetails.currency || 'USDT',
+                      safeDetails: methodWithExtras.cryptoDetails.safeDetails,
+                    } : undefined,
+                  };
+                })}
+                selectedMethodId={selectedPaymentMethodId}
+                onSelect={handlePaymentMethodSelect}
+                showSafeWallets={true}
+              />
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
@@ -3654,6 +3888,39 @@ export default function CreateInvoicePage() {
                         </div>
                       </div>
                     )}
+                    {/* Save Payment Method Button */}
+                    <SavePaymentMethodButton
+                      formData={formData}
+                      isAlreadySaved={(() => {
+                        // Check if current form data matches any saved payment method
+                        return savedPaymentMethods.some(method => {
+                          if (formData.paymentMethod === 'fiat' && method.type === 'fiat') {
+                            if (formData.fiatPaymentSubtype === 'bank') {
+                              return method.fiatDetails?.bankName === formData.bankName &&
+                                     method.fiatDetails?.accountNumber === formData.accountNumber;
+                            } else if (formData.fiatPaymentSubtype === 'mpesa_paybill') {
+                              return method.fiatDetails?.paybillNumber === formData.paybillNumber &&
+                                     method.fiatDetails?.mpesaAccountNumber === formData.mpesaAccountNumber;
+                            } else if (formData.fiatPaymentSubtype === 'mpesa_till') {
+                              return method.fiatDetails?.tillNumber === formData.tillNumber;
+                            } else if (formData.fiatPaymentSubtype === 'phone') {
+                              return method.fiatDetails?.paymentPhoneNumber === formData.paymentPhoneNumber;
+                            }
+                          }
+                          return false;
+                        });
+                      })()}
+                      onSaveSuccess={(savedMethodId) => {
+                        // Refresh payment methods list
+                        loadSavedPaymentMethods().then(() => {
+                          // Auto-select the newly saved payment method
+                          if (savedMethodId) {
+                            setSelectedPaymentMethodId(savedMethodId);
+                            handlePaymentMethodSelect(savedMethodId);
+                          }
+                        });
+                      }}
+                    />
                   </div>
                 ) : formData.paymentMethod === 'crypto' ? (
                   <div className="space-y-4">
@@ -3717,6 +3984,30 @@ export default function CreateInvoicePage() {
                                   type="button"
                                   onClick={() => {
                                     handleInputChange('paymentNetwork', network.id);
+                                    // Clear chainId and tokenAddress if not Celo, or sync with currency if Celo
+                                    setFormData(prev => {
+                                      if (network.id === 'celo') {
+                                        // Sync tokenAddress with current currency when Celo is selected
+                                        const currentCurrency = String(prev.currency || '').toUpperCase();
+                                        let tokenAddress = CELO_TOKENS.cUSD.address; // Default
+                                        if (currentCurrency === 'USDT') {
+                                          tokenAddress = CELO_TOKENS.USDT.address;
+                                        } else if (currentCurrency === 'CUSD') {
+                                          tokenAddress = CELO_TOKENS.cUSD.address;
+                                        }
+                                        return {
+                                          ...prev,
+                                          chainId: 42220,
+                                          tokenAddress
+                                        };
+                                      } else {
+                                        return {
+                                          ...prev,
+                                          chainId: undefined,
+                                          tokenAddress: undefined
+                                        };
+                                      }
+                                    });
                                     setShowNetworkDropdown(false);
                                     setNetworkSearch('');
                                   }}
@@ -3744,16 +4035,75 @@ export default function CreateInvoicePage() {
                         )}
                       </div>
                     </div>
+                    {/* Token Selection - Only show when a chain with tokens is selected (e.g., Celo) */}
+                    {formData.paymentNetwork === 'celo' && (
+                      <div>
+                        <label className="block text-sm text-gray-600 mb-1">Select Token</label>
+                        <select
+                          value={formData.tokenAddress || ''}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            // Use handleInputChange to trigger sync logic (only if value exists)
+                            if (value) {
+                              handleInputChange('tokenAddress', value);
+                            } else {
+                              // Clear tokenAddress and don't sync currency if cleared
+                              setFormData(prev => ({ ...prev, tokenAddress: undefined }));
+                            }
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white font-medium"
+                        >
+                          <option value="">Select token</option>
+                          <option value="native">CELO (Native)</option>
+                          <option value={CELO_TOKENS.cUSD.address}>cUSD</option>
+                          <option value={CELO_TOKENS.USDT.address}>USDT</option>
+                        </select>
+                      </div>
+                    )}
                     <div>
                       <label className="block text-sm text-gray-600 mb-1">Where do you want to receive your payment?</label>
-                      <input
-                        type="text"
+                      <ReceivingAddressInput
                         value={formData.paymentAddress || ''}
-                        onChange={(e) => handleInputChange('paymentAddress', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-                        placeholder="Enter wallet address"
+                        onChangeAction={(address, metadata) => {
+                          setFormData(prev => ({
+                            ...prev,
+                            paymentAddress: address,
+                            receivingMethod: metadata?.mode || 'manual',
+                            receivingWalletType: metadata?.walletType || null,
+                            // Update chain and token if provided by wallet connection
+                            chainId: metadata?.chainId || prev.chainId,
+                            tokenAddress: metadata?.tokenAddress || prev.tokenAddress,
+                          }));
+                        }}
+                        network={formData.paymentNetwork}
+                        chainId={formData.chainId}
+                        tokenAddress={formData.tokenAddress}
                       />
                     </div>
+                    {/* Save Payment Method Button */}
+                    <SavePaymentMethodButton
+                      formData={formData}
+                      isAlreadySaved={(() => {
+                        // Check if current form data matches any saved payment method
+                        return savedPaymentMethods.some(method => {
+                          if (formData.paymentMethod === 'crypto' && method.type === 'crypto') {
+                            return method.cryptoDetails?.address === formData.paymentAddress &&
+                                   method.cryptoDetails?.network === formData.paymentNetwork;
+                          }
+                          return false;
+                        });
+                      })()}
+                      onSaveSuccess={(savedMethodId) => {
+                        // Refresh payment methods list
+                        loadSavedPaymentMethods().then(() => {
+                          // Auto-select the newly saved payment method
+                          if (savedMethodId) {
+                            setSelectedPaymentMethodId(savedMethodId);
+                            handlePaymentMethodSelect(savedMethodId);
+                          }
+                        });
+                      }}
+                    />
                   </div>
                 ) : null}
                     </div>
@@ -4073,7 +4423,7 @@ export default function CreateInvoicePage() {
 
         {/* Client Creation Modal */}
         {showNewClientModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-30 z-50 p-4 overflow-y-auto">
+          <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-50 p-4 overflow-y-auto">
             <div className="min-h-full flex items-center justify-center py-4">
               <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative touch-manipulation shadow-xl">
                 <div className="flex justify-between items-center mb-4">
@@ -4089,6 +4439,7 @@ export default function CreateInvoicePage() {
                 <ClientCreationForm 
                   onSubmit={handleCreateClient}
                   onCancel={() => setShowNewClientModal(false)}
+                  isLoading={creatingClient}
                 />
               </div>
             </div>
@@ -4097,7 +4448,7 @@ export default function CreateInvoicePage() {
 
         {/* CC Client Creation Modal */}
         {showCcClientCreationModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-30 z-50 p-4 overflow-y-auto">
+          <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-50 p-4 overflow-y-auto">
             <div className="min-h-full flex items-center justify-center py-4">
               <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative touch-manipulation shadow-xl">
                 <div className="flex justify-between items-center mb-4">
@@ -4210,18 +4561,18 @@ export default function CreateInvoicePage() {
 // Client Creation Form Component
 function ClientCreationForm({ 
   onSubmit, 
-  onCancel 
+  onCancel,
+  isLoading = false
 }: { 
   onSubmit: (clientData: Omit<Client, '_id'>) => void;
   onCancel: () => void;
+  isLoading?: boolean;
 }) {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
     company: '',
-    taxId: '',
-    notes: '',
     address: {
       street: '',
       city: '',
@@ -4232,6 +4583,7 @@ function ClientCreationForm({
   });
   const [showCountryDropdown, setShowCountryDropdown] = useState(false);
   const [countrySearch, setCountrySearch] = useState('');
+  const [showAddressFields, setShowAddressFields] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -4264,13 +4616,26 @@ function ClientCreationForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Name <span className="text-red-500">*</span></label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Client Name <span className="text-red-500">*</span></label>
         <input
           type="text"
           value={formData.name}
           onChange={(e) => handleInputChange('name', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+          disabled={isLoading}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           required
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Company</label>
+        <input
+          type="text"
+          value={formData.company}
+          onChange={(e) => handleInputChange('company', e.target.value)}
+          disabled={isLoading}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          placeholder="Company name (optional)"
         />
       </div>
       
@@ -4280,7 +4645,8 @@ function ClientCreationForm({
           type="email"
           value={formData.email}
           onChange={(e) => handleInputChange('email', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+          disabled={isLoading}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           required
         />
       </div>
@@ -4291,156 +4657,159 @@ function ClientCreationForm({
           type="tel"
           value={formData.phone}
           onChange={(e) => handleInputChange('phone', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-        />
-      </div>
-      
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Company</label>
-        <input
-          type="text"
-          value={formData.company}
-          onChange={(e) => handleInputChange('company', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+          disabled={isLoading}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          placeholder="Phone number"
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Street Address</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
         <input
           type="text"
-          value={formData.address.street}
-          onChange={(e) => handleInputChange('address.street', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
+          value={formData.address.city}
+          onChange={(e) => handleInputChange('address.city', e.target.value)}
+          disabled={isLoading}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
-          <input
-            type="text"
-            value={formData.address.city}
-            onChange={(e) => handleInputChange('address.city', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
-          <input
-            type="text"
-            value={formData.address.state}
-            onChange={(e) => handleInputChange('address.state', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">ZIP Code</label>
-          <input
-            type="text"
-            value={formData.address.zipCode}
-            onChange={(e) => handleInputChange('address.zipCode', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setShowCountryDropdown(!showCountryDropdown)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-left flex items-center justify-between bg-white"
-            >
-              <span className={formData.address.country ? 'text-gray-900' : 'text-gray-500'}>
-                {formData.address.country 
-                  ? countries.find(c => c.code === formData.address.country)?.name 
-                  : 'Select Country'}
-              </span>
-              <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${showCountryDropdown ? 'rotate-180' : ''}`} />
-            </button>
-            
-            {showCountryDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md max-h-60 overflow-y-auto z-20 shadow-lg">
-                {/* Search input */}
-                <div className="p-2 border-b border-gray-200 bg-gray-50">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <input
-                      type="text"
-                      value={countrySearch}
-                      onChange={(e) => setCountrySearch(e.target.value)}
-                      placeholder="Search countries..."
-                      className="w-full pl-10 pr-3 py-2 bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-                
-                {/* Country list */}
-                <div className="max-h-48 overflow-y-auto">
-                  {countries
-                    .filter(country => 
-                      country.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
-                      country.phoneCode.includes(countrySearch) ||
-                      country.code.toLowerCase().includes(countrySearch.toLowerCase())
-                    )
-                    .map(country => (
-                    <button
-                      key={country.code}
-                      type="button"
-                      onClick={() => {
-                        handleInputChange('address.country', country.code);
-                        setShowCountryDropdown(false);
-                        setCountrySearch('');
-                      }}
-                      className="w-full px-3 py-2 text-left text-gray-700 hover:bg-gray-100 transition-colors flex items-center justify-between border-b border-gray-100 last:border-b-0"
-                    >
-                      <span className="text-sm">{country.name}</span>
-                      <span className="text-blue-600 text-xs font-medium">{country.phoneCode}</span>
-                    </button>
-                  ))}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowCountryDropdown(!showCountryDropdown)}
+            disabled={isLoading}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-left flex items-center justify-between bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <span className={formData.address.country ? 'text-gray-900' : 'text-gray-500'}>
+              {formData.address.country 
+                ? countries.find(c => c.code === formData.address.country)?.name 
+                : 'Select Country'}
+            </span>
+            <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${showCountryDropdown ? 'rotate-180' : ''}`} />
+          </button>
+          
+          {showCountryDropdown && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md max-h-60 overflow-y-auto z-20 shadow-lg">
+              {/* Search input */}
+              <div className="p-2 border-b border-gray-200 bg-gray-50">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    value={countrySearch}
+                    onChange={(e) => setCountrySearch(e.target.value)}
+                    placeholder="Search countries..."
+                    className="w-full pl-10 pr-3 py-2 bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
               </div>
-            )}
-          </div>
+              
+              {/* Country list */}
+              <div className="max-h-48 overflow-y-auto">
+                {countries
+                  .filter(country => 
+                    country.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                    country.phoneCode.includes(countrySearch) ||
+                    country.code.toLowerCase().includes(countrySearch.toLowerCase())
+                  )
+                  .map(country => (
+                  <button
+                    key={country.code}
+                    type="button"
+                    onClick={() => {
+                      handleInputChange('address.country', country.code);
+                      setShowCountryDropdown(false);
+                      setCountrySearch('');
+                    }}
+                    className="w-full px-3 py-2 text-left text-gray-700 hover:bg-gray-100 transition-colors flex items-center justify-between border-b border-gray-100 last:border-b-0"
+                  >
+                    <span className="text-sm">{country.name}</span>
+                    <span className="text-blue-600 text-xs font-medium">{country.phoneCode}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
-      
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Tax ID</label>
-        <input
-          type="text"
-          value={formData.taxId}
-          onChange={(e) => handleInputChange('taxId', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-        />
-      </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-        <textarea
-          value={formData.notes}
-          onChange={(e) => handleInputChange('notes', e.target.value)}
-          rows={3}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
-        />
-      </div>
+      {!showAddressFields && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowAddressFields(true)}
+            disabled={isLoading}
+            className="flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Plus className="h-4 w-4" />
+            Add Address
+          </button>
+        </div>
+      )}
+
+      {showAddressFields && (
+        <>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Street Address</label>
+            <input
+              type="text"
+              value={formData.address.street}
+              onChange={(e) => handleInputChange('address.street', e.target.value)}
+              disabled={isLoading}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+              <input
+                type="text"
+                value={formData.address.state}
+                onChange={(e) => handleInputChange('address.state', e.target.value)}
+                disabled={isLoading}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">ZIP Code</label>
+              <input
+                type="text"
+                value={formData.address.zipCode}
+                onChange={(e) => handleInputChange('address.zipCode', e.target.value)}
+                disabled={isLoading}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+            </div>
+          </div>
+        </>
+      )}
       
       <div className="flex space-x-3 pt-4">
         <button
           type="button"
           onClick={onCancel}
-          className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+          disabled={isLoading}
+          className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Cancel
         </button>
         <button
           type="submit"
-          className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          disabled={isLoading}
+          className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
-          Create Client
+          {isLoading ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Creating...</span>
+            </>
+          ) : (
+            <span>Create Client</span>
+          )}
         </button>
       </div>
     </form>

@@ -206,11 +206,30 @@ html {
   box-sizing: border-box;
 }
 
-/* Mobile touch optimizations */
+/* Mobile touch optimizations - CRITICAL for button performance */
 button, a, [role="button"], input[type="button"], input[type="submit"] {
+  touch-action: manipulation !important;
+  -webkit-tap-highlight-color: transparent !important;
+  -webkit-touch-callout: none !important;
+  /* Prevent text selection on mobile taps */
+  user-select: none;
+  -webkit-user-select: none;
+  /* Optimize rendering */
+  will-change: transform;
+  /* Reduce paint complexity */
+  contain: layout style paint;
+}
+
+/* Optimize all interactive elements for mobile */
+[onclick], [onClick] {
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
-  -webkit-touch-callout: none;
+}
+
+/* Prevent layout shifts on button clicks */
+button:active {
+  transform: scale(0.98);
+  transition: transform 0.1s ease-out;
 }
 
 /* Improve scrolling performance on mobile */

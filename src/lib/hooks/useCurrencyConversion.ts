@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useCurrency } from '@/lib/contexts/CurrencyContext';
+import { useCurrencyStore } from '@/lib/stores/currencyStore';
+import { batchConvertCurrency } from '@/app/actions/currency-actions';
 
 interface ConversionResult {
   originalAmount: number;
@@ -12,12 +14,75 @@ interface ConversionResult {
   error: string | null;
 }
 
+// Batch conversion queue to reduce API calls
+const conversionQueue = new Map<string, {
+  resolve: (result: ConversionResult) => void;
+  reject: (error: Error) => void;
+  amount: number;
+  fromCurrency: string;
+  toCurrency: string;
+}>();
+
+let batchTimeout: NodeJS.Timeout | null = null;
+const BATCH_DELAY = 100; // Wait 100ms to batch conversions
+
+async function processBatchConversions() {
+  if (conversionQueue.size === 0) return;
+  
+  const conversions = Array.from(conversionQueue.entries()).map(([key, item]) => ({
+    key,
+    ...item,
+  }));
+  
+  // Clear queue
+  conversionQueue.clear();
+  
+  try {
+    const result = await batchConvertCurrency(
+      conversions.map(c => ({
+        amount: c.amount,
+        fromCurrency: c.fromCurrency,
+        toCurrency: c.toCurrency,
+      }))
+    );
+    
+    if (result.success && result.data) {
+      conversions.forEach((conversion, index) => {
+        const conversionResult = result.data[index];
+        if (conversionResult) {
+          conversion.resolve({
+            originalAmount: conversionResult.originalAmount,
+            convertedAmount: conversionResult.convertedAmount,
+            fromCurrency: conversionResult.fromCurrency,
+            toCurrency: conversionResult.toCurrency,
+            rate: conversionResult.rate,
+            converted: conversionResult.converted,
+            isLoading: false,
+            error: null,
+          });
+        } else {
+          conversion.reject(new Error('Conversion failed'));
+        }
+      });
+    } else {
+      conversions.forEach(conversion => {
+        conversion.reject(new Error(result.error || 'Conversion failed'));
+      });
+    }
+  } catch (error) {
+    conversions.forEach(conversion => {
+      conversion.reject(error instanceof Error ? error : new Error('Conversion failed'));
+    });
+  }
+}
+
 export function useCurrencyConversion(
   amount: number,
   fromCurrency: string,
   toCurrency?: string
 ): ConversionResult {
   const { preferredCurrency } = useCurrency();
+  const { getCachedConversion, setCachedConversion, getCacheKey } = useCurrencyStore();
   const [result, setResult] = useState<ConversionResult>({
     originalAmount: amount,
     convertedAmount: amount,
@@ -28,6 +93,13 @@ export function useCurrencyConversion(
     isLoading: false,
     error: null
   });
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     const targetCurrency = toCurrency || preferredCurrency;
@@ -47,56 +119,99 @@ export function useCurrencyConversion(
       return;
     }
 
-    // Convert currency
-    const convertCurrency = async () => {
-      
-      setResult(prev => ({ ...prev, isLoading: true, error: null }));
-      
-      try {
-        const response = await fetch('/api/currency/convert', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            amount,
-            fromCurrency,
-            toCurrency: targetCurrency
-          }),
-        });
+    // Check cache first
+    const cacheKey = getCacheKey(amount, fromCurrency, targetCurrency);
+    const cached = getCachedConversion(cacheKey);
+    
+    if (cached) {
+      setResult({
+        originalAmount: cached.originalAmount,
+        convertedAmount: cached.convertedAmount,
+        fromCurrency: cached.fromCurrency,
+        toCurrency: cached.toCurrency,
+        rate: cached.rate,
+        converted: cached.converted,
+        isLoading: false,
+        error: null
+      });
+      return;
+    }
 
-        const data = await response.json();
-        
-        
-        if (data.success) {
-          setResult({
-            originalAmount: data.data.originalAmount,
-            convertedAmount: data.data.convertedAmount,
-            fromCurrency: data.data.fromCurrency,
-            toCurrency: data.data.toCurrency,
-            rate: data.data.rate,
-            converted: data.data.converted,
-            isLoading: false,
-            error: null
-          });
-        } else {
-          setResult(prev => ({
-            ...prev,
-            isLoading: false,
-            error: data.message || 'Conversion failed'
-          }));
-        }
-      } catch {
+    // Set initial state with original amount (non-blocking)
+    setResult({
+      originalAmount: amount,
+      convertedAmount: amount, // Show original while converting
+      fromCurrency,
+      toCurrency: targetCurrency,
+      rate: 1,
+      converted: false,
+      isLoading: true, // Still loading but showing original amount
+      error: null
+    });
+    
+    const queueKey = `${Date.now()}_${Math.random()}`;
+    
+    // Set a timeout to prevent getting stuck in loading state
+    const timeoutId = setTimeout(() => {
+      if (mountedRef.current) {
         setResult(prev => ({
           ...prev,
           isLoading: false,
-          error: 'Failed to convert currency'
+          error: 'Conversion timeout - showing original amount'
         }));
       }
-    };
+      conversionQueue.delete(queueKey);
+    }, 10000); // 10 second timeout
+    
+    new Promise<ConversionResult>((resolve, reject) => {
+      conversionQueue.set(queueKey, {
+        resolve: (result) => {
+          clearTimeout(timeoutId);
+          if (mountedRef.current) {
+            // Cache the result
+            setCachedConversion(cacheKey, {
+              originalAmount: result.originalAmount,
+              convertedAmount: result.convertedAmount,
+              fromCurrency: result.fromCurrency,
+              toCurrency: result.toCurrency,
+              rate: result.rate,
+              converted: result.converted,
+              timestamp: Date.now(),
+            });
+            setResult(result);
+          }
+          resolve(result);
+        },
+        reject: (error) => {
+          clearTimeout(timeoutId);
+          if (mountedRef.current) {
+            setResult(prev => ({
+              ...prev,
+              isLoading: false,
+              error: error.message || 'Conversion failed'
+            }));
+          }
+          reject(error);
+        },
+        amount,
+        fromCurrency,
+        toCurrency: targetCurrency,
+      });
+    });
 
-    convertCurrency();
-  }, [amount, fromCurrency, toCurrency, preferredCurrency]);
+    // Process batch after delay
+    if (batchTimeout) {
+      clearTimeout(batchTimeout);
+    }
+    batchTimeout = setTimeout(() => {
+      processBatchConversions();
+    }, BATCH_DELAY);
+
+    return () => {
+      clearTimeout(timeoutId);
+      conversionQueue.delete(queueKey);
+    };
+  }, [amount, fromCurrency, toCurrency, preferredCurrency, getCachedConversion, setCachedConversion, getCacheKey]);
 
   return result;
 } 

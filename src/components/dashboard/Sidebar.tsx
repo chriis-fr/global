@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, memo, startTransition } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
@@ -89,7 +89,7 @@ const SETTINGS_LINKS = [
   },
 ];
 
-export default function Sidebar() {
+function Sidebar() {
   const { data: session } = useSession();
   const { subscription } = useSubscription();
   const { permissions } = usePermissions();
@@ -207,18 +207,33 @@ export default function Sidebar() {
     }
   };
 
-  const toggleMobileMenu = () => {
-    setIsMobileMenuOpen(!isMobileMenuOpen);
-  };
+  // Optimized handlers with useCallback and startTransition for mobile performance
+  const toggleMobileMenu = useCallback(() => {
+    startTransition(() => {
+      setIsMobileMenuOpen(prev => !prev);
+    });
+  }, []);
 
-  const closeMobileMenu = () => {
-    setIsMobileMenuOpen(false);
-  };
+  const closeMobileMenu = useCallback(() => {
+    // Use startTransition to mark this as non-urgent, preventing UI blocking
+    startTransition(() => {
+      setIsMobileMenuOpen(false);
+      setIsSettingsOpen(false); // Also close settings when closing menu
+    });
+  }, []);
 
-  const toggleCollapse = () => {
-    setIsCollapsed(!isCollapsed);
-    setIsAutoHidden(false);
-  };
+  const toggleSettings = useCallback(() => {
+    startTransition(() => {
+      setIsSettingsOpen(prev => !prev);
+    });
+  }, []);
+
+  const toggleCollapse = useCallback(() => {
+    startTransition(() => {
+      setIsCollapsed(prev => !prev);
+      setIsAutoHidden(false);
+    });
+  }, []);
 
   const SidebarContent = () => (
     <>
@@ -253,8 +268,9 @@ export default function Sidebar() {
             {/* Mobile Close Button */}
             <button
               onClick={closeMobileMenu}
-              className="lg:hidden p-2 text-white/70 hover:text-white hover:bg-blue-900/50 rounded-lg transition-colors"
+              className="lg:hidden p-2 text-white/70 hover:text-white hover:bg-blue-900/50 rounded-lg transition-colors touch-manipulation active:scale-95"
               aria-label="Close menu"
+              style={{ touchAction: 'manipulation' }}
             >
               <X className="h-5 w-5" />
             </button>
@@ -356,13 +372,14 @@ export default function Sidebar() {
         <div className="border-t border-white/10 p-4 space-y-2">
           {/* Settings Header Button */}
           <button
-            onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-            className={`flex items-center justify-between w-full px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation ${
+            onClick={toggleSettings}
+            className={`flex items-center justify-between w-full px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation active:scale-[0.98] ${
               pathname.startsWith('/dashboard/settings') 
                 ? 'bg-blue-800 text-white' 
                 : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
             }`}
             title={isCollapsed && !isAutoHidden ? 'Settings' : undefined}
+            style={{ touchAction: 'manipulation' }}
           >
             <div className="flex items-center">
               <User className="h-4 w-4 mr-3 flex-shrink-0" />
@@ -494,12 +511,13 @@ export default function Sidebar() {
         <div className="border-t border-white/10 p-4 space-y-2">
           {/* Settings Header Button */}
           <button
-            onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-            className={`flex items-center justify-between w-full px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation ${
+            onClick={toggleSettings}
+            className={`flex items-center justify-between w-full px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation active:scale-[0.98] ${
               pathname.startsWith('/dashboard/settings') 
                 ? 'bg-blue-800 text-white' 
                 : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
             }`}
+            style={{ touchAction: 'manipulation' }}
           >
             <div className="flex items-center">
               <User className="h-4 w-4 mr-3 flex-shrink-0" />
@@ -581,6 +599,7 @@ export default function Sidebar() {
         } ${
           isAutoHidden ? 'w-16' : ''
         }`}
+        style={{ willChange: 'width' }}
       >
         <SidebarContent />
       </aside>
@@ -595,6 +614,7 @@ export default function Sidebar() {
           hover:shadow-2xl hover:shadow-blue-500/10
           ${isMobileMenuOpen ? 'hidden' : 'block'}`}
         aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
+        style={{ touchAction: 'manipulation' }}
       >
         <Menu className="h-5 w-5" />
       </button>
@@ -604,6 +624,7 @@ export default function Sidebar() {
         <div 
           className="lg:hidden fixed inset-0 bg-black/50 z-40"
           onClick={closeMobileMenu}
+          style={{ touchAction: 'manipulation' }}
         />
       )}
 
@@ -615,9 +636,13 @@ export default function Sidebar() {
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
+        style={{ willChange: 'transform', touchAction: 'pan-y' }}
       >
         <SidebarContent />
       </aside>
     </>
   );
-} 
+}
+
+// Memoize the component to prevent unnecessary re-renders
+export default memo(Sidebar); 
