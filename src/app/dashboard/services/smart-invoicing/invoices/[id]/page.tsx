@@ -241,7 +241,7 @@ export default function InvoiceViewPage() {
     return optimizedCanvas;
   };
 
-  const generateOptimizedPdf = async (
+  const generateOptimizedPdf = useCallback(async (
     pdfContainer: HTMLElement, 
     jsPDFLib: typeof import('jspdf')['default'], 
     html2canvasLib: typeof import('html2canvas')['default']
@@ -299,7 +299,7 @@ export default function InvoiceViewPage() {
     const base64 = pdf.output('datauristring').split(',')[1];
     
     return { pdf, base64 };
-  };
+  }, []); // No dependencies - pure function that only uses its parameters
 
   const addWatermark = (pdf: import('jspdf').jsPDF, invoiceNumber?: string) => {
     const pageWidth = pdf.internal.pageSize.getWidth();
@@ -410,7 +410,7 @@ export default function InvoiceViewPage() {
   };
 
   // Check if user has permission to mark invoice as paid
-  const canMarkAsPaid = () => {
+  const canMarkAsPaid = useCallback(() => {
     if (!session?.user) return false;
     
     // Individual users can always mark their own invoices as paid
@@ -426,16 +426,16 @@ export default function InvoiceViewPage() {
     // Fallback: allow owners and admins to mark invoices as paid
     const userRole = session.user.role;
     return userRole === 'owner' || userRole === 'admin';
-  };
+  }, [session?.user, permissions?.canMarkInvoiceAsPaid]);
 
   // Check if invoice can be marked as paid
-  const canMarkInvoiceAsPaid = () => {
+  const canMarkInvoiceAsPaid = useCallback(() => {
     if (!invoice) return false;
     
     // Allow marking as paid if status is 'sent', 'pending', or 'approved'
     const allowedStatuses = ['sent', 'pending', 'approved'];
     return allowedStatuses.includes(invoice.status || '') && canMarkAsPaid();
-  };
+  }, [invoice, canMarkAsPaid]);
 
   const handleMarkAsPaid = useCallback(async () => {
     if (!invoice || !canMarkInvoiceAsPaid() || !confirm('Are you sure you want to mark this invoice as paid?')) return;
@@ -858,7 +858,7 @@ export default function InvoiceViewPage() {
         setDownloadingPdf(false);
       });
     }
-  }, [invoice, formatDate, getCurrencySymbol, hasAnyDiscounts, hasAnyTaxes]);
+  }, [invoice, formatDate, getCurrencySymbol, hasAnyDiscounts, hasAnyTaxes, generateOptimizedPdf]);
 
   // Handle Receipt download - lazy load libraries
   const handleDownloadReceipt = useCallback(async () => {
