@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 import { 
   Users, 
   FileText, 
@@ -11,45 +12,19 @@ import {
   ArrowUp,
   CheckCircle,
   XCircle,
-  UserCheck
+  UserCheck,
+  Search,
+  ArrowUpDown,
+  Sparkles,
+  Mail,
+  ExternalLink,
+  Link2
 } from 'lucide-react';
+import { BILLING_PLANS } from '@/data/billingPlans';
+import { getAdminStats, type AdminStats } from '@/lib/actions/admin-stats';
+import { getExplorerUrl } from '@/lib/utils/blockchain';
 
-interface AdminStats {
-  users: {
-    total: number;
-    today: number;
-    thisWeek: number;
-    thisMonth: number;
-    thisYear: number;
-    active: number;
-    byPlan: Array<{ planId: string; count: number }>;
-    onboarding: {
-      completed: number;
-      pending: number;
-    };
-    growth: Array<{ period: string; count: number }>;
-  };
-  invoices: {
-    total: number;
-    today: number;
-    thisMonth: number;
-    paid: number;
-    unpaid: number;
-  };
-  payables: {
-    total: number;
-    thisMonth: number;
-    paid: number;
-  };
-  organizations: {
-    total: number;
-    thisMonth: number;
-  };
-  revenue: {
-    total: number;
-    transactions: number;
-  };
-}
+// AdminStats type is now imported from admin-stats.ts
 
 interface User {
   id: string;
@@ -82,6 +57,48 @@ export default function AdminDashboard() {
   const [usersPage, setUsersPage] = useState(1);
   const [usersTotal, setUsersTotal] = useState(0);
   const [usersLoading, setUsersLoading] = useState(false);
+  
+  // User search and plan management
+  const [searchEmail, setSearchEmail] = useState('');
+  const [searchedUser, setSearchedUser] = useState<{
+    _id: string;
+    email: string;
+    name: string;
+    subscription: {
+      planId: string;
+      status: string;
+      billingPeriod: string;
+    };
+    services: Record<string, boolean>;
+  } | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [updatingPlan, setUpdatingPlan] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<string>('');
+  
+  // Bulk update unknown plans
+  const [unknownPlansCount, setUnknownPlansCount] = useState<number | null>(null);
+  const [loadingUnknownCount, setLoadingUnknownCount] = useState(false);
+  const [bulkUpdatePlan, setBulkUpdatePlan] = useState<string>('receivables-free');
+  const [bulkUpdating, setBulkUpdating] = useState(false);
+
+  // Load unknown plans count function
+  const loadUnknownPlansCount = async () => {
+    setLoadingUnknownCount(true);
+    try {
+      const { getUnknownPlanUsersCount } = await import('@/lib/actions/admin');
+      const result = await getUnknownPlanUsersCount();
+      
+      if (result.success && result.count !== undefined) {
+        setUnknownPlansCount(result.count);
+      } else {
+        console.error('Failed to load unknown plans count:', result.error);
+      }
+    } catch (error) {
+      console.error('Failed to load unknown plans count:', error);
+    } finally {
+      setLoadingUnknownCount(false);
+    }
+  };
 
   // Check authentication and admin access
   useEffect(() => {
@@ -99,22 +116,32 @@ export default function AdminDashboard() {
 
     loadStats();
     loadUsers(1);
+    loadUnknownPlansCount();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, session]);
 
   const loadStats = async () => {
     try {
-      const response = await fetch('/api/admin/stats', {
-        cache: 'no-store'
+      // Add timeout to prevent infinite loading
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Request timeout')), 30000); // 30 second timeout
       });
-      const data = await response.json();
-      if (data.success) {
-        setStats(data.data);
+
+      const statsPromise = getAdminStats();
+      const result = await Promise.race([statsPromise, timeoutPromise]) as Awaited<ReturnType<typeof getAdminStats>>;
+      
+      if (result.success && result.data) {
+        setStats(result.data);
       } else {
-        console.error('Failed to load stats:', data.message);
+        console.error('Failed to load stats:', result.error);
+        toast.error(result.error || 'Failed to load admin statistics');
       }
     } catch (error) {
       console.error('Failed to load stats:', error);
+      const errorMessage = error instanceof Error && error.message === 'Request timeout' 
+        ? 'Request timed out. Please try again.' 
+        : 'Failed to load admin statistics';
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -123,19 +150,19 @@ export default function AdminDashboard() {
   const loadUsers = async (page: number) => {
     setUsersLoading(true);
     try {
-      const response = await fetch(`/api/admin/users?page=${page}&limit=50`, {
-        cache: 'no-store'
-      });
-      const data = await response.json();
-      if (data.success) {
-        setUsers(data.data.users);
-        setUsersTotal(data.data.pagination.total);
+      const { getAdminUsers } = await import('@/lib/actions/admin-users');
+      const result = await getAdminUsers(page, 10);
+      if (result.success && result.data) {
+        setUsers(result.data.users);
+        setUsersTotal(result.data.pagination.total);
         setUsersPage(page);
       } else {
-        console.error('Failed to load users:', data.message);
+        console.error('Failed to load users:', result.error);
+        toast.error(result.error || 'Failed to load users');
       }
     } catch (error) {
       console.error('Failed to load users:', error);
+      toast.error('Failed to load users');
     } finally {
       setUsersLoading(false);
     }
@@ -180,6 +207,125 @@ export default function AdminDashboard() {
     });
   };
 
+  const handleSearchUser = async () => {
+    if (!searchEmail.trim()) {
+      toast.error('Please enter an email address');
+      return;
+    }
+
+    setSearching(true);
+    try {
+      const { searchUserByEmail } = await import('@/lib/actions/admin');
+      const result = await searchUserByEmail(searchEmail.trim());
+      
+      if (result.success && result.data) {
+        setSearchedUser({
+          _id: result.data._id,
+          email: result.data.email,
+          name: result.data.name,
+          subscription: result.data.subscription,
+          services: result.data.services
+        });
+        setSelectedPlan(result.data.subscription.planId);
+        toast.success('User found');
+      } else {
+        toast.error(result.error || 'User not found');
+        setSearchedUser(null);
+      }
+    } catch (error) {
+      console.error('Failed to search user:', error);
+      toast.error('Failed to search user');
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleUpdatePlan = async () => {
+    if (!searchedUser || !selectedPlan) {
+      toast.error('Please select a plan');
+      return;
+    }
+
+    if (selectedPlan === searchedUser.subscription.planId) {
+      toast.error('User is already on this plan');
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to update ${searchedUser.name}'s plan to ${selectedPlan}?`)) {
+      return;
+    }
+
+    setUpdatingPlan(true);
+    try {
+      const { updateUserPlanAdmin } = await import('@/lib/actions/admin');
+      const result = await updateUserPlanAdmin(
+        searchedUser.email,
+        selectedPlan,
+        'monthly'
+      );
+      
+      if (result.success) {
+        toast.success('Plan updated successfully! The changes will take effect immediately.');
+        // Refresh user data
+        await handleSearchUser();
+        // Refresh stats
+        loadStats();
+      } else {
+        toast.error(result.error || 'Failed to update plan');
+      }
+    } catch (error) {
+      console.error('Failed to update plan:', error);
+      toast.error('Failed to update plan');
+    } finally {
+      setUpdatingPlan(false);
+    }
+  };
+
+  const getPlanName = (planId: string) => {
+    const plan = BILLING_PLANS.find(p => p.planId === planId);
+    return plan ? plan.name : planId;
+  };
+
+  const handleBulkUpdateUnknownPlans = async () => {
+    if (!bulkUpdatePlan) {
+      toast.error('Please select a plan');
+      return;
+    }
+
+    if (unknownPlansCount === null || unknownPlansCount === 0) {
+      toast.error('No users with unknown plans found');
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to update ${unknownPlansCount} user(s) with unknown plans to ${getPlanName(bulkUpdatePlan)}? This action cannot be undone.`)) {
+      return;
+    }
+
+    setBulkUpdating(true);
+    try {
+      const { bulkUpdateUnknownPlans } = await import('@/lib/actions/admin');
+      const result = await bulkUpdateUnknownPlans(bulkUpdatePlan, 'monthly');
+      
+      if (result.success) {
+        toast.success(`Successfully updated ${result.updatedCount || 0} user(s) to ${getPlanName(bulkUpdatePlan)}!`);
+        // Refresh counts
+        await loadUnknownPlansCount();
+        // Refresh stats
+        loadStats();
+        // Refresh users list
+        loadUsers(usersPage);
+      } else {
+        toast.error(result.error || 'Failed to update plans');
+      }
+    } catch (error) {
+      console.error('Failed to bulk update plans:', error);
+      toast.error('Failed to bulk update plans');
+    } finally {
+      setBulkUpdating(false);
+    }
+  };
+
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -215,6 +361,262 @@ export default function AdminDashboard() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Bulk Update Unknown Plans */}
+        <div className="bg-white rounded-lg shadow p-6 mb-8 border-l-4 border-yellow-500">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900 flex items-center space-x-2">
+                <ArrowUpDown className="h-5 w-5 text-yellow-600" />
+                <span>Bulk Update Unknown Plans</span>
+              </h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Update all users with unknown or invalid plans to a selected plan
+              </p>
+            </div>
+            <button
+              onClick={loadUnknownPlansCount}
+              disabled={loadingUnknownCount}
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 flex items-center gap-2 transition-colors"
+            >
+              {loadingUnknownCount ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Loading...</span>
+                </>
+              ) : (
+                <>
+                  <ArrowUp className="h-4 w-4" />
+                  <span>Refresh Count</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Users with Unknown Plans
+              </label>
+              <div className="px-4 py-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                {loadingUnknownCount ? (
+                  <div className="flex items-center space-x-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-yellow-600" />
+                    <span className="text-gray-600">Loading...</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-2">
+                    <span className="text-2xl font-bold text-yellow-700">
+                      {unknownPlansCount !== null ? unknownPlansCount : '--'}
+                    </span>
+                    <span className="text-sm text-gray-600">user(s)</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="bulk-plan-select" className="block text-sm font-medium text-gray-700 mb-2">
+                Select Plan to Assign
+              </label>
+              <select
+                id="bulk-plan-select"
+                value={bulkUpdatePlan}
+                onChange={(e) => setBulkUpdatePlan(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                {BILLING_PLANS.map((plan) => (
+                  <option key={plan.planId} value={plan.planId}>
+                    {plan.name} ({plan.type} - {plan.tier}) - ${plan.monthlyPrice}/month
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <button
+                onClick={handleBulkUpdateUnknownPlans}
+                disabled={bulkUpdating || unknownPlansCount === null || unknownPlansCount === 0}
+                className="w-full px-6 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
+              >
+                {bulkUpdating ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Updating...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4" />
+                    <span>Update All Unknown Plans</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {unknownPlansCount !== null && unknownPlansCount > 0 && (
+            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p className="text-sm text-yellow-800">
+                <strong>Note:</strong> This will update {unknownPlansCount} user(s) with unknown or invalid plans 
+                to <strong>{getPlanName(bulkUpdatePlan)}</strong>. All subscription caches will be cleared 
+                and changes will take effect immediately.
+              </p>
+            </div>
+          )}
+
+          {unknownPlansCount === 0 && (
+            <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+              <p className="text-sm text-green-800">
+                <strong>✓ All users have valid plans.</strong> No action needed.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* User Search and Plan Management */}
+        <div className="bg-white rounded-lg shadow p-6 mb-8">
+          <div className="flex items-center space-x-2 mb-4">
+            <Search className="h-5 w-5 text-blue-600" />
+            <h2 className="text-xl font-semibold text-gray-900">User Search & Plan Management</h2>
+          </div>
+          
+          <div className="space-y-4">
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <label htmlFor="search-email" className="block text-sm font-medium text-gray-700 mb-2">
+                  Search by Email
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    id="search-email"
+                    type="email"
+                    value={searchEmail}
+                    onChange={(e) => setSearchEmail(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleSearchUser()}
+                    placeholder="Enter user email address"
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <button
+                    onClick={handleSearchUser}
+                    disabled={searching || !searchEmail.trim()}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+                  >
+                    {searching ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Searching...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Search className="h-4 w-4" />
+                        <span>Search</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {searchedUser && (
+              <div className="mt-6 p-6 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">{searchedUser.name}</h3>
+                    <div className="flex items-center space-x-2 mt-1">
+                      <Mail className="h-4 w-4 text-gray-500" />
+                      <span className="text-sm text-gray-600">{searchedUser.email}</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm text-gray-600">Current Plan</p>
+                    <p className="text-lg font-semibold text-gray-900">{getPlanName(searchedUser.subscription.planId)}</p>
+                    <p className="text-xs text-gray-500 mt-1">{searchedUser.subscription.planId}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                  <div>
+                    <label htmlFor="plan-select" className="block text-sm font-medium text-gray-700 mb-2">
+                      <div className="flex items-center space-x-2">
+                        <ArrowUpDown className="h-4 w-4" />
+                        <span>Select New Plan</span>
+                      </div>
+                    </label>
+                    <select
+                      id="plan-select"
+                      value={selectedPlan}
+                      onChange={(e) => setSelectedPlan(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      {BILLING_PLANS.map((plan) => (
+                        <option key={plan.planId} value={plan.planId}>
+                          {plan.name} ({plan.type} - {plan.tier}) - ${plan.monthlyPrice}/month
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Enabled Services
+                    </label>
+                    <div className="bg-white border border-gray-200 rounded-lg p-3 max-h-32 overflow-y-auto">
+                      {Object.entries(searchedUser.services)
+                        .filter(([, enabled]) => enabled)
+                        .length > 0 ? (
+                        <div className="space-y-1">
+                          {Object.entries(searchedUser.services)
+                            .filter(([, enabled]) => enabled)
+                            .map(([serviceKey]) => (
+                              <div key={serviceKey} className="flex items-center space-x-2 text-sm">
+                                <CheckCircle className="h-4 w-4 text-green-500" />
+                                <span className="text-gray-700">{serviceKey}</span>
+                              </div>
+                            ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-500 italic">No services enabled</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex items-center justify-between pt-4 border-t border-gray-200">
+                  <div className="text-sm text-gray-600">
+                    <p>Status: <span className="font-medium">{searchedUser.subscription.status}</span></p>
+                    <p className="mt-1">Billing: <span className="font-medium">{searchedUser.subscription.billingPeriod}</span></p>
+                  </div>
+                  <button
+                    onClick={handleUpdatePlan}
+                    disabled={updatingPlan || selectedPlan === searchedUser.subscription.planId}
+                    className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+                  >
+                    {updatingPlan ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Updating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-4 w-4" />
+                        <span>Update Plan</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {selectedPlan !== searchedUser.subscription.planId && (
+                  <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-800">
+                      <strong>Note:</strong> The plan will be updated immediately in the database. 
+                      The user's subscription cache will be cleared and changes will take effect on their next page refresh.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {/* Total Users */}
@@ -240,7 +642,11 @@ export default function AdminDashboard() {
                 <p className="text-3xl font-bold text-gray-900 mt-2">{stats.users.active.toLocaleString()}</p>
                 <div className="flex items-center mt-2 text-sm">
                   <UserCheck className="h-4 w-4 text-blue-500 mr-1" />
-                  <span className="text-gray-600">{((stats.users.active / stats.users.total) * 100).toFixed(1)}% active</span>
+                  <span className="text-gray-600">
+                    {stats.users.total > 0 
+                      ? ((stats.users.active / stats.users.total) * 100).toFixed(1) 
+                      : '0.0'}% active
+                  </span>
                 </div>
               </div>
               <UserCheck className="h-12 w-12 text-green-500" />
@@ -350,6 +756,123 @@ export default function AdminDashboard() {
           </div>
         </div>
 
+        {/* Chain/Blockchain Transactions */}
+        {stats.chainTransactions && (
+          <div className="bg-white rounded-lg shadow p-6 mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 flex items-center space-x-2">
+                  <Link2 className="h-5 w-5 text-blue-600" />
+                  <span>Blockchain Transactions</span>
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Transactions made on Celo and other supported chains
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm text-gray-600">Total Transactions</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.chainTransactions.total}</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  {stats.chainTransactions.celo} on Celo
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="bg-blue-50 rounded-lg p-4">
+                <p className="text-sm text-gray-600 mb-1">Total Transactions</p>
+                <p className="text-2xl font-bold text-blue-600">{stats.chainTransactions.total}</p>
+              </div>
+              <div className="bg-green-50 rounded-lg p-4">
+                <p className="text-sm text-gray-600 mb-1">Celo Transactions</p>
+                <p className="text-2xl font-bold text-green-600">{stats.chainTransactions.celo}</p>
+              </div>
+              <div className="bg-purple-50 rounded-lg p-4">
+                <p className="text-sm text-gray-600 mb-1">Total Amount</p>
+                <p className="text-2xl font-bold text-purple-600">{formatCurrency(stats.chainTransactions.totalAmount)}</p>
+              </div>
+            </div>
+
+            {stats.chainTransactions.transactions.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Transaction Hash</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Chain</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {stats.chainTransactions.transactions.map((tx) => {
+                      const explorerUrl = getExplorerUrl(tx.txHash, tx.chainId);
+                      return (
+                        <tr key={tx._id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {explorerUrl ? (
+                              <a
+                                href={explorerUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center space-x-2 text-blue-600 hover:text-blue-800 transition-colors group"
+                              >
+                                <code className="text-sm font-mono text-gray-800 bg-gray-100 px-2 py-1 rounded group-hover:bg-gray-200">
+                                  {tx.txHash.slice(0, 10)}...{tx.txHash.slice(-8)}
+                                </code>
+                                <ExternalLink className="h-4 w-4 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </a>
+                            ) : (
+                              <code className="text-sm font-mono text-gray-800 bg-gray-100 px-2 py-1 rounded">
+                                {tx.txHash.slice(0, 10)}...{tx.txHash.slice(-8)}
+                              </code>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              {tx.chainName || (tx.chainId ? `Chain ${tx.chainId}` : 'Unknown')}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              tx.type === 'invoice' 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-purple-100 text-purple-800'
+                            }`}>
+                              {tx.type === 'invoice' ? 'Invoice' : 'Payable'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                            {tx.amountUsd !== undefined 
+                              ? `${formatCurrency(tx.amountUsd)} (${tx.amount} ${tx.currency})`
+                              : `${formatCurrency(tx.amount)} ${tx.currency}`
+                            }
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                            {formatDate(
+                              tx.createdAt instanceof Date 
+                                ? tx.createdAt.toISOString() 
+                                : typeof tx.createdAt === 'string' 
+                                  ? tx.createdAt 
+                                  : new Date(tx.createdAt).toISOString()
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <Link2 className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+                <p>No blockchain transactions found</p>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Users Table */}
         <div className="bg-white rounded-lg shadow">
           <div className="p-6 border-b border-gray-200">
@@ -364,11 +887,11 @@ export default function AdminDashboard() {
                   Previous
                 </button>
                 <span className="text-sm text-gray-600">
-                  Page {usersPage} of {Math.ceil(usersTotal / 50)}
+                  Page {usersPage} of {Math.ceil(usersTotal / 10)}
                 </span>
                 <button
                   onClick={() => loadUsers(usersPage + 1)}
-                  disabled={usersPage >= Math.ceil(usersTotal / 50) || usersLoading}
+                  disabled={usersPage >= Math.ceil(usersTotal / 10) || usersLoading}
                   className="px-3 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 disabled:opacity-50"
                 >
                   Next
@@ -395,7 +918,11 @@ export default function AdminDashboard() {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {users.map((user) => (
-                    <tr key={user.id} className="hover:bg-gray-50">
+                    <tr 
+                      key={user.id} 
+                      className="hover:bg-gray-50 cursor-pointer transition-colors"
+                      onClick={() => router.push(`/admin/users/${user.id}`)}
+                    >
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <div>

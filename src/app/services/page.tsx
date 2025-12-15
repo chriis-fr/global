@@ -21,8 +21,13 @@ import {
   Code,
   Globe2,
   Check,
-  X
+  X,
+  AlertCircle,
+  Sparkles
 } from 'lucide-react';
+import { getServices, getUserServiceData, toggleService, updateUserPlan } from '@/lib/actions/services';
+import { BILLING_PLANS } from '@/data/billingPlans';
+import type { ToggleServiceResult } from '@/lib/actions/services';
 
 interface ServiceDefinition {
   key: string;
@@ -31,6 +36,10 @@ interface ServiceDefinition {
   category: string;
   icon: string;
   ready: boolean;
+  subscriptionRequired?: {
+    plans: string[];
+    minTier: string;
+  };
 }
 
 interface User {
@@ -38,6 +47,10 @@ interface User {
   email: string;
   name: string;
   services: Record<string, boolean>;
+  subscription: {
+    planId: string;
+    status: string;
+  };
 }
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -67,6 +80,14 @@ export default function ServicesPage() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [upgradeModal, setUpgradeModal] = useState<{
+    show: boolean;
+    serviceKey: string;
+    serviceTitle: string;
+    requiredPlans: string[];
+    recommendedPlan: string;
+  } | null>(null);
+  const [upgrading, setUpgrading] = useState(false);
 
   // Load services data (public)
   useEffect(() => {
@@ -77,20 +98,9 @@ export default function ServicesPage() {
     if (!session?.user?.id) return;
 
     try {
-      console.log('🔍 [Services] Loading user data for:', session.user.id);
-      const response = await fetch('/api/users/profile');
-      
-      if (response.ok) {
-        const userData = await response.json();
-        if (userData.success) {
-          console.log('✅ [Services] User data loaded:', userData.data);
-          console.log('🔍 [Services] User services:', userData.data.services);
-          setUser(userData.data);
-        } else {
-          console.log('❌ [Services] Failed to load user data:', userData.error);
-        }
-      } else {
-        console.log('❌ [Services] HTTP error loading user data:', response.status);
+      const result = await getUserServiceData();
+      if (result.success && result.data) {
+        setUser(result.data);
       }
     } catch (error) {
       console.error('❌ [Services] Error loading user data:', error);
@@ -104,11 +114,9 @@ export default function ServicesPage() {
     if (status === 'loading') return;
     
     if (status === 'authenticated' && session?.user?.id) {
-      // User is logged in, load their data
       loadUserData();
       setIsAuthenticated(true);
     } else {
-      // User is not logged in
       setUser(null);
       setIsAuthenticated(false);
       setLoading(false);
@@ -117,28 +125,24 @@ export default function ServicesPage() {
 
   const loadServices = async () => {
     try {
-      const response = await fetch('/api/services');
-      const data = await response.json();
-      if (data.success) {
-        setServices(data.data.services || {});
-        setCategories(data.data.categories || []);
+      const result = await getServices();
+      if (result.success && result.data) {
+        setServices(result.data.services || {});
+        setCategories(result.data.categories || []);
       } else {
-        console.error('Failed to load services:', data.message);
-        // Set empty defaults to prevent blank page
+        console.error('Failed to load services:', result.error);
         setServices({});
         setCategories([]);
       }
     } catch (error) {
       console.error('Failed to load services:', error);
-      // Set empty defaults to prevent blank page
       setServices({});
       setCategories([]);
     }
   };
 
-  const toggleService = async (serviceKey: string) => {
+  const handleToggleService = async (serviceKey: string) => {
     if (!user || !isAuthenticated) {
-      // Redirect to auth if not logged in
       router.push('/auth');
       return;
     }
@@ -146,23 +150,23 @@ export default function ServicesPage() {
     setUpdating(serviceKey);
     try {
       const action = user.services?.[serviceKey] ? 'disable' : 'enable';
-      const response = await fetch('/api/services', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userId: user._id,
-          serviceKey,
-          action
-        }),
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        setUser(data.data.user);
+      const result: ToggleServiceResult = await toggleService(serviceKey, action);
+      
+      if (result.success && result.user) {
+        setUser(result.user);
+        // Refresh the page to update subscription context
+        window.location.reload();
+      } else if (result.requiresUpgrade) {
+        // Show upgrade modal
+        setUpgradeModal({
+          show: true,
+          serviceKey: result.requiresUpgrade.serviceKey,
+          serviceTitle: result.requiresUpgrade.serviceTitle,
+          requiredPlans: result.requiresUpgrade.requiredPlans,
+          recommendedPlan: result.requiresUpgrade.recommendedPlan
+        });
       } else {
-        alert(`Error: ${data.message}`);
+        alert(`Error: ${result.error || 'Failed to update service'}`);
       }
     } catch (error) {
       console.error('Failed to toggle service:', error);
@@ -172,8 +176,39 @@ export default function ServicesPage() {
     }
   };
 
+  const handleUpgrade = async () => {
+    if (!upgradeModal) return;
+
+    setUpgrading(true);
+    try {
+      const result = await updateUserPlan(upgradeModal.recommendedPlan, 'monthly');
+      
+      if (result.success) {
+        // Close modal and refresh user data
+        setUpgradeModal(null);
+        await loadUserData();
+        // Try to enable the service again
+        await handleToggleService(upgradeModal.serviceKey);
+        // Refresh the page to update subscription context
+        window.location.reload();
+      } else {
+        alert(`Error: ${result.error || 'Failed to upgrade plan'}`);
+      }
+    } catch (error) {
+      console.error('Failed to upgrade plan:', error);
+      alert('Failed to upgrade plan');
+    } finally {
+      setUpgrading(false);
+    }
+  };
+
   const handleAuthRedirect = () => {
     router.push('/auth');
+  };
+
+  const getPlanName = (planId: string) => {
+    const plan = BILLING_PLANS.find(p => p.planId === planId);
+    return plan ? plan.name : planId;
   };
 
   if (loading) {
@@ -194,7 +229,7 @@ export default function ServicesPage() {
         <div className="text-center mb-12">
           <div className="flex justify-between items-center mb-6">
             <button
-              onClick={() => window.location.href = '/dashboard'}
+              onClick={() => router.push('/dashboard')}
               className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -230,9 +265,8 @@ export default function ServicesPage() {
               <p className="text-blue-800">
                 <strong>Welcome back, {user.name}!</strong>
               </p>
-              {/* Debug info - remove this later */}
               <div className="mt-2 text-xs text-blue-600">
-                Enabled services: {Object.entries(user.services || {}).filter(([, enabled]) => enabled).map(([key]) => key).join(', ') || 'None'}
+                Current Plan: <strong>{getPlanName(user.subscription.planId)}</strong>
               </div>
             </div>
           )}
@@ -249,17 +283,14 @@ export default function ServicesPage() {
                 .filter(([, service]) => service.category === category)
                 .map(([serviceKey, service], index) => {
                   const Icon = iconMap[service.icon];
-                  // Fix: Properly check if service is enabled
                   const isEnabled = isAuthenticated && user?.services ? (user.services[serviceKey] === true) : false;
                   const isUpdating = updating === serviceKey;
                   const isNotReady = !service.ready;
 
-                  console.log(` [Services] Service ${serviceKey}:`, {
-                    isAuthenticated,
-                    userServices: user?.services,
-                    serviceValue: user?.services?.[serviceKey],
-                    isEnabled
-                  });
+                  // Check if service requires upgrade
+                  const currentPlanId = user?.subscription?.planId || 'receivables-free';
+                  const requiresUpgrade = service.subscriptionRequired && 
+                    !service.subscriptionRequired.plans.includes(currentPlanId);
 
                   return (
                     <motion.div
@@ -279,16 +310,15 @@ export default function ServicesPage() {
                           : !isNotReady
                             ? 'bg-white border-gray-200 hover:border-gray-300'
                             : ''
-                      }`}
+                      } ${requiresUpgrade && !isNotReady ? 'border-yellow-300 bg-yellow-50' : ''}`}
                       onClick={() => {
                         if (isNotReady) {
-                          // Do nothing - service is not ready
                           return;
                         }
                         if (!isAuthenticated && service.ready) {
                           handleAuthRedirect();
                         } else if (service.ready) {
-                          toggleService(serviceKey);
+                          handleToggleService(serviceKey);
                         }
                       }}
                     >
@@ -315,6 +345,8 @@ export default function ServicesPage() {
                             <LockKeyhole className="h-5 w-5 text-gray-400" />
                           ) : !service.ready ? (
                             <LockKeyhole className="h-5 w-5 text-yellow-500" />
+                          ) : requiresUpgrade ? (
+                            <AlertCircle className="h-5 w-5 text-yellow-500" />
                           ) : isAuthenticated && isEnabled ? (
                             <Check className="h-5 w-5 text-green-500" />
                           ) : (
@@ -337,6 +369,11 @@ export default function ServicesPage() {
                             Coming Soon
                           </span>
                         )}
+                        {requiresUpgrade && !isNotReady && (
+                          <span className="ml-2 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                            Upgrade Required
+                          </span>
+                        )}
                       </h3>
                       <p className={`text-sm mb-4 ${
                         isNotReady ? 'text-gray-400' : 'text-gray-600'
@@ -350,12 +387,15 @@ export default function ServicesPage() {
                             ? 'bg-gray-200 text-gray-500'
                             : !service.ready
                               ? 'bg-yellow-100 text-yellow-800'
-                              : isAuthenticated && isEnabled 
-                                ? 'bg-green-100 text-green-800' 
-                                : 'bg-gray-100 text-gray-600'
+                              : requiresUpgrade
+                                ? 'bg-yellow-100 text-yellow-800'
+                                : isAuthenticated && isEnabled 
+                                  ? 'bg-green-100 text-green-800' 
+                                  : 'bg-gray-100 text-gray-600'
                         }`}>
                           {isNotReady ? 'Not Available' :
                            !service.ready ? 'Coming Soon' : 
+                           requiresUpgrade ? 'Upgrade Required' :
                            (isAuthenticated && isEnabled ? 'Enabled' : 'Available')}
                         </span>
                         {isNotReady ? (
@@ -373,9 +413,18 @@ export default function ServicesPage() {
                           >
                             Sign In to Enable
                           </button>
+                        ) : requiresUpgrade ? (
+                          <button
+                            onClick={() => handleToggleService(serviceKey)}
+                            className="px-4 py-2 rounded-md text-sm font-medium bg-yellow-500 text-white hover:bg-yellow-600 transition-colors flex items-center space-x-1"
+                          >
+                            <Sparkles className="h-4 w-4" />
+                            <span>Upgrade to Enable</span>
+                          </button>
                         ) : (
                           <button
                             disabled={isUpdating}
+                            onClick={() => handleToggleService(serviceKey)}
                             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                               isEnabled
                                 ? 'bg-red-500 text-white hover:bg-red-600'
@@ -440,7 +489,77 @@ export default function ServicesPage() {
             </div>
           </div>
         )}
+
+        {/* Upgrade Modal */}
+        {upgradeModal && upgradeModal.show && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white rounded-xl shadow-xl max-w-md w-full p-6"
+            >
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
+                  <Sparkles className="h-6 w-6 text-yellow-600" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">Upgrade Required</h3>
+                  <p className="text-sm text-gray-600">To enable this service</p>
+                </div>
+              </div>
+
+              <div className="mb-6">
+                <p className="text-gray-700 mb-4">
+                  To enable <strong>{upgradeModal.serviceTitle}</strong>, you need to upgrade your plan.
+                </p>
+                
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                  <p className="text-sm font-medium text-blue-900 mb-2">Recommended Plan:</p>
+                  <p className="text-lg font-bold text-blue-600">
+                    {getPlanName(upgradeModal.recommendedPlan)}
+                  </p>
+                  {BILLING_PLANS.find(p => p.planId === upgradeModal.recommendedPlan) && (
+                    <p className="text-sm text-blue-700 mt-1">
+                      ${BILLING_PLANS.find(p => p.planId === upgradeModal.recommendedPlan)?.monthlyPrice}/month
+                    </p>
+                  )}
+                </div>
+
+                <p className="text-xs text-gray-500">
+                  Note: Since Stripe checkout is not available, your plan will be updated directly in the database.
+                </p>
+              </div>
+
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setUpgradeModal(null)}
+                  disabled={upgrading}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpgrade}
+                  disabled={upgrading}
+                  className="flex-1 px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors disabled:opacity-50 flex items-center justify-center space-x-2"
+                >
+                  {upgrading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      <span>Upgrading...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-4 w-4" />
+                      <span>Upgrade Now</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
       </div>
     </div>
   );
-} 
+}

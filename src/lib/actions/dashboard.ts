@@ -43,6 +43,7 @@ export interface RecentPayable {
   vendorName: string; // Just name, no full details
   total: number;
   currency: string;
+  amountUsd?: number; // Converted USD amount (for crypto currencies)
   status: string;
   createdAt: string;
 }
@@ -465,6 +466,7 @@ export async function getRecentInvoices(limit: number = 5): Promise<{ success: b
 /**
  * Get recent payables - only list view data
  * Matches existing payable structure but minimal fields
+ * Converts crypto amounts to USD on server side
  */
 export async function getRecentPayables(limit: number = 5): Promise<{ success: boolean; data?: RecentPayable[]; error?: string }> {
   try {
@@ -511,16 +513,42 @@ export async function getRecentPayables(limit: number = 5): Promise<{ success: b
       .limit(limit)
       .toArray();
 
-    // Transform to minimal data structure
-    const recentPayables: RecentPayable[] = payables.map(payable => ({
-      _id: payable._id.toString(),
-      payableNumber: payable.payableNumber || 'Payable',
-      vendorName: payable.vendorName || 'Vendor',
-      total: payable.total || payable.amount || 0,
-      currency: payable.currency || 'USD',
-      status: payable.status || 'pending',
-      createdAt: payable.createdAt?.toISOString() || new Date().toISOString()
-    }));
+    // Helper to check if currency is crypto
+    const isCryptoCurrency = (currency: string): boolean => {
+      const cryptoCurrencies = ['CELO', 'ETH', 'BTC', 'USDT', 'USDC', 'DAI', 'MATIC', 'BNB', 'AVAX', 'cUSD', 'cEUR'];
+      return cryptoCurrencies.includes(currency.toUpperCase());
+    };
+
+    // Transform to minimal data structure with USD conversion for crypto (server-side, like admin stats)
+    const recentPayablesPromises = payables.map(async (payable) => {
+      const amount = payable.total || payable.amount || 0;
+      const currency = payable.currency || 'USD';
+      
+      // Convert crypto to USD on server side (like admin stats)
+      let amountUsd: number | undefined;
+      if (isCryptoCurrency(currency)) {
+        try {
+          const { convertCryptoToUsd } = await import('@/lib/services/exchangeRateService');
+          amountUsd = await convertCryptoToUsd(amount, currency);
+        } catch (error) {
+          console.error(`Error converting ${amount} ${currency} to USD:`, error);
+          // If conversion fails, amountUsd will be undefined and CurrencyAmount will handle it
+        }
+      }
+      
+      return {
+        _id: payable._id.toString(),
+        payableNumber: payable.payableNumber || 'Payable',
+        vendorName: payable.vendorName || 'Vendor',
+        total: amount,
+        currency: currency,
+        amountUsd: amountUsd, // Converted USD amount for crypto
+        status: payable.status || 'pending',
+        createdAt: payable.createdAt?.toISOString() || new Date().toISOString()
+      };
+    });
+    
+    const recentPayables = await Promise.all(recentPayablesPromises);
 
     return { success: true, data: recentPayables };
 

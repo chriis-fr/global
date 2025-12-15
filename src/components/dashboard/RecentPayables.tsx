@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Receipt, Clock, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 import { getRecentPayables, RecentPayable } from '@/lib/actions/dashboard';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
+import CurrencyAmount from '@/components/CurrencyAmount';
 
 interface RecentPayablesProps {
   className?: string;
@@ -193,7 +194,12 @@ export default function RecentPayables({ className = '' }: RecentPayablesProps) 
               </div>
               <div className="text-right">
                 <p className="font-semibold text-white">
-                  <FormattedNumberDisplay value={payable.total} />
+                  <CurrencyAmount 
+                    amount={payable.total} 
+                    currency={payable.currency || 'USD'}
+                    convertedAmount={payable.amountUsd}
+                    convertedCurrency="USD"
+                  />
                 </p>
                 <p className={`text-xs font-medium ${getStatusColor(payable.status)}`}>
                   {payable.status.charAt(0).toUpperCase() + payable.status.slice(1).replace('_', ' ')}

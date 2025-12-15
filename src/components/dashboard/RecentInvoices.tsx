@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { FileText, Clock, CheckCircle, XCircle, AlertTriangle, MessageCircle } from 'lucide-react';
 import { getRecentInvoices, RecentInvoice } from '@/lib/actions/dashboard';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
+import CurrencyAmount from '@/components/CurrencyAmount';
 
 interface RecentInvoicesProps {
   className?: string;
@@ -195,7 +196,10 @@ export default function RecentInvoices({ className = '' }: RecentInvoicesProps) 
               </div>
               <div className="text-right">
                 <p className="font-semibold text-white">
-                  <FormattedNumberDisplay value={invoice.total} />
+                  <CurrencyAmount 
+                    amount={invoice.total} 
+                    currency={invoice.currency || 'USD'}
+                  />
                 </p>
                 <p className={`text-xs font-medium ${getStatusColor(invoice.status)}`}>
                   {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}

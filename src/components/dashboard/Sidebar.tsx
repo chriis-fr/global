@@ -17,7 +17,8 @@ import {
   CreditCard,
   ImageIcon,
   CheckCircle,
-  Receipt
+  Receipt,
+  Plus
 } from 'lucide-react';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import Image from 'next/image';
@@ -285,9 +286,31 @@ function Sidebar() {
           {/* Services Navigation */}
           <div className="mb-4">
             {(!isCollapsed || isAutoHidden) && (
-              <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wider mb-2 px-2">
-                Services
-              </h3>
+              <div className="flex items-center justify-between mb-2 px-2">
+                <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wider">
+                  Services
+                </h3>
+                <Link
+                  href="/services"
+                  onClick={closeMobileMenu}
+                  className="p-1 rounded hover:bg-white/10 transition-colors group"
+                  title="Manage Services"
+                >
+                  <Plus className="h-4 w-4 text-white/50 group-hover:text-white transition-colors" />
+                </Link>
+              </div>
+            )}
+            {isCollapsed && !isAutoHidden && (
+              <div className="mb-2 px-2 flex justify-center">
+                <Link
+                  href="/services"
+                  onClick={closeMobileMenu}
+                  className="p-1 rounded hover:bg-white/10 transition-colors group"
+                  title="Manage Services"
+                >
+                  <Plus className="h-4 w-4 text-white/50 group-hover:text-white transition-colors" />
+                </Link>
+              </div>
             )}
             {SERVICE_LINKS.filter(link => {
               // Check if service is enabled (services must be enabled during onboarding)

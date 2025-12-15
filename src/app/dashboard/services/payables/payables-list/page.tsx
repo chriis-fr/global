@@ -20,6 +20,7 @@ import {
   DollarSign
 } from 'lucide-react';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
+import CurrencyAmount from '@/components/CurrencyAmount';
 
 interface Payable {
   _id: string;
@@ -493,7 +494,10 @@ export default function PayablesListPage() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-sm font-medium text-white">
-                        <FormattedNumberDisplay value={payable.amount} />
+                        <CurrencyAmount 
+                          amount={payable.amount} 
+                          currency={payable.currency || 'USD'}
+                        />
                       </div>
                     </td>
                     <td className="px-6 py-4">

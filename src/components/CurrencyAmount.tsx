@@ -34,8 +34,9 @@ export default function CurrencyAmount({
   const isCryptoCurrency = isCrypto || CRYPTO_CURRENCIES.includes(currency.toUpperCase());
   
   // Call hook unconditionally at the top (before any early returns)
-  // Only use hook if we don't have pre-converted amount
-  const shouldUseHook = !(convertedAmount !== undefined && 
+  // For crypto, ALWAYS use the hook to convert (even if we have pre-converted amount, we want real-time rates)
+  // Only use hook if we don't have pre-converted amount OR if it's crypto
+  const shouldUseHook = isCryptoCurrency || !(convertedAmount !== undefined && 
                           convertedCurrency === preferredCurrency &&
                           currency !== preferredCurrency);
   
@@ -72,8 +73,8 @@ export default function CurrencyAmount({
     const convertedSymbol = getCurrencySymbol(preferredCurrency);
     const convertedFormatted = formatNumber(convertedAmount, convertedSymbol);
 
-    // For crypto: show converted amount first, then currency code in brackets (gray)
-    // Format: $0.07(CELO) where $0.07 is converted USD
+    // For crypto: show converted amount first, then original amount and currency in brackets (gray)
+    // Format: $0.04 (0.3 CELO) where $0.04 is converted USD and 0.3 CELO is original crypto
     if (isCryptoCurrency) {
       return (
         <span className={className}>
@@ -155,12 +156,27 @@ export default function CurrencyAmount({
   // The hook should have the correct converted value after conversion completes
   const convertedSymbol = getCurrencySymbol(preferredCurrency);
   // Use convertedAmount if available (should always be set after conversion)
-  // For crypto, convertedAmount should be different from amount (e.g., 0.4 CELO -> 0.07 USD)
-  const displayConvertedAmount = conversion.convertedAmount;
+  // For crypto, convertedAmount should be different from amount (e.g., 0.3 CELO -> 0.04 USD)
+  // If conversion hasn't happened yet or failed, use the original amount as fallback
+  let displayConvertedAmount = conversion.convertedAmount;
+  
+  // For crypto, if convertedAmount equals original amount and conversion says it converted,
+  // something went wrong - log it
+  if (isCryptoCurrency && displayConvertedAmount === amount && conversion.converted) {
+    console.warn(`Crypto conversion may have failed: ${amount} ${currency} converted to ${displayConvertedAmount} ${preferredCurrency}`);
+  }
+  
+  // For crypto, if we're still loading or haven't converted yet, show a placeholder
+  // but don't show the original amount as if it's USD
+  if (isCryptoCurrency && (conversion.isLoading || !conversion.converted) && displayConvertedAmount === amount) {
+    // Still calculating, show loading or use a very small placeholder
+    // The conversion should complete soon
+  }
+  
   const convertedFormatted = formatNumber(displayConvertedAmount, convertedSymbol);
 
-  // For crypto: show converted amount first, then currency code in brackets (gray)
-  // Format: $0.07(CELO) where $0.07 is converted USD
+  // For crypto: show converted amount first, then currency name in brackets (gray)
+  // Format: $0.04 (CELO) where $0.04 is converted USD
   if (isCryptoCurrency) {
     return (
       <span className={className}>
