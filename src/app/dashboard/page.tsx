@@ -121,10 +121,10 @@ export default function DashboardPage() {
             </h1>
             <p className="text-blue-200">Welcome back, {displayName}!</p>
         </div>
-        <div className="text-right">
+        {/* <div className="text-right">
             <p className="text-sm text-blue-300">Last updated</p>
             <p className="text-sm text-white">{new Date().toLocaleDateString()}</p>
-        </div>
+        </div> */}
       </div>
 
       {/* Plan Status Banner - Only show for receivables free users */}

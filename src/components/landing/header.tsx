@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, startTransition } from 'react'
+import { useState, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import {
   Menu,
@@ -10,31 +10,37 @@ import {
   Shield,
   Zap,
   Building,
-  LayoutDashboard
+  LayoutDashboard,
+  Loader2
 } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { AnimatePresence } from 'framer-motion'
 import { useSession, signOut } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
 
 export function Header() {
   const { data: session } = useSession();
+  const router = useRouter();
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isProductsOpen, setIsProductsOpen] = useState(false)
   const [isSolutionsOpen, setIsSolutionsOpen] = useState(false)
+  const [navLoading, setNavLoading] = useState<string | null>(null)
 
   // Optimized handlers for mobile performance
   const toggleMenu = useCallback(() => {
-    startTransition(() => {
-      setIsMenuOpen(prev => !prev);
-    });
+    setIsMenuOpen(prev => !prev);
   }, []);
 
   const closeMenu = useCallback(() => {
-    startTransition(() => {
-      setIsMenuOpen(false);
-    });
+    setIsMenuOpen(false);
   }, []);
+
+  const handleNav = useCallback(async (path: string, id: string) => {
+    if (navLoading) return;
+    setNavLoading(id);
+    router.push(path);
+  }, [navLoading, router]);
 
   const navigation = [
     { name: 'Home', href: '/' },
@@ -99,7 +105,10 @@ export function Header() {
   ]
 
   return (
-    <header className="fixed left-1/2 -translate-x-1/2  top-3 shadow-inner font-sans bg-opacity-15 w-[90%] border border-gray-300 mx-auto z-50 rounded-2xl bg-white backdrop-blur-md ">
+    <header
+      className="fixed left-1/2 -translate-x-1/2 top-3 shadow-inner font-sans bg-opacity-15 w-[90%] border border-gray-300 mx-auto z-50 rounded-2xl bg-white backdrop-blur-md"
+      style={{ willChange: 'transform', transform: 'translateZ(0)', WebkitBackfaceVisibility: 'hidden' }}
+    >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
@@ -125,16 +134,12 @@ export function Header() {
                 {item.hasDropdown ? (
                   <div
                     onMouseEnter={() => {
-                      startTransition(() => {
-                        if (item.name === 'Products') setIsProductsOpen(true)
-                        if (item.name === 'Solutions') setIsSolutionsOpen(true)
-                      });
+                      if (item.name === 'Products') setIsProductsOpen(true)
+                      if (item.name === 'Solutions') setIsSolutionsOpen(true)
                     }}
                     onMouseLeave={() => {
-                      startTransition(() => {
-                        if (item.name === 'Products') setIsProductsOpen(false)
-                        if (item.name === 'Solutions') setIsSolutionsOpen(false)
-                      });
+                      if (item.name === 'Products') setIsProductsOpen(false)
+                      if (item.name === 'Solutions') setIsSolutionsOpen(false)
                     }}
                     className="relative"
                   >
@@ -212,32 +217,42 @@ export function Header() {
                 Sign Out
               </button>
             ) : (
-              <Link
-                href="/auth"
-                className="text-gray-700 hover:text-blue-600 transition-colors font-medium"
+              <button
+                type="button"
+                onClick={() => handleNav('/auth', 'signin')}
+                disabled={navLoading === 'signin'}
+                className="text-gray-700 hover:text-blue-600 transition-colors font-medium flex items-center space-x-2 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Sign In
-              </Link>
+                <span>Sign In</span>
+                {navLoading === 'signin' && <Loader2 className="h-4 w-4 animate-spin" />}
+              </button>
             )}
             {!session && <motion.div
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
 
-              <Link
-                href="/auth"
-                className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors"
+              <button
+                type="button"
+                onClick={() => handleNav('/auth', 'getstarted')}
+                disabled={navLoading === 'getstarted'}
+                className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-
-                {'Get Started'}
-              </Link>
+                <span>Get Started</span>
+                {navLoading === 'getstarted' && <Loader2 className="h-4 w-4 animate-spin" />}
+              </button>
             </motion.div>}
           </div>
 
           {/* Mobile menu button */}
           <div className="md:hidden">
             <button
-              onClick={toggleMenu}
+              type="button"
+              onClick={() => {
+                setIsMenuOpen(prev => !prev);
+                setIsProductsOpen(false);
+                setIsSolutionsOpen(false);
+              }}
               className="text-gray-700 hover:text-blue-600 transition-colors touch-manipulation active:scale-95"
               style={{ touchAction: 'manipulation' }}
             >
@@ -266,13 +281,11 @@ export function Header() {
                       <div>
                         <button
                           onClick={() => {
-                            startTransition(() => {
-                              if (item.name === 'Products') {
-                                setIsProductsOpen(!isProductsOpen);
-                              } else if (item.name === 'Solutions') {
-                                setIsSolutionsOpen(!isSolutionsOpen);
-                              }
-                            });
+                            if (item.name === 'Products') {
+                              setIsProductsOpen(!isProductsOpen);
+                            } else if (item.name === 'Solutions') {
+                              setIsSolutionsOpen(!isSolutionsOpen);
+                            }
                           }}
                           className="flex items-center justify-between w-full text-gray-700 hover:text-blue-600 transition-colors touch-manipulation active:scale-[0.98] py-2"
                           style={{ touchAction: 'manipulation' }}
@@ -303,9 +316,9 @@ export function Header() {
                                     href={dropdownItem.href}
                                     className="flex items-start space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors touch-manipulation active:scale-[0.98]"
                                     onClick={() => {
-                                      startTransition(() => {
-                                        closeMenu();
-                                      });
+                                      closeMenu();
+                                      setIsProductsOpen(false);
+                                      setIsSolutionsOpen(false);
                                     }}
                                     style={{ touchAction: 'manipulation' }}
                                   >
@@ -328,9 +341,9 @@ export function Header() {
                         href={item.href}
                         className="block text-gray-700 hover:text-blue-600 transition-colors touch-manipulation active:scale-[0.98] py-2"
                         onClick={() => {
-                          startTransition(() => {
-                            closeMenu();
-                          });
+                          closeMenu();
+                          setIsProductsOpen(false);
+                          setIsSolutionsOpen(false);
                         }}
                         style={{ touchAction: 'manipulation' }}
                       >
@@ -346,9 +359,7 @@ export function Header() {
                     href="/dashboard"
                     className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 transition-colors touch-manipulation active:scale-95"
                     onClick={() => {
-                      startTransition(() => {
-                        closeMenu();
-                      });
+                      closeMenu();
                     }}
                     style={{ touchAction: 'manipulation' }}
                   >

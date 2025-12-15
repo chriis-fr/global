@@ -105,7 +105,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <meta name="safe-apps" content="true" />
       <link rel="icon" href="/chains.PNG" />
       <body

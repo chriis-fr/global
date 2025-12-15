@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef, useCallback, memo, startTransition } from 'react';
+import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
@@ -211,26 +211,31 @@ function Sidebar() {
   // Immediate handlers for mobile menu - no delays, instant response
   const toggleMobileMenu = useCallback(() => {
     // Update state immediately - don't use startTransition for user interactions
-    setIsMobileMenuOpen(prev => !prev);
+      setIsMobileMenuOpen(prev => !prev);
   }, []);
 
-  const closeMobileMenu = useCallback(() => {
+  const closeMobileMenu = useCallback((e?: React.MouseEvent | React.TouchEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     // Update state immediately - don't use startTransition for user interactions
     setIsMobileMenuOpen(false);
     setIsSettingsOpen(false); // Also close settings when closing menu
   }, []);
 
-  const toggleSettings = useCallback(() => {
-    startTransition(() => {
-      setIsSettingsOpen(prev => !prev);
-    });
+  const toggleSettings = useCallback((e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    // Immediate state update - no startTransition for mobile responsiveness
+    setIsSettingsOpen(prev => !prev);
   }, []);
 
   const toggleCollapse = useCallback(() => {
-    startTransition(() => {
-      setIsCollapsed(prev => !prev);
-      setIsAutoHidden(false);
-    });
+    setIsCollapsed(prev => !prev);
+    setIsAutoHidden(false);
   }, []);
 
   const SidebarContent = () => (
@@ -238,14 +243,23 @@ function Sidebar() {
       {/* Fixed Header */}
       <div className="p-6 border-b border-white/10 flex-shrink-0">
         <div className="flex items-center justify-between">
-          <Link href="/dashboard" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+          <Link 
+            href="/dashboard" 
+            onClick={(e) => {
+              e.stopPropagation();
+              closeMobileMenu(e);
+            }}
+            className="flex items-center space-x-3 hover:opacity-80 transition-opacity touch-manipulation"
+            style={{ touchAction: 'manipulation', willChange: 'transform' }}
+          >
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0" style={{ willChange: 'transform' }}>
             <Image
                   src="/chainsnobg.png"
                   alt="ChainsERP"
                   width={40}
                   height={40}
                   className="bg-white rounded-lg "
+                  priority
                 />
             </div>
             {(!isCollapsed || isAutoHidden) && (
@@ -257,18 +271,33 @@ function Sidebar() {
           <div className="flex items-center space-x-2">
             <Link
               href="/dashboard/notifications"
-              className="relative p-2 text-white/70 hover:text-white hover:bg-blue-900/50 rounded-lg transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                closeMobileMenu(e);
+              }}
+              className="relative p-2 text-white/70 hover:text-white hover:bg-blue-900/50 rounded-lg transition-colors touch-manipulation"
               title="Notifications"
+              style={{ touchAction: 'manipulation', willChange: 'transform' }}
             >
               <Bell className="h-5 w-5" />
             </Link>
             
             {/* Mobile Close Button */}
             <button
-              onClick={closeMobileMenu}
-              className="lg:hidden p-2 text-white/70 hover:text-white hover:bg-blue-900/50 rounded-lg transition-colors touch-manipulation active:scale-95"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                closeMobileMenu(e);
+              }}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                closeMobileMenu(e as unknown as React.MouseEvent);
+              }}
+              className="lg:hidden p-2 text-white/70 hover:text-white hover:bg-blue-900/50 rounded-lg transition-colors touch-manipulation active:scale-95 z-50 relative"
               aria-label="Close menu"
-              style={{ touchAction: 'manipulation' }}
+              type="button"
+              style={{ touchAction: 'manipulation', willChange: 'transform', pointerEvents: 'auto' }}
             >
               <X className="h-5 w-5" />
             </button>
@@ -277,7 +306,13 @@ function Sidebar() {
       </div>
 
       {/* Scrollable Navigation Area - Services Only */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
+      <div 
+        className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain"
+        style={{ 
+          WebkitOverflowScrolling: 'touch',
+          willChange: 'scroll-position'
+        }}
+      >
         {/* Dashboard Navigation */}
         <nav className="p-4 space-y-2">
           {/* Services Navigation */}
@@ -285,13 +320,17 @@ function Sidebar() {
             {(!isCollapsed || isAutoHidden) && (
               <div className="flex items-center justify-between mb-2 px-2">
                 <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wider">
-                  Services
-                </h3>
+                Services
+              </h3>
                 <Link
                   href="/services"
-                  onClick={closeMobileMenu}
-                  className="p-1 rounded hover:bg-white/10 transition-colors group"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeMobileMenu(e);
+                  }}
+                  className="p-1 rounded hover:bg-white/10 transition-colors group touch-manipulation"
                   title="Manage Services"
+                  style={{ touchAction: 'manipulation', willChange: 'transform' }}
                 >
                   <Plus className="h-4 w-4 text-white/50 group-hover:text-white transition-colors" />
                 </Link>
@@ -301,9 +340,13 @@ function Sidebar() {
               <div className="mb-2 px-2 flex justify-center">
                 <Link
                   href="/services"
-                  onClick={closeMobileMenu}
-                  className="p-1 rounded hover:bg-white/10 transition-colors group"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeMobileMenu(e);
+                  }}
+                  className="p-1 rounded hover:bg-white/10 transition-colors group touch-manipulation"
                   title="Manage Services"
+                  style={{ touchAction: 'manipulation', willChange: 'transform' }}
                 >
                   <Plus className="h-4 w-4 text-white/50 group-hover:text-white transition-colors" />
                 </Link>
@@ -330,12 +373,16 @@ function Sidebar() {
                 <Link
                   key={link.key}
                   href={link.href}
-                  onClick={closeMobileMenu}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeMobileMenu(e);
+                  }}
                   className={`flex items-center px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation ${
                     active
                       ? 'bg-blue-600 text-white'
                       : 'text-white/70 hover:text-white hover:bg-white/10'
                   }`}
+                  style={{ touchAction: 'manipulation', willChange: 'transform' }}
                 >
                   <link.icon className={`h-5 w-5 ${isCollapsed && !isAutoHidden ? 'mx-auto' : 'mr-3'} flex-shrink-0`} />
                   {(!isCollapsed || isAutoHidden) && (
@@ -360,13 +407,16 @@ function Sidebar() {
                   <Link
                     key={link.key}
                     href={link.href}
-                    onClick={closeMobileMenu}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      closeMobileMenu(e);
+                    }}
                     className={`flex items-center px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation ${
                       active 
                         ? 'bg-blue-800 text-white' 
                         : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
                     }`}
-                    style={{ textDecoration: 'none' }}
+                    style={{ textDecoration: 'none', touchAction: 'manipulation', willChange: 'transform' }}
                     title={isCollapsed && !isAutoHidden ? link.label : undefined}
                   >
                     <link.icon className="h-4 w-4 mr-3 flex-shrink-0" />
@@ -461,6 +511,8 @@ function Sidebar() {
               alt={session?.user?.name || 'User'}
               size="sm"
               type="user"
+              highPriority
+              style={{ touchAction: 'manipulation' }}
             />
             {(!isCollapsed || isAutoHidden) && (
               <div className="flex-1 min-w-0">
@@ -512,13 +564,16 @@ function Sidebar() {
         <div className="border-t border-white/10 p-4">
           <Link
             href="/dashboard/notifications"
-            onClick={closeMobileMenu}
+            onClick={(e) => {
+              e.stopPropagation();
+              closeMobileMenu(e);
+            }}
             className={`flex items-center justify-between w-full px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation ${
               pathname.startsWith('/dashboard/notifications') 
                 ? 'bg-blue-800 text-white' 
                 : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
             }`}
-            style={{ textDecoration: 'none' }}
+            style={{ textDecoration: 'none', touchAction: 'manipulation', willChange: 'transform' }}
           >
             <div className="flex items-center">
               <Bell className="h-4 w-4 mr-3 flex-shrink-0" />
@@ -531,13 +586,18 @@ function Sidebar() {
         <div className="border-t border-white/10 p-4 space-y-2">
           {/* Settings Header Button */}
           <button
-            onClick={toggleSettings}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              toggleSettings(e);
+            }}
             className={`flex items-center justify-between w-full px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation active:scale-[0.98] ${
               pathname.startsWith('/dashboard/settings') 
                 ? 'bg-blue-800 text-white' 
                 : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
             }`}
-            style={{ touchAction: 'manipulation' }}
+            type="button"
+            style={{ touchAction: 'manipulation', willChange: 'transform' }}
           >
             <div className="flex items-center">
               <User className="h-4 w-4 mr-3 flex-shrink-0" />
@@ -556,20 +616,23 @@ function Sidebar() {
               {SETTINGS_LINKS.map(link => {
                 const active = pathname.startsWith(link.href);
                 return (
-                  <Link
-                    key={link.key}
-                    href={link.href}
-                    onClick={closeMobileMenu}
-                    className={`flex items-center px-3 py-3 rounded-lg transition-colors text-sm font-medium group relative touch-manipulation ${
-                      active 
-                        ? 'bg-blue-800 text-white' 
-                        : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
-                    }`}
-                    style={{ textDecoration: 'none' }}
-                  >
-                    <link.icon className="h-4 w-4 mr-3 flex-shrink-0" />
-                    <span className="whitespace-nowrap">{link.label}</span>
-                  </Link>
+                <Link
+                  key={link.key}
+                  href={link.href}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeMobileMenu(e);
+                  }}
+                  className={`flex items-center px-3 py-3 rounded-lg transition-colors text-sm font-medium group relative touch-manipulation ${
+                    active 
+                      ? 'bg-blue-800 text-white' 
+                      : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
+                  }`}
+                  style={{ textDecoration: 'none', touchAction: 'manipulation', willChange: 'transform' }}
+                >
+                  <link.icon className="h-4 w-4 mr-3 flex-shrink-0" />
+                  <span className="whitespace-nowrap">{link.label}</span>
+                </Link>
                 );
               })}
             </div>
@@ -584,6 +647,8 @@ function Sidebar() {
               alt={session?.user?.name || 'User'}
               size="sm"
               type="user"
+              highPriority
+              style={{ touchAction: 'manipulation' }}
             />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-white truncate">
@@ -648,8 +713,17 @@ function Sidebar() {
       {isMobileMenuOpen && (
         <div 
           className="lg:hidden fixed inset-0 bg-black/50 z-40"
-          onClick={closeMobileMenu}
-          style={{ touchAction: 'manipulation' }}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            closeMobileMenu(e);
+          }}
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            closeMobileMenu(e as unknown as React.MouseEvent);
+          }}
+          style={{ touchAction: 'manipulation', pointerEvents: 'auto' }}
         />
       )}
 
@@ -661,11 +735,16 @@ function Sidebar() {
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
+        onClick={(e) => {
+          // Prevent clicks inside sidebar from closing it
+          e.stopPropagation();
+        }}
         style={{ 
           willChange: 'transform', 
           touchAction: 'pan-y',
-          // Ensure sidebar renders immediately even if content is loading
-          pointerEvents: isMobileMenuOpen ? 'auto' : 'none'
+          pointerEvents: isMobileMenuOpen ? 'auto' : 'none',
+          backfaceVisibility: 'hidden',
+          WebkitBackfaceVisibility: 'hidden'
         }}
       >
         <SidebarContent />
