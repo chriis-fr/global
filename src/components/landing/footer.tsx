@@ -13,6 +13,8 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
+import { useEffect, useState } from 'react'
+import { formatDateReadable } from '@/lib/utils/dateFormat'
 
 const footerLinks = {
   product: [
@@ -64,6 +66,13 @@ const socialLinks = [
 ]
 
 export function Footer() {
+  const [lastUpdated, setLastUpdated] = useState<string>('')
+
+  useEffect(() => {
+    // Compute on client to avoid hydration mismatch from differing server/client locales/times
+    setLastUpdated(formatDateReadable(new Date().toISOString()))
+  }, [])
+
   return (
     <footer className="bg-gray-900 text-white ">
       {/* Main Footer Content */}
@@ -241,7 +250,9 @@ export function Footer() {
             <div className="flex items-center space-x-4 text-xs text-gray-500">
               <span>Version 1.0.1</span>
               <span>•</span>
-              <span>Last updated: {new Date().toLocaleDateString()}</span>
+              <span>
+                Last updated: {lastUpdated || '—'}
+              </span>
             </div>
           </div>
         </div>

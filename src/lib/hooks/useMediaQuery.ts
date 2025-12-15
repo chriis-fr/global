@@ -24,7 +24,14 @@ export default function useMediaQuery(): WindowDimensions {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
+    // Track previous width to avoid updates triggered only by height changes
+    let prevWidth = window.innerWidth;
+
     const handleResize = () => {
+      const nextWidth = window.innerWidth;
+      // Bail if width did not change (common on mobile address bar show/hide)
+      if (nextWidth === prevWidth) return;
+      prevWidth = nextWidth;
       setWindowDimensions(getWindowDimensions());
     };
 
