@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
 import CurrencyAmount from '@/components/CurrencyAmount';
+import { formatDateReadable } from '@/lib/utils/dateFormat';
 
 interface Payable {
   _id: string;
@@ -217,14 +218,10 @@ export default function PayablesListPage() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
+  // Use consistent date formatting utility to avoid hydration mismatches
+  const formatDate = formatDateReadable;
 
+  
   const isOverdue = (dueDate: string, status: string) => {
     return status !== 'paid' && new Date(dueDate) < new Date();
   };

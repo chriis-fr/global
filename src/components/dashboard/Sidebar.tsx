@@ -208,19 +208,16 @@ function Sidebar() {
     }
   };
 
-  // Optimized handlers with useCallback and startTransition for mobile performance
+  // Immediate handlers for mobile menu - no delays, instant response
   const toggleMobileMenu = useCallback(() => {
-    startTransition(() => {
-      setIsMobileMenuOpen(prev => !prev);
-    });
+    // Update state immediately - don't use startTransition for user interactions
+    setIsMobileMenuOpen(prev => !prev);
   }, []);
 
   const closeMobileMenu = useCallback(() => {
-    // Use startTransition to mark this as non-urgent, preventing UI blocking
-    startTransition(() => {
-      setIsMobileMenuOpen(false);
-      setIsSettingsOpen(false); // Also close settings when closing menu
-    });
+    // Update state immediately - don't use startTransition for user interactions
+    setIsMobileMenuOpen(false);
+    setIsSettingsOpen(false); // Also close settings when closing menu
   }, []);
 
   const toggleSettings = useCallback(() => {
@@ -629,7 +626,11 @@ function Sidebar() {
 
       {/* Mobile Menu Button */}
       <button
-        onClick={toggleMobileMenu}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleMobileMenu();
+        }}
         className={`lg:hidden fixed top-4 right-4 z-50 p-3 
           rounded-xl text-white transition-all duration-300 ease-out shadow-xl touch-manipulation active:scale-95
           backdrop-blur-xl bg-gradient-to-br from-white/10 to-blue-900/20
@@ -638,6 +639,7 @@ function Sidebar() {
           ${isMobileMenuOpen ? 'hidden' : 'block'}`}
         aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
         style={{ touchAction: 'manipulation' }}
+        type="button"
       >
         <Menu className="h-5 w-5" />
       </button>
@@ -653,13 +655,18 @@ function Sidebar() {
 
       {/* Mobile Sidebar */}
       <aside 
-        className={`lg:hidden fixed  left-0 top-0 h-full w-80 sm:w-80 bg-blue-950 border-r border-white/10 z-50 transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col ${
+        className={`lg:hidden fixed left-0 top-0 h-full w-80 sm:w-80 bg-blue-950 border-r border-white/10 z-50 transform transition-transform duration-200 ease-out overflow-hidden flex flex-col ${
           isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
-        style={{ willChange: 'transform', touchAction: 'pan-y' }}
+        style={{ 
+          willChange: 'transform', 
+          touchAction: 'pan-y',
+          // Ensure sidebar renders immediately even if content is loading
+          pointerEvents: isMobileMenuOpen ? 'auto' : 'none'
+        }}
       >
         <SidebarContent />
       </aside>

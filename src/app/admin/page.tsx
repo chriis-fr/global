@@ -23,6 +23,7 @@ import {
 import { BILLING_PLANS } from '@/data/billingPlans';
 import { getAdminStats, type AdminStats } from '@/lib/actions/admin-stats';
 import { getExplorerUrl } from '@/lib/utils/blockchain';
+import { formatDateReadable } from '@/lib/utils/dateFormat';
 
 // AdminStats type is now imported from admin-stats.ts
 
@@ -199,13 +200,8 @@ export default function AdminDashboard() {
     }).format(amount);
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
+  // Use consistent date formatting utility to avoid hydration mismatches
+  const formatDate = formatDateReadable;
 
   const handleSearchUser = async () => {
     if (!searchEmail.trim()) {

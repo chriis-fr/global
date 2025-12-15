@@ -20,6 +20,7 @@ import {
   LayoutDashboard
 } from 'lucide-react';
 import { Notification, NotificationType, NotificationPriority, NotificationStatus } from '@/models/Notification';
+import { formatDateTimeReadable } from '@/lib/utils/dateFormat';
 
 interface NotificationStats {
   total: number;
@@ -215,15 +216,8 @@ export default function NotificationsPage() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
+  // Use consistent date formatting utility to avoid hydration mismatches
+  const formatDate = formatDateTimeReadable;
 
   const filteredNotifications = notifications.filter(notification => {
     if (typeFilter !== 'all' && notification.type !== typeFilter) return false;

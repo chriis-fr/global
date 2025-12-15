@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { OrganizationMember } from '@/models/Organization';
 import { type RoleKey } from '@/lib/utils/roles';
 import PermissionMatrix from './PermissionMatrix';
+import { formatDateReadable } from '@/lib/utils/dateFormat';
 
 interface MemberCardProps {
   member: OrganizationMember;
@@ -64,27 +65,10 @@ export default function MemberCard({
   const canRemove = canEdit && member.role !== 'owner';
   const isOwner = member.role === 'owner';
 
+  // Use consistent date formatting utility to avoid hydration mismatches
   const formatDate = (date: Date | string | undefined) => {
     if (!date) return 'Unknown';
-    
-    try {
-      // Handle both Date objects and ISO strings
-      const dateObj = typeof date === 'string' ? new Date(date) : date;
-      
-      if (isNaN(dateObj.getTime())) {
-        console.warn('Invalid date provided to formatDate:', date);
-        return 'Unknown';
-      }
-      
-      return dateObj.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      });
-    } catch (error) {
-      console.error('Error formatting date:', error, 'Date value:', date);
-      return 'Unknown';
-    }
+    return formatDateReadable(date);
   };
 
   return (

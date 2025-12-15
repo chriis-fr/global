@@ -19,6 +19,7 @@ import {
   Save,
   X
 } from 'lucide-react';
+import { formatDateReadable } from '@/lib/utils/dateFormat';
 import { BILLING_PLANS } from '@/data/billingPlans';
 import { 
   getAdminUserDetail, 
@@ -159,15 +160,10 @@ export default function AdminUserDetailPage() {
     return plan ? plan.name : planId;
   };
 
+  // Use consistent date formatting utility to avoid hydration mismatches
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'Never';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    return formatDateReadable(dateString);
   };
 
   if (status === 'loading' || loading) {
