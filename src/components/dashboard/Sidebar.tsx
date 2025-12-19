@@ -214,11 +214,7 @@ function Sidebar() {
       setIsMobileMenuOpen(prev => !prev);
   }, []);
 
-  const closeMobileMenu = useCallback((e?: React.MouseEvent | React.TouchEvent) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
+  const closeMobileMenu = useCallback(() => {
     // Update state immediately - don't use startTransition for user interactions
     setIsMobileMenuOpen(false);
     setIsSettingsOpen(false); // Also close settings when closing menu
@@ -247,7 +243,7 @@ function Sidebar() {
             href="/dashboard" 
             onClick={(e) => {
               e.stopPropagation();
-              closeMobileMenu(e);
+              closeMobileMenu();
             }}
             className="flex items-center space-x-3 hover:opacity-80 transition-opacity touch-manipulation"
             style={{ touchAction: 'manipulation', willChange: 'transform' }}
@@ -271,10 +267,10 @@ function Sidebar() {
           <div className="flex items-center space-x-2">
             <Link
               href="/dashboard/notifications"
-              onClick={(e) => {
-                e.stopPropagation();
-                closeMobileMenu(e);
-              }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      closeMobileMenu();
+                    }}
               className="relative p-2 text-white/70 hover:text-white hover:bg-blue-900/50 rounded-lg transition-colors touch-manipulation"
               title="Notifications"
               style={{ touchAction: 'manipulation', willChange: 'transform' }}
@@ -284,16 +280,16 @@ function Sidebar() {
             
             {/* Mobile Close Button */}
             <button
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                closeMobileMenu(e);
-              }}
-              onPointerDown={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                closeMobileMenu(e as unknown as React.MouseEvent);
-              }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              closeMobileMenu();
+            }}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              closeMobileMenu();
+            }}
               className="lg:hidden p-2 text-white/70 hover:text-white hover:bg-blue-900/50 rounded-lg transition-colors touch-manipulation active:scale-95 z-50 relative"
               aria-label="Close menu"
               type="button"
@@ -326,7 +322,7 @@ function Sidebar() {
                   href="/services"
                   onClick={(e) => {
                     e.stopPropagation();
-                    closeMobileMenu(e);
+                    closeMobileMenu();
                   }}
                   className="p-1 rounded hover:bg-white/10 transition-colors group touch-manipulation"
                   title="Manage Services"
@@ -342,7 +338,7 @@ function Sidebar() {
                   href="/services"
                   onClick={(e) => {
                     e.stopPropagation();
-                    closeMobileMenu(e);
+                    closeMobileMenu();
                   }}
                   className="p-1 rounded hover:bg-white/10 transition-colors group touch-manipulation"
                   title="Manage Services"
@@ -375,7 +371,7 @@ function Sidebar() {
                   href={link.href}
                   onClick={(e) => {
                     e.stopPropagation();
-                    closeMobileMenu(e);
+                    closeMobileMenu();
                   }}
                   className={`flex items-center px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation ${
                     active
@@ -409,7 +405,7 @@ function Sidebar() {
                     href={link.href}
                     onClick={(e) => {
                       e.stopPropagation();
-                      closeMobileMenu(e);
+                      closeMobileMenu();
                     }}
                     className={`flex items-center px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation ${
                       active 
@@ -442,14 +438,24 @@ function Sidebar() {
         <div className="border-t border-white/10 p-4 space-y-2">
           {/* Settings Header Button */}
           <button
-            onClick={toggleSettings}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              toggleSettings(e);
+            }}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              toggleSettings(e as unknown as React.MouseEvent);
+            }}
             className={`flex items-center justify-between w-full px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation active:scale-[0.98] ${
               pathname.startsWith('/dashboard/settings') 
                 ? 'bg-blue-800 text-white' 
                 : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
             }`}
             title={isCollapsed && !isAutoHidden ? 'Settings' : undefined}
-            style={{ touchAction: 'manipulation' }}
+            type="button"
+            style={{ touchAction: 'manipulation', willChange: 'transform' }}
           >
             <div className="flex items-center">
               <User className="h-4 w-4 mr-3 flex-shrink-0" />
@@ -531,6 +537,13 @@ function Sidebar() {
               signOut({ callbackUrl: '/auth' });
               closeMobileMenu();
             }}
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            clearOnboarding();
+            signOut({ callbackUrl: '/auth' });
+            closeMobileMenu();
+          }}
             className="flex items-center w-full px-3 py-3 rounded-lg text-sm font-medium text-white/80 hover:bg-blue-900/50 hover:text-white transition-colors group touch-manipulation"
             title={isCollapsed && !isAutoHidden ? 'Sign Out' : undefined}
           >
@@ -550,6 +563,11 @@ function Sidebar() {
         <div className="hidden lg:block border-t border-white/10 p-2">
           <button
             onClick={toggleCollapse}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              toggleCollapse();
+            }}
             className="w-full flex items-center justify-center p-2 rounded-lg text-white/80 hover:bg-blue-900/50 hover:text-white transition-colors"
             title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
           >
@@ -566,7 +584,7 @@ function Sidebar() {
             href="/dashboard/notifications"
             onClick={(e) => {
               e.stopPropagation();
-              closeMobileMenu(e);
+              closeMobileMenu();
             }}
             className={`flex items-center justify-between w-full px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation ${
               pathname.startsWith('/dashboard/notifications') 
@@ -590,6 +608,11 @@ function Sidebar() {
               e.preventDefault();
               e.stopPropagation();
               toggleSettings(e);
+            }}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              toggleSettings(e as unknown as React.MouseEvent);
             }}
             className={`flex items-center justify-between w-full px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation active:scale-[0.98] ${
               pathname.startsWith('/dashboard/settings') 
@@ -621,7 +644,7 @@ function Sidebar() {
                   href={link.href}
                   onClick={(e) => {
                     e.stopPropagation();
-                    closeMobileMenu(e);
+                    closeMobileMenu();
                   }}
                   className={`flex items-center px-3 py-3 rounded-lg transition-colors text-sm font-medium group relative touch-manipulation ${
                     active 
@@ -664,6 +687,12 @@ function Sidebar() {
               signOut({ callbackUrl: '/auth' });
               closeMobileMenu();
             }}
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            signOut({ callbackUrl: '/auth' });
+            closeMobileMenu();
+          }}
             className="flex items-center w-full px-3 py-3 rounded-lg text-sm font-medium text-white/80 hover:bg-blue-900/50 hover:text-white transition-colors group touch-manipulation"
           >
             <LogOut className="h-4 w-4 mr-3 flex-shrink-0" />
@@ -696,6 +725,11 @@ function Sidebar() {
           e.stopPropagation();
           toggleMobileMenu();
         }}
+        onPointerDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleMobileMenu();
+        }}
         className={`lg:hidden fixed top-4 right-4 z-50 p-3 
           rounded-xl text-white transition-all duration-300 ease-out shadow-xl touch-manipulation active:scale-95
           backdrop-blur-xl bg-gradient-to-br from-white/10 to-blue-900/20
@@ -716,12 +750,12 @@ function Sidebar() {
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            closeMobileMenu(e);
+            closeMobileMenu();
           }}
           onPointerDown={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            closeMobileMenu(e as unknown as React.MouseEvent);
+            closeMobileMenu();
           }}
           style={{ touchAction: 'manipulation', pointerEvents: 'auto' }}
         />
