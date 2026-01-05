@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { motion } from 'framer-motion';
-import Link from 'next/link';
 import { 
   Plus, 
   FileText, 
@@ -16,7 +15,6 @@ import {
   Users,
   List,
   Building2,
-  LayoutDashboard,
   AlertCircle,
   Lock,
   CheckCircle,
@@ -728,13 +726,7 @@ export default function SmartInvoicingPage() {
       )}
 
       {/* Floating Dashboard Button */}
-      <Link
-        href="/dashboard"
-        className="fixed bottom-6 right-6 z-50 flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-all duration-300 hover:scale-110"
-        title="View Financial Overview"
-      >
-        <LayoutDashboard className="h-5 w-5 sm:h-6 sm:w-6" />
-      </Link>
+      
     </div>
   );
 } 

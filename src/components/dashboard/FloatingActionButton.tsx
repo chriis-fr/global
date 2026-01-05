@@ -62,7 +62,17 @@ export default function FloatingActionButton() {
   }
 
   return (
-    <div className="fixed bottom-6 right-6 z-50">
+    <div 
+      className="fixed bottom-6 right-6 z-50"
+      style={{
+        position: 'fixed',
+        bottom: '1.5rem',
+        right: '1.5rem',
+        zIndex: 50,
+        transform: 'translateZ(0)',
+        willChange: 'transform'
+      }}
+    >
       {/* Quick Actions Menu */}
       {isOpen && (
         <div className="absolute bottom-16 right-0 mb-2 space-y-2">
@@ -104,6 +114,14 @@ export default function FloatingActionButton() {
         <div 
           className="fixed inset-0 z-[-1]" 
           onClick={() => setIsOpen(false)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: -1
+          }}
         />
       )}
 

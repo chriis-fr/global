@@ -77,13 +77,13 @@ export function ProfileAvatar({
   return (
     <div
       className={`
-        ${sizeClasses[size]} 
-        ${className}
-        rounded-full 
-        bg-gradient-to-br from-blue-500 to-blue-600 
-        flex items-center justify-center 
-        text-white font-medium
-        shadow-lg
+      ${sizeClasses[size]} 
+      ${className}
+      rounded-full 
+      bg-gradient-to-br from-blue-500 to-blue-600 
+      flex items-center justify-center 
+      text-white font-medium
+      shadow-lg
       `}
       style={{
         willChange: 'transform',

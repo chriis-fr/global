@@ -1,14 +1,14 @@
 'use client';
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
-import { 
-  FileText, 
-  Menu, 
-  X, 
-  User, 
-  Building2, 
+import {
+  FileText,
+  Menu,
+  X,
+  User,
+  Building2,
   Bell,
   HelpCircle,
   LogOut,
@@ -27,67 +27,21 @@ import { usePermissions } from '@/lib/contexts/PermissionContext';
 import { useOnboardingStore } from '@/lib/stores/onboardingStore';
 
 const SERVICE_LINKS = [
-  {
-    key: 'smartInvoicing',
-    label: 'Smart Invoicing',
-    icon: FileText,
-    href: '/dashboard/services/smart-invoicing',
-  },
-  {
-    key: 'accountsPayable',
-    label: 'Pay',
-    icon: Receipt,
-    href: '/dashboard/services/payables',
-  },
-  // Add more services as they become ready
+  { key: 'smartInvoicing', label: 'Smart Invoicing', icon: FileText, href: '/dashboard/services/smart-invoicing' },
+  { key: 'accountsPayable', label: 'Pay', icon: Receipt, href: '/dashboard/services/payables' },
 ];
 
 const ADMIN_LINKS = [
-  {
-    key: 'approvals',
-    label: 'Pending Approvals',
-    icon: CheckCircle,
-    href: '/dashboard/approvals',
-  },
+  { key: 'approvals', label: 'Pending Approvals', icon: CheckCircle, href: '/dashboard/approvals' },
 ];
 
 const SETTINGS_LINKS = [
-  {
-    key: 'profile',
-    label: 'Profile Settings',
-    icon: User,
-    href: '/dashboard/settings/profile',
-  },
-  {
-    key: 'organization',
-    label: 'Organization',
-    icon: Building2,
-    href: '/dashboard/settings/organization',
-  },
-  {
-    key: 'logos',
-    label: 'Logo Management',
-    icon: ImageIcon,
-    href: '/dashboard/settings/logos',
-  },
-  {
-    key: 'payment-methods',
-    label: 'Payment Methods',
-    icon: CreditCard,
-    href: '/dashboard/settings/payment-methods',
-  },
-  {
-    key: 'notifications',
-    label: 'Notifications',
-    icon: Bell,
-    href: '/dashboard/settings/notifications',
-  },
-  {
-    key: 'help',
-    label: 'Help & Support',
-    icon: HelpCircle,
-    href: '/dashboard/settings/help',
-  },
+  { key: 'profile', label: 'Profile Settings', icon: User, href: '/dashboard/settings/profile' },
+  { key: 'organization', label: 'Organization', icon: Building2, href: '/dashboard/settings/organization' },
+  { key: 'logos', label: 'Logo Management', icon: ImageIcon, href: '/dashboard/settings/logos' },
+  { key: 'payment-methods', label: 'Payment Methods', icon: CreditCard, href: '/dashboard/settings/payment-methods' },
+  { key: 'notifications', label: 'Notifications', icon: Bell, href: '/dashboard/settings/notifications' },
+  { key: 'help', label: 'Help & Support', icon: HelpCircle, href: '/dashboard/settings/help' },
 ];
 
 function Sidebar() {
@@ -96,302 +50,232 @@ function Sidebar() {
   const { permissions } = usePermissions();
   const { clearOnboarding } = useOnboardingStore();
   const pathname = usePathname();
-  // const enabledServices = session?.user?.services || {}; // Temporarily disabled to show all services
+  const router = useRouter();
+
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isAutoHidden, setIsAutoHidden] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const sidebarRef = useRef<HTMLDivElement>(null);
-  
-  // Touch gesture state for mobile
-  const [touchStart, setTouchStart] = useState<number | null>(null);
-  const [touchEnd, setTouchEnd] = useState<number | null>(null);
 
-  // Auto-hide functionality
+  const sidebarRef = useRef<HTMLDivElement>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
-    const handleMouseMove = () => {
-      if (isAutoHidden) {
-        setIsAutoHidden(false);
-      }
-      
-      // Clear existing timeout
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-      
-      // Set new timeout (5 seconds of inactivity)
+    setIsMobileMenuOpen(false);
+    setIsSettingsOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (window.innerWidth < 1024) return;
+
+    const resetTimer = () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
       timeoutRef.current = setTimeout(() => {
-        if (!isCollapsed && window.innerWidth >= 1024) {
-          setIsAutoHidden(true);
-        }
+        if (!isCollapsed) setIsAutoHidden(true);
       }, 5000);
     };
 
-    const handleMouseLeave = () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-      
-      // Auto-hide after 3 seconds when mouse leaves sidebar area
-      timeoutRef.current = setTimeout(() => {
-        if (!isCollapsed && window.innerWidth >= 1024) {
-          setIsAutoHidden(true);
-        }
-      }, 3000);
-    };
-
-    const handleMouseEnter = () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
+    const onMove = () => {
       setIsAutoHidden(false);
+      resetTimer();
     };
 
-    // Only add auto-hide functionality on large screens
-    if (window.innerWidth >= 1024) {
-      document.addEventListener('mousemove', handleMouseMove);
-      
-      if (sidebarRef.current) {
-        sidebarRef.current.addEventListener('mouseleave', handleMouseLeave);
-        sidebarRef.current.addEventListener('mouseenter', handleMouseEnter);
-      }
-    }
+    document.addEventListener('mousemove', onMove);
+    resetTimer();
 
     return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
+      document.removeEventListener('mousemove', onMove);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [isCollapsed, isAutoHidden]);
+  }, [isCollapsed]);
 
-  // Listen for custom event to open mobile sidebar
   useEffect(() => {
-    const handleOpenMobileSidebar = () => {
-      setIsMobileMenuOpen(true);
-    };
-
-    window.addEventListener('openMobileSidebar', handleOpenMobileSidebar);
-    return () => {
-      window.removeEventListener('openMobileSidebar', handleOpenMobileSidebar);
-    };
+    const open = () => setIsMobileMenuOpen(true);
+    window.addEventListener('openMobileSidebar', open);
+    return () => window.removeEventListener('openMobileSidebar', open);
   }, []);
 
-  // Touch gesture handlers for mobile
-  const minSwipeDistance = 50;
-
-  const onTouchStart = (e: React.TouchEvent) => {
-    setTouchEnd(null);
-    setTouchStart(e.targetTouches[0].clientX);
-  };
-
-  const onTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd(e.targetTouches[0].clientX);
-  };
-
-  const onTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
-    
-    const distance = touchStart - touchEnd;
-    const isLeftSwipe = distance > minSwipeDistance;
-    const isRightSwipe = distance < -minSwipeDistance;
-
-    if (isLeftSwipe && isMobileMenuOpen) {
-      // Swipe left to close sidebar
-      setIsMobileMenuOpen(false);
-    } else if (isRightSwipe && !isMobileMenuOpen) {
-      // Swipe right to open sidebar (only from left edge)
-      if (touchStart < 50) { // Only trigger if swipe starts from left edge
-        setIsMobileMenuOpen(true);
-      }
-    }
-  };
-
-  // Immediate handlers for mobile menu - no delays, instant response
   const toggleMobileMenu = useCallback(() => {
-    // Update state immediately - don't use startTransition for user interactions
-      setIsMobileMenuOpen(prev => !prev);
+    setIsMobileMenuOpen(v => !v);
+    setIsSettingsOpen(false);
   }, []);
 
   const closeMobileMenu = useCallback(() => {
-    // Update state immediately - don't use startTransition for user interactions
     setIsMobileMenuOpen(false);
-    setIsSettingsOpen(false); // Also close settings when closing menu
+    setIsSettingsOpen(false);
   }, []);
 
-  const toggleSettings = useCallback((e?: React.MouseEvent) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    // Immediate state update - no startTransition for mobile responsiveness
-    setIsSettingsOpen(prev => !prev);
+  const toggleSettings = useCallback(() => {
+    setIsSettingsOpen(v => !v);
   }, []);
 
   const toggleCollapse = useCallback(() => {
-    setIsCollapsed(prev => !prev);
+    setIsCollapsed(v => !v);
     setIsAutoHidden(false);
   }, []);
 
-  const SidebarContent = () => (
-    <>
-      {/* Fixed Header */}
-      <div className="p-6 border-b border-white/10 flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <Link 
-            href="/dashboard" 
-            onClick={(e) => {
-              e.stopPropagation();
-              closeMobileMenu();
-            }}
-            className="flex items-center space-x-3 hover:opacity-80 transition-opacity touch-manipulation"
-            style={{ touchAction: 'manipulation', willChange: 'transform' }}
-          >
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0" style={{ willChange: 'transform' }}>
-            <Image
-                  src="/chainsnobg.png"
-                  alt="ChainsERP"
-                  width={40}
-                  height={40}
-                  className="bg-white rounded-lg "
-                  priority
-                />
-            </div>
-            {(!isCollapsed || isAutoHidden) && (
-              <span className="text-white text-lg font-bold whitespace-nowrap">Global Finance</span>
+  const handleMobileNavigation = useCallback((href: string) => {
+    router.push(href);
+  }, [router]);
+
+  const SidebarContent = () => {
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
+
+    return (
+      <>
+        {/* Header */}
+        <div className="p-6 border-b border-white/10">
+          <div className="flex items-center justify-between">
+            {isMobile ? (
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => handleMobileNavigation('/dashboard')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleMobileNavigation('/dashboard');
+                  }
+                }}
+                className="flex items-center space-x-3 hover:opacity-80 cursor-pointer"
+              >
+                <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
+                  <Image src="/chainsnobg.png" alt="ChainsERP" width={40} height={40} priority />
+                </div>
+                {(!isCollapsed || isAutoHidden) && (
+                  <span className="text-white text-lg font-bold">Global Finance</span>
+                )}
+              </div>
+            ) : (
+              <Link href="/dashboard" className="flex items-center space-x-2 hover:opacity-80">
+                <div className="w-7 h-7 bg-white rounded-lg flex items-center justify-center">
+                  <Image src="/chainsnobg.png" alt="ChainsERP" width={40} height={40} priority />
+                </div>
+                {(!isCollapsed || isAutoHidden) && (
+                  <span className="text-white text-lg font-bold">Global&nbsp;Finance</span>
+                )}
+              </Link>
             )}
-          </Link>
-          
-          {/* Notifications Bell Icon */}
-          <div className="flex items-center space-x-2">
-            <Link
-              href="/dashboard/notifications"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      closeMobileMenu();
-                    }}
-              className="relative p-2 text-white/70 hover:text-white hover:bg-blue-900/50 rounded-lg transition-colors touch-manipulation"
-              title="Notifications"
-              style={{ touchAction: 'manipulation', willChange: 'transform' }}
-            >
-              <Bell className="h-5 w-5" />
-            </Link>
-            
-            {/* Mobile Close Button */}
-            <button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              closeMobileMenu();
-            }}
-            onPointerDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              closeMobileMenu();
-            }}
-              className="lg:hidden p-2 text-white/70 hover:text-white hover:bg-blue-900/50 rounded-lg transition-colors touch-manipulation active:scale-95 z-50 relative"
-              aria-label="Close menu"
-              type="button"
-              style={{ touchAction: 'manipulation', willChange: 'transform', pointerEvents: 'auto' }}
-            >
-              <X className="h-5 w-5" />
-            </button>
+
+            <div className="flex items-center space-x-2">
+              {isMobile ? (
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleMobileNavigation('/dashboard/notifications')}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleMobileNavigation('/dashboard/notifications');
+                    }
+                  }}
+                  className="p-2 rounded-lg hover:bg-blue-900/50 cursor-pointer"
+                >
+                  <Bell className="h-5 w-5 text-white/70" />
+                </div>
+              ) : (
+                <Link href="/dashboard/notifications" className="p-2 rounded-lg hover:bg-blue-900/50">
+                  <Bell className="h-5 w-5 text-white/70" />
+                </Link>
+              )}
+
+              <button
+                onClick={closeMobileMenu}
+                className="lg:hidden p-2 rounded-lg hover:bg-blue-900/50"
+                type="button"
+                style={{ touchAction: 'manipulation' }}
+              >
+                <X className="h-5 w-5 text-white/70" />
+              </button>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Scrollable Navigation Area - Services Only */}
-      <div 
-        className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain"
-        style={{ 
-          WebkitOverflowScrolling: 'touch',
-          willChange: 'scroll-position'
-        }}
-      >
-        {/* Dashboard Navigation */}
-        <nav className="p-4 space-y-2">
-          {/* Services Navigation */}
-          <div className="mb-4">
+        {/* Scrollable Nav */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {/* Services */}
+          <div>
             {(!isCollapsed || isAutoHidden) && (
-              <div className="flex items-center justify-between mb-2 px-2">
-                <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wider">
-                Services
-              </h3>
-                <Link
-                  href="/services"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    closeMobileMenu();
-                  }}
-                  className="p-1 rounded hover:bg-white/10 transition-colors group touch-manipulation"
-                  title="Manage Services"
-                  style={{ touchAction: 'manipulation', willChange: 'transform' }}
-                >
-                  <Plus className="h-4 w-4 text-white/50 group-hover:text-white transition-colors" />
-                </Link>
+              <div className="flex justify-between items-center mb-2 px-2">
+                <h3 className="text-xs text-white/50 uppercase">Services</h3>
+                {isMobile ? (
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleMobileNavigation('/services')}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleMobileNavigation('/services');
+                      }
+                    }}
+                    className="p-1 rounded hover:bg-white/10 cursor-pointer"
+                  >
+                    <Plus className="h-4 w-4 text-white/50" />
+                  </div>
+                ) : (
+                  <Link href="/services">
+                    <Plus className="h-4 w-4 text-white/50" />
+                  </Link>
+                )}
               </div>
             )}
-            {isCollapsed && !isAutoHidden && (
-              <div className="mb-2 px-2 flex justify-center">
-                <Link
-                  href="/services"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    closeMobileMenu();
-                  }}
-                  className="p-1 rounded hover:bg-white/10 transition-colors group touch-manipulation"
-                  title="Manage Services"
-                  style={{ touchAction: 'manipulation', willChange: 'transform' }}
-                >
-                  <Plus className="h-4 w-4 text-white/50 group-hover:text-white transition-colors" />
-                </Link>
-              </div>
-            )}
+
             {SERVICE_LINKS.filter(link => {
-              // Check if service is enabled (services must be enabled during onboarding)
               const isServiceEnabled = session?.user?.services?.[link.key] || false;
-              
-              // Hide Payables service if user doesn't have access to payables OR service is not enabled
               if (link.key === 'accountsPayable') {
                 return (subscription?.canAccessPayables || false) && isServiceEnabled;
               }
-              // Hide Smart Invoicing service if user only has payables access (payables-only plans) OR service is not enabled
               if (link.key === 'smartInvoicing') {
-                // Show Smart Invoicing for receivables plans, combined plans, or free plan, AND service must be enabled
                 const isPayablesOnly = subscription?.plan?.type === 'payables';
                 return !isPayablesOnly && isServiceEnabled;
               }
               return isServiceEnabled;
             }).map(link => {
               const active = pathname.startsWith(link.href);
+
+              if (isMobile) {
+                return (
+                  <div
+                    key={link.key}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleMobileNavigation(link.href)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleMobileNavigation(link.href);
+                      }
+                    }}
+                    className={`flex items-center px-3 py-3 rounded-lg text-sm font-medium cursor-pointer ${
+                      active ? 'bg-blue-600 text-white' : 'text-white/70 hover:bg-white/10'
+                    }`}
+                    style={{ touchAction: 'manipulation' }}
+                  >
+                    <link.icon className={`h-5 w-5 ${isCollapsed && !isAutoHidden ? 'mx-auto' : 'mr-3'}`} />
+                    {(!isCollapsed || isAutoHidden) && link.label}
+                  </div>
+                );
+              }
+
               return (
                 <Link
                   key={link.key}
                   href={link.href}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    closeMobileMenu();
-                  }}
-                  className={`flex items-center px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation ${
-                    active
-                      ? 'bg-blue-600 text-white'
-                      : 'text-white/70 hover:text-white hover:bg-white/10'
+                  className={`flex items-center px-3 py-3 rounded-lg text-sm font-medium ${
+                    active ? 'bg-blue-600 text-white' : 'text-white/70 hover:bg-white/10'
                   }`}
-                  style={{ touchAction: 'manipulation', willChange: 'transform' }}
                 >
-                  <link.icon className={`h-5 w-5 ${isCollapsed && !isAutoHidden ? 'mx-auto' : 'mr-3'} flex-shrink-0`} />
-                  {(!isCollapsed || isAutoHidden) && (
-                    <span className="truncate">{link.label}</span>
-                  )}
+                  <link.icon className={`h-5 w-5 ${isCollapsed && !isAutoHidden ? 'mx-auto' : 'mr-3'}`} />
+                  {(!isCollapsed || isAutoHidden) && link.label}
                 </Link>
               );
             })}
           </div>
 
-          {/* Admin Navigation - Only for users with approval permissions */}
+          {/* Admin */}
           {permissions.canApproveBills && session?.user?.organizationId && (
-            <div className="mb-4">
+            <div>
               {(!isCollapsed || isAutoHidden) && (
                 <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wider mb-2 px-2">
                   Admin
@@ -399,109 +283,41 @@ function Sidebar() {
               )}
               {ADMIN_LINKS.map(link => {
                 const active = pathname.startsWith(link.href);
+
+                if (isMobile) {
+                  return (
+                    <div
+                      key={link.key}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleMobileNavigation(link.href)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleMobileNavigation(link.href);
+                        }
+                      }}
+                      className={`flex items-center px-3 py-3 rounded-lg text-sm font-medium cursor-pointer ${
+                        active ? 'bg-blue-800 text-white' : 'text-white/80 hover:bg-blue-900/50'
+                      }`}
+                      style={{ touchAction: 'manipulation' }}
+                    >
+                      <link.icon className="h-4 w-4 mr-3" />
+                      {(!isCollapsed || isAutoHidden) && link.label}
+                    </div>
+                  );
+                }
+
                 return (
                   <Link
                     key={link.key}
                     href={link.href}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      closeMobileMenu();
-                    }}
-                    className={`flex items-center px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation ${
-                      active 
-                        ? 'bg-blue-800 text-white' 
-                        : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
+                    className={`flex items-center px-3 py-3 rounded-lg text-sm font-medium ${
+                      active ? 'bg-blue-800 text-white' : 'text-white/80 hover:bg-blue-900/50'
                     }`}
-                    style={{ textDecoration: 'none', touchAction: 'manipulation', willChange: 'transform' }}
-                    title={isCollapsed && !isAutoHidden ? link.label : undefined}
                   >
-                    <link.icon className="h-4 w-4 mr-3 flex-shrink-0" />
-                    {(!isCollapsed || isAutoHidden) && (
-                      <span className="whitespace-nowrap">{link.label}</span>
-                    )}
-                    {isCollapsed && !isAutoHidden && (
-                      <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
-                        {link.label}
-                      </div>
-                    )}
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-        </nav>
-      </div>
-
-      {/* Fixed Footer - Settings and Profile (Desktop) */}
-      <div className="hidden lg:block flex-shrink-0">
-        {/* Settings Section */}
-        <div className="border-t border-white/10 p-4 space-y-2">
-          {/* Settings Header Button */}
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              toggleSettings(e);
-            }}
-            onPointerDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              toggleSettings(e as unknown as React.MouseEvent);
-            }}
-            className={`flex items-center justify-between w-full px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation active:scale-[0.98] ${
-              pathname.startsWith('/dashboard/settings') 
-                ? 'bg-blue-800 text-white' 
-                : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
-            }`}
-            title={isCollapsed && !isAutoHidden ? 'Settings' : undefined}
-            type="button"
-            style={{ touchAction: 'manipulation', willChange: 'transform' }}
-          >
-            <div className="flex items-center">
-              <User className="h-4 w-4 mr-3 flex-shrink-0" />
-              {(!isCollapsed || isAutoHidden) && (
-                <span className="whitespace-nowrap">Settings</span>
-              )}
-            </div>
-            {(!isCollapsed || isAutoHidden) && (
-              <ChevronRight 
-                className={`h-4 w-4 transition-transform duration-200 ${
-                  isSettingsOpen ? 'rotate-90' : ''
-                }`} 
-              />
-            )}
-            {isCollapsed && !isAutoHidden && (
-              <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
-                Settings
-              </div>
-            )}
-          </button>
-
-          {/* Settings Dropdown */}
-          {isSettingsOpen && (!isCollapsed || isAutoHidden) && (
-            <div className="ml-4 space-y-1">
-              {SETTINGS_LINKS.map(link => {
-                const active = pathname.startsWith(link.href);
-                return (
-                  <Link
-                    key={link.key}
-                    href={link.href}
-                    onClick={closeMobileMenu}
-                    className={`flex items-center px-3 py-3 rounded-lg transition-colors text-sm font-medium group relative touch-manipulation ${
-                      active 
-                        ? 'bg-blue-800 text-white' 
-                        : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
-                    }`}
-                    style={{ textDecoration: 'none' }}
-                    title={isCollapsed && !isAutoHidden ? link.label : undefined}
-                  >
-                    <link.icon className="h-4 w-4 mr-3 flex-shrink-0" />
-                    <span className="whitespace-nowrap">{link.label}</span>
-                    {isCollapsed && !isAutoHidden && (
-                      <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
-                        {link.label}
-                      </div>
-                    )}
+                    <link.icon className="h-4 w-4 mr-3" />
+                    {(!isCollapsed || isAutoHidden) && link.label}
                   </Link>
                 );
               })}
@@ -509,8 +325,66 @@ function Sidebar() {
           )}
         </div>
 
-        {/* User Profile */}
-        <div className="border-t border-white/10 p-4">
+        {/* Footer (Always at bottom on mobile) */}
+        <div className="border-t border-white/10 p-4 space-y-3 flex-shrink-0">
+          <button
+            onClick={toggleSettings}
+            className="flex w-full items-center justify-between px-3 py-3 rounded-lg hover:bg-blue-900/50"
+            type="button"
+            style={{ touchAction: 'manipulation' }}
+          >
+            <span className="flex items-center text-white/80">
+              <User className="h-4 w-4 mr-3" />
+              {(!isCollapsed || isAutoHidden) && 'Settings'}
+            </span>
+            <ChevronRight className={`h-4 w-4 transition ${isSettingsOpen ? 'rotate-90' : ''}`} />
+          </button>
+
+          {isSettingsOpen && (
+            <div className="ml-4 space-y-1">
+              {SETTINGS_LINKS.map(link => {
+                const active = pathname.startsWith(link.href);
+
+                if (isMobile) {
+                  return (
+                    <div
+                      key={link.key}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleMobileNavigation(link.href)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleMobileNavigation(link.href);
+                        }
+                      }}
+                      className={`flex px-3 py-2 rounded hover:bg-blue-900/50 cursor-pointer ${
+                        active ? 'bg-blue-800 text-white' : 'text-white/80'
+                      }`}
+                      style={{ touchAction: 'manipulation' }}
+                    >
+                      <link.icon className="h-4 w-4 mr-3" />
+                      {link.label}
+                    </div>
+                  );
+                }
+
+                return (
+                  <Link
+                    key={link.key}
+                    href={link.href}
+                    className={`flex px-3 py-2 rounded hover:bg-blue-900/50 ${
+                      active ? 'bg-blue-800 text-white' : 'text-white/80'
+                    }`}
+                  >
+                    <link.icon className="h-4 w-4 mr-3" />
+                    {link.label}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+
           <div className="flex items-center space-x-3 mb-3">
             <ProfileAvatar
               src={session?.user?.image}
@@ -531,228 +405,68 @@ function Sidebar() {
               </div>
             )}
           </div>
+
           <button
             onClick={() => {
-              clearOnboarding(); // Clear onboarding store on logout
+              clearOnboarding();
               signOut({ callbackUrl: '/auth' });
-              closeMobileMenu();
             }}
-          onPointerDown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            clearOnboarding();
-            signOut({ callbackUrl: '/auth' });
-            closeMobileMenu();
-          }}
-            className="flex items-center w-full px-3 py-3 rounded-lg text-sm font-medium text-white/80 hover:bg-blue-900/50 hover:text-white transition-colors group touch-manipulation"
-            title={isCollapsed && !isAutoHidden ? 'Sign Out' : undefined}
-          >
-            <LogOut className="h-4 w-4 mr-3 flex-shrink-0" />
-            {(!isCollapsed || isAutoHidden) && (
-              <span className="whitespace-nowrap">Sign Out</span>
-            )}
-            {isCollapsed && !isAutoHidden && (
-              <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
-                Sign Out
-              </div>
-            )}
-          </button>
-        </div>
-
-        {/* Collapse Toggle Button (Desktop Only) */}
-        <div className="hidden lg:block border-t border-white/10 p-2">
-          <button
-            onClick={toggleCollapse}
-            onPointerDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              toggleCollapse();
-            }}
-            className="w-full flex items-center justify-center p-2 rounded-lg text-white/80 hover:bg-blue-900/50 hover:text-white transition-colors"
-            title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
-          >
-            {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-          </button>
-        </div>
-      </div>
-
-              {/* Mobile Footer - Settings and Profile */}
-      <div className="lg:hidden flex-shrink-0 mt-auto">
-        {/* Notifications Section (Mobile Only) */}
-        <div className="border-t border-white/10 p-4">
-          <Link
-            href="/dashboard/notifications"
-            onClick={(e) => {
-              e.stopPropagation();
-              closeMobileMenu();
-            }}
-            className={`flex items-center justify-between w-full px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation ${
-              pathname.startsWith('/dashboard/notifications') 
-                ? 'bg-blue-800 text-white' 
-                : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
-            }`}
-            style={{ textDecoration: 'none', touchAction: 'manipulation', willChange: 'transform' }}
-          >
-            <div className="flex items-center">
-              <Bell className="h-4 w-4 mr-3 flex-shrink-0" />
-              <span className="whitespace-nowrap">Notifications</span>
-            </div>
-          </Link>
-        </div>
-        
-        {/* Settings Section */}
-        <div className="border-t border-white/10 p-4 space-y-2">
-          {/* Settings Header Button */}
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              toggleSettings(e);
-            }}
-            onPointerDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              toggleSettings(e as unknown as React.MouseEvent);
-            }}
-            className={`flex items-center justify-between w-full px-3 py-3 rounded-lg transition-colors text-sm font-medium group touch-manipulation active:scale-[0.98] ${
-              pathname.startsWith('/dashboard/settings') 
-                ? 'bg-blue-800 text-white' 
-                : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
-            }`}
+            className="flex w-full items-center px-3 py-3 rounded-lg hover:bg-blue-900/50 text-white/80"
             type="button"
-            style={{ touchAction: 'manipulation', willChange: 'transform' }}
           >
-            <div className="flex items-center">
-              <User className="h-4 w-4 mr-3 flex-shrink-0" />
-              <span className="whitespace-nowrap">Settings</span>
-            </div>
-            <ChevronRight 
-              className={`h-4 w-4 transition-transform duration-200 ${
-                isSettingsOpen ? 'rotate-90' : ''
-              }`} 
-            />
-          </button>
-
-          {/* Settings Dropdown */}
-          {isSettingsOpen && (
-            <div className="ml-4 space-y-1">
-              {SETTINGS_LINKS.map(link => {
-                const active = pathname.startsWith(link.href);
-                return (
-                <Link
-                  key={link.key}
-                  href={link.href}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    closeMobileMenu();
-                  }}
-                  className={`flex items-center px-3 py-3 rounded-lg transition-colors text-sm font-medium group relative touch-manipulation ${
-                    active 
-                      ? 'bg-blue-800 text-white' 
-                      : 'text-white/80 hover:bg-blue-900/50 hover:text-white'
-                  }`}
-                  style={{ textDecoration: 'none', touchAction: 'manipulation', willChange: 'transform' }}
-                >
-                  <link.icon className="h-4 w-4 mr-3 flex-shrink-0" />
-                  <span className="whitespace-nowrap">{link.label}</span>
-                </Link>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* User Profile */}
-        <div className="border-t border-white/10 p-4">
-          <div className="flex items-center space-x-3 mb-3">
-            <ProfileAvatar
-              src={session?.user?.image}
-              alt={session?.user?.name || 'User'}
-              size="sm"
-              type="user"
-              highPriority
-              style={{ touchAction: 'manipulation' }}
-            />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white truncate">
-                {session?.user?.name || 'User'}
-              </p>
-              <p className="text-xs text-white/50 truncate">
-                {session?.user?.email}
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => {
-              signOut({ callbackUrl: '/auth' });
-              closeMobileMenu();
-            }}
-          onPointerDown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            signOut({ callbackUrl: '/auth' });
-            closeMobileMenu();
-          }}
-            className="flex items-center w-full px-3 py-3 rounded-lg text-sm font-medium text-white/80 hover:bg-blue-900/50 hover:text-white transition-colors group touch-manipulation"
-          >
-            <LogOut className="h-4 w-4 mr-3 flex-shrink-0" />
-            <span className="whitespace-nowrap">Sign Out</span>
+            <LogOut className="h-4 w-4 mr-3" />
+            {(!isCollapsed || isAutoHidden) && 'Sign Out'}
           </button>
         </div>
-      </div>
-    </>
-  );
+      </>
+    );
+  };
 
   return (
     <>
-      {/* Desktop Sidebar */}
-      <aside 
+      {/* Desktop */}
+      <aside
         ref={sidebarRef}
-        className={`hidden lg:flex flex-col bg-blue-950 border-r border-white/10 h-screen transition-all duration-300 ease-in-out flex-shrink-0 ${
+        className={`hidden lg:flex flex-col h-screen bg-blue-950 border-r border-white/10 transition-all ${
           isCollapsed && !isAutoHidden ? 'w-16' : 'w-64'
-        } ${
-          isAutoHidden ? 'w-16' : ''
         }`}
         style={{ willChange: 'width' }}
       >
         <SidebarContent />
+
+        <div className="hidden lg:block border-t border-white/10 p-2">
+          <button
+            onClick={toggleCollapse}
+            className="w-full flex items-center justify-center p-2 rounded-lg text-white/80 hover:bg-blue-900/50 hover:text-white transition-colors"
+            title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+            type="button"
+          >
+            {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          </button>
+        </div>
       </aside>
 
-      {/* Mobile Menu Button */}
+      {/* Mobile button */}
       <button
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
           toggleMobileMenu();
         }}
-        onPointerDown={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          toggleMobileMenu();
-        }}
-        className={`lg:hidden fixed top-4 right-4 z-50 p-3 
-          rounded-xl text-white transition-all duration-300 ease-out shadow-xl touch-manipulation active:scale-95
-          backdrop-blur-xl bg-gradient-to-br from-white/10 to-blue-900/20
-          border border-white/20 hover:from-white/20 hover:to-blue-900/30
-          hover:shadow-2xl hover:shadow-blue-500/10
-          ${isMobileMenuOpen ? 'hidden' : 'block'}`}
-        aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
-        style={{ touchAction: 'manipulation' }}
+        className={`lg:hidden fixed top-4 right-4 z-50 p-3 rounded-xl bg-blue-900/80 ${
+          isMobileMenuOpen ? 'hidden' : 'block'
+        }`}
         type="button"
+        style={{ touchAction: 'manipulation' }}
       >
-        <Menu className="h-5 w-5" />
+        <Menu className="h-5 w-5 text-white" />
       </button>
 
-      {/* Mobile Sidebar Overlay */}
+      {/* Overlay */}
       {isMobileMenuOpen && (
-        <div 
-          className="lg:hidden fixed inset-0 bg-black/50 z-40"
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
           onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            closeMobileMenu();
-          }}
-          onPointerDown={(e) => {
             e.preventDefault();
             e.stopPropagation();
             closeMobileMenu();
@@ -761,24 +475,23 @@ function Sidebar() {
         />
       )}
 
-      {/* Mobile Sidebar */}
-      <aside 
-        className={`lg:hidden fixed left-0 top-0 h-full w-80 sm:w-80 bg-blue-950 border-r border-white/10 z-50 transform transition-transform duration-200 ease-out overflow-hidden flex flex-col ${
+      {/* Mobile sidebar */}
+      <aside
+        className={`fixed top-0 left-0 h-full w-80 bg-blue-950 z-50 flex flex-col justify-between transform transition-transform lg:hidden ${
           isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
-        onClick={(e) => {
-          // Prevent clicks inside sidebar from closing it
-          e.stopPropagation();
-        }}
-        style={{ 
-          willChange: 'transform', 
-          touchAction: 'pan-y',
+        style={{
+          willChange: 'transform',
+          touchAction: 'manipulation',
           pointerEvents: isMobileMenuOpen ? 'auto' : 'none',
           backfaceVisibility: 'hidden',
-          WebkitBackfaceVisibility: 'hidden'
+          WebkitBackfaceVisibility: 'hidden',
+          transform: isMobileMenuOpen
+            ? 'translateX(0) translateZ(0)'
+            : 'translateX(-100%) translateZ(0)',
+          WebkitTransform: isMobileMenuOpen
+            ? 'translateX(0) translateZ(0)'
+            : 'translateX(-100%) translateZ(0)',
         }}
       >
         <SidebarContent />
@@ -787,5 +500,4 @@ function Sidebar() {
   );
 }
 
-// Memoize the component to prevent unnecessary re-renders
-export default memo(Sidebar); 
+export default memo(Sidebar);
