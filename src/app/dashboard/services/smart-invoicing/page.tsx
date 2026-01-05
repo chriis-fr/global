@@ -1,265 +1,28 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { motion } from 'framer-motion';
 import { 
   Plus, 
   FileText, 
-  DollarSign, 
-  Calendar, 
-  TrendingUp,
-  ArrowRight,
-  RotateCcw,
-  Users,
   List,
   Building2,
-  AlertCircle,
   Lock,
-  CheckCircle,
-  MessageCircle
+  Users,
+  ArrowRight,
+  RotateCcw
 } from 'lucide-react';
-import { InvoiceService, InvoiceStats } from '@/lib/services/invoiceService';
-import { Invoice } from '@/models/Invoice';
-import FormattedNumberDisplay from '@/components/FormattedNumber';
-import InvoicingSkeleton from '@/components/ui/InvoicingSkeleton';
 import { useSubscription } from '@/lib/contexts/SubscriptionContext';
-
-// Cache key for localStorage
-const CACHE_KEY = 'smart-invoicing-cache';
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes - stable cache for good UX
-
-interface CachedData {
-  invoices: Invoice[];
-  stats: InvoiceStats;
-  isOnboardingCompleted: boolean | null;
-  timestamp: number;
-}
+import InvoiceStatCard from '@/components/smart-invoicing/InvoiceStatCard';
+import RecentInvoicesList from '@/components/smart-invoicing/RecentInvoicesList';
+import OnboardingStatus from '@/components/smart-invoicing/OnboardingStatus';
 
 export default function SmartInvoicingPage() {
   const router = useRouter();
   const { data: session } = useSession();
   const { subscription } = useSubscription();
-
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [stats, setStats] = useState<InvoiceStats>({
-    totalInvoices: 0,
-    pendingCount: 0,
-    paidCount: 0,
-    totalRevenue: 0
-  });
-  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [dataLoaded, setDataLoaded] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filteredInvoices, setFilteredInvoices] = useState<Invoice[]>([]);
-  
-  // Load cached data from localStorage
-  const loadCachedData = useCallback(() => {
-    try {
-      const cached = localStorage.getItem(CACHE_KEY);
-      if (cached) {
-        const data: CachedData = JSON.parse(cached);
-        const now = Date.now();
-        
-        // Check if cache is still valid (less than 5 minutes old)
-        if (now - data.timestamp < CACHE_DURATION) {
-          setInvoices(data.invoices);
-          setStats(data.stats);
-          setIsOnboardingCompleted(data.isOnboardingCompleted);
-          setDataLoaded(true);
-          return true;
-        } else {
-          localStorage.removeItem(CACHE_KEY);
-        }
-      }
-    } catch (error) {
-      console.error('❌ [Smart Invoicing] Error loading cache:', error);
-      localStorage.removeItem(CACHE_KEY);
-    }
-    return false;
-  }, []);
-
-  // Save data to cache
-  const saveToCache = useCallback((invoices: Invoice[], stats: InvoiceStats, isOnboardingCompleted: boolean | null) => {
-    try {
-      const cacheData: CachedData = {
-        invoices,
-        stats,
-        isOnboardingCompleted,
-        timestamp: Date.now()
-      };
-      localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
-    } catch (error) {
-      console.error('❌ [Smart Invoicing] Error saving to cache:', error);
-    }
-  }, []);
-
-  // Load all data in parallel
-  const loadAllData = useCallback(async (forceRefresh = false) => {
-    if (!session?.user) return;
-    
-    // Try to load from cache first (unless force refresh)
-    if (!forceRefresh && loadCachedData()) {
-      // If we have cached data, check if it's stale and refresh in background
-      const cached = localStorage.getItem(CACHE_KEY);
-      if (cached) {
-        const data: CachedData = JSON.parse(cached);
-        const age = Date.now() - data.timestamp;
-        const staleThreshold = 2 * 60 * 1000; // 2 minutes
-        
-        if (age > staleThreshold) {
-          console.log('🔄 [Smart Invoicing] Background refresh - cache is stale');
-          setRefreshing(true);
-          // Don't await - let it refresh in background
-          loadAllData(true).finally(() => setRefreshing(false));
-        }
-      }
-      return;
-    }
-    
-    // Don't reload if we already have data and not forcing refresh
-    if (dataLoaded && !forceRefresh) return;
-    
-    try {
-      setLoading(true);
-      
-      // Load invoices with stats and check onboarding status in parallel
-      const [invoicesResponse, onboardingResponse] = await Promise.all([
-        fetch('/api/invoices?convertToPreferred=true'), // Convert to user's preferred currency
-        fetch('/api/onboarding/service?service=smartInvoicing')
-      ]);
-      
-      const invoicesData = await invoicesResponse.json();
-      
-      // Process invoices and stats from API
-      let currentInvoices: Invoice[] = [];
-      let currentStats: InvoiceStats = {
-        totalInvoices: 0,
-        pendingCount: 0,
-        paidCount: 0,
-        totalRevenue: 0
-      };
-      
-      if (invoicesData.success) {
-        currentInvoices = invoicesData.data.invoices || [];
-        const apiStats = invoicesData.data.stats;
-        
-        
-        setInvoices(currentInvoices);
-        currentStats = {
-          totalInvoices: apiStats.totalInvoices || 0,
-          // Use API stats counts (calculated from total database count, not paginated results)
-          pendingCount: (apiStats.statusCounts?.sent || 0) + (apiStats.statusCounts?.pending || 0),
-          paidCount: apiStats.statusCounts?.paid || 0,
-          totalRevenue: apiStats.totalRevenue || 0
-        };
-        setStats(currentStats);
-      } else {
-        // Fallback to local calculation if API fails
-        currentInvoices = forceRefresh ? await InvoiceService.refreshInvoices() : await InvoiceService.getInvoices();
-        setInvoices(currentInvoices);
-        currentStats = InvoiceService.getStats(currentInvoices);
-        setStats(currentStats);
-      }
-      
-      // Process onboarding status
-      const onboardingData = await onboardingResponse.json();
-      let onboardingCompleted = null;
-      if (onboardingData.success) {
-        onboardingCompleted = onboardingData.data.isCompleted;
-        setIsOnboardingCompleted(onboardingCompleted);
-      }
-      
-      // Save to cache
-      saveToCache(currentInvoices, currentStats, onboardingCompleted);
-    } catch (error) {
-      console.error('❌ [Smart Invoicing Dashboard] Error loading data:', error);
-    } finally {
-      setLoading(false);
-      setDataLoaded(true);
-    }
-  }, [session?.user, dataLoaded, loadCachedData, saveToCache]);
-
-  useEffect(() => {
-    if (session?.user) {
-      // Load data (will use cache if available and valid)
-      loadAllData(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.user]); // Intentionally exclude loadAllData to prevent infinite loops
-
-  // Refresh completion status when returning from onboarding or payment actions
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('refresh') === 'true') {
-      // Clear the cache to ensure fresh data
-      localStorage.removeItem(CACHE_KEY);
-      // Remove the refresh parameter from URL
-      const newUrl = window.location.pathname;
-      window.history.replaceState({}, '', newUrl);
-      // Force refresh data immediately (bypass cache)
-      loadAllData(true);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Intentionally exclude loadAllData to prevent infinite loops
-
-  // Smart refresh when returning from specific actions
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (!document.hidden && dataLoaded) {
-        // Check if we're returning from a payment-related action
-        const lastAction = sessionStorage.getItem('lastPaymentAction');
-        const now = Date.now();
-        
-        if (lastAction) {
-          const actionTime = parseInt(lastAction);
-          // If last payment action was within last 2 minutes, force refresh
-          if (now - actionTime < 2 * 60 * 1000) {
-            console.log('🔄 [Smart Invoicing] Force refresh due to recent payment action');
-            loadAllData(true);
-            sessionStorage.removeItem('lastPaymentAction');
-            return;
-          }
-        }
-        
-        // Otherwise, only refresh if cache is expired (5+ minutes old)
-        const cached = localStorage.getItem(CACHE_KEY);
-        if (cached) {
-          const data = JSON.parse(cached);
-          if (now - data.timestamp > CACHE_DURATION) {
-            loadAllData(true);
-          }
-        }
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataLoaded]);
-
-  // Filter invoices based on search term
-  useEffect(() => {
-    if (!searchTerm.trim()) {
-      setFilteredInvoices(invoices);
-    } else {
-      const filtered = invoices.filter(invoice => 
-        invoice.invoiceNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        invoice.clientDetails?.companyName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        invoice.clientDetails?.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        invoice.clientDetails?.lastName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        invoice.clientDetails?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        invoice.status?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      setFilteredInvoices(filtered);
-    }
-  }, [searchTerm, invoices]);
 
   const handleCreateInvoice = () => {
     // Check if user can create invoice (limit reached)
@@ -268,22 +31,12 @@ export default function SmartInvoicingPage() {
       return;
     }
     
-    // Only check onboarding if we have the data, otherwise assume it's completed
-    if (dataLoaded && isOnboardingCompleted === false) {
-      router.push('/dashboard/services/smart-invoicing/onboarding');
-    } else {
-      router.push('/dashboard/services/smart-invoicing/create');
-    }
+    router.push('/dashboard/services/smart-invoicing/create');
   };
 
   const handleManageInvoiceInfo = () => {
     router.push('/dashboard/services/smart-invoicing/onboarding');
   };
-
-  const handleSetupService = () => {
-    router.push('/dashboard/services/smart-invoicing/onboarding');
-  };
-
 
   const handleViewInvoices = () => {
     router.push('/dashboard/services/smart-invoicing/invoices');
@@ -293,14 +46,22 @@ export default function SmartInvoicingPage() {
     router.push('/dashboard/clients');
   };
 
-  // Show skeleton while loading initial data
-  if (loading && !dataLoaded) {
-    return <InvoicingSkeleton />;
-  }
+  const handleRefresh = () => {
+    // Clear all caches to force refresh
+    localStorage.removeItem('invoice_stat_total');
+    localStorage.removeItem('invoice_stat_revenue');
+    localStorage.removeItem('invoice_stat_pending');
+    localStorage.removeItem('invoice_stat_paid');
+    localStorage.removeItem('smart_invoicing_recent_invoices');
+    localStorage.removeItem('smart_invoicing_onboarding_status');
+    
+    // Reload the page to trigger fresh data
+    window.location.reload();
+  };
 
   return (
     <div className="space-y-4 sm:space-y-6 px-4 sm:px-0">
-      {/* Header - Modern Design */}
+      {/* Header - Always Visible, No Data Dependency */}
       <div className="bg-white/10 backdrop-blur-sm border-b rounded-lg border-white/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
@@ -310,23 +71,17 @@ export default function SmartInvoicingPage() {
                 <h1 className="text-lg sm:text-xl font-semibold text-white truncate">Smart Invoicing</h1>
                 <p className="text-xs sm:text-sm text-blue-200 hidden sm:block">
                   Create, manage, and get paid with both fiat and blockchain payments seamlessly
-                  {refreshing && (
-                    <span className="ml-2 text-xs text-blue-300">
-                      🔄 Updating...
-                    </span>
-                  )}
                 </p>
               </div>
             </div>
             
             <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
               <button
-                onClick={() => loadAllData(true)}
-                disabled={refreshing}
-                className="flex items-center justify-center w-8 h-8 text-blue-300 hover:text-blue-200 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-50"
-                title={refreshing ? "Refreshing..." : "Refresh data"}
+                onClick={handleRefresh}
+                className="flex items-center justify-center w-8 h-8 text-blue-300 hover:text-blue-200 hover:bg-white/10 rounded-lg transition-colors"
+                title="Refresh data"
               >
-                <RotateCcw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
+                <RotateCcw className="h-3 w-3" />
               </button>
               <motion.button
                 whileHover={{ scale: 1.05 }}
@@ -351,16 +106,10 @@ export default function SmartInvoicingPage() {
               >
                 <Plus className="h-4 w-4" />
                 <span className="hidden sm:inline">
-                  {!subscription?.canCreateInvoice ? 'Limit Reached' :
-                   !dataLoaded && loading ? 'Loading...' : 
-                   dataLoaded && isOnboardingCompleted === false ? 'Setup & Create' : 
-                   'Create Invoice'}
+                  {!subscription?.canCreateInvoice ? 'Limit Reached' : 'Create Invoice'}
                 </span>
                 <span className="sm:hidden">
-                  {!subscription?.canCreateInvoice ? 'Limit' :
-                   !dataLoaded && loading ? 'Loading...' : 
-                   dataLoaded && isOnboardingCompleted === false ? 'Setup' : 
-                   'Create'}
+                  {!subscription?.canCreateInvoice ? 'Limit' : 'Create'}
                 </span>
                 {!subscription?.canCreateInvoice && (
                   <Lock className="h-4 w-4" />
@@ -371,122 +120,83 @@ export default function SmartInvoicingPage() {
         </div>
       </div>
 
-      {/* Service Onboarding Check */}
-      {!loading && isOnboardingCompleted === false && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-yellow-600/20 border border-yellow-500/50 rounded-xl p-4 sm:p-6"
-        >
-          <div className="flex items-start space-x-3 sm:space-x-4">
-            <AlertCircle className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-400 mt-1 flex-shrink-0" />
-            <div className="flex-1">
-              <h3 className="text-base sm:text-lg font-semibold text-yellow-100 mb-2">
-                Service Setup Required
-              </h3>
-              <p className="text-yellow-200 mb-4 text-sm sm:text-base">
-                Before you can create invoices, you need to configure your business information and invoice settings. 
-                Click &quot;Manage Invoice Info&quot; above or &quot;Complete Setup&quot; below to get started.
-              </p>
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={handleSetupService}
-                className="flex items-center justify-center space-x-2 bg-yellow-600 text-white px-4 py-3 rounded-lg hover:bg-yellow-700 transition-colors min-h-[44px] w-full sm:w-auto"
-              >
-                <ArrowRight className="h-4 w-4" />
-                <span>Complete Setup</span>
-              </motion.button>
-            </div>
-          </div>
-        </motion.div>
-      )}
+      {/* Onboarding Status - Independent Loading with Suspense */}
+      <Suspense fallback={null}>
+        <OnboardingStatus />
+      </Suspense>
 
-      {/* Stats Cards - Modern Design */}
+      {/* Stats Cards - Independent Loading with Suspense */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200"
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-blue-200 text-sm font-medium">Total Invoices</p>
-              <p className="text-2xl font-bold text-white">
-                {stats.totalInvoices}
-              </p>
+          <Suspense fallback={
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 animate-pulse">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="h-4 w-24 bg-white/20 rounded mb-2"></div>
+                  <div className="h-8 w-16 bg-white/20 rounded"></div>
+                </div>
+                <div className="p-3 bg-white/20 rounded-lg">
+                  <div className="h-6 w-6"></div>
+                </div>
+              </div>
             </div>
-            <div className="p-3 bg-blue-500/20 rounded-lg">
-              <FileText className="h-6 w-6 text-blue-400" />
-            </div>
-          </div>
-        </motion.div>
+          }>
+            <InvoiceStatCard type="total" />
+          </Suspense>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200"
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-blue-200 text-sm font-medium">Total Revenue</p>
-              <p className="text-2xl font-bold text-white">
-                <FormattedNumberDisplay value={stats.totalRevenue} usePreferredCurrency={true} />
-              </p>
+          <Suspense fallback={
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 animate-pulse">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="h-4 w-24 bg-white/20 rounded mb-2"></div>
+                  <div className="h-8 w-16 bg-white/20 rounded"></div>
+                </div>
+                <div className="p-3 bg-white/20 rounded-lg">
+                  <div className="h-6 w-6"></div>
+                </div>
+              </div>
             </div>
-            <div className="p-3 bg-green-500/20 rounded-lg">
-              <DollarSign className="h-6 w-6 text-green-400" />
-            </div>
-          </div>
-        </motion.div>
+          }>
+            <InvoiceStatCard type="revenue" />
+          </Suspense>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200"
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-blue-200 text-sm font-medium">Pending</p>
-              <p className="text-2xl font-bold text-white">
-                {stats.pendingCount}
-              </p>
+          <Suspense fallback={
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 animate-pulse">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="h-4 w-24 bg-white/20 rounded mb-2"></div>
+                  <div className="h-8 w-16 bg-white/20 rounded"></div>
+                </div>
+                <div className="p-3 bg-white/20 rounded-lg">
+                  <div className="h-6 w-6"></div>
+                </div>
+              </div>
             </div>
-            <div className="p-3 bg-yellow-500/20 rounded-lg">
-              <Calendar className="h-6 w-6 text-yellow-400" />
-            </div>
-          </div>
-        </motion.div>
+          }>
+            <InvoiceStatCard type="pending" />
+          </Suspense>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200"
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-blue-200 text-sm font-medium">Paid</p>
-              <p className="text-2xl font-bold text-white">
-                {stats.paidCount}
-              </p>
+          <Suspense fallback={
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 animate-pulse">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="h-4 w-24 bg-white/20 rounded mb-2"></div>
+                  <div className="h-8 w-16 bg-white/20 rounded"></div>
+                </div>
+                <div className="p-3 bg-white/20 rounded-lg">
+                  <div className="h-6 w-6"></div>
+                </div>
+              </div>
             </div>
-            <div className="p-3 bg-green-500/20 rounded-lg">
-              <TrendingUp className="h-6 w-6 text-green-400" />
-            </div>
-          </div>
-        </motion.div>
+          }>
+            <InvoiceStatCard type="paid" />
+          </Suspense>
         </div>
       </div>
 
-      {/* Quick Actions - Modern Design */}
+      {/* Quick Actions - Always Visible */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {/* Only show Create New Invoice card when onboarding is not completed */}
-        {(!dataLoaded || isOnboardingCompleted === false) && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -522,211 +232,84 @@ export default function SmartInvoicingPage() {
               )}
             </div>
           </motion.div>
-        )}
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200 cursor-pointer"
-          onClick={handleManageInvoiceInfo}
-        >
-          <div className="flex items-center space-x-4">
-            <div className="p-3 bg-orange-500/20 rounded-lg">
-              <Building2 className="h-6 w-6 text-orange-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="text-lg font-semibold text-white">Manage Invoice Info</h3>
-              <p className="text-blue-200 text-sm">Configure business information and settings</p>
-            </div>
-            <ArrowRight className="h-5 w-5 text-blue-400 flex-shrink-0" />
-          </div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6 }}
-          className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200 cursor-pointer"
-          onClick={handleManageClients}
-        >
-          <div className="flex items-center space-x-4">
-            <div className="p-3 bg-green-500/20 rounded-lg">
-              <Users className="h-6 w-6 text-green-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="text-lg font-semibold text-white">Manage Clients</h3>
-              <p className="text-blue-200 text-sm">Add and organize your clients</p>
-            </div>
-            <ArrowRight className="h-5 w-5 text-blue-400 flex-shrink-0" />
-          </div>
-        </motion.div>
-
-        {/* Only show Team Settings for business users with organizations */}
-        {session?.user?.userType === 'business' && session?.user?.organizationId && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.7 }}
+            transition={{ delay: 0.5 }}
             className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200 cursor-pointer"
-            onClick={() => router.push('/dashboard/settings/organization')}
+            onClick={handleManageInvoiceInfo}
           >
             <div className="flex items-center space-x-4">
-              <div className="p-3 bg-purple-500/20 rounded-lg">
-                <Users className="h-6 w-6 text-purple-400" />
+              <div className="p-3 bg-orange-500/20 rounded-lg">
+                <Building2 className="h-6 w-6 text-orange-400" />
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="text-lg font-semibold text-white">Team Settings</h3>
-                <p className="text-blue-200 text-sm">Configure team permissions</p>
+                <h3 className="text-lg font-semibold text-white">Manage Invoice Info</h3>
+                <p className="text-blue-200 text-sm">Configure business information and settings</p>
               </div>
               <ArrowRight className="h-5 w-5 text-blue-400 flex-shrink-0" />
             </div>
           </motion.div>
-        )}
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6 }}
+            className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200 cursor-pointer"
+            onClick={handleManageClients}
+          >
+            <div className="flex items-center space-x-4">
+              <div className="p-3 bg-green-500/20 rounded-lg">
+                <Users className="h-6 w-6 text-green-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg font-semibold text-white">Manage Clients</h3>
+                <p className="text-blue-200 text-sm">Add and organize your clients</p>
+              </div>
+              <ArrowRight className="h-5 w-5 text-blue-400 flex-shrink-0" />
+            </div>
+          </motion.div>
+
+          {/* Only show Team Settings for business users with organizations */}
+          {session?.user?.userType === 'business' && session?.user?.organizationId && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.7 }}
+              className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200 cursor-pointer"
+              onClick={() => router.push('/dashboard/settings/organization')}
+            >
+              <div className="flex items-center space-x-4">
+                <div className="p-3 bg-purple-500/20 rounded-lg">
+                  <Users className="h-6 w-6 text-purple-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-lg font-semibold text-white">Team Settings</h3>
+                  <p className="text-blue-200 text-sm">Configure team permissions</p>
+                </div>
+                <ArrowRight className="h-5 w-5 text-blue-400 flex-shrink-0" />
+              </div>
+            </motion.div>
+          )}
         </div>
       </div>
 
-      {/* Recent Activity - Modern Design */}
-      {invoices.length > 0 && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.7 }}
-            className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6"
-          >
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base sm:text-lg font-semibold text-white">Recent Invoices</h3>
-            <button
-              onClick={handleViewInvoices}
-              className="text-blue-400 hover:text-blue-300 text-sm font-medium"
-            >
-              View All
-            </button>
-          </div>
-          
-          {/* Search Bar */}
-          <div className="mb-6">
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Search by invoice number, client, or status..."
-                value={searchTerm}
-                className="w-full px-4 py-2 pl-10 bg-white/5 border border-white/20 rounded-lg text-white placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-200"
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg className="h-4 w-4 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
+      {/* Recent Activity - Independent Loading with Suspense */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <Suspense fallback={
+          <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
+            <div className="h-6 w-32 bg-white/20 rounded mb-4 animate-pulse"></div>
+            <div className="space-y-4">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-16 bg-white/10 rounded-lg animate-pulse"></div>
+              ))}
             </div>
           </div>
-          <div className="space-y-3">
-            {(searchTerm ? filteredInvoices : invoices).slice(0, 5).map((invoice, index) => (
-              <motion.div
-                key={invoice._id?.toString() || index}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.8 + index * 0.1 }}
-                className="flex items-center justify-between p-3 bg-white/5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer min-h-[60px]"
-                onClick={() => {
-                  if (invoice.status === 'draft') {
-                    router.push(`/dashboard/services/smart-invoicing/create?id=${invoice._id}`);
-                  } else {
-                    router.push(`/dashboard/services/smart-invoicing/invoices/${invoice._id}`);
-                  }
-                }}
-              >
-                <div className="flex items-center space-x-3 flex-1 min-w-0">
-                  <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-                    <FileText className="h-4 w-4 text-white" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center space-x-2">
-                      <p className="text-white font-medium text-sm sm:text-base truncate">{invoice.invoiceNumber || 'Invoice'}</p>
-                      {/* WhatsApp indicator */}
-                      {invoice.sentVia === 'whatsapp' && (
-                        <MessageCircle className="h-4 w-4 text-green-400 flex-shrink-0"  />
-                      )}
-                      {/* Approval indicator - only for organization recipients */}
-                      {(invoice.status === 'approved' || invoice.status === 'sent') && invoice.organizationId && invoice.recipientType === 'organization' && (
-                        <div className="relative group">
-                          <CheckCircle className="h-4 w-4 text-green-400 flex-shrink-0" />
-                          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-                            Approved
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-blue-200 text-xs sm:text-sm truncate">
-                      {invoice.clientDetails?.companyName || 
-                       [invoice.clientDetails?.firstName, invoice.clientDetails?.lastName].filter(Boolean).join(' ') || 
-                       invoice.clientDetails?.email || 'Client'}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right flex-shrink-0 ml-3">
-                  <p className="text-white font-semibold text-sm sm:text-base">
-                    <FormattedNumberDisplay value={invoice.totalAmount || 0} />
-                  </p>
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                    invoice.status === 'paid' ? 'bg-green-100 text-green-800' :
-                    invoice.status === 'sent' || invoice.status === 'pending' || invoice.status === 'approved' ? 'bg-yellow-100 text-yellow-800' :
-                    invoice.status === 'draft' ? 'bg-gray-100 text-gray-800' :
-                    'bg-red-100 text-red-800'
-                  }`}>
-                    {invoice.status === 'sent' || invoice.status === 'approved' ? 'pending' : invoice.status}
-                  </span>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-          </motion.div>
-        </div>
-      )}
-
-      {/* Empty State - Modern Design */}
-      {invoices.length === 0 && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.8 }}
-            className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-12 text-center"
-          >
-          <FileText className="h-12 w-12 sm:h-16 sm:w-16 text-blue-400 mx-auto mb-4" />
-          <h3 className="text-lg sm:text-xl font-semibold text-white mb-2">No invoices yet</h3>
-          <p className="text-blue-200 mb-6 text-sm sm:text-base">
-            Create your first invoice to get started with our comprehensive invoicing system.
-          </p>
-          <button
-            onClick={handleCreateInvoice}
-            disabled={!subscription?.canCreateInvoice}
-            className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-lg transition-colors mx-auto min-h-[44px] ${
-              subscription?.canCreateInvoice
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                : 'bg-gray-500 text-gray-300 cursor-not-allowed'
-            }`}
-          >
-            {subscription?.canCreateInvoice ? (
-              <>
-                <Plus className="h-5 w-5" />
-                <span>Create Your First Invoice</span>
-              </>
-            ) : (
-              <>
-                <Lock className="h-5 w-5" />
-                <span>Limit Reached</span>
-              </>
-            )}
-          </button>
-          </motion.div>
-        </div>
-      )}
-
-      {/* Floating Dashboard Button */}
-      
+        }>
+          <RecentInvoicesList />
+        </Suspense>
+      </div>
     </div>
   );
-} 
+}

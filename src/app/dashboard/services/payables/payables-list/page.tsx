@@ -22,6 +22,7 @@ import {
 import FormattedNumberDisplay from '@/components/FormattedNumber';
 import CurrencyAmount from '@/components/CurrencyAmount';
 import { formatDateReadable } from '@/lib/utils/dateFormat';
+import { getAllPayables, deletePayable } from '@/app/actions/payable-actions';
 
 interface Payable {
   _id: string;
@@ -107,12 +108,11 @@ export default function PayablesListPage() {
     
     try {
       setLoading(true);
-      const response = await fetch('/api/payables?convertToPreferred=false'); // Keep original amounts
-      const data = await response.json();
+      const result = await getAllPayables();
       
-      if (data.success) {
-        setPayables(data.data.payables || []);
-        setStats(data.data.stats || {
+      if (result.success && result.data) {
+        setPayables(result.data.payables || []);
+        setStats(result.data.stats || {
           totalPayables: 0,
           pendingCount: 0,
           paidCount: 0,
@@ -165,11 +165,9 @@ export default function PayablesListPage() {
     if (!confirm('Are you sure you want to delete this payable?')) return;
     
     try {
-      const response = await fetch(`/api/payables/${payableId}`, {
-        method: 'DELETE'
-      });
+      const result = await deletePayable(payableId);
       
-      if (response.ok) {
+      if (result.success) {
         setPayables(prev => prev.filter(p => p._id !== payableId));
       }
     } catch (error) {

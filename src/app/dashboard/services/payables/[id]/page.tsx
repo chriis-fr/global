@@ -245,17 +245,17 @@ export default function PayableViewPage() {
     }
 
     try {
-      const response = await fetch(`/api/payables/${payableId}`, {
-        method: 'DELETE',
-      });
+      const { deletePayable } = await import('@/app/actions/payable-actions');
+      const result = await deletePayable(payableId);
 
-      const data = await response.json();
-
-      if (data.success) {
+      if (result.success) {
         router.push('/dashboard/services/payables?refresh=true');
       } else {
+        alert(result.error || 'Failed to delete payable');
       }
-    } catch {
+    } catch (error) {
+      console.error('Error deleting payable:', error);
+      alert('Failed to delete payable. Please try again.');
     }
   };
 

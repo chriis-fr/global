@@ -337,7 +337,7 @@ function Sidebar() {
               <User className="h-4 w-4 mr-3" />
               {(!isCollapsed || isAutoHidden) && 'Settings'}
             </span>
-            <ChevronRight className={`h-4 w-4 transition ${isSettingsOpen ? 'rotate-90' : ''}`} />
+            <ChevronRight  className={`h-4 w-4 text-white transition-transform duration-200 ${isSettingsOpen ? 'rotate-90' : ''}`} />
           </button>
 
           {isSettingsOpen && (
@@ -358,7 +358,7 @@ function Sidebar() {
                           handleMobileNavigation(link.href);
                         }
                       }}
-                      className={`flex px-3 py-2 rounded hover:bg-blue-900/50 cursor-pointer ${
+                      className={`flex px-3 py-2 rounded hover:rounded hover:bg-blue-900/50 cursor-pointer ${
                         active ? 'bg-blue-800 text-white' : 'text-white/80'
                       }`}
                       style={{ touchAction: 'manipulation' }}

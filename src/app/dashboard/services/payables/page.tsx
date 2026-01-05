@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { Suspense, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { motion } from 'framer-motion';
 import { 
   Plus, 
@@ -9,36 +10,41 @@ import {
   DollarSign, 
   Users,
   Building2,
-  ArrowRight
+  ArrowRight,
+  RotateCcw
 } from 'lucide-react';
-import PayablesStatsCards from '@/components/payables/PayablesStatsCards';
+import PayableStatCard from '@/components/payables/PayableStatCard';
 import PayablesList from '@/components/payables/PayablesList';
-import { usePayables } from '@/lib/contexts/PayablesContext';
+import PayablesOnboardingStatus from '@/components/payables/PayablesOnboardingStatus';
 
 export default function AccountsPayablePage() {
   const router = useRouter();
-  const { isOnboardingCompleted } = usePayables();
+  const { data: session } = useSession();
   const [activeTab, setActiveTab] = useState<'bills' | 'direct-payments' | 'vendors'>('bills');
 
   const handleCreatePayable = () => {
-    // Navigate instantly - onboarding check happens in background
-    if (isOnboardingCompleted === false) {
-      router.push('/dashboard/services/payables/onboarding');
-    } else {
-      router.push('/dashboard/services/payables/create');
-    }
+    router.push('/dashboard/services/payables/create');
   };
 
   const handleManagePayablesInfo = () => {
     router.push('/dashboard/services/payables/onboarding');
   };
 
-
-
+  const handleRefresh = () => {
+    // Clear all caches to force refresh
+    localStorage.removeItem('payable_stat_total');
+    localStorage.removeItem('payable_stat_amount');
+    localStorage.removeItem('payable_stat_pending');
+    localStorage.removeItem('payable_stat_paid');
+    localStorage.removeItem('payables_onboarding_status');
+    
+    // Reload the page to trigger fresh data
+    window.location.reload();
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br ">
-      {/* Header */}
+    <div className="min-h-screen bg-gradient-to-br">
+      {/* Header - Always Visible, No Data Dependency */}
       <div className="bg-white/10 backdrop-blur-sm border-b rounded-lg border-white/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
@@ -51,8 +57,15 @@ export default function AccountsPayablePage() {
             </div>
             <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
               <button
+                onClick={handleRefresh}
+                className="flex items-center justify-center w-8 h-8 text-blue-300 hover:text-blue-200 hover:bg-white/10 rounded-lg transition-colors"
+                title="Refresh data"
+              >
+                <RotateCcw className="h-3 w-3" />
+              </button>
+              <button
                 onClick={handleCreatePayable}
-                className="flex items-center space-x-1 sm:space-x-2 px-2 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors touch-manipulation active:scale-95"
+                className="flex items-center space-x-1 sm:space-x-2 px-2 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors touch-manipulation active:scale-95 text-sm"
                 style={{ touchAction: 'manipulation' }}
               >
                 <Plus className="h-4 w-4" />
@@ -65,10 +78,79 @@ export default function AccountsPayablePage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Cards - Load independently */}
-        <PayablesStatsCards />
+        {/* Onboarding Status - Independent Loading with Suspense */}
+        <Suspense fallback={null}>
+          <PayablesOnboardingStatus />
+        </Suspense>
 
-        {/* Quick Actions - Similar to Smart Invoicing */}
+        {/* Stats Cards - Independent Loading with Suspense */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <Suspense fallback={
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 animate-pulse">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="h-4 w-24 bg-white/20 rounded mb-2"></div>
+                  <div className="h-8 w-16 bg-white/20 rounded"></div>
+                </div>
+                <div className="p-3 bg-white/20 rounded-lg">
+                  <div className="h-6 w-6"></div>
+                </div>
+              </div>
+            </div>
+          }>
+            <PayableStatCard type="total" />
+          </Suspense>
+
+          <Suspense fallback={
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 animate-pulse">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="h-4 w-24 bg-white/20 rounded mb-2"></div>
+                  <div className="h-8 w-16 bg-white/20 rounded"></div>
+                </div>
+                <div className="p-3 bg-white/20 rounded-lg">
+                  <div className="h-6 w-6"></div>
+                </div>
+              </div>
+            </div>
+          }>
+            <PayableStatCard type="amount" />
+          </Suspense>
+
+          <Suspense fallback={
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 animate-pulse">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="h-4 w-24 bg-white/20 rounded mb-2"></div>
+                  <div className="h-8 w-16 bg-white/20 rounded"></div>
+                </div>
+                <div className="p-3 bg-white/20 rounded-lg">
+                  <div className="h-6 w-6"></div>
+                </div>
+              </div>
+            </div>
+          }>
+            <PayableStatCard type="pending" />
+          </Suspense>
+
+          <Suspense fallback={
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 animate-pulse">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="h-4 w-24 bg-white/20 rounded mb-2"></div>
+                  <div className="h-8 w-16 bg-white/20 rounded"></div>
+                </div>
+                <div className="p-3 bg-white/20 rounded-lg">
+                  <div className="h-6 w-6"></div>
+                </div>
+              </div>
+            </div>
+          }>
+            <PayableStatCard type="paid" />
+          </Suspense>
+        </div>
+
+        {/* Quick Actions - Always Visible */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -234,10 +316,7 @@ export default function AccountsPayablePage() {
             )}
           </div>
         </motion.div>
-
       </div>
-
-      
     </div>
   );
 }

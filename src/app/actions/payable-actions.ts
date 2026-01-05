@@ -449,3 +449,148 @@ export async function getPayablesStats() {
   }
 }
 
+/**
+ * Delete a payable
+ */
+export async function deletePayable(payableId: string) {
+  try {
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const db = await connectToDatabase();
+    const payablesCollection = db.collection('payables');
+
+    // Build query - Organization members should see organization's payables
+    const isOrganization = !!(session.user.organizationId && session.user.organizationId !== session.user.id);
+    const isObjectId = /^[0-9a-fA-F]{24}$/.test(session.user.id);
+    const issuerIdQuery = isObjectId 
+      ? { issuerId: new ObjectId(session.user.id) }
+      : { issuerId: session.user.id };
+    
+    const query: Record<string, unknown> = isOrganization 
+      ? { 
+          _id: new ObjectId(payableId),
+          $or: [
+            { organizationId: session.user.organizationId },
+            { organizationId: new ObjectId(session.user.organizationId) }
+          ]
+        }
+      : { 
+          _id: new ObjectId(payableId),
+          $or: [
+            issuerIdQuery,
+            { userId: session.user.email }
+          ]
+        };
+
+    const result = await payablesCollection.deleteOne(query);
+
+    if (result.deletedCount === 0) {
+      return { success: false, error: 'Payable not found or unauthorized' };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting payable:', error);
+    return { success: false, error: 'Failed to delete payable' };
+  }
+}
+
+/**
+ * Get all payables for list page (no pagination, client-side filtering)
+ */
+export async function getAllPayables() {
+  try {
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const db = await connectToDatabase();
+    const payablesCollection = db.collection('payables');
+
+    // Build query
+    const isOrganization = !!(session.user.organizationId && session.user.organizationId !== session.user.id);
+    const isObjectId = /^[0-9a-fA-F]{24}$/.test(session.user.id);
+    const issuerIdQuery = isObjectId 
+      ? { issuerId: new ObjectId(session.user.id) }
+      : { issuerId: session.user.id };
+    
+    const baseQuery = isOrganization 
+      ? { 
+          $or: [
+            { organizationId: session.user.organizationId },
+            { organizationId: new ObjectId(session.user.organizationId) }
+          ]
+        }
+      : { 
+          $or: [
+            issuerIdQuery,
+            { userId: session.user.email }
+          ]
+        };
+
+    // Get all payables
+    const payables = await payablesCollection
+      .find(baseQuery)
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    // Get status counts
+    const [draftCount, pendingCount, approvedCount, paidCount, overdueCount] = await Promise.all([
+      payablesCollection.countDocuments({ ...baseQuery, status: 'draft' }),
+      payablesCollection.countDocuments({ ...baseQuery, status: 'pending' }),
+      payablesCollection.countDocuments({ ...baseQuery, status: 'approved' }),
+      payablesCollection.countDocuments({ ...baseQuery, status: 'paid' }),
+      payablesCollection.countDocuments({ ...baseQuery, status: 'overdue' })
+    ]);
+
+    // Calculate total amount for unpaid payables
+    const unpaidPayables = payables.filter(p => p.status !== 'paid');
+    const totalAmount = unpaidPayables.reduce((sum, p) => sum + (p.total || p.amount || 0), 0);
+
+    // Transform payables
+    const transformedPayables = payables.map(p => ({
+      _id: p._id.toString(),
+      payableNumber: p.payableNumber || 'Payable',
+      payableName: p.payableName || p.payableNumber || 'Payable',
+      companyName: p.companyName,
+      vendorName: p.vendorName || '',
+      vendorCompany: p.vendorCompany,
+      vendorEmail: p.vendorEmail || '',
+      amount: p.amount || p.total || 0,
+      total: p.total || p.amount || 0,
+      currency: p.currency || 'USD',
+      status: p.status || 'pending',
+      dueDate: p.dueDate?.toISOString() || new Date().toISOString(),
+      issueDate: p.issueDate?.toISOString() || new Date().toISOString(),
+      description: p.description || p.memo || '',
+      category: p.category || '',
+      priority: p.priority || 'medium',
+      createdAt: p.createdAt?.toISOString() || new Date().toISOString(),
+      updatedAt: p.updatedAt?.toISOString() || new Date().toISOString(),
+    }));
+
+    return {
+      success: true,
+      data: {
+        payables: transformedPayables,
+        stats: {
+          totalPayables: payables.length,
+          pendingCount: pendingCount + approvedCount,
+          paidCount,
+          totalAmount,
+          overdueCount
+        }
+      }
+    };
+  } catch (error) {
+    console.error('Error getting all payables:', error);
+    return { success: false, error: 'Failed to fetch payables' };
+  }
+}
+
