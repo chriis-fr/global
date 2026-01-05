@@ -202,7 +202,7 @@ export default function Home() {
       >
         {/* <div className='bg' /> */}
         <Header />
-        <div className="pt-16">
+        <div className="pt-15">
           <BlockchainBenefits />
         </div>
         <Footer />

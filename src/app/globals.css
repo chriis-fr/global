@@ -45,6 +45,10 @@
   visibility: visible;
   pointer-events: none;
   z-index: 0;
+  /* Prevent background from causing scroll jitter */
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 /* Ensure animated cursor is above bg layer */
@@ -214,10 +218,8 @@ button, a, [role="button"], input[type="button"], input[type="submit"] {
   /* Prevent text selection on mobile taps */
   user-select: none;
   -webkit-user-select: none;
-  /* Optimize rendering */
+  /* Optimize rendering - removed contain to prevent scroll jitter */
   will-change: transform;
-  /* Reduce paint complexity */
-  contain: layout style paint;
 }
 
 /* Optimize all interactive elements for mobile */
@@ -238,10 +240,10 @@ section:first-of-type img[priority] {
   content-visibility: auto;
 }
 
-/* Reduce layout shifts - contain layout calculations */
-h1, h2, h3 {
+/* Reduce layout shifts - removed contain to prevent scroll jitter on mobile */
+/* h1, h2, h3 {
   contain: layout style;
-}
+} */
 
 /* Optimize motion animations for INP */
 [style*="content-visibility"] {
@@ -258,6 +260,24 @@ button:active {
 body, html {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
+}
+
+/* Prevent scroll jitter on mobile - force GPU acceleration for scroll containers */
+@media (max-width: 1023px) {
+  /* Force GPU layer for sections with absolute positioning */
+  section,
+  [class*="min-h-"],
+  [class*="h-screen"] {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+  }
+  
+  /* Optimize absolute positioned elements during scroll */
+  [class*="absolute"] {
+    will-change: transform;
+    transform: translateZ(0);
+  }
 }
 
 /* Ensure mobile uses native touch cursor - extra safety */
