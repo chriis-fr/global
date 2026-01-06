@@ -51,7 +51,7 @@ const SectionC = () => {
 
           <h2 className="text-3xl md:text-4xl font-bold mb-4 text-black">
             <span className="text-transparent bg-gradient-to-r from-[#D247BF] to-primary bg-clip-text">
-              Cross-border Payments?
+              International Settlement?
             </span>
           </h2>
           <p className="text-xl text-gray-700 mb-8 font-serif relative text-center md:text-left">

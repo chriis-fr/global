@@ -107,7 +107,6 @@ export function Header() {
   return (
     <header
       className="fixed left-1/2 -translate-x-1/2 top-3 shadow-inner font-sans bg-opacity-15 w-[90%] border border-gray-300 mx-auto z-50 rounded-2xl bg-white backdrop-blur-md"
-      style={{ willChange: 'transform', transform: 'translateZ(0)', WebkitBackfaceVisibility: 'hidden' }}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">

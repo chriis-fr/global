@@ -218,8 +218,7 @@ button, a, [role="button"], input[type="button"], input[type="submit"] {
   /* Prevent text selection on mobile taps */
   user-select: none;
   -webkit-user-select: none;
-  /* Optimize rendering - removed contain to prevent scroll jitter */
-  will-change: transform;
+  /* Removed will-change to prevent scroll jitter - only use when actually animating */
 }
 
 /* Optimize all interactive elements for mobile */
@@ -229,26 +228,17 @@ button, a, [role="button"], input[type="button"], input[type="submit"] {
 }
 
 /* Optimize images for LCP - critical for performance */
-img[priority], img[data-priority], img[fetchpriority="high"] {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 500px;
-}
+/* Removed content-visibility: auto as it can cause layout recalculations during scroll on mobile */
 
 /* Optimize hero sections for faster LCP */
-section:first-of-type h1,
-section:first-of-type img[priority] {
-  content-visibility: auto;
-}
+/* Removed content-visibility to prevent scroll jitter on mobile */
 
 /* Reduce layout shifts - removed contain to prevent scroll jitter on mobile */
 /* h1, h2, h3 {
   contain: layout style;
 } */
 
-/* Optimize motion animations for INP */
-[style*="content-visibility"] {
-  will-change: contents;
-}
+/* Removed will-change: contents as it can cause performance issues during scroll */
 
 /* Prevent layout shifts on button clicks */
 button:active {
@@ -262,23 +252,9 @@ body, html {
   overscroll-behavior-y: contain;
 }
 
-/* Prevent scroll jitter on mobile - force GPU acceleration for scroll containers */
-@media (max-width: 1023px) {
-  /* Force GPU layer for sections with absolute positioning */
-  section,
-  [class*="min-h-"],
-  [class*="h-screen"] {
-    transform: translateZ(0);
-    backface-visibility: hidden;
-    -webkit-backface-visibility: hidden;
-  }
-  
-  /* Optimize absolute positioned elements during scroll */
-  [class*="absolute"] {
-    will-change: transform;
-    transform: translateZ(0);
-  }
-}
+/* Prevent scroll jitter on mobile - REMOVED aggressive GPU acceleration
+   that was causing layer thrashing. Only apply GPU acceleration to specific
+   elements that actually need it, not all sections/absolute elements */
 
 /* Ensure mobile uses native touch cursor - extra safety */
 @media (pointer: coarse) {
