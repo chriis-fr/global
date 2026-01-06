@@ -270,7 +270,7 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
               <p className="text-xs text-blue-300 mt-2">{stats.pendingInvoices} pending invoices</p>
             </div>
             <div className="p-3 bg-blue-500/20 rounded-lg w-fit mt-4">
-              <ArrowUpRight className="h-6 w-6 text-blue-400" />
+              <ArrowDownLeft className="h-6 w-6 text-blue-400" />
             </div>
           </div>
         </div>
@@ -288,7 +288,7 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
               <p className="text-xs text-blue-300 mt-2">Bills to pay</p>
             </div>
             <div className="p-3 bg-red-500/20 rounded-lg w-fit mt-4">
-              <ArrowDownLeft className="h-6 w-6 text-red-400" />
+              <ArrowUpRight className="h-6 w-6 text-red-400" />
             </div>
           </div>
         </div>
