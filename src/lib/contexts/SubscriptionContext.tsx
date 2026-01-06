@@ -54,6 +54,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
   const [loading, setLoading] = useState(!cachedSubscription && status === 'loading');
   const [error, setError] = useState<string | null>(null);
   const hasInitialized = useRef(false);
+  const lastUserIdRef = useRef<string | null>(null);
 
   // Check if we're on the landing page - don't show loader there
   const isLandingPage = pathname === '/';
@@ -196,27 +197,27 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
   }, [session?.user?.id, getCachedData, setCachedData]);
 
   useEffect(() => {
-    // Skip if already initialized for this user
     const userId = session?.user?.id;
-    if (hasInitialized.current && userId) {
-      return;
-    }
-
-    // Once authenticated, load subscription immediately
-    if (status === 'authenticated' && userId) {
-      if (!hasInitialized.current) {
+    
+    // Start fetching subscription as soon as we have a session, even during loading phase
+    // This ensures subscription is ready by the time dashboard loads
+    if (userId) {
+      // Check if we need to initialize for this user
+      if (!hasInitialized.current || lastUserIdRef.current !== userId) {
         hasInitialized.current = true;
+        lastUserIdRef.current = userId;
         
         // Check cache first
         const cached = getCachedSubscription(userId);
         if (cached) {
-          // We have cache, use it immediately and refresh in background
+          // We have cache, use it immediately
           setSubscription(cached);
           setLoading(false);
-          // Refresh in background silently
+          // Refresh in background silently (happens during auth loading phase)
           fetchSubscription(false, false);
         } else {
-          // No cache, fetch now (but don't show loading if we're during auth)
+          // No cache, fetch immediately (happens during auth loading phase)
+          // This runs in parallel with authentication, so it's ready when dashboard loads
           fetchSubscription(false, false);
         }
       }
@@ -226,9 +227,10 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
       setLoading(false);
       setError(null);
       hasInitialized.current = false;
+      lastUserIdRef.current = null;
       clearCache(); // Clear cache on logout
     }
-  }, [status, session?.user?.id, fetchSubscription, clearCache]);
+  }, [session?.user?.id, status, fetchSubscription, clearCache]);
 
   // Refetch on window focus if cache is older than 30 minutes (less aggressive)
   useEffect(() => {

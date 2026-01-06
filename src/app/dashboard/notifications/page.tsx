@@ -144,24 +144,6 @@ export default function NotificationsPage() {
     }
   };
 
-  const handleCreateTestNotification = async () => {
-    try {
-      const response = await fetch('/api/notifications/test', {
-        method: 'POST'
-      });
-      
-      if (response.ok) {
-        // Reload notifications
-        loadNotifications();
-        alert('Test notification created successfully!');
-      } else {
-        const error = await response.json();
-        alert(`Failed to create test notification: ${error.message}`);
-      }
-    } catch {
-      alert('Failed to create test notification');
-    }
-  };
 
   const getNotificationIcon = (type: NotificationType) => {
     switch (type) {
@@ -235,15 +217,6 @@ export default function NotificationsPage() {
           <p className="text-blue-200">Stay updated with your latest activities and alerts</p>
         </div>
         <div className="flex space-x-3">
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={handleCreateTestNotification}
-            className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
-          >
-            <Bell className="h-4 w-4" />
-            <span>Test Notification</span>
-          </motion.button>
           {stats.unread > 0 && (
             <motion.button
               whileHover={{ scale: 1.05 }}

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ProvidersWrapper } from "@/components/providers/ProvidersWrapper";
+import { PWARefresh } from "@/components/pwa/PWARefresh";
 
 // DO NOT import database initialization here - it blocks SSR
 // Database connections should be lazy-loaded only when needed in API routes
@@ -97,6 +98,7 @@ export const metadata: Metadata = {
 export const viewport = {
   width: "device-width",
   initialScale: 1.0,
+  themeColor: "#1c398e", // Matches the blue theme - controls status bar color on mobile
 };
 
 export default function RootLayout({
@@ -122,6 +124,8 @@ export default function RootLayout({
         <ProvidersWrapper>
           {children}
         </ProvidersWrapper>
+        {/* PWA Refresh Button - Only shows when app is installed */}
+        <PWARefresh />
       </body>
     </html>
   );
