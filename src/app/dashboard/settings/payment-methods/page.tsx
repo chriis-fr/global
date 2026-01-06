@@ -14,11 +14,13 @@ import {
   EyeOff,
   LayoutDashboard,
   Smartphone,
-  Shield
+  Shield,
+  ChevronDown
 } from 'lucide-react';
 import Link from 'next/link';
 import BankSelector from '@/components/BankSelector';
 import { Bank } from '@/data';
+import DynamicBankFields from '@/components/payments/DynamicBankFields';
 import ConnectSafeModal from '@/components/safe/ConnectSafeModal';
 import { getConnectedSafeWallets } from '@/app/actions/safe-connection';
 
@@ -39,6 +41,11 @@ interface PaymentMethod {
     accountNumber?: string;
     branchAddress?: string;
     accountType?: string;
+    // Custom bank fields
+    bankAddress?: string;
+    accountHolder?: string;
+    routingNumber?: string;
+    beneficiaryName?: string;
     // M-Pesa details
     paybillNumber?: string;
     mpesaAccountNumber?: string;
@@ -76,6 +83,8 @@ export default function PaymentMethodsPage() {
   const [showSensitiveData, setShowSensitiveData] = useState<Record<string, boolean>>({});
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSafeModal, setShowSafeModal] = useState(false);
+  const [showCustomBankFields, setShowCustomBankFields] = useState(false);
+  const [isCustomBank, setIsCustomBank] = useState(false);
   const [newPaymentMethod, setNewPaymentMethod] = useState({
     name: '',
     type: 'fiat' as 'fiat' | 'crypto',
@@ -89,6 +98,9 @@ export default function PaymentMethodsPage() {
     accountNumber: '',
     branchAddress: '',
     accountType: 'checking' as 'checking' | 'savings' | 'business',
+    // Custom bank fields
+    bankCountryCode: 'KE' as 'GH' | 'KE',
+    customFields: {} as Record<string, string>,
     // M-Pesa fields
     paybillNumber: '',
     mpesaAccountNumber: '',
@@ -107,6 +119,50 @@ export default function PaymentMethodsPage() {
     loadPaymentMethods();
     loadSafeWallets();
   }, []);
+
+  // Check if bank name is custom (not in the list)
+  useEffect(() => {
+    // Only check if we have a bank name and it's not empty
+    if (!newPaymentMethod.bankName || !newPaymentMethod.bankName.trim() || !newPaymentMethod.bankCountryCode) {
+      setIsCustomBank(false);
+      setShowCustomBankFields(false);
+      return;
+    }
+
+    // Immediately show as potentially custom when user types (optimistic UI)
+    // This will be verified by the API check below
+    const bankNameTrimmed = newPaymentMethod.bankName.trim();
+    if (bankNameTrimmed.length > 0) {
+      setIsCustomBank(true);
+    }
+
+    // Add a small delay to avoid checking on every keystroke
+    const timeoutId = setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/banks/search?country=${newPaymentMethod.bankCountryCode}`);
+        const data = await response.json();
+        
+        if (data.success) {
+          const banks = data.data.banks as Bank[];
+          const bankNameLower = bankNameTrimmed.toLowerCase();
+          const isInList = banks.some(bank => 
+            bank.name.toLowerCase().trim() === bankNameLower
+          );
+          setIsCustomBank(!isInList);
+          if (!isInList) {
+            // If it's a custom bank, keep fields hidden until user toggles
+          } else {
+            setShowCustomBankFields(false);
+          }
+        }
+      } catch {
+        // If we can't check, assume it might be custom if there's a value
+        setIsCustomBank(!!bankNameTrimmed);
+      }
+    }, 300); // 300ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [newPaymentMethod.bankName, newPaymentMethod.bankCountryCode]);
 
   const loadSafeWallets = async () => {
     try {
@@ -188,14 +244,21 @@ export default function PaymentMethodsPage() {
     }));
   };
 
-  const handleBankSelect = (bank: Bank) => {
-    setNewPaymentMethod(prev => ({
-      ...prev,
-      bankName: bank.name,
-      swiftCode: bank.swift_code,
-      bankCode: bank.bank_code || '',
-      branchCode: bank.bank_code || ''
-    }));
+  const handleBankSelect = (bank: Bank | null) => {
+    if (bank) {
+      setNewPaymentMethod(prev => ({
+        ...prev,
+        bankName: bank.name,
+        swiftCode: bank.swift_code,
+        bankCode: bank.bank_code || '',
+        branchCode: bank.bank_code || ''
+      }));
+      setIsCustomBank(false);
+      setShowCustomBankFields(false);
+    } else {
+      // Custom bank - user is typing custom bank name
+      setIsCustomBank(true);
+    }
   };
 
   if (loading) {
@@ -431,6 +494,8 @@ export default function PaymentMethodsPage() {
                       accountNumber: newPaymentMethod.accountNumber,
                       branchAddress: newPaymentMethod.branchAddress,
                       accountType: newPaymentMethod.accountType,
+                      // Custom bank fields
+                      customFields: newPaymentMethod.customFields || {},
                       // M-Pesa details
                       paybillNumber: newPaymentMethod.paybillNumber,
                       mpesaAccountNumber: newPaymentMethod.mpesaAccountNumber,
@@ -572,13 +637,35 @@ export default function PaymentMethodsPage() {
                     {newPaymentMethod.subtype === 'bank' && (
                       <>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Bank Name</label>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-sm font-medium text-gray-700">Bank Name</label>
+                            <div className="relative">
+                              <select
+                                value={newPaymentMethod.bankCountryCode || 'KE'}
+                                onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, bankCountryCode: e.target.value as 'GH' | 'KE' }))}
+                                className="text-xs text-gray-600 bg-transparent border-none outline-none cursor-pointer pr-4 appearance-none"
+                              >
+                                <option value="GH">Ghana</option>
+                                <option value="KE">Kenya</option>
+                              </select>
+                              <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-600 pointer-events-none" />
+                            </div>
+                          </div>
                           <BankSelector
-                            countryCode="KE"
+                            countryCode={newPaymentMethod.bankCountryCode || 'KE'}
                             value={newPaymentMethod.bankName}
                             onBankSelectAction={handleBankSelect}
-                            onInputChangeAction={(value) => setNewPaymentMethod(prev => ({ ...prev, bankName: value }))}
-                            placeholder="Search for a bank..."
+                            onInputChangeAction={(value) => {
+                              setNewPaymentMethod(prev => ({ ...prev, bankName: value }));
+                              // If user clears the input, hide custom fields
+                              if (!value || !value.trim()) {
+                                setIsCustomBank(false);
+                                setShowCustomBankFields(false);
+                              }
+                              // The useEffect will check if it's a custom bank after debounce
+                            }}
+                            placeholder="Search for a bank or type custom bank name..."
+                            allowCustom={true}
                           />
                         </div>
                         <div>
@@ -644,9 +731,27 @@ export default function PaymentMethodsPage() {
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
                             placeholder="Branch address"
                             rows={3}
-                            required
                           />
                         </div>
+                        {/* Custom bank fields - only shown for custom banks with toggle */}
+                        {isCustomBank && (
+                          <div className="pt-2 border-t border-gray-200">
+                            <button
+                              type="button"
+                              onClick={() => setShowCustomBankFields(!showCustomBankFields)}
+                              className="flex items-center justify-between w-full text-left text-xs text-gray-500 hover:text-gray-700 mb-3"
+                            >
+                              <span>Additional bank details (optional)</span>
+                              <ChevronDown className={`h-3 w-3 transition-transform ${showCustomBankFields ? 'rotate-180' : ''}`} />
+                            </button>
+                            {showCustomBankFields && (
+                              <DynamicBankFields
+                                fields={newPaymentMethod.customFields || {}}
+                                onFieldsChange={(fields) => setNewPaymentMethod(prev => ({ ...prev, customFields: fields }))}
+                              />
+                            )}
+                          </div>
+                        )}
                       </>
                     )}
                     

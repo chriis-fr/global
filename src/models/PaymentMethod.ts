@@ -18,6 +18,8 @@ export interface FiatPaymentDetails {
   accountNumber?: string;
   branchAddress?: string;
   accountType?: 'checking' | 'savings' | 'business';
+  // Custom bank fields (for banks not in the predefined list) - dynamic key-value pairs
+  customFields?: Record<string, string>; // e.g., { "Bank Address": "123 Main St", "Routing Number": "123456" }
   // M-Pesa Paybill details (for mpesa_paybill subtype)
   paybillNumber?: string;
   mpesaAccountNumber?: string;
@@ -96,6 +98,8 @@ export interface CreateFiatPaymentMethodInput {
   accountNumber?: string;
   branchAddress?: string;
   accountType?: 'checking' | 'savings' | 'business';
+  // Custom bank fields (for banks not in the predefined list) - dynamic key-value pairs
+  customFields?: Record<string, string>; // e.g., { "Bank Address": "123 Main St", "Routing Number": "123456" }
   // M-Pesa Paybill details (for mpesa_paybill subtype)
   paybillNumber?: string;
   mpesaAccountNumber?: string;

@@ -7,10 +7,11 @@ import { Bank } from '@/data';
 interface BankSelectorProps {
   countryCode: string;
   value: string;
-  onBankSelectAction: (bank: Bank) => void;
+  onBankSelectAction: (bank: Bank | null) => void;
   onInputChangeAction: (value: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  allowCustom?: boolean; // Allow custom bank entry
 }
 
 export default function BankSelector({
@@ -19,7 +20,8 @@ export default function BankSelector({
   onBankSelectAction,
   onInputChangeAction,
   placeholder = "Search for a bank...",
-  disabled = false
+  disabled = false,
+  allowCustom = true
 }: BankSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [banks, setBanks] = useState<Bank[]>([]);
@@ -80,6 +82,12 @@ export default function BankSelector({
     setSearchTerm(newValue);
     onInputChangeAction(newValue);
     setIsOpen(true);
+    
+    // If allowCustom is true and user is typing a custom bank, notify parent
+    if (allowCustom && newValue && !banks.some(bank => bank.name.toLowerCase() === newValue.toLowerCase())) {
+      // User is entering a custom bank
+      onBankSelectAction(null);
+    }
   };
 
   const handleClear = () => {
@@ -155,10 +163,15 @@ export default function BankSelector({
                   </div>
                 </button>
               ))}
+              {allowCustom && searchTerm && !filteredBanks.some(bank => bank.name.toLowerCase() === searchTerm.toLowerCase()) && (
+                <div className="px-3 py-2 text-xs text-gray-500 border-t border-gray-200">
+                  Can't find your bank? Continue typing to add custom bank details.
+                </div>
+              )}
             </div>
           ) : (
             <div className="px-3 py-2 text-gray-500 text-sm">
-              {loading ? 'Loading banks...' : 'No banks found'}
+              {loading ? 'Loading banks...' : allowCustom ? 'No banks found. Continue typing to add custom bank details.' : 'No banks found'}
             </div>
           )}
         </div>
