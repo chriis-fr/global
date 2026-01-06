@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { usePathname } from 'next/navigation';
 import { getUserSubscription, SubscriptionData } from '@/lib/actions/subscription';
@@ -20,13 +20,40 @@ const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes cache (longer for better UX
 const CACHE_KEY = 'subscription_cache';
 const USER_CACHE_KEY = 'subscription_user_id'; // Track which user the cache belongs to
 
+// Helper function to get cached subscription immediately (for initial state)
+const getCachedSubscription = (userId?: string): SubscriptionData | null => {
+  if (typeof window === 'undefined' || !userId) return null;
+  
+  try {
+    const cached = localStorage.getItem(CACHE_KEY);
+    const cachedUserId = localStorage.getItem(USER_CACHE_KEY);
+    
+    if (cached && cachedUserId === userId) {
+      const { data, timestamp } = JSON.parse(cached);
+      const now = Date.now();
+      
+      // Return cached data if it's less than 30 minutes old
+      if (now - timestamp < CACHE_DURATION) {
+        return data;
+      }
+    }
+  } catch {
+    // Ignore cache errors
+  }
+  
+  return null;
+};
+
 export function SubscriptionProvider({ children }: { children: React.ReactNode }) {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const pathname = usePathname();
-  const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
-  const [loading, setLoading] = useState(true);
+  
+  // Initialize with cached data if available to avoid loading state
+  const cachedSubscription = session?.user?.id ? getCachedSubscription(session.user.id) : null;
+  const [subscription, setSubscription] = useState<SubscriptionData | null>(cachedSubscription);
+  const [loading, setLoading] = useState(!cachedSubscription && status === 'loading');
   const [error, setError] = useState<string | null>(null);
-  const [hasInitialized, setHasInitialized] = useState(false);
+  const hasInitialized = useRef(false);
 
   // Check if we're on the landing page - don't show loader there
   const isLandingPage = pathname === '/';
@@ -88,7 +115,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     localStorage.removeItem(USER_CACHE_KEY);
   }, []);
 
-  const fetchSubscription = useCallback(async (forceRefresh = false) => {
+  const fetchSubscription = useCallback(async (forceRefresh = false, showLoading = true) => {
     if (!session?.user?.id) {
       setSubscription(null);
       setLoading(false);
@@ -101,11 +128,22 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
       if (cachedData) {
         setSubscription(cachedData);
         setLoading(false);
+        // Still fetch in background to update cache, but don't show loading
+        getUserSubscription().then((subscriptionData) => {
+          if (subscriptionData) {
+            setCachedData(subscriptionData, session.user.id);
+            setSubscription(subscriptionData); // Update silently
+          }
+        }).catch(() => {
+          // Silently fail background refresh
+        });
         return;
       }
     }
 
-    setLoading(true);
+    if (showLoading) {
+      setLoading(true);
+    }
     setError(null);
 
     try {
@@ -124,73 +162,33 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
       
       // Only provide fallback subscription for individual users, not organization members
       if (session?.user?.id) {
-        
-        // Check if user is an organization member by making a quick API call
-        try {
-          const orgResponse = await fetch('/api/organization');
-          const orgData = await orgResponse.json();
-          
-          if (orgData.success && orgData.data.hasOrganization) {
-            // Organization members should not have individual subscriptions
-            setSubscription(null);
-            setCachedData(null);
-          } else {
-            const fallbackData = {
-              plan: {
-                planId: 'receivables-free',
-                type: 'receivables',
-                tier: 'free'
-              },
-              status: 'active',
-              isTrialActive: false,
-              trialDaysRemaining: 0,
-              usage: {
-                invoicesThisMonth: 0,
-                monthlyVolume: 0,
-                recentInvoiceCount: 0
-              },
-              canCreateOrganization: false,
-              canAccessPayables: false,
-              canCreateInvoice: true,
-              canUseAdvancedFeatures: false,
-              limits: {
-                invoicesPerMonth: 5,
-                monthlyVolume: 0,
-                cryptoToCryptoFee: 0.9
-              }
-            };
-            setSubscription(fallbackData);
-            setCachedData(fallbackData, session.user.id);
+        // Use fallback subscription (most users are individual)
+        const fallbackData = {
+          plan: {
+            planId: 'receivables-free',
+            type: 'receivables',
+            tier: 'free'
+          },
+          status: 'active',
+          isTrialActive: false,
+          trialDaysRemaining: 0,
+          usage: {
+            invoicesThisMonth: 0,
+            monthlyVolume: 0,
+            recentInvoiceCount: 0
+          },
+          canCreateOrganization: false,
+          canAccessPayables: false,
+          canCreateInvoice: true,
+          canUseAdvancedFeatures: false,
+          limits: {
+            invoicesPerMonth: 5,
+            monthlyVolume: 0,
+            cryptoToCryptoFee: 0.9
           }
-        } catch {
-          // Fallback to individual subscription if we can't check organization status
-          const fallbackData = {
-            plan: {
-              planId: 'receivables-free',
-              type: 'receivables',
-              tier: 'free'
-            },
-            status: 'active',
-            isTrialActive: false,
-            trialDaysRemaining: 0,
-            usage: {
-              invoicesThisMonth: 0,
-              monthlyVolume: 0,
-              recentInvoiceCount: 0
-            },
-            canCreateOrganization: false,
-            canAccessPayables: false,
-            canCreateInvoice: true,
-            canUseAdvancedFeatures: false,
-            limits: {
-              invoicesPerMonth: 5,
-              monthlyVolume: 0,
-              cryptoToCryptoFee: 0.9
-            }
-          };
-          setSubscription(fallbackData);
-          setCachedData(fallbackData);
-        }
+        };
+        setSubscription(fallbackData);
+        setCachedData(fallbackData, session.user.id);
       }
     } finally {
       setLoading(false);
@@ -198,29 +196,39 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
   }, [session?.user?.id, getCachedData, setCachedData]);
 
   useEffect(() => {
-    // Only fetch subscription if user is authenticated
-    if (session?.user?.id) {
-      // Only show loading spinner on initial load, not on navigation
-      if (!hasInitialized) {
-        setLoading(true);
-        setHasInitialized(true);
-        // Clear cache on mount to ensure fresh data for new users
-        clearCache();
-        fetchSubscription(true); // Force refresh on mount
-      } else {
-        // On subsequent navigations, fetch in background without showing loader
-        setLoading(false);
-        fetchSubscription(false); // Don't force refresh, use cache if available
+    // Skip if already initialized for this user
+    const userId = session?.user?.id;
+    if (hasInitialized.current && userId) {
+      return;
+    }
+
+    // Once authenticated, load subscription immediately
+    if (status === 'authenticated' && userId) {
+      if (!hasInitialized.current) {
+        hasInitialized.current = true;
+        
+        // Check cache first
+        const cached = getCachedSubscription(userId);
+        if (cached) {
+          // We have cache, use it immediately and refresh in background
+          setSubscription(cached);
+          setLoading(false);
+          // Refresh in background silently
+          fetchSubscription(false, false);
+        } else {
+          // No cache, fetch now (but don't show loading if we're during auth)
+          fetchSubscription(false, false);
+        }
       }
-    } else {
+    } else if (status === 'unauthenticated') {
       // Clear subscription data and cache for unauthenticated users
       setSubscription(null);
       setLoading(false);
       setError(null);
-      setHasInitialized(false);
+      hasInitialized.current = false;
       clearCache(); // Clear cache on logout
     }
-  }, [session?.user?.id, fetchSubscription, clearCache, hasInitialized]);
+  }, [status, session?.user?.id, fetchSubscription, clearCache]);
 
   // Refetch on window focus if cache is older than 30 minutes (less aggressive)
   useEffect(() => {
@@ -247,16 +255,8 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
 
   return (
     <SubscriptionContext.Provider value={{ subscription, loading, error, refetch, clearCache }}>
-      {/* Only show loader on initial load, not during navigation */}
-      {/* Don't show loader on landing page - it has its own preloader */}
-      {loading && !hasInitialized && session?.user?.id && !isLandingPage ? (
-        <LoadingSpinner 
-          fullScreen={true} 
-          message="Loading..." 
-        />
-      ) : (
-        children
-      )}
+      {/* Don't show loader - subscription loads in background during auth */}
+      {children}
     </SubscriptionContext.Provider>
   )
 }
