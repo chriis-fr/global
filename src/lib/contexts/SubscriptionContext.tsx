@@ -48,10 +48,28 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
   const { data: session, status } = useSession();
   const pathname = usePathname();
   
-  // Initialize with cached data if available to avoid loading state
-  const cachedSubscription = session?.user?.id ? getCachedSubscription(session.user.id) : null;
-  const [subscription, setSubscription] = useState<SubscriptionData | null>(cachedSubscription);
-  const [loading, setLoading] = useState(!cachedSubscription && status === 'loading');
+  // Pre-load subscription from cache immediately on mount (before session loads)
+  // This allows dashboard to render with cached data instantly
+  const [subscription, setSubscription] = useState<SubscriptionData | null>(() => {
+    if (typeof window === 'undefined') return null;
+    // Try to get cached subscription immediately, even without session
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      const cachedUserId = localStorage.getItem(USER_CACHE_KEY);
+      if (cached && cachedUserId) {
+        const { data, timestamp } = JSON.parse(cached);
+        const now = Date.now();
+        if (now - timestamp < CACHE_DURATION) {
+          return data; // Return cached data immediately
+        }
+      }
+    } catch {
+      // Ignore errors
+    }
+    return null;
+  });
+  
+  const [loading, setLoading] = useState(false); // Start with false - we have cache
   const [error, setError] = useState<string | null>(null);
   const hasInitialized = useRef(false);
   const lastUserIdRef = useRef<string | null>(null);
@@ -196,6 +214,22 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     }
   }, [session?.user?.id, getCachedData, setCachedData]);
 
+  // Pre-fetch subscription on mount if we have cached user ID (even before session loads)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    // Check if we have a cached user ID from previous session
+    const cachedUserId = localStorage.getItem(USER_CACHE_KEY);
+    if (cachedUserId && !hasInitialized.current) {
+      // We have a cached user, try to use cached subscription immediately
+      const cached = getCachedSubscription(cachedUserId);
+      if (cached) {
+        setSubscription(cached);
+        setLoading(false);
+      }
+    }
+  }, []); // Run once on mount
+
   useEffect(() => {
     const userId = session?.user?.id;
     
@@ -207,30 +241,31 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
         hasInitialized.current = true;
         lastUserIdRef.current = userId;
         
-        // Check cache first
+        // Check cache first (might already be set from mount effect)
         const cached = getCachedSubscription(userId);
-        if (cached) {
-          // We have cache, use it immediately
+        if (cached && !subscription) {
+          // We have cache but subscription state wasn't set, use it immediately
           setSubscription(cached);
           setLoading(false);
-          // Refresh in background silently (happens during auth loading phase)
-          fetchSubscription(false, false);
-        } else {
-          // No cache, fetch immediately (happens during auth loading phase)
-          // This runs in parallel with authentication, so it's ready when dashboard loads
-          fetchSubscription(false, false);
         }
+        
+        // Always refresh in background silently (happens during auth loading phase)
+        // This ensures data is fresh but doesn't block UI
+        fetchSubscription(false, false);
       }
     } else if (status === 'unauthenticated') {
-      // Clear subscription data and cache for unauthenticated users
-      setSubscription(null);
-      setLoading(false);
-      setError(null);
-      hasInitialized.current = false;
-      lastUserIdRef.current = null;
-      clearCache(); // Clear cache on logout
+      // Only clear if we're definitely unauthenticated (not just loading)
+      if (lastUserIdRef.current) {
+        // Clear subscription data and cache for unauthenticated users
+        setSubscription(null);
+        setLoading(false);
+        setError(null);
+        hasInitialized.current = false;
+        lastUserIdRef.current = null;
+        clearCache(); // Clear cache on logout
+      }
     }
-  }, [session?.user?.id, status, fetchSubscription, clearCache]);
+  }, [session?.user?.id, status, fetchSubscription, clearCache, subscription]);
 
   // Refetch on window focus if cache is older than 30 minutes (less aggressive)
   useEffect(() => {

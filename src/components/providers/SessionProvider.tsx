@@ -24,7 +24,7 @@ const PUBLIC_ROUTES = [
 ]
 
 function AuthWrapper({ children }: SessionProviderProps) {
-  const { status } = useSession()
+  const { status, data: session } = useSession()
   const pathname = usePathname()
   
   // Check if current route is public
@@ -35,10 +35,11 @@ function AuthWrapper({ children }: SessionProviderProps) {
     return pathname.startsWith(route)
   })
   
-  // Only show loading state on protected routes (dashboard, profile, etc.)
-  // For public routes (especially landing page '/'), render immediately - no loading spinner
-  // The landing page handles its own preloader
-  if (status === 'loading' && !isPublicRoute) {
+  // If we have a session, don't show loader even if status is loading (it's just refreshing)
+  // Only show loader if we're truly loading AND don't have a session yet
+  const shouldShowLoader = status === 'loading' && !isPublicRoute && !session?.user
+  
+  if (shouldShowLoader) {
     return (
       <LoadingSpinner 
         fullScreen={true} 
@@ -54,7 +55,10 @@ function AuthWrapper({ children }: SessionProviderProps) {
 
 export function SessionProvider({ children }: SessionProviderProps) {
   return (
-    <NextAuthSessionProvider>
+    <NextAuthSessionProvider
+      refetchInterval={5 * 60} // Only refetch session every 5 minutes (instead of default)
+      refetchOnWindowFocus={false} // Don't refetch on window focus - use cache
+    >
       <AuthWrapper>
         {children}
       </AuthWrapper>
