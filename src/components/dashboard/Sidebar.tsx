@@ -448,19 +448,48 @@ function Sidebar() {
 
       {/* Mobile button */}
       <button
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          toggleMobileMenu();
-        }}
-        className={`lg:hidden fixed top-4 right-4 z-50 p-3 rounded-xl bg-blue-900/80 ${
-          isMobileMenuOpen ? 'hidden' : 'block'
-        }`}
-        type="button"
-        style={{ touchAction: 'manipulation' }}
-      >
-        <Menu className="h-5 w-5 text-white" />
-      </button>
+  onClick={(e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleMobileMenu();
+  }}
+  type="button"
+  className={`lg:hidden top-4 right-4 z-50
+    fixed
+    p-3
+    rounded-2xl
+    backdrop-blur-xl
+    bg-white/10
+    border border-white/20
+    shadow-[0_8px_30px_rgba(0,0,0,0.25)]
+    transition-all duration-200 ease-out
+    active:scale-95
+    hover:bg-white/15
+    ${
+      isMobileMenuOpen ? 'hidden' : 'block'
+    }`}
+  style={{
+    touchAction: 'manipulation',
+    WebkitBackdropFilter: 'blur(16px)',
+    backdropFilter: 'blur(16px)',
+  }}
+>
+  {/* Subtle glass light reflection */}
+  <span className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/25 via-white/10 to-transparent pointer-events-none" />
+
+  {/* Ultra-fine noise for real glass feel */}
+  <span
+    className="absolute inset-0 rounded-2xl opacity-[0.04] pointer-events-none"
+    style={{
+      backgroundImage:
+        'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.8\' numOctaves=\'3\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")',
+    }}
+  />
+
+  {/* Icon */}
+  <Menu className="relative h-5 w-5 text-white" />
+</button>
+
 
       {/* Overlay */}
       {isMobileMenuOpen && (

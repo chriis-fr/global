@@ -63,19 +63,15 @@ export default function FloatingActionButton() {
 
   return (
     <div 
-      className="fixed bottom-6 right-6 z-50"
+      className="fixed bottom-20 right-4 md:bottom-6 md:right-6 z-[100]"
       style={{
         position: 'fixed',
-        bottom: '1.5rem',
-        right: '1.5rem',
-        zIndex: 50,
-        transform: 'translateZ(0)',
-        willChange: 'transform'
+        zIndex: 100,
       }}
     >
       {/* Quick Actions Menu */}
       {isOpen && (
-        <div className="absolute bottom-16 right-0 mb-2 space-y-2">
+        <div className="absolute bottom-16 right-0 mb-2 space-y-2 z-[101]">
           {quickActions.map((action, index) => (
             <Link
               key={action.href}
@@ -112,7 +108,7 @@ export default function FloatingActionButton() {
       {/* Overlay to close menu when clicking outside */}
       {isOpen && (
         <div 
-          className="fixed inset-0 z-[-1]" 
+          className="fixed inset-0 z-[99] bg-black/20" 
           onClick={() => setIsOpen(false)}
           style={{
             position: 'fixed',
@@ -120,23 +116,11 @@ export default function FloatingActionButton() {
             left: 0,
             right: 0,
             bottom: 0,
-            zIndex: -1
+            zIndex: 99
           }}
         />
       )}
 
-      <style jsx>{`
-        @keyframes slideUp {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-      `}</style>
     </div>
   );
 }

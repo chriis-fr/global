@@ -4,6 +4,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Breadcrumb from '@/components/dashboard/Breadcrumb';
+import FloatingActionButton from '@/components/dashboard/FloatingActionButton';
 import { useOnboardingStore } from '@/lib/stores/onboardingStore';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -183,6 +184,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {children}
         </div>
       </main>
+      <FloatingActionButton />
     </div>
   );
 } 
