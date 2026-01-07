@@ -28,9 +28,6 @@ export function Header() {
   const [navLoading, setNavLoading] = useState<string | null>(null)
 
   // Optimized handlers for mobile performance
-  const toggleMenu = useCallback(() => {
-    setIsMenuOpen(prev => !prev);
-  }, []);
 
   const closeMenu = useCallback(() => {
     setIsMenuOpen(false);
@@ -371,10 +368,8 @@ export function Header() {
                   {session ? (
                     <button
                       onClick={() => {
-                        startTransition(() => {
-                          signOut({ callbackUrl: '/' });
-                          setIsMenuOpen(false);
-                        });
+                        signOut({ callbackUrl: '/' });
+                        setIsMenuOpen(false);
                       }}
                       className="block text-gray-700 hover:text-blue-600 transition-colors w-full text-left touch-manipulation active:scale-95"
                       style={{ touchAction: 'manipulation' }}
@@ -386,9 +381,7 @@ export function Header() {
                       href="/auth"
                       className="block text-gray-700 hover:text-blue-600 transition-colors touch-manipulation active:scale-95"
                       onClick={() => {
-                        startTransition(() => {
-                          closeMenu();
-                        });
+                        closeMenu();
                       }}
                       style={{ touchAction: 'manipulation' }}
                     >
@@ -399,9 +392,7 @@ export function Header() {
                     href="/auth"
                     className="block bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors text-center touch-manipulation active:scale-95"
                     onClick={() => {
-                      startTransition(() => {
-                        closeMenu();
-                      });
+                      closeMenu();
                     }}
                     style={{ touchAction: 'manipulation' }}
                   >

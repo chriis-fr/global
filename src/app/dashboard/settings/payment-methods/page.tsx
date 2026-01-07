@@ -517,8 +517,8 @@ export default function PaymentMethodsPage() {
                   setShowAddModal(false);
                   setNewPaymentMethod({
                     name: '',
-                    type: 'fiat',
-                    subtype: 'bank',
+                    type: 'fiat' as 'fiat' | 'crypto',
+                    subtype: 'bank' as 'bank' | 'mpesa_paybill' | 'mpesa_till',
                     bankName: '',
                     swiftCode: '',
                     bankCode: '',
@@ -526,7 +526,9 @@ export default function PaymentMethodsPage() {
                     accountName: '',
                     accountNumber: '',
                     branchAddress: '',
-                    accountType: 'checking',
+                    accountType: 'checking' as 'checking' | 'savings' | 'business',
+                    bankCountryCode: 'KE' as 'GH' | 'KE',
+                    customFields: {} as Record<string, string>,
                     paybillNumber: '',
                     mpesaAccountNumber: '',
                     tillNumber: '',

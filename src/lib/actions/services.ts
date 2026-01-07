@@ -95,7 +95,7 @@ export async function getUserServiceData(): Promise<{ success: boolean; data?: U
         _id: user._id.toString(),
         email: user.email,
         name: user.name,
-        services: user.services ? { ...createDefaultServices(), ...user.services } : createDefaultServices(),
+        services: (user.services ? { ...createDefaultServices(), ...user.services } : createDefaultServices()) as unknown as Record<string, boolean>,
         subscription: {
           planId: user.subscription?.planId || 'receivables-free',
           status: user.subscription?.status || 'active'
@@ -209,9 +209,9 @@ export async function toggleService(
         _id: updatedUser._id.toString(),
         email: updatedUser.email,
         name: updatedUser.name,
-        services: updatedUser.services 
-          ? { ...createDefaultServices(), ...updatedUser.services } 
-          : createDefaultServices(),
+        services: (updatedUser.services
+          ? { ...createDefaultServices(), ...updatedUser.services }
+          : createDefaultServices()) as unknown as Record<string, boolean>,
         subscription: {
           planId: updatedUser.subscription?.planId || 'receivables-free',
           status: updatedUser.subscription?.status || 'active'

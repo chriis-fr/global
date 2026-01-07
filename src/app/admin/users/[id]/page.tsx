@@ -7,9 +7,7 @@ import toast from 'react-hot-toast';
 import {
   Loader2,
   ArrowLeft,
-  User,
   Mail,
-  Calendar,
   Shield,
   CheckCircle,
   XCircle,
@@ -67,6 +65,7 @@ export default function AdminUserDetailPage() {
     }
 
     loadUser();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, session, userId]);
 
   const loadUser = async () => {
@@ -331,9 +330,9 @@ export default function AdminUserDetailPage() {
                       <Mail className="h-4 w-4 text-gray-500" />
                       <p className="text-gray-900">{user.email}</p>
                       {user.isEmailVerified ? (
-                        <CheckCircle className="h-4 w-4 text-green-500" title="Email verified" />
+                        <CheckCircle className="h-4 w-4 text-green-500" />
                       ) : (
-                        <XCircle className="h-4 w-4 text-red-500" title="Email not verified" />
+                        <XCircle className="h-4 w-4 text-red-500" />
                       )}
                     </div>
                   )}

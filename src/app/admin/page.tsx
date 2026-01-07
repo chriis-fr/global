@@ -154,7 +154,7 @@ export default function AdminDashboard() {
       const { getAdminUsers } = await import('@/lib/actions/admin-users');
       const result = await getAdminUsers(page, 10);
       if (result.success && result.data) {
-        setUsers(result.data.users);
+        setUsers(result.data.users as User[]);
         setUsersTotal(result.data.pagination.total);
         setUsersPage(page);
       } else {
@@ -604,7 +604,7 @@ export default function AdminDashboard() {
                   <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                     <p className="text-sm text-blue-800">
                       <strong>Note:</strong> The plan will be updated immediately in the database. 
-                      The user's subscription cache will be cleared and changes will take effect on their next page refresh.
+                      The user&apos;s subscription cache will be cleared and changes will take effect on their next page refresh.
                     </p>
                   </div>
                 )}

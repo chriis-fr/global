@@ -114,9 +114,9 @@ export function PushNotificationManager() {
         setError(result.error || 'Failed to save subscription')
         setSubscription(null)
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Subscription failed:', error)
-      setError(error.message || 'Failed to subscribe. Make sure you are using HTTPS and have granted notification permissions.')
+      setError((error as { message?: string })?.message || 'Failed to subscribe. Make sure you are using HTTPS and have granted notification permissions.')
     }
   }
 
@@ -128,9 +128,9 @@ export function PushNotificationManager() {
       }
       setSubscription(null)
       await unsubscribeUser()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Unsubscription failed:', error)
-      setError(error.message || 'Failed to unsubscribe')
+      setError((error as { message?: string })?.message || 'Failed to unsubscribe')
     }
   }
 
@@ -144,9 +144,9 @@ export function PushNotificationManager() {
         } else {
           setError(result.error || 'Failed to send notification')
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Failed to send notification:', error)
-        setError(error.message || 'Failed to send notification')
+        setError((error as { message?: string })?.message || 'Failed to send notification')
       }
     } else if (!message) {
       setError('Please enter a message')

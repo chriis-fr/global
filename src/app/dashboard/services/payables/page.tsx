@@ -2,7 +2,6 @@
 
 import { Suspense, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 import { motion } from 'framer-motion';
 import { 
   Plus, 
@@ -19,7 +18,6 @@ import PayablesOnboardingStatus from '@/components/payables/PayablesOnboardingSt
 
 export default function AccountsPayablePage() {
   const router = useRouter();
-  const { data: session } = useSession();
   const [activeTab, setActiveTab] = useState<'bills' | 'direct-payments' | 'vendors'>('bills');
 
   const handleCreatePayable = () => {

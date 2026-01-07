@@ -306,7 +306,7 @@ export async function getAdminStats(): Promise<{
 
     // Get transactions from financial_ledger with transactionHash (if collection exists)
     let ledgerTransactions: Array<{
-      _id: any;
+      _id: unknown;
       transactionHash: string;
       blockchainNetwork?: string;
       amount?: number;
@@ -317,7 +317,7 @@ export async function getAdminStats(): Promise<{
     }> = [];
     
     try {
-      ledgerTransactions = await db.collection('financial_ledger').find({
+      ledgerTransactions = (await db.collection('financial_ledger').find({
         transactionHash: { $exists: true, $ne: null },
         status: 'paid'
       }, {
@@ -331,7 +331,16 @@ export async function getAdminStats(): Promise<{
           status: 1,
           type: 1
         }
-      }).toArray();
+      }).toArray()) as Array<{
+        _id: unknown;
+        transactionHash: string;
+        blockchainNetwork?: string;
+        amount?: number;
+        currency?: string;
+        createdAt: Date | string;
+        status: string;
+        type?: string;
+      }>;
     } catch (error) {
       // Collection might not exist, continue without ledger transactions
       console.error('Error fetching ledger transactions (collection may not exist):', error);
@@ -367,8 +376,8 @@ export async function getAdminStats(): Promise<{
 
     // Combine and format chain transactions with USD conversion
     const allChainTransactionsPromises = [
-      ...invoiceTransactions.map(async (inv: {
-        _id: any;
+      ...(invoiceTransactions as Array<{
+        _id: unknown;
         txHash: string;
         chainId?: number;
         total?: number;
@@ -377,7 +386,7 @@ export async function getAdminStats(): Promise<{
         currency?: string;
         createdAt: Date | string;
         status: string;
-      }) => {
+      }>).map(async (inv) => {
         const chainId = inv.chainId;
         let chainName = 'Unknown';
         if (chainId === 42220) {
@@ -399,7 +408,7 @@ export async function getAdminStats(): Promise<{
         const conversion = await convertToUsd(amount, currency);
         
         return {
-          _id: inv._id.toString(),
+          _id: (inv._id as { toString: () => string }).toString(),
           txHash: inv.txHash,
           chainId: chainId,
           chainName: chainName,
@@ -408,13 +417,13 @@ export async function getAdminStats(): Promise<{
           amountUsd: conversion.amountUsd,
           exchangeRate: conversion.rate,
           type: 'invoice' as const,
-          relatedId: inv._id.toString(),
+          relatedId: (inv._id as { toString: () => string }).toString(),
           createdAt: inv.createdAt instanceof Date ? inv.createdAt : new Date(inv.createdAt),
           status: inv.status
         };
       }),
-      ...payableTransactions.map(async (pay: {
-        _id: any;
+      ...(payableTransactions as Array<{
+        _id: unknown;
         txHash: string;
         chainId?: number;
         total?: number;
@@ -423,7 +432,7 @@ export async function getAdminStats(): Promise<{
         currency?: string;
         createdAt: Date | string;
         status: string;
-      }) => {
+      }>).map(async (pay) => {
         const chainId = pay.chainId;
         let chainName = 'Unknown';
         if (chainId === 42220) {
@@ -445,7 +454,7 @@ export async function getAdminStats(): Promise<{
         const conversion = await convertToUsd(amount, currency);
         
         return {
-          _id: pay._id.toString(),
+          _id: (pay._id as { toString: () => string }).toString(),
           txHash: pay.txHash,
           chainId: chainId,
           chainName: chainName,
@@ -454,13 +463,13 @@ export async function getAdminStats(): Promise<{
           amountUsd: conversion.amountUsd,
           exchangeRate: conversion.rate,
           type: 'payable' as const,
-          relatedId: pay._id.toString(),
+          relatedId: (pay._id as { toString: () => string }).toString(),
           createdAt: pay.createdAt instanceof Date ? pay.createdAt : new Date(pay.createdAt),
           status: pay.status
         };
       }),
-      ...ledgerTransactions.map(async (led: {
-        _id: any;
+      ...(ledgerTransactions as Array<{
+        _id: unknown;
         transactionHash: string;
         blockchainNetwork?: string;
         amount?: number;
@@ -468,7 +477,7 @@ export async function getAdminStats(): Promise<{
         createdAt: Date | string;
         status: string;
         type?: string;
-      }) => {
+      }>).map(async (led) => {
         let chainId = led.blockchainNetwork === 'Celo' ? 42220 : undefined;
         let chainName = led.blockchainNetwork || 'Unknown';
         
@@ -489,7 +498,7 @@ export async function getAdminStats(): Promise<{
         const conversion = await convertToUsd(amount, currency);
         
         return {
-          _id: led._id.toString(),
+          _id: (led._id as { toString: () => string }).toString(),
           txHash: led.transactionHash,
           chainId: chainId,
           chainName: chainName,
@@ -498,7 +507,7 @@ export async function getAdminStats(): Promise<{
           amountUsd: conversion.amountUsd,
           exchangeRate: conversion.rate,
           type: led.type === 'receivable' ? 'invoice' as const : 'payable' as const,
-          relatedId: led._id.toString(),
+          relatedId: (led._id as { toString: () => string }).toString(),
           createdAt: led.createdAt instanceof Date ? led.createdAt : new Date(led.createdAt),
           status: led.status
         };

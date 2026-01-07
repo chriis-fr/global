@@ -158,7 +158,7 @@ export default function CurrencyAmount({
   // Use convertedAmount if available (should always be set after conversion)
   // For crypto, convertedAmount should be different from amount (e.g., 0.3 CELO -> 0.04 USD)
   // If conversion hasn't happened yet or failed, use the original amount as fallback
-  let displayConvertedAmount = conversion.convertedAmount;
+  const displayConvertedAmount = conversion.convertedAmount;
   
   // For crypto, if convertedAmount equals original amount and conversion says it converted,
   // something went wrong - log it

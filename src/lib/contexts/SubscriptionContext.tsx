@@ -2,9 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useSession } from 'next-auth/react';
-import { usePathname } from 'next/navigation';
 import { getUserSubscription, SubscriptionData } from '@/lib/actions/subscription';
-import LoadingSpinner from '@/components/ui/LoadingSpinner';
 
 interface SubscriptionContextType {
   subscription: SubscriptionData | null;
@@ -46,7 +44,6 @@ const getCachedSubscription = (userId?: string): SubscriptionData | null => {
 
 export function SubscriptionProvider({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
-  const pathname = usePathname();
   
   // Pre-load subscription from cache immediately on mount (before session loads)
   // This allows dashboard to render with cached data instantly
@@ -75,7 +72,6 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
   const lastUserIdRef = useRef<string | null>(null);
 
   // Check if we're on the landing page - don't show loader there
-  const isLandingPage = pathname === '/';
 
   const getCachedData = useCallback((userId?: string) => {
     if (typeof window === 'undefined') return null;

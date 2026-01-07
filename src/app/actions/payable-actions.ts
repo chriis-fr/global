@@ -541,7 +541,7 @@ export async function getAllPayables() {
       .toArray();
 
     // Get status counts
-    const [draftCount, pendingCount, approvedCount, paidCount, overdueCount] = await Promise.all([
+    const [, pendingCount, approvedCount, paidCount, overdueCount] = await Promise.all([
       payablesCollection.countDocuments({ ...baseQuery, status: 'draft' }),
       payablesCollection.countDocuments({ ...baseQuery, status: 'pending' }),
       payablesCollection.countDocuments({ ...baseQuery, status: 'approved' }),

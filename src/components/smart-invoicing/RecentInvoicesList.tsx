@@ -15,7 +15,7 @@ const CACHE_DURATION = 2 * 60 * 1000; // 2 minutes cache
 
 export default function RecentInvoicesList({ className = '' }: RecentInvoicesListProps) {
   const router = useRouter();
-  const [invoices, setInvoices] = useState<any[]>([]);
+  const [invoices, setInvoices] = useState<Array<Record<string, unknown>>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -51,7 +51,7 @@ export default function RecentInvoicesList({ className = '' }: RecentInvoicesLis
         const result = await getInvoicesListMinimal(1, 5);
         
         if (result.success && result.data) {
-          setInvoices(result.data.invoices || []);
+          setInvoices((result.data.invoices || []) as unknown as Array<Record<string, unknown>>);
           
           // Cache in localStorage
           const cacheData = {
@@ -76,14 +76,20 @@ export default function RecentInvoicesList({ className = '' }: RecentInvoicesLis
   }, []);
 
   const filteredInvoices = searchTerm
-    ? invoices.filter(invoice => 
-        invoice.invoiceNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        invoice.clientDetails?.companyName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        invoice.clientDetails?.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        invoice.clientDetails?.lastName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        invoice.clientDetails?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        invoice.status?.toLowerCase().includes(searchTerm.toLowerCase())
-      )
+    ? invoices.filter(invoice => {
+        const inv = invoice as Record<string, unknown>;
+        const invoiceNumber = typeof inv.invoiceNumber === 'string' ? inv.invoiceNumber : '';
+        const clientDetails = inv.clientDetails as Record<string, unknown> | undefined;
+        const companyName = typeof clientDetails?.companyName === 'string' ? clientDetails.companyName : '';
+        const firstName = typeof clientDetails?.firstName === 'string' ? clientDetails.firstName : '';
+        const lastName = typeof clientDetails?.lastName === 'string' ? clientDetails.lastName : '';
+        return invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (typeof clientDetails?.email === 'string' ? clientDetails.email : '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (typeof inv.status === 'string' ? inv.status : '').toLowerCase().includes(searchTerm.toLowerCase());
+      })
     : invoices;
 
   if (loading) {
@@ -158,64 +164,77 @@ export default function RecentInvoicesList({ className = '' }: RecentInvoicesLis
       </div>
       
       <div className="space-y-3">
-        {filteredInvoices.slice(0, 5).map((invoice, index) => (
-          <motion.div
-            key={invoice._id?.toString() || index}
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.8 + index * 0.1 }}
-            className="flex items-center justify-between p-3 bg-white/5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer min-h-[60px]"
-            onClick={() => {
-              if (invoice.status === 'draft') {
-                router.push(`/dashboard/services/smart-invoicing/create?id=${invoice._id}`);
-              } else {
-                router.push(`/dashboard/services/smart-invoicing/invoices/${invoice._id}`);
-              }
-            }}
-          >
-            <div className="flex items-center space-x-3 flex-1 min-w-0">
-              <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-                <FileText className="h-4 w-4 text-white" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center space-x-2">
-                  <p className="text-white font-medium text-sm sm:text-base truncate">{invoice.invoiceNumber || 'Invoice'}</p>
-                  {/* WhatsApp indicator */}
-                  {invoice.sentVia === 'whatsapp' && (
-                    <MessageCircle className="h-4 w-4 text-green-400 flex-shrink-0" />
-                  )}
-                  {/* Approval indicator */}
-                  {(invoice.status === 'approved' || invoice.status === 'sent') && invoice.organizationId && invoice.recipientType === 'organization' && (
-                    <div className="relative group">
-                      <CheckCircle className="h-4 w-4 text-green-400 flex-shrink-0" />
-                      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-                        Approved
-                      </div>
+        {filteredInvoices.slice(0, 5).map((invoice, index) => {
+          const inv = invoice as Record<string, unknown>;
+          const invoiceId = inv._id?.toString() || String(index);
+          const status = typeof inv.status === 'string' ? inv.status : '';
+          const invoiceNumber = typeof inv.invoiceNumber === 'string' ? inv.invoiceNumber : 'Invoice';
+          const clientDetails = inv.clientDetails as Record<string, unknown> | undefined;
+          const companyName = typeof clientDetails?.companyName === 'string' ? clientDetails.companyName : '';
+          const firstName = typeof clientDetails?.firstName === 'string' ? clientDetails.firstName : '';
+          const lastName = typeof clientDetails?.lastName === 'string' ? clientDetails.lastName : '';
+          const email = typeof clientDetails?.email === 'string' ? clientDetails.email : '';
+          const totalAmount = typeof inv.totalAmount === 'number' ? inv.totalAmount : (typeof inv.total === 'number' ? inv.total : 0);
+          const sentVia = typeof inv.sentVia === 'string' ? inv.sentVia : '';
+          const organizationId = inv.organizationId;
+          const recipientType = typeof inv.recipientType === 'string' ? inv.recipientType : '';
+          return (
+              <motion.div
+                key={invoiceId}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.8 + index * 0.1 }}
+                className="flex items-center justify-between p-3 bg-white/5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer min-h-[60px]"
+                onClick={() => {
+                  if (status === 'draft') {
+                    router.push(`/dashboard/services/smart-invoicing/create?id=${invoiceId}`);
+                  } else {
+                    router.push(`/dashboard/services/smart-invoicing/invoices/${invoiceId}`);
+                  }
+                }}
+              >
+                <div className="flex items-center space-x-3 flex-1 min-w-0">
+                  <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                    <FileText className="h-4 w-4 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center space-x-2">
+                      <p className="text-white font-medium text-sm sm:text-base truncate">{invoiceNumber}</p>
+                      {/* WhatsApp indicator */}
+                      {sentVia === 'whatsapp' && (
+                        <MessageCircle className="h-4 w-4 text-green-400 flex-shrink-0" />
+                      )}
+                      {/* Approval indicator */}
+                      {(status === 'approved' || status === 'sent') && !!organizationId && recipientType === 'organization' && (
+                        <div className="relative group">
+                          <CheckCircle className="h-4 w-4 text-green-400 flex-shrink-0" />
+                          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                            Approved
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  )}
+                    <p className="text-blue-200 text-xs sm:text-sm truncate">
+                      {companyName || [firstName, lastName].filter(Boolean).join(' ') || email || 'Client'}
+                    </p>
+                  </div>
                 </div>
-                <p className="text-blue-200 text-xs sm:text-sm truncate">
-                  {invoice.clientDetails?.companyName || 
-                   [invoice.clientDetails?.firstName, invoice.clientDetails?.lastName].filter(Boolean).join(' ') || 
-                   invoice.clientDetails?.email || 'Client'}
-                </p>
-              </div>
-            </div>
-            <div className="text-right flex-shrink-0 ml-3">
-              <p className="text-white font-semibold text-sm sm:text-base">
-                <FormattedNumberDisplay value={invoice.totalAmount || invoice.total || 0} />
-              </p>
-              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                invoice.status === 'paid' ? 'bg-green-100 text-green-800' :
-                invoice.status === 'sent' || invoice.status === 'pending' || invoice.status === 'approved' ? 'bg-yellow-100 text-yellow-800' :
-                invoice.status === 'draft' ? 'bg-gray-100 text-gray-800' :
-                'bg-red-100 text-red-800'
-              }`}>
-                {invoice.status === 'sent' || invoice.status === 'approved' ? 'pending' : invoice.status}
-              </span>
-            </div>
-          </motion.div>
-        ))}
+                <div className="text-right flex-shrink-0 ml-3">
+                  <p className="text-white font-semibold text-sm sm:text-base">
+                    <FormattedNumberDisplay value={totalAmount} />
+                  </p>
+                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                    status === 'paid' ? 'bg-green-100 text-green-800' :
+                    status === 'sent' || status === 'pending' || status === 'approved' ? 'bg-yellow-100 text-yellow-800' :
+                    status === 'draft' ? 'bg-gray-100 text-gray-800' :
+                    'bg-red-100 text-red-800'
+                  }`}>
+                    {status === 'sent' || status === 'approved' ? 'pending' : status}
+                  </span>
+                </div>
+              </motion.div>
+          );
+        })}
       </div>
     </motion.div>
   );

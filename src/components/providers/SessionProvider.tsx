@@ -37,7 +37,7 @@ function AuthWrapper({ children }: SessionProviderProps) {
   
   // If we have a session, don't show loader even if status is loading (it's just refreshing)
   // Only show loader if we're truly loading AND don't have a session yet
-  const shouldShowLoader = status === 'loading' && !isPublicRoute && !session?.user
+  const shouldShowLoader = status === 'loading' && !isPublicRoute && !(session && typeof session === 'object' && 'user' in session)
   
   if (shouldShowLoader) {
     return (

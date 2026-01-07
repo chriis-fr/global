@@ -4,7 +4,6 @@ import webpush from 'web-push'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getDatabase } from '@/lib/database'
-import { ObjectId } from 'mongodb'
 
 // Initialize VAPID details
 if (process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
@@ -15,7 +14,13 @@ if (process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
   )
 }
 
-export async function subscribeUser(sub: PushSubscription) {
+export async function subscribeUser(sub: {
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+}) {
   try {
     const session = await getServerSession(authOptions)
     
@@ -96,7 +101,13 @@ export async function sendNotification(message: string, userId?: string) {
       throw new Error('No subscription available')
     }
 
-    const subscription = subscriptionDoc.subscription as PushSubscription
+    const subscription = subscriptionDoc.subscription as {
+      endpoint: string;
+      keys: {
+        p256dh: string;
+        auth: string;
+      };
+    }
 
     try {
       await webpush.sendNotification(
@@ -109,9 +120,10 @@ export async function sendNotification(message: string, userId?: string) {
         })
       )
       return { success: true }
-    } catch (error: any) {
+    } catch (error: unknown) {
       // If subscription is invalid, remove it from database
-      if (error.statusCode === 410 || error.statusCode === 404) {
+      const errorObj = error as { statusCode?: number };
+      if (errorObj.statusCode === 410 || errorObj.statusCode === 404) {
         await db.collection('push_subscriptions').deleteOne({
           userId: targetEmail
         })

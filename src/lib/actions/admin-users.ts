@@ -4,7 +4,6 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { getDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
-import { createDefaultServices } from '@/lib/services/serviceManager';
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 
@@ -108,14 +107,14 @@ export async function getAdminUsers(
       .limit(limit)
       .toArray();
 
-    const formattedUsers: AdminUserListItem[] = users.map((user: any) => ({
+    const formattedUsers: AdminUserListItem[] = (users as unknown as Array<{ _id: { toString: () => string }; email: string; name: string; adminTag?: boolean; role?: string; createdAt?: Date | string; lastLogin?: Date | string; isEmailVerified?: boolean; planId?: string; subscriptionStatus?: string; onboardingCompleted?: boolean; onboardingStep?: number; organizationId?: string; services?: { smartInvoicing?: boolean; accountsReceivable?: boolean; accountsPayable?: boolean }; subscription?: { planId?: string; status?: string }; onboarding?: { isCompleted?: boolean; currentStep?: number } }>).map((user) => ({
       id: user._id.toString(),
       email: user.email,
       name: user.name,
       adminTag: user.adminTag || false,
       role: user.role || 'user',
-      createdAt: user.createdAt?.toISOString() || new Date().toISOString(),
-      lastLogin: user.lastLogin?.toISOString(),
+      createdAt: user.createdAt instanceof Date ? user.createdAt.toISOString() : (typeof user.createdAt === 'string' ? user.createdAt : new Date().toISOString()),
+      lastLogin: user.lastLogin instanceof Date ? user.lastLogin.toISOString() : (typeof user.lastLogin === 'string' ? user.lastLogin : undefined),
       isEmailVerified: user.isEmailVerified || false,
       planId: user.subscription?.planId || 'receivables-free',
       subscriptionStatus: user.subscription?.status || 'active',

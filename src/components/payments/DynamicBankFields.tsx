@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, X, ChevronDown } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 
 interface DynamicBankFieldsProps {
   fields: Record<string, string>;
