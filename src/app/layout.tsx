@@ -21,7 +21,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL("https://chains-erp.com"),
   title: {
-    default: "Global Finance - Flexible, secure and simple borderless finance for DAOs, Freelancers, Contractors & more...",
+    default: "Global Finance - Send Invoices, get paid globally",
     template: "%s | Chains ERP"
   },
   description:
@@ -51,7 +51,7 @@ export const metadata: Metadata = {
   },
 
   openGraph: {
-    title: "Global Finance - Flexible, secure and simple borderless finance for DAOs, Freelancers, Contractors & more...",
+    title: "Global Finance - Send Invoices, get paid globally",
     description:
       "Manage invoices, payables and more with the most flexible and secure finance platform.",
     url: "https://global.chains-erp.com",
