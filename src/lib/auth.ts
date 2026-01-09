@@ -191,7 +191,7 @@ export const authOptions: NextAuthOptions = {
 
           await UserService.createUser(userData)
           return true
-        } catch (error) {
+        } catch {
           return false
         }
       }
@@ -243,7 +243,7 @@ export const authOptions: NextAuthOptions = {
             if (dbUser?._id) {
               token.mongoId = dbUser._id.toString()
             }
-          } catch (error) {
+          } catch {
             // Error fetching user for JWT
           }
         }
@@ -295,7 +295,7 @@ export const authOptions: NextAuthOptions = {
       }
       
       if (!token.services) {
-        token.services = createDefaultServices() as Record<string, boolean>;
+        token.services = createDefaultServices() as unknown as Record<string, boolean>;
       }
       
       return token
