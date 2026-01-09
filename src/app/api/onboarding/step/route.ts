@@ -35,27 +35,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Log current onboarding structure for debugging
+    console.log('📊 [OnboardingStep] Current user onboarding structure:', JSON.stringify({
+      userId: user._id?.toString(),
+      email: user.email,
+      onboardingDataCompleted: (user.onboarding?.data as { completed?: boolean })?.completed,
+      onboardingCurrentStep: user.onboarding?.currentStep
+    }, null, 2));
+
     // Update onboarding progress
     // Handle both old structure (data.serviceOnboarding) and new structure (serviceOnboarding)
-    const onboardingData = user.onboarding.data as { serviceOnboarding?: Record<string, unknown> } | undefined;
+    const onboardingData = user.onboarding.data as { serviceOnboarding?: Record<string, unknown>; completed?: boolean } | undefined;
     const onboardingDirect = user.onboarding as { serviceOnboarding?: Record<string, unknown> } | undefined;
     const currentServiceOnboarding = 
       onboardingDirect?.serviceOnboarding || 
       onboardingData?.serviceOnboarding || 
       {};
     
+    // Mark as completed if step is 4 (final step)
+    const shouldMarkCompleted = step === 4;
+    
     const updatedOnboarding = {
-      isCompleted: step === 4 ? true : (user.onboarding.isCompleted || false),
       currentStep: step,
       completedSteps: completedSteps || [...(user.onboarding.completedSteps || []), step.toString()],
       data: {
         ...((user.onboarding.data as Record<string, unknown>) || {}),
-      serviceOnboarding: {
-        ...currentServiceOnboarding,
-        ...stepData
+        ...(shouldMarkCompleted ? { completed: true } : {}),
+        serviceOnboarding: {
+          ...currentServiceOnboarding,
+          ...stepData
         }
       }
     };
+
 
     if (!user._id) {
       return NextResponse.json(

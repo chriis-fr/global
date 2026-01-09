@@ -229,8 +229,9 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     const userId = session?.user?.id;
     
-    // Start fetching subscription as soon as we have a session, even during loading phase
+    // Start fetching subscription as soon as we have a session (even if status is still 'loading')
     // This ensures subscription is ready by the time dashboard loads
+    // Fetch during authentication phase so dashboard has data immediately
     if (userId) {
       // Check if we need to initialize for this user
       if (!hasInitialized.current || lastUserIdRef.current !== userId) {
@@ -245,9 +246,10 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
           setLoading(false);
         }
         
-        // Always refresh in background silently (happens during auth loading phase)
-        // This ensures data is fresh but doesn't block UI
-        fetchSubscription(false, false);
+        // Fetch subscription immediately and show loading if no cache
+        // This happens during authentication phase, so dashboard will have data ready
+        const hasCache = !!getCachedSubscription(userId);
+        fetchSubscription(false, !hasCache); // Show loading only if no cache
       }
     } else if (status === 'unauthenticated') {
       // Only clear if we're definitely unauthenticated (not just loading)

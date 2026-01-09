@@ -27,12 +27,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Mark onboarding as completed
+    // Mark onboarding as completed using old format (data.completed)
     const updatedOnboarding = {
       ...user.onboarding,
-      completed: true,
       currentStep: 4,
-      completedSteps: ['1', '2', '3', '4']
+      completedSteps: ['1', '2', '3', '4'],
+      data: {
+        ...(user.onboarding.data || {}),
+        completed: true
+      }
     };
 
     const updatedUser = await UserService.updateUser(userId, {

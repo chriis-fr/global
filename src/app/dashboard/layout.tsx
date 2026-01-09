@@ -139,13 +139,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     touchEndRef.current = null;
   };
 
-  // Show loading only while checking authentication
+  // Show loading while checking authentication
+  // Subscription loads in parallel during auth, so it should be ready by the time auth completes
   if (status === 'loading') {
     return (
       <div className="h-screen flex items-center justify-center bg-gradient-to-br from-blue-900 to-blue-950">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto"></div>
-          <p className="mt-4 text-white">Loading...</p>
+          <p className="mt-4 text-white">Authenticating...</p>
         </div>
       </div>
     );

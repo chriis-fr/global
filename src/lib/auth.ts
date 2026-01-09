@@ -106,21 +106,12 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async signIn({ user, account }) {
-      console.log('🔍 [Auth] SignIn callback triggered')
-      console.log('🔍 [Auth] User:', user)
-      console.log('🔍 [Auth] Account:', account)
-      
       if (account?.provider === 'google') {
-        console.log('🔍 [Auth] Google provider detected')
         try {
-          console.log('🔍 [Auth] Checking if user exists:', user.email)
-          
           // Check if user already exists
           const existingUser = await UserService.getUserByEmail(user.email!)
-          console.log('🔍 [Auth] Existing user check result:', existingUser ? 'Found' : 'Not found')
           
           if (existingUser) {
-            console.log('🔍 [Auth] Updating existing user')
             // Update existing user with Google info
             await UserService.updateUser(existingUser._id!.toString(), {
               profilePicture: user.image || undefined,
@@ -134,15 +125,11 @@ export const authOptions: NextAuthOptions = {
             const hasUsedTrial = existingUser.subscription?.hasUsedTrial;
             
             if (!hasProSubscription && !hasUsedTrial) {
-              console.log('🎉 [Auth] Existing user eligible for 30-day trial, activating...');
               await activate30DayTrial(existingUser._id!.toString());
             }
-            
-            console.log('✅ [Auth] Existing user updated successfully')
             return true
           }
 
-          console.log('🔍 [Auth] Creating new user from Google data')
           // Create new user from Google data
           const googleUser = user as GoogleUserExtended
           
@@ -202,21 +189,12 @@ export const authOptions: NextAuthOptions = {
             }
           }
 
-          console.log('🔍 [Auth] User data prepared:', { email: userData.email, name: userData.name })
           await UserService.createUser(userData)
-          console.log('✅ [Auth] New user created successfully')
           return true
         } catch (error) {
-          console.error('❌ [Auth] Error during Google sign-in:', error)
-          console.error('❌ [Auth] Error details:', {
-            message: error instanceof Error ? error.message : 'Unknown error',
-            stack: error instanceof Error ? error.stack : undefined,
-            name: error instanceof Error ? error.name : 'Unknown'
-          })
           return false
         }
       }
-      console.log('🔍 [Auth] Non-Google provider, returning true')
       return true
     },
     async session({ session, token }) {
@@ -266,7 +244,7 @@ export const authOptions: NextAuthOptions = {
               token.mongoId = dbUser._id.toString()
             }
           } catch (error) {
-            console.error('❌ [Auth] Error fetching user for JWT:', error)
+            // Error fetching user for JWT
           }
         }
       }
@@ -277,6 +255,7 @@ export const authOptions: NextAuthOptions = {
       // 3. Token is older than 5 minutes (reduce DB calls by 95%)
       const shouldRefresh = !token.mongoId || 
                            trigger === 'update' || 
+                           !token.lastRefresh ||
                            (token.lastRefresh && Date.now() - (token.lastRefresh as number) > 5 * 60 * 1000);
       
       if (token.email && shouldRefresh) {
@@ -285,8 +264,10 @@ export const authOptions: NextAuthOptions = {
           if (dbUser) {
             token.organizationId = dbUser.organizationId?.toString()
             token.role = dbUser.role
-            // Mark as completed if isCompleted is true OR if currentStep is 4 (final step)
-            const isCompleted = dbUser.onboarding?.isCompleted || dbUser.onboarding?.currentStep === 4
+            // Mark as completed if data.completed is true OR currentStep is 4 (final step)
+            const dataCompleted = (dbUser.onboarding?.data as { completed?: boolean })?.completed
+            const isCompleted = dataCompleted === true || dbUser.onboarding?.currentStep === 4
+            
             token.onboarding = {
               completed: isCompleted,
               currentStep: dbUser.onboarding?.currentStep || 0,
@@ -301,6 +282,20 @@ export const authOptions: NextAuthOptions = {
         } catch {
           // Error fetching latest user data for JWT
         }
+      }
+      
+      // Ensure onboarding and services are always set (even if empty/default)
+      if (!token.onboarding) {
+        token.onboarding = {
+          completed: false,
+          currentStep: 0,
+          completedSteps: [],
+          serviceOnboarding: {}
+        };
+      }
+      
+      if (!token.services) {
+        token.services = createDefaultServices() as Record<string, boolean>;
       }
       
       return token

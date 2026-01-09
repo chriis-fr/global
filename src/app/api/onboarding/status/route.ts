@@ -29,12 +29,13 @@ export async function GET() {
     }
 
     // Convert User model structure to API response structure
-    // User model has: isCompleted, currentStep, completedSteps, data
+    // User model has: currentStep, completedSteps, data (with data.completed)
     // API response should have: completed, currentStep, completedSteps, serviceOnboarding
     // IMPORTANT: Check user's onboarding status, NOT organization status
     // Users must complete their own onboarding even if they belong to an organization
-    // Mark as completed if isCompleted is true OR if currentStep is 4 (final step)
-    const isCompleted = user.onboarding.isCompleted || user.onboarding.currentStep === 4;
+    // Mark as completed if data.completed is true OR currentStep is 4 (final step)
+    const dataCompleted = (user.onboarding.data as { completed?: boolean })?.completed
+    const isCompleted = dataCompleted === true || user.onboarding.currentStep === 4;
     const onboardingData = {
       completed: isCompleted,
       currentStep: user.onboarding.currentStep || 1,

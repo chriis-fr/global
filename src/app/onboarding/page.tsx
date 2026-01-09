@@ -184,13 +184,13 @@ export default function OnboardingPage() {
             session.user.services as Record<string, boolean>
           );
         }
-            window.location.href = '/dashboard';
-            return;
-          }
-          
+        window.location.href = '/dashboard';
+        return;
+      }
+      
       // If session shows it's not completed, continue with onboarding flow
-          loadUserAndServices();
-        }
+      loadUserAndServices();
+    }
   }, [session, status, onboarding, loadUserAndServices, setOnboarding]);
 
   const updateOnboardingStep = async (step: number, stepData?: Record<string, unknown>) => {
@@ -364,16 +364,20 @@ export default function OnboardingPage() {
               </div>
             </div>
             <div className="text-center lg:text-right">
-              <p className="text-white text-sm">Step {currentStep} of {ONBOARDING_STEPS.length}</p>
-              <div className="flex justify-center lg:justify-end space-x-1 mt-1">
-                {ONBOARDING_STEPS.map((step) => (
-                  <div
-                    key={step.id}
-                    className={`h-1 w-6 lg:w-8 rounded ${
-                      step.id <= currentStep ? 'bg-blue-500' : 'bg-white/20'
-                    }`}
-                  />
-                ))}
+              <div className="flex flex-col items-center lg:items-end space-y-2">
+                <div>
+                  <p className="text-white text-sm">Step {currentStep} of {ONBOARDING_STEPS.length}</p>
+                  <div className="flex justify-center lg:justify-end space-x-1 mt-1">
+                    {ONBOARDING_STEPS.map((step) => (
+                      <div
+                        key={step.id}
+                        className={`h-1 w-6 lg:w-8 rounded ${
+                          step.id <= currentStep ? 'bg-blue-500' : 'bg-white/20'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
