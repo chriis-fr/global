@@ -4,6 +4,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Breadcrumb from '@/components/dashboard/Breadcrumb';
+import FloatingActionButton from '@/components/dashboard/FloatingActionButton';
 import { useOnboardingStore } from '@/lib/stores/onboardingStore';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -14,26 +15,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const { fetchOnboarding, setOnboarding } = useOnboardingStore();
 
-  // Initialize onboarding store from session on mount and check completion
+  // Initialize onboarding store from session on mount and check completion.
+  // Guarded with a ref to prevent repeated state updates that can cause update-depth errors.
+  const onboardingInitRef = useRef(false);
   useEffect(() => {
     if (status === 'loading') return;
+    if (onboardingInitRef.current) return;
     
     if (!session) {
       router.push('/auth');
       return;
     }
 
+    onboardingInitRef.current = true;
+
     // Check session data FIRST (fastest check, no API call needed)
-    // Consider completed if: completed === true OR currentStep === 4 (final step)
     const sessionOnboardingCompleted = session.user?.onboarding?.completed || session.user?.onboarding?.currentStep === 4;
     
     // If session shows onboarding is completed, allow dashboard immediately
     if (sessionOnboardingCompleted) {
-      // Initialize store from session data immediately
       if (session.user?.onboarding && session.user?.services) {
         setOnboarding(
           {
-            completed: true, // Mark as completed since currentStep is 4
+            completed: true,
             currentStep: session.user.onboarding.currentStep || 4,
             completedSteps: session.user.onboarding.completedSteps || [],
             serviceOnboarding: session.user.onboarding.serviceOnboarding || {}
@@ -41,17 +45,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           session.user.services as Record<string, boolean>
         );
       }
-      // Allow dashboard to render - don't redirect
       return;
     }
 
     // If session shows onboarding is NOT completed, redirect immediately
-    if (!sessionOnboardingCompleted) {
-      const currentPath = window.location.pathname;
-      if (currentPath !== '/onboarding' && !currentPath.startsWith('/onboarding')) {
-        window.location.href = '/onboarding';
-        return;
-      }
+    const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
+    if (currentPath !== '/onboarding' && !currentPath.startsWith('/onboarding')) {
+      window.location.href = '/onboarding';
+      return;
     }
 
     // If session doesn't have onboarding data, initialize store (will fetch if needed)
@@ -66,7 +67,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         session.user.services as Record<string, boolean>
       );
     } else {
-      // Only fetch if session doesn't have the data
       fetchOnboarding();
     }
   }, [session, status, setOnboarding, fetchOnboarding, router]);
@@ -74,31 +74,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Listen for sidebar state changes
   useEffect(() => {
     const handleResize = () => {
-      // Check if sidebar is collapsed or auto-hidden based on CSS classes
       const sidebar = document.querySelector('aside');
-      if (sidebar) {
-        const isCollapsed = sidebar.classList.contains('w-16');
-        const isAutoHidden = sidebar.classList.contains('w-16') && !sidebar.classList.contains('w-64');
-        
-        if (isAutoHidden) {
-          setSidebarState('auto-hidden');
-        } else if (isCollapsed) {
-          setSidebarState('collapsed');
-        } else {
-          setSidebarState('expanded');
-        }
-      }
+      if (!sidebar) return;
+      const isCollapsed = sidebar.classList.contains('w-16');
+      const isAutoHidden = sidebar.classList.contains('w-16') && !sidebar.classList.contains('w-64');
+      const nextState: 'expanded' | 'collapsed' | 'auto-hidden' = isAutoHidden ? 'auto-hidden' : isCollapsed ? 'collapsed' : 'expanded';
+      setSidebarState((prev) => (prev === nextState ? prev : nextState));
     };
 
-    // Use MutationObserver to watch for class changes on the sidebar
     const sidebar = document.querySelector('aside');
     if (sidebar) {
       const observer = new MutationObserver(handleResize);
       observer.observe(sidebar, { attributes: true, attributeFilter: ['class'] });
-      
-      // Initial check
       handleResize();
-      
       return () => observer.disconnect();
     }
   }, []);
@@ -196,6 +184,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {children}
         </div>
       </main>
+      <FloatingActionButton />
     </div>
   );
 } 

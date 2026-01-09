@@ -17,6 +17,8 @@ interface SavePaymentMethodButtonProps {
         accountName?: string;
         accountNumber?: string;
         branchAddress?: string;
+        // Custom bank fields
+        customBankFields?: Record<string, string>;
         paybillNumber?: string;
         mpesaAccountNumber?: string;
         tillNumber?: string;
@@ -123,6 +125,8 @@ export default function SavePaymentMethodButton({
                         accountName: formData.accountName,
                         accountNumber: formData.accountNumber,
                         branchAddress: formData.branchAddress,
+                        // Custom bank fields
+                        customFields: formData.customBankFields || {},
                     }),
                     ...(formData.fiatPaymentSubtype === 'mpesa_paybill' && {
                         paybillNumber: formData.paybillNumber,

@@ -40,7 +40,7 @@ import InvoicePdfView from '@/components/invoicing/InvoicePdfView';
 import { LogoSelector } from '@/components/LogoSelector';
 import BankSelector from '@/components/BankSelector';
 import { Bank } from '@/data';
-import FloatingActionButton from '@/components/dashboard/FloatingActionButton';
+import DynamicBankFields from '@/components/payments/DynamicBankFields';
 import { useSubscription } from '@/lib/contexts/SubscriptionContext';
 import { CELO_TOKENS } from '@/lib/chains/celo';
 import PaymentMethodSelector from '@/components/payments/PaymentMethodSelector';
@@ -105,6 +105,9 @@ interface InvoiceFormData {
   accountName?: string;
   accountNumber?: string;
   branchAddress?: string;
+  // Custom bank fields (for banks not in predefined list)
+  bankCountryCode?: string; // Country code for bank selection (GH, KE, etc.)
+  customBankFields?: Record<string, string>; // Dynamic key-value pairs for custom bank fields
   // M-Pesa Paybill fields
   paybillNumber?: string;
   mpesaAccountNumber?: string;
@@ -185,6 +188,8 @@ const defaultInvoiceData: InvoiceFormData = {
   accountName: '',
   accountNumber: '',
   branchAddress: '',
+  bankCountryCode: 'KE', // Default to Kenya
+  customBankFields: {}, // Dynamic custom bank fields
   paybillNumber: '',
   mpesaAccountNumber: '',
   tillNumber: '',
@@ -659,6 +664,8 @@ export default function CreateInvoicePage() {
   const [currencySearch, setCurrencySearch] = useState('');
   const [userHasSelectedCurrency, setUserHasSelectedCurrency] = useState(false);
   const [isAutoSelectingCurrency, setIsAutoSelectingCurrency] = useState(false);
+  const [showCustomBankFields, setShowCustomBankFields] = useState(false);
+  const [isCustomBank, setIsCustomBank] = useState(false);
   
   // Check saved data on mount to preserve currency selection
   useEffect(() => {
@@ -785,6 +792,8 @@ export default function CreateInvoicePage() {
       accountName?: string;
       accountNumber?: string;
       branchAddress?: string;
+      // Custom bank fields
+      customFields?: Record<string, string>;
       // M-Pesa details
       paybillNumber?: string;
       mpesaAccountNumber?: string;
@@ -1068,7 +1077,7 @@ export default function CreateInvoicePage() {
     };
   }, []);
 
-  const handleInputChange = (field: keyof InvoiceFormData, value: string | number | boolean) => {
+  const handleInputChange = (field: keyof InvoiceFormData, value: string | number | boolean | Record<string, string>) => {
     setFormData(prev => {
       const updated = { ...prev, [field]: value };
       
@@ -1177,14 +1186,56 @@ export default function CreateInvoicePage() {
     }));
   };
 
-  const handleBankSelect = (bank: Bank) => {
-    setFormData(prev => ({
-      ...prev,
-      bankName: bank.name,
-      swiftCode: bank.swift_code,
-      bankCode: bank.bank_code || ''
-    }));
+  const handleBankSelect = (bank: Bank | null) => {
+    if (bank) {
+      // Bank selected from list
+      setFormData(prev => ({
+        ...prev,
+        bankName: bank.name,
+        swiftCode: bank.swift_code,
+        bankCode: bank.bank_code || ''
+      }));
+      setIsCustomBank(false);
+      setShowCustomBankFields(false);
+    } else {
+      // Custom bank - user is typing custom bank name
+      setIsCustomBank(true);
+    }
   };
+
+  // Check if bank name is custom (not in the list)
+  useEffect(() => {
+    const checkIfCustomBank = async () => {
+      if (!formData.bankName || !formData.bankCountryCode) {
+        setIsCustomBank(false);
+        setShowCustomBankFields(false);
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/banks/search?country=${formData.bankCountryCode}`);
+        const data = await response.json();
+        
+        if (data.success) {
+          const banks = data.data.banks as Bank[];
+          const isInList = banks.some(bank => 
+            bank.name.toLowerCase().trim() === formData.bankName?.toLowerCase().trim()
+          );
+          setIsCustomBank(!isInList);
+          if (!isInList) {
+            // If it's a custom bank, keep fields hidden until user toggles
+          } else {
+            setShowCustomBankFields(false);
+          }
+        }
+      } catch {
+        // If we can't check, assume it might be custom if there's a value
+        setIsCustomBank(!!formData.bankName);
+      }
+    };
+
+    checkIfCustomBank();
+  }, [formData.bankName, formData.bankCountryCode]);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
@@ -2760,6 +2811,7 @@ export default function CreateInvoicePage() {
             accountName: selectedMethod.fiatDetails?.accountName || '',
             accountNumber: selectedMethod.fiatDetails?.accountNumber || '',
             branchAddress: selectedMethod.fiatDetails?.branchAddress || '',
+            customBankFields: (selectedMethod.fiatDetails as { customFields?: Record<string, string> })?.customFields || {},
             paybillNumber: selectedMethod.fiatDetails?.paybillNumber || '',
             mpesaAccountNumber: selectedMethod.fiatDetails?.mpesaAccountNumber || '',
             tillNumber: selectedMethod.fiatDetails?.tillNumber || '',
@@ -3786,14 +3838,27 @@ export default function CreateInvoicePage() {
                     {formData.fiatPaymentSubtype === 'bank' && (
                       <div className="space-y-4">
                         <div>
-                          <label className="block text-sm text-gray-700 mb-1">Bank Name</label>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-sm text-gray-700">Bank Name</label>
+                            <div className="relative">
+                              <select
+                                value={formData.bankCountryCode || 'KE'}
+                                onChange={(e) => handleInputChange('bankCountryCode', e.target.value)}
+                                className="text-xs text-gray-600 bg-transparent border-none outline-none cursor-pointer pr-4 appearance-none"
+                              >
+                                <option value="GH">Ghana</option>
+                                <option value="KE">Kenya</option>
+                              </select>
+                              <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-600 pointer-events-none" />
+                            </div>
+                          </div>
                           <BankSelector
-                            countryCode="KE"
+                            countryCode={formData.bankCountryCode || 'KE'}
                             value={formData.bankName || ''}
                             onBankSelectAction={handleBankSelect}
                             onInputChangeAction={(value) => handleInputChange('bankName', value)}
-                            placeholder="Search for a bank..."
-                            
+                            placeholder="Search for a bank or type custom bank name..."
+                            allowCustom={true}
                           />
                         </div>
                         <div>
@@ -3826,6 +3891,25 @@ export default function CreateInvoicePage() {
                             placeholder="Account holder name"
                           />
                         </div>
+                        {/* Custom bank fields - only shown for custom banks with toggle */}
+                        {isCustomBank && (
+                          <div className="pt-2 border-t border-gray-200">
+                            <button
+                              type="button"
+                              onClick={() => setShowCustomBankFields(!showCustomBankFields)}
+                              className="flex items-center justify-between w-full text-left text-xs text-gray-500 hover:text-gray-700 mb-3"
+                            >
+                              <span>Additional bank details (optional)</span>
+                              <ChevronDown className={`h-3 w-3 transition-transform ${showCustomBankFields ? 'rotate-180' : ''}`} />
+                            </button>
+                            {showCustomBankFields && (
+                              <DynamicBankFields
+                                fields={formData.customBankFields || {}}
+                                onFieldsChange={(fields) => handleInputChange('customBankFields', fields)}
+                              />
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                     
@@ -4551,8 +4635,6 @@ export default function CreateInvoicePage() {
         <InvoicePdfView formData={formData} invoiceNumber={formData.invoiceNumber} />
       </div>
 
-      {/* Floating Action Button */}
-      <FloatingActionButton />
       </div>
     </div>
   );

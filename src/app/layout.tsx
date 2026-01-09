@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ProvidersWrapper } from "@/components/providers/ProvidersWrapper";
+import { PWARefresh } from "@/components/pwa/PWARefresh";
 
 // DO NOT import database initialization here - it blocks SSR
 // Database connections should be lazy-loaded only when needed in API routes
@@ -20,7 +21,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL("https://chains-erp.com"),
   title: {
-    default: "Global Finance - Flexible, secure and simple borderless finance for DAOs, Freelancers, Contractors & more...",
+    default: "Global Finance - Send Invoices, get paid globally",
     template: "%s | Chains ERP"
   },
   description:
@@ -50,7 +51,7 @@ export const metadata: Metadata = {
   },
 
   openGraph: {
-    title: "Global Finance - Flexible, secure and simple borderless finance for DAOs, Freelancers, Contractors & more...",
+    title: "Global Finance - Send Invoices, get paid globally",
     description:
       "Manage invoices, payables and more with the most flexible and secure finance platform.",
     url: "https://global.chains-erp.com",
@@ -97,6 +98,7 @@ export const metadata: Metadata = {
 export const viewport = {
   width: "device-width",
   initialScale: 1.0,
+  themeColor: "#1c398e", // Matches the blue theme - controls status bar color on mobile
 };
 
 export default function RootLayout({
@@ -105,7 +107,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <meta name="safe-apps" content="true" />
       <link rel="icon" href="/chains.PNG" />
       <body
@@ -122,6 +124,8 @@ export default function RootLayout({
         <ProvidersWrapper>
           {children}
         </ProvidersWrapper>
+        {/* PWA Refresh Button - Only shows when app is installed */}
+        <PWARefresh />
       </body>
     </html>
   );

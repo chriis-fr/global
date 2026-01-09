@@ -20,6 +20,9 @@ import {
   DollarSign
 } from 'lucide-react';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
+import CurrencyAmount from '@/components/CurrencyAmount';
+import { formatDateReadable } from '@/lib/utils/dateFormat';
+import { getAllPayables, deletePayable } from '@/app/actions/payable-actions';
 
 interface Payable {
   _id: string;
@@ -105,12 +108,11 @@ export default function PayablesListPage() {
     
     try {
       setLoading(true);
-      const response = await fetch('/api/payables?convertToPreferred=false'); // Keep original amounts
-      const data = await response.json();
+      const result = await getAllPayables();
       
-      if (data.success) {
-        setPayables(data.data.payables || []);
-        setStats(data.data.stats || {
+      if (result.success && result.data) {
+        setPayables(result.data.payables || []);
+        setStats(result.data.stats || {
           totalPayables: 0,
           pendingCount: 0,
           paidCount: 0,
@@ -163,11 +165,9 @@ export default function PayablesListPage() {
     if (!confirm('Are you sure you want to delete this payable?')) return;
     
     try {
-      const response = await fetch(`/api/payables/${payableId}`, {
-        method: 'DELETE'
-      });
+      const result = await deletePayable(payableId);
       
-      if (response.ok) {
+      if (result.success) {
         setPayables(prev => prev.filter(p => p._id !== payableId));
       }
     } catch (error) {
@@ -216,14 +216,10 @@ export default function PayablesListPage() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
+  // Use consistent date formatting utility to avoid hydration mismatches
+  const formatDate = formatDateReadable;
 
+  
   const isOverdue = (dueDate: string, status: string) => {
     return status !== 'paid' && new Date(dueDate) < new Date();
   };
@@ -493,7 +489,10 @@ export default function PayablesListPage() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-sm font-medium text-white">
-                        <FormattedNumberDisplay value={payable.amount} />
+                        <CurrencyAmount 
+                          amount={payable.amount} 
+                          currency={payable.currency || 'USD'}
+                        />
                       </div>
                     </td>
                     <td className="px-6 py-4">

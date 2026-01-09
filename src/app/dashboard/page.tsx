@@ -103,28 +103,48 @@ export default function DashboardPage() {
       {/* Header - Renders immediately with session data */}
       <div className="flex items-center justify-between">
         <div>
-            <h1 
-              className="text-2xl md:text-3xl font-bold text-white mb-2 flex items-center gap-2"
-              style={{ contentVisibility: 'auto' }}
-            >
-              {displayOrgName && (
-                <span className="text-blue-300 font-medium">
-                  {displayOrgName} • 
-                </span>
-              )}
-              Overview
-              {isPaidUser && (
-                <span className="bg-gradient-to-r from-yellow-400 to-orange-500 text-black text-xs font-bold px-2 py-1 rounded-full">
-                  PRO
-                </span>
-              )}
-            </h1>
-            <p className="text-blue-200">Welcome back, {displayName}!</p>
+            {/* Mobile: Welcome back first, then Overview */}
+            <div className="md:hidden">
+              <p className="text-blue-200 mb-2">Hi, {displayName}!</p>
+              <h1 
+                className="text-2xl font-bold text-white flex items-center gap-2"
+                style={{ contentVisibility: 'auto' }}
+              >
+                {displayOrgName && (
+                  <span className="text-blue-300 font-medium">
+                    {displayOrgName} • 
+                  </span>
+                )}
+                Overview
+                {isPaidUser && (
+                  <span className="w-2 h-2 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full"></span>
+                )}
+              </h1>
+            </div>
+            
+            {/* Desktop: Overview first, then Welcome back */}
+            <div className="hidden md:block">
+              <h1 
+                className="text-3xl font-bold text-white mb-2 flex items-center gap-2"
+                style={{ contentVisibility: 'auto' }}
+              >
+                {displayOrgName && (
+                  <span className="text-blue-300 font-medium">
+                    {displayOrgName} • 
+                  </span>
+                )}
+                Overview
+                {isPaidUser && (
+                  <span className="w-2 h-2 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full"></span>
+                )}
+              </h1>
+              <p className="text-blue-200">Welcome back, {displayName}!</p>
+            </div>
         </div>
-        <div className="text-right">
+        {/* <div className="text-right">
             <p className="text-sm text-blue-300">Last updated</p>
             <p className="text-sm text-white">{new Date().toLocaleDateString()}</p>
-        </div>
+        </div> */}
       </div>
 
       {/* Plan Status Banner - Only show for receivables free users */}

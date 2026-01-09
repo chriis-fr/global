@@ -6,32 +6,6 @@ import {
   ArrowUpLeft,
 } from 'lucide-react'
 
-// const benefits = [
-//   {
-//     icon: ArrowUpLeft,
-//     title: 'Accounts Payable',
-//     description: 'Manage business payments and streamline outgoing transactions in both crypto and fiat.',
-//     link: '/services'
-//   },
-//   {
-//     icon: ArrowDownRight,
-//     title: 'Accounts Receivable',
-//     description: 'Create invoices, and get paid seamlessly in crypto and fiat while staying compliant.',
-//     link: '/services'
-//   },
-//   {
-//     icon: Receipt,
-//     title: 'Expenses',
-//     description: 'Manage corporate expenses, track spending, and get reimbursed easily across crypto and fiat.',
-//     link: '/services'
-//   },
-//   {
-//     icon: Users,
-//     title: 'Payroll & Compensation',
-//     description: 'Pay your team salaries, bonuses, and contractor bills globally in crypto and fiat.',
-//     link: '/services'
-//   }
-// ];
 
 const benefits = [
   {
@@ -77,7 +51,7 @@ const SectionC = () => {
 
           <h2 className="text-3xl md:text-4xl font-bold mb-4 text-black">
             <span className="text-transparent bg-gradient-to-r from-[#D247BF] to-primary bg-clip-text">
-              Cross-border Payments?
+              International Settlement?
             </span>
           </h2>
           <p className="text-xl text-gray-700 mb-8 font-serif relative text-center md:text-left">

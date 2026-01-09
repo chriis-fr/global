@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { approveInvoice, rejectInvoice, getPendingApprovals } from '@/lib/actions/invoiceApproval';
 import { autoSendApprovedInvoice } from '@/lib/utils/autoSendInvoice';
 import { CheckCircle, XCircle, Clock, DollarSign, User, Mail } from 'lucide-react';
+import { formatDateTimeReadable } from '@/lib/utils/dateFormat';
 
 interface PendingInvoice {
   _id: string;
@@ -179,15 +180,8 @@ export default function PendingInvoiceApprovals() {
     }).format(amount);
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
+  // Use consistent date formatting utility to avoid hydration mismatches
+  const formatDate = formatDateTimeReadable;
 
   if (loading) {
     return (

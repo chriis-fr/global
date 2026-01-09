@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, CSSProperties } from 'react'
 import Image from 'next/image'
 import { User, Building } from 'lucide-react'
 
@@ -10,6 +10,8 @@ interface ProfileAvatarProps {
   size?: 'sm' | 'md' | 'lg' | 'xl'
   type?: 'user' | 'organization'
   className?: string
+  style?: CSSProperties
+  highPriority?: boolean
 }
 
 export function ProfileAvatar({ 
@@ -17,7 +19,9 @@ export function ProfileAvatar({
   alt, 
   size = 'md', 
   type = 'user',
-  className = '' 
+  className = '',
+  style,
+  highPriority = false,
 }: ProfileAvatarProps) {
   const [imageError, setImageError] = useState(false)
   
@@ -37,22 +41,42 @@ export function ProfileAvatar({
 
   const IconComponent = type === 'organization' ? Building : User
 
+  const numericSize = {
+    sm: 32,
+    md: 48,
+    lg: 64,
+    xl: 96,
+  }[size];
+
   if (src && !imageError) {
     return (
-      <div className={`relative ${sizeClasses[size]} ${className}`}>
+      <div
+        className={`relative ${sizeClasses[size]} ${className}`}
+        style={{
+          willChange: 'transform',
+          transform: 'translateZ(0)',
+          WebkitBackfaceVisibility: 'hidden',
+          backfaceVisibility: 'hidden',
+          ...style,
+        }}
+      >
         <Image
           src={src}
           alt={alt}
-          fill
+          width={numericSize}
+          height={numericSize}
           className="rounded-full object-cover"
           onError={() => setImageError(true)}
+          priority={highPriority}
+          draggable={false}
         />
       </div>
     )
   }
 
   return (
-    <div className={`
+    <div
+      className={`
       ${sizeClasses[size]} 
       ${className}
       rounded-full 
@@ -60,7 +84,15 @@ export function ProfileAvatar({
       flex items-center justify-center 
       text-white font-medium
       shadow-lg
-    `}>
+      `}
+      style={{
+        willChange: 'transform',
+        transform: 'translateZ(0)',
+        WebkitBackfaceVisibility: 'hidden',
+        backfaceVisibility: 'hidden',
+        ...style,
+      }}
+    >
       <IconComponent className={iconSizes[size]} />
     </div>
   )

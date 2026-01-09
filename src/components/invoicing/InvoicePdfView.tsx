@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { Building2, User, Calendar, Clock } from 'lucide-react';
 import { getCurrencyByCode } from '@/data/currencies';
 import { countries } from '@/data/countries';
+import { formatDateReadable } from '@/lib/utils/dateFormat';
 
 interface InvoiceItem {
   id: string;
@@ -69,13 +70,9 @@ const InvoicePdfView = memo(forwardRef<HTMLDivElement, InvoicePdfViewProps>(
     // Check if any items have discounts or taxes
     const hasAnyDiscounts = formData.items.some(item => item.discount > 0);
     const hasAnyTaxes = formData.items.some(item => item.tax > 0);
+    // Use consistent date formatting utility to avoid hydration mismatches
     const formatDate = (dateString: string) => {
-      const date = new Date(dateString);
-      return date.toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      });
+      return formatDateReadable(dateString);
     };
 
     const getCurrencySymbol = () => {

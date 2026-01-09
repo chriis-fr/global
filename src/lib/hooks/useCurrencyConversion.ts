@@ -3,6 +3,12 @@ import { useCurrency } from '@/lib/contexts/CurrencyContext';
 import { useCurrencyStore } from '@/lib/stores/currencyStore';
 import { batchConvertCurrency } from '@/app/actions/currency-actions';
 
+// Helper to check if currency is crypto
+const CRYPTO_CURRENCIES = ['CELO', 'ETH', 'BTC', 'USDT', 'USDC', 'DAI', 'MATIC', 'BNB', 'AVAX', 'cUSD', 'cEUR'];
+const isCryptoCurrency = (currency: string): boolean => {
+  return CRYPTO_CURRENCIES.includes(currency.toUpperCase());
+};
+
 interface ConversionResult {
   originalAmount: number;
   convertedAmount: number;
@@ -103,14 +109,22 @@ export function useCurrencyConversion(
 
   useEffect(() => {
     const targetCurrency = toCurrency || preferredCurrency;
+    const fromIsCrypto = isCryptoCurrency(fromCurrency);
     
-    // If currencies are the same, no conversion needed
-    if (fromCurrency === targetCurrency) {
+    // For crypto, always convert to USD (or preferred currency if different)
+    // Even if the target currency matches, we want to show the USD equivalent
+    const actualTargetCurrency = fromIsCrypto && targetCurrency === fromCurrency 
+      ? 'USD' 
+      : targetCurrency;
+    
+    // If currencies are the same AND not crypto, no conversion needed
+    // For crypto, ALWAYS convert even if target is same (to show USD equivalent)
+    if (fromCurrency === targetCurrency && !fromIsCrypto) {
       setResult({
         originalAmount: amount,
         convertedAmount: amount,
         fromCurrency,
-        toCurrency: targetCurrency,
+        toCurrency: actualTargetCurrency,
         rate: 1,
         converted: false,
         isLoading: false,
@@ -120,7 +134,7 @@ export function useCurrencyConversion(
     }
 
     // Check cache first
-    const cacheKey = getCacheKey(amount, fromCurrency, targetCurrency);
+    const cacheKey = getCacheKey(amount, fromCurrency, actualTargetCurrency);
     const cached = getCachedConversion(cacheKey);
     
     if (cached) {
@@ -142,7 +156,7 @@ export function useCurrencyConversion(
       originalAmount: amount,
       convertedAmount: amount, // Show original while converting
       fromCurrency,
-      toCurrency: targetCurrency,
+      toCurrency: actualTargetCurrency,
       rate: 1,
       converted: false,
       isLoading: true, // Still loading but showing original amount
@@ -195,7 +209,7 @@ export function useCurrencyConversion(
         },
         amount,
         fromCurrency,
-        toCurrency: targetCurrency,
+        toCurrency: actualTargetCurrency,
       });
     });
 

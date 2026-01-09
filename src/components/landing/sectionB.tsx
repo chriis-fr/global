@@ -37,7 +37,7 @@ const SectionB = () => {
   const isMobile = isMounted ? (width ? width < 1023 : true) : true;
 
   return (
-    <div className="h-screen w-full bg-[#1a1a1a] text-[#4cf7029e] flex items-center flex-col mt-12 justify-center relative overflow-hidden">
+    <div className="w-full min-h-screen lg:h-screen bg-[#1a1a1a] text-[#4cf7029e] flex items-center flex-col mt-12 justify-center relative overflow-hidden">
       {/* Mobile Text */}
       <div className="font-Neue text-3xl mb-4 p-8 ml-6 flex lg:hidden flex-col lg:text-6xl lg:w-3/5 w-screen lg:text-left absolute top-10">
         {["Invoice, Receive ", "& Pay ", "all around the", "Globe"].map((wrd, index) => {
@@ -86,7 +86,7 @@ const SectionB = () => {
 
       {/* Desktop Layout */}
       <div className="hidden lg:flex space-x-2 items-center justify-center">
-        <motion.div className="absolute -left-1/4 w-full -bottom-2/4">
+        <motion.div className="absolute -left-1/4 w-full -bottom-2/4" initial={false}>
           {!isMobile && <UserPopLg></UserPopLg>}
         </motion.div>
 

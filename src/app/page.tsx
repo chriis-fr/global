@@ -185,7 +185,6 @@ export default function Home() {
       )}
       {/* Landing page content - always rendered but hidden, slides up with preloader layers */}
       <div 
-
         ref={landingPageRef}
         className="crossBg"
         style={{ 
@@ -197,14 +196,13 @@ export default function Home() {
           minHeight: '100vh',
           pointerEvents: shouldShowPreloader ? 'none' : 'auto',
           zIndex: shouldShowPreloader ? 9980 : 1,
-          opacity: 0,
-          visibility: 'hidden'
-          // opacity and visibility controlled by GSAP animation
+          opacity: shouldShowPreloader ? 0 : 1,
+          visibility: shouldShowPreloader ? 'hidden' : 'visible'
         }}
       >
         {/* <div className='bg' /> */}
         <Header />
-        <div className="pt-16">
+        <div className="pt-15">
           <BlockchainBenefits />
         </div>
         <Footer />

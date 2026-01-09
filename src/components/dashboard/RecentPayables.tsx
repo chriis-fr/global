@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Receipt, Clock, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { Receipt, Clock, CheckCircle, XCircle, AlertTriangle, ChevronDown } from 'lucide-react';
 import { getRecentPayables, RecentPayable } from '@/lib/actions/dashboard';
-import FormattedNumberDisplay from '@/components/FormattedNumber';
+import CurrencyAmount from '@/components/CurrencyAmount';
 
 interface RecentPayablesProps {
   className?: string;
@@ -14,6 +14,8 @@ export default function RecentPayables({ className = '' }: RecentPayablesProps) 
   const [payables, setPayables] = useState<RecentPayable[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const hasInitialized = useRef(false);
   const CACHE_DURATION = 2 * 60 * 1000; // 2 minutes cache for recent data
@@ -111,27 +113,37 @@ export default function RecentPayables({ className = '' }: RecentPayablesProps) 
 
   if (loading) {
     return (
-      <div className={`bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6 ${className}`}>
-        <div className="flex items-center space-x-3 mb-6">
-          <Receipt className="h-6 w-6 text-green-400" />
-          <h3 className="text-lg font-semibold text-white">Recent Payables</h3>
+      <div className={`bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-3 ${className}`}>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center space-x-3">
+            <Receipt className="h-6 w-6 text-green-400" />
+            <h3 className="text-lg font-semibold text-white">Recent Payables</h3>
+          </div>
+          <div className="flex items-center gap-3">
+            <ChevronDown className="h-5 w-5 text-white/70 md:hidden" />
+          </div>
         </div>
-        <div className="space-y-4">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="flex items-center justify-between p-4 bg-white/5 rounded-lg animate-pulse">
-              <div className="flex items-center space-x-3">
-                <div className="h-4 w-4 bg-white/20 rounded"></div>
-                <div className="space-y-2">
-                  <div className="h-4 w-32 bg-white/20 rounded"></div>
-                  <div className="h-3 w-24 bg-white/20 rounded"></div>
+        {/* Loading skeleton - hidden on mobile when collapsed, visible on desktop */}
+        <div className={`overflow-hidden transition-all duration-300 ease-in-out md:max-h-none md:opacity-100 ${
+          !isExpanded ? 'max-h-0 opacity-0 md:max-h-none md:opacity-100' : 'max-h-[2000px] opacity-100'
+        }`}>
+          <div className="space-y-4">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="flex items-center justify-between p-4 bg-white/5 rounded-lg animate-pulse">
+                <div className="flex items-center space-x-3">
+                  <div className="h-4 w-4 bg-white/20 rounded"></div>
+                  <div className="space-y-2">
+                    <div className="h-4 w-32 bg-white/20 rounded"></div>
+                    <div className="h-3 w-24 bg-white/20 rounded"></div>
+                  </div>
+                </div>
+                <div className="text-right space-y-2">
+                  <div className="h-4 w-16 bg-white/20 rounded"></div>
+                  <div className="h-3 w-12 bg-white/20 rounded"></div>
                 </div>
               </div>
-              <div className="text-right space-y-2">
-                <div className="h-4 w-16 bg-white/20 rounded"></div>
-                <div className="h-3 w-12 bg-white/20 rounded"></div>
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -140,69 +152,133 @@ export default function RecentPayables({ className = '' }: RecentPayablesProps) 
   if (error) {
     return (
       <div className={`bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6 ${className}`}>
-        <div className="flex items-center space-x-3 mb-6">
-          <Receipt className="h-6 w-6 text-green-400" />
-          <h3 className="text-lg font-semibold text-white">Recent Payables</h3>
-        </div>
-        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
-          <div className="flex items-center space-x-2 text-red-400">
-            <AlertTriangle className="h-5 w-5" />
-            <span className="font-medium">Failed to load payables</span>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center space-x-3">
+            <Receipt className="h-6 w-6 text-green-400" />
+            <h3 className="text-lg font-semibold text-white">Recent Payables</h3>
           </div>
-          <p className="text-red-300 text-sm mt-2">{error}</p>
+          <div className="flex items-center gap-3">
+            <ChevronDown className="h-5 w-5 text-white/70 md:hidden" />
+          </div>
+        </div>
+        {/* Error message - hidden on mobile when collapsed, visible on desktop */}
+        <div className={`overflow-hidden transition-all duration-300 ease-in-out md:max-h-none md:opacity-100 ${
+          !isExpanded ? 'max-h-0 opacity-0 md:max-h-none md:opacity-100' : 'max-h-[2000px] opacity-100'
+        }`}>
+          <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
+            <div className="flex items-center space-x-2 text-red-400">
+              <AlertTriangle className="h-5 w-5" />
+              <span className="font-medium">Failed to load payables</span>
+            </div>
+            <p className="text-red-300 text-sm mt-2">{error}</p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className={`bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6 ${className}`}>
-      <div className="flex items-center justify-between mb-6">
+    <div className={`bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl px-6 p-3 ${className}`}>
+      {/* Header - Clickable on mobile to expand/collapse */}
+      <div 
+        className="flex items-center justify-between mb-6 cursor-pointer md:cursor-default select-none"
+        onClick={(e) => {
+          // Only toggle on mobile (below lg breakpoint)
+          if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+            e.preventDefault();
+            e.stopPropagation();
+            // Preserve scroll position from the main scroll container
+            const mainContent = document.querySelector('main[class*="overflow-y-auto"]') as HTMLElement;
+            const scrollY = mainContent?.scrollTop || window.scrollY;
+            setIsExpanded(!isExpanded);
+            // Restore scroll position after state update
+            requestAnimationFrame(() => {
+              if (mainContent) {
+                mainContent.scrollTop = scrollY;
+              } else {
+                window.scrollTo(0, scrollY);
+              }
+            });
+          }
+        }}
+      >
         <div className="flex items-center space-x-3">
           <Receipt className="h-6 w-6 text-green-400" />
           <h3 className="text-lg font-semibold text-white">Recent Payables</h3>
         </div>
-        <button
-          onClick={() => router.push('/dashboard/services/payables')}
-          className="text-green-400 hover:text-green-300 text-sm font-medium transition-colors"
-        >
-          View All
-        </button>
+        <div className="flex items-center gap-3">
+          {/* View All button - hidden on mobile when collapsed, always visible on desktop */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              router.push('/dashboard/services/payables');
+            }}
+            className={`text-green-400 hover:text-green-300 text-sm font-medium transition-colors ${
+              !isExpanded ? 'hidden md:block' : 'block'
+            }`}
+          >
+            View All
+          </button>
+          {/* Chevron - only visible on mobile */}
+          <ChevronDown 
+            className={`h-5 w-5 text-white/70 transition-transform duration-200 md:hidden ${
+              isExpanded ? 'rotate-180' : ''
+            }`}
+          />
+        </div>
       </div>
 
-      {payables.length === 0 ? (
-        <div className="text-center py-8">
-          <Receipt className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-400">No payables yet</p>
-          <p className="text-gray-500 text-sm">Your payables will appear here</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {payables.map((payable) => (
-            <div
-              key={payable._id}
-              className="flex items-center justify-between p-4 bg-white/5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
-              onClick={() => router.push(`/dashboard/services/payables/${payable._id}`)}
-            >
-              <div className="flex items-center space-x-3">
-                {getStatusIcon(payable.status)}
-                <div>
-                  <p className="font-medium text-white">{payable.payableNumber}</p>
-                  <p className="text-sm text-gray-400">{payable.vendorName}</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="font-semibold text-white">
-                  <FormattedNumberDisplay value={payable.total} />
-                </p>
-                <p className={`text-xs font-medium ${getStatusColor(payable.status)}`}>
-                  {payable.status.charAt(0).toUpperCase() + payable.status.slice(1).replace('_', ' ')}
-                </p>
-              </div>
+      {/* Content - Collapsible on mobile, always visible on desktop */}
+      <div 
+        ref={contentRef}
+        className={`overflow-hidden transition-all duration-300 ease-in-out md:max-h-none md:opacity-100 ${
+          !isExpanded ? 'max-h-0 opacity-0 md:max-h-none md:opacity-100' : 'max-h-[2000px] opacity-100'
+        }`}
+        style={{
+          transitionProperty: 'max-height, opacity',
+        }}
+      >
+        <div className="md:block">
+          {payables.length === 0 ? (
+            <div className="text-center py-8">
+              <Receipt className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-400">No payables yet</p>
+              <p className="text-gray-500 text-sm">Your payables will appear here</p>
             </div>
-          ))}
+          ) : (
+            <div className="space-y-4">
+              {payables.map((payable) => (
+                <div
+                  key={payable._id}
+                  className="flex items-center justify-between p-4 bg-white/5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                  onClick={() => router.push(`/dashboard/services/payables/${payable._id}`)}
+                >
+                  <div className="flex items-center space-x-3">
+                    {getStatusIcon(payable.status)}
+                    <div>
+                      <p className="font-medium text-white">{payable.payableNumber}</p>
+                      <p className="text-sm text-gray-400">{payable.vendorName}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold text-white">
+                      <CurrencyAmount 
+                        amount={payable.total} 
+                        currency={payable.currency || 'USD'}
+                        convertedAmount={payable.amountUsd}
+                        convertedCurrency="USD"
+                      />
+                    </p>
+                    <p className={`text-xs font-medium ${getStatusColor(payable.status)}`}>
+                      {payable.status.charAt(0).toUpperCase() + payable.status.slice(1).replace('_', ' ')}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

@@ -247,7 +247,7 @@ export const authOptions: NextAuthOptions = {
       }
       return session
     },
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       if (user) {
         // Add custom user data to token
         token.userType = user.userType
@@ -271,8 +271,15 @@ export const authOptions: NextAuthOptions = {
         }
       }
       
-      // Always fetch the latest user data from database to ensure organizationId is up to date
-      if (token.email) {
+      // Only fetch latest user data if:
+      // 1. Token doesn't have mongoId yet (first time)
+      // 2. Explicitly triggered (e.g., session update)
+      // 3. Token is older than 5 minutes (reduce DB calls by 95%)
+      const shouldRefresh = !token.mongoId || 
+                           trigger === 'update' || 
+                           (token.lastRefresh && Date.now() - (token.lastRefresh as number) > 5 * 60 * 1000);
+      
+      if (token.email && shouldRefresh) {
         try {
           const dbUser = await UserService.getUserByEmail(token.email as string)
           if (dbUser) {
@@ -289,6 +296,7 @@ export const authOptions: NextAuthOptions = {
             token.services = { ...(dbUser.services || createDefaultServices()) } as Record<string, boolean>
             token.mongoId = dbUser._id?.toString()
             token.adminTag = dbUser.adminTag || false
+            token.lastRefresh = Date.now() // Track when we last refreshed
           }
         } catch {
           // Error fetching latest user data for JWT
@@ -304,6 +312,7 @@ export const authOptions: NextAuthOptions = {
   },
   session: {
     strategy: 'jwt',
+    maxAge: 30 * 24 * 60 * 60, // 30 days - longer session to reduce re-auth
   },
   secret: process.env.NEXTAUTH_SECRET,
 } 

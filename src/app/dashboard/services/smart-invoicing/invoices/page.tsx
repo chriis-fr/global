@@ -27,6 +27,7 @@ import { getInvoicesListMinimal, getFullInvoicesForExport, InvoiceDetails } from
 import { deleteInvoice, getInvoiceStats } from '@/app/actions/invoice-actions';
 import { useInvoiceStore } from '@/lib/stores/invoiceStore';
 import BatchPaymentModal from '@/components/payments/BatchPaymentModal';
+import { formatDateReadable } from '@/lib/utils/dateFormat';
 
 export default function InvoicesPage() {
   const router = useRouter();
@@ -189,13 +190,9 @@ export default function InvoicesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Memoize formatDate to prevent recreation on every render (define early so it can be used in other functions)
+  // Use consistent date formatting utility to avoid hydration mismatches
   const formatDate = useCallback((dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
+    return formatDateReadable(dateString);
   }, []);
 
   const handleDeleteInvoice = async (id: string) => {
