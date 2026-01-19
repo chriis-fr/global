@@ -27,8 +27,6 @@ export interface BillingPlan {
   description: string;
   monthlyPrice: number;
   yearlyPrice: number;
-  monthlyPriceId: string | null; // Stripe price ID
-  yearlyPriceId: string | null; // Stripe price ID
   monthlyPaystackPlanCode?: string | null; // Paystack plan code (null for free plans)
   yearlyPaystackPlanCode?: string | null; // Paystack plan code (null for free plans)
   currency: string;
