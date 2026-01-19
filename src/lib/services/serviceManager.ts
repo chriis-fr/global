@@ -7,7 +7,7 @@ export const SERVICE_DEFINITIONS = {
   smartInvoicing: {
     key: 'smartInvoicing',
     title: 'Smart Invoicing',
-    description: 'Create, manage, and get paid with both fiat and blockchain payments seamlessly',
+    description: 'Create, manage, and get paid with local currency, stables coins or crypto payments seamlessly',
     category: 'Core Invoicing & Payments',
     icon: 'FileText',
     ready: true,

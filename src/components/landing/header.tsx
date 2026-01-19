@@ -26,6 +26,7 @@ export function Header() {
   const [isProductsOpen, setIsProductsOpen] = useState(false)
   const [isSolutionsOpen, setIsSolutionsOpen] = useState(false)
   const [navLoading, setNavLoading] = useState<string | null>(null)
+  const [isSigningOut, setIsSigningOut] = useState(false)
 
   // Optimized handlers for mobile performance
 
@@ -207,10 +208,21 @@ export function Header() {
             )}
             {session ? (
               <button
-                onClick={() => signOut({ callbackUrl: '/' })}
-                className="text-gray-700 hover:text-blue-600 transition-colors font-medium"
+                onClick={async () => {
+                  if (isSigningOut) return;
+                  setIsSigningOut(true);
+                  try {
+                    await signOut({ callbackUrl: '/' });
+                  } catch (error) {
+                    console.error('Error signing out:', error);
+                    setIsSigningOut(false);
+                  }
+                }}
+                disabled={isSigningOut}
+                className="text-gray-700 hover:text-blue-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
               >
-                Sign Out
+                {isSigningOut && <Loader2 className="h-4 w-4 animate-spin" />}
+                <span>{isSigningOut ? 'Signing Out...' : 'Sign Out'}</span>
               </button>
             ) : (
               <button
@@ -367,14 +379,23 @@ export function Header() {
                 <div className="pt-4 border-t border-gray-200 space-y-3">
                   {session ? (
                     <button
-                      onClick={() => {
-                        signOut({ callbackUrl: '/' });
+                      onClick={async () => {
+                        if (isSigningOut) return;
+                        setIsSigningOut(true);
                         setIsMenuOpen(false);
+                        try {
+                          await signOut({ callbackUrl: '/' });
+                        } catch (error) {
+                          console.error('Error signing out:', error);
+                          setIsSigningOut(false);
+                        }
                       }}
-                      className="block text-gray-700 hover:text-blue-600 transition-colors w-full text-left touch-manipulation active:scale-95"
+                      disabled={isSigningOut}
+                      className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 transition-colors w-full text-left touch-manipulation active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                       style={{ touchAction: 'manipulation' }}
                     >
-                      Sign Out
+                      {isSigningOut && <Loader2 className="h-4 w-4 animate-spin" />}
+                      <span>{isSigningOut ? 'Signing Out...' : 'Sign Out'}</span>
                     </button>
                   ) : (
                     <Link

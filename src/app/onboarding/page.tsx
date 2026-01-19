@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useSession } from 'next-auth/react';
 import { 
@@ -21,7 +21,9 @@ import {
   Globe2,
   Check,
   ArrowRightCircle,
-  Settings
+  Settings,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import Image from 'next/image';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
@@ -84,7 +86,7 @@ const ONBOARDING_STEPS = [
 ];
 
 export default function OnboardingPage() {
-  const { data: session, status } = useSession();
+  const { data: session, status, update: updateSession } = useSession();
   const { onboarding, services: storeServices, setOnboarding, updateOnboarding } = useOnboardingStore();
   const [user, setUser] = useState<User | null>(null);
   const [services, setServices] = useState<Record<string, ServiceDefinition>>({});
@@ -93,12 +95,57 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [taxID, setTaxID] = useState('');
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
+    'Core Invoicing & Payments': true, // Expanded by default
+    'Business Operations': false // Collapsed by default
+  });
+  const hasInitializedRef = useRef(false);
+  const isCheckingStatusRef = useRef(false);
+  const onboardingRef = useRef(onboarding);
+  const redirectingRef = useRef(false);
+  
+  // Keep ref in sync with onboarding state
+  useEffect(() => {
+    onboardingRef.current = onboarding;
+  }, [onboarding]);
 
   const loadUserAndServices = useCallback(async () => {
+    // Prevent multiple simultaneous calls
+    if (isCheckingStatusRef.current) {
+      return;
+    }
+    
     try {
       if (!session?.user) {
         window.location.href = '/auth';
         return;
+      }
+
+      // Double-check onboarding status from API to catch stale sessions (only once)
+      if (!hasInitializedRef.current) {
+        isCheckingStatusRef.current = true;
+        try {
+          const statusResponse = await fetch('/api/onboarding/status');
+          const statusData = await statusResponse.json();
+          
+          if (statusData.success && statusData.data?.completed) {
+            console.log('✅ [Onboarding] API shows onboarding completed, redirecting to dashboard');
+            // Force session refresh
+            await updateSession();
+            
+            // Redirect to dashboard
+            setTimeout(() => {
+              window.location.href = '/dashboard';
+            }, 500);
+            isCheckingStatusRef.current = false;
+            return;
+          }
+        } catch (error) {
+          console.error('❌ [Onboarding] Error checking onboarding status:', error);
+          // Continue with normal flow if status check fails
+        } finally {
+          isCheckingStatusRef.current = false;
+        }
       }
 
       // Create user object from session
@@ -114,7 +161,7 @@ export default function OnboardingPage() {
           postalCode: ''
         },
         taxId: session.user.taxId || '',
-        onboarding: onboarding || session.user.onboarding || {
+        onboarding: onboardingRef.current || session.user.onboarding || {
           completed: false,
           currentStep: 1,
           completedSteps: [],
@@ -135,27 +182,40 @@ export default function OnboardingPage() {
         setCategories(servicesData.data.categories);
       }
 
-      // Use onboarding from store or session
-      if (onboarding) {
-        setCurrentStep(onboarding.currentStep);
-      } else if (session.user.onboarding) {
-        setCurrentStep(session.user.onboarding.currentStep || 1);
-        // Initialize store from session
-        setOnboarding(
-          {
-            completed: session.user.onboarding.completed || false,
-            currentStep: session.user.onboarding.currentStep || 1,
-            completedSteps: session.user.onboarding.completedSteps || [],
-            serviceOnboarding: session.user.onboarding.serviceOnboarding || {}
-          },
-          session.user.services as Record<string, boolean> || {}
-        );
+      // Use onboarding from store or session (only initialize once)
+      if (!hasInitializedRef.current) {
+        const currentOnboarding = onboardingRef.current;
+        if (currentOnboarding && currentOnboarding.currentStep) {
+          setCurrentStep(currentOnboarding.currentStep);
+        } else if (session.user.onboarding) {
+          setCurrentStep(session.user.onboarding.currentStep || 1);
+          // Initialize store from session only if not already initialized
+          if (!currentOnboarding || !currentOnboarding.currentStep) {
+            setOnboarding(
+              {
+                completed: session.user.onboarding.completed || false,
+                currentStep: session.user.onboarding.currentStep || 1,
+                completedSteps: session.user.onboarding.completedSteps || [],
+                serviceOnboarding: session.user.onboarding.serviceOnboarding || {}
+              },
+              session.user.services as Record<string, boolean> || {}
+            );
+          }
+        }
+        hasInitializedRef.current = true;
+      } else {
+        // If already initialized, just update current step from store (only if different)
+        const storeStep = onboardingRef.current?.currentStep;
+        if (storeStep && storeStep !== currentStep) {
+          setCurrentStep(storeStep);
+        }
       }
     } catch {
     } finally {
       setLoading(false);
     }
-  }, [session?.user, onboarding, storeServices, setOnboarding]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user, storeServices, setOnboarding, updateSession]); // Removed 'onboarding' and 'currentStep' from deps to prevent infinite loop
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -171,9 +231,12 @@ export default function OnboardingPage() {
       const sessionCompleted = session.user.onboarding?.completed || session.user.onboarding?.currentStep === 4;
       
       // If session shows onboarding is completed, redirect immediately
-      if (sessionCompleted) {
-        // Initialize store from session before redirect
-        if (session.user.onboarding && session.user.services) {
+      if (sessionCompleted && !redirectingRef.current) {
+        redirectingRef.current = true;
+        console.log('✅ [Onboarding] Session shows onboarding completed, redirecting to dashboard');
+        // Initialize store from session before redirect (only if not already set)
+        // Use onboardingRef to check current state without causing re-render
+        if (session.user.onboarding && session.user.services && !onboardingRef.current?.completed) {
           setOnboarding(
             {
               completed: true,
@@ -189,9 +252,13 @@ export default function OnboardingPage() {
       }
       
       // If session shows it's not completed, continue with onboarding flow
-      loadUserAndServices();
+      // But also check the database directly to catch cases where session is stale
+      if (!hasInitializedRef.current && !isCheckingStatusRef.current) {
+        loadUserAndServices();
+      }
     }
-  }, [session, status, onboarding, loadUserAndServices, setOnboarding]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, status, loadUserAndServices]); // Removed setOnboarding and onboarding from deps to prevent infinite loop
 
   const updateOnboardingStep = async (step: number, stepData?: Record<string, unknown>) => {
     if (!user) return;
@@ -213,12 +280,26 @@ export default function OnboardingPage() {
 
       const data = await response.json();
       if (data.success) {
+        // Check if onboarding is completed from the response
+        const isStep4Completed = step === 4;
+        const isCompletedFromDB = data.data.onboarding.isCompleted === true;
+        const dataCompleted = (data.data.onboarding.data as { completed?: boolean })?.completed;
+        const isCompleted = isStep4Completed || isCompletedFromDB || dataCompleted === true;
+        
         const updatedOnboarding = {
-          completed: data.data.onboarding.completed || false,
+          completed: isCompleted,
           currentStep: step,
           completedSteps: data.data.onboarding.completedSteps || [],
           serviceOnboarding: data.data.onboarding.serviceOnboarding || {}
         };
+        
+        console.log('✅ [Onboarding] Step updated:', {
+          step,
+          isCompleted,
+          isCompletedFromDB,
+          dataCompleted,
+          updatedOnboarding
+        });
         
         // Update store
         updateOnboarding(updatedOnboarding);
@@ -226,8 +307,28 @@ export default function OnboardingPage() {
         // Update local state
         setUser(prev => prev ? { ...prev, onboarding: updatedOnboarding } : null);
         setCurrentStep(step);
+        
+        // If step 4 is completed, refresh session and redirect to dashboard
+        if (isStep4Completed || isCompleted) {
+          console.log('🔄 [Onboarding] Step 4 completed, refreshing session and redirecting...');
+          
+          // Force session refresh to update JWT token with new onboarding status
+          try {
+            await updateSession();
+            console.log('✅ [Onboarding] Session refreshed successfully');
+          } catch (error) {
+            console.error('❌ [Onboarding] Error refreshing session:', error);
+          }
+          
+          // Redirect to dashboard after a short delay to ensure session is updated
+          setTimeout(() => {
+            console.log('🚀 [Onboarding] Redirecting to dashboard...');
+            window.location.href = '/dashboard';
+          }, 1000);
+        }
       }
-    } catch {
+    } catch (error) {
+      console.error('Error updating onboarding step:', error);
     } finally {
       setUpdating(false);
     }
@@ -284,32 +385,43 @@ export default function OnboardingPage() {
       .filter(([, service]) => service.ready).length;
   };
 
-  // Early check: if onboarding is completed, redirect immediately (before any loading)
-  // Consider completed if: completed === true OR currentStep === 4 (final step)
-  if (status === 'authenticated' && session?.user) {
-    const sessionCompleted = session.user.onboarding?.completed || session.user.onboarding?.currentStep === 4;
-    if (sessionCompleted) {
-      // Initialize store from session before redirect
-      if (session.user.onboarding && session.user.services) {
-        setOnboarding(
-          {
-            completed: true,
-            currentStep: session.user.onboarding.currentStep || 4,
-            completedSteps: session.user.onboarding.completedSteps || [],
-            serviceOnboarding: session.user.onboarding.serviceOnboarding || {}
-          },
-          session.user.services as Record<string, boolean>
-        );
+  // Early redirect check - moved to useEffect to avoid calling setState during render
+  useEffect(() => {
+    if (status === 'authenticated' && session?.user && !redirectingRef.current) {
+      const sessionCompleted = session.user.onboarding?.completed || session.user.onboarding?.currentStep === 4;
+      if (sessionCompleted) {
+        redirectingRef.current = true;
+        // Initialize store from session before redirect
+        if (session.user.onboarding && session.user.services && !onboardingRef.current?.completed) {
+          setOnboarding(
+            {
+              completed: true,
+              currentStep: session.user.onboarding.currentStep || 4,
+              completedSteps: session.user.onboarding.completedSteps || [],
+              serviceOnboarding: session.user.onboarding.serviceOnboarding || {}
+            },
+            session.user.services as Record<string, boolean>
+          );
+        }
+        // Redirect immediately
+        if (typeof window !== 'undefined') {
+          window.location.href = '/dashboard';
+        }
       }
-      // Redirect immediately without rendering anything
-      if (typeof window !== 'undefined') {
-        window.location.href = '/dashboard';
-      }
-      return null;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, session]); // Removed setOnboarding from deps to prevent infinite loop
+
+  // Only show loading if we're actually loading data (not during initial status check)
+  // Hide loading state during initial status check to avoid irritating UI
+  const shouldShowLoading = loading && (hasInitializedRef.current || !isCheckingStatusRef.current);
+  
+  if (!shouldShowLoading && (status === 'loading' || (loading && !hasInitializedRef.current))) {
+    // Return null to hide loading UI during initial status check
+    return null;
   }
 
-  if (loading) {
+  if (shouldShowLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-900 to-blue-950 flex items-center justify-center">
         <div className="text-center">
@@ -432,10 +544,10 @@ export default function OnboardingPage() {
               className="text-center"
             >
               <h2 className="text-2xl lg:text-3xl font-bold text-white mb-4">
-                Welcome to ChainsERP!
+                Welcome to Chains ERP!
               </h2>
               <p className="text-lg lg:text-xl text-blue-200 mb-8 max-w-2xl mx-auto px-4">
-                You&apos;re about to set up your blockchain-powered business management system. 
+                You&apos;re about to set up your business management system. 
                 Let&apos;s get you started with the services you need.
               </p>
               <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 lg:p-6 mb-8 mx-4">
@@ -492,16 +604,44 @@ export default function OnboardingPage() {
                 Choose Your Services
               </h2>
               <p className="text-lg lg:text-xl text-blue-200">
-                Select the blockchain-powered services you need for your business
+                Select the services you need for your business operations
               </p>
 
               {/* Services by Category */}
-              {categories.map((category, categoryIndex) => (
-                <div key={category} className="mb-8 px-4">
-                  <h3 className="text-lg lg:text-xl font-semibold text-white mb-4 border-b border-white/20 pb-2">
-                    {category}
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {categories
+                .filter(category => category !== 'Blockchain Benefits' && category !== 'Integrations & APIs')
+                .map((category, categoryIndex) => {
+                  const isExpanded = expandedCategories[category] ?? true;
+                  const isCollapsible = category === 'Business Operations';
+                  
+                  return (
+                    <div key={category} className="mb-8 px-4">
+                      <h3 
+                        className={`text-lg lg:text-xl font-semibold text-white mb-4 border-b border-white/20 pb-2 flex items-center justify-between ${
+                          isCollapsible ? 'cursor-pointer hover:text-blue-300 transition-colors' : ''
+                        }`}
+                        onClick={() => {
+                          if (isCollapsible) {
+                            setExpandedCategories(prev => ({
+                              ...prev,
+                              [category]: !prev[category]
+                            }));
+                          }
+                        }}
+                      >
+                        <span>{category}</span>
+                        {isCollapsible && (
+                          <span className="ml-2">
+                            {isExpanded ? (
+                              <ChevronUp className="h-5 w-5" />
+                            ) : (
+                              <ChevronDown className="h-5 w-5" />
+                            )}
+                          </span>
+                        )}
+                      </h3>
+                      {isExpanded && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {Object.entries(services)
                       .filter(([, service]) => service.category === category)
                       .filter(([serviceKey]) => {
@@ -573,9 +713,11 @@ export default function OnboardingPage() {
                           </motion.div>
                         );
                       })}
-                  </div>
-                </div>
-              ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
 
               <div className="text-center mt-8 px-4">
                 <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 mb-6 inline-block">
@@ -676,7 +818,7 @@ export default function OnboardingPage() {
                   Welcome to ChainsERP!
                 </h2>
                 <p className="text-lg lg:text-xl text-blue-200 mb-6">
-                  Your account has been successfully set up. You&apos;re ready to start using blockchain-powered business management.
+                  Your account has been successfully set up. You&apos;re ready to go.
                 </p>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">

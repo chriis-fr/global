@@ -264,9 +264,10 @@ export const authOptions: NextAuthOptions = {
           if (dbUser) {
             token.organizationId = dbUser.organizationId?.toString()
             token.role = dbUser.role
-            // Mark as completed if data.completed is true OR currentStep is 4 (final step)
+            // Mark as completed if isCompleted is true, data.completed is true, OR currentStep is 4 (final step)
+            const isCompletedFlag = dbUser.onboarding?.isCompleted === true
             const dataCompleted = (dbUser.onboarding?.data as { completed?: boolean })?.completed
-            const isCompleted = dataCompleted === true || dbUser.onboarding?.currentStep === 4
+            const isCompleted = isCompletedFlag || dataCompleted === true || dbUser.onboarding?.currentStep === 4
             
             token.onboarding = {
               completed: isCompleted,

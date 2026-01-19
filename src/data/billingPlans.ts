@@ -10,8 +10,6 @@ export const BILLING_PLANS: BillingPlan[] = [
     description: 'Full access to all features for 30 days',
     monthlyPrice: 0,
     yearlyPrice: 0,
-    monthlyPriceId: 'trial_premium', // Special trial plan
-    yearlyPriceId: 'trial_premium', // Special trial plan
     currency: 'USD',
     features: [
       { id: 'unlimited-invoices', name: 'Unlimited invoices', description: 'Create as many invoices as you need', included: true },
@@ -42,17 +40,17 @@ export const BILLING_PLANS: BillingPlan[] = [
     description: 'Perfect for contractors and freelancers',
     monthlyPrice: 0,
     yearlyPrice: 0,
-    monthlyPriceId: 'price_1SAdJ5AGa3OwCLpllBuA0tiF', // Free plan - $0
-    yearlyPriceId: 'price_1SAdJ5AGa3OwCLpllBuA0tiF', // Free plan - $0
+    monthlyPaystackPlanCode: null, // Free plan - no Paystack plan code
+    yearlyPaystackPlanCode: null, // Free plan - no Paystack plan code
     currency: 'USD',
     features: [
-      { id: 'invoices', name: 'Up to 5 invoices per month', description: 'Create and send invoices', included: true, limit: 5, unit: 'invoices' },
-      { id: 'reconciliation', name: 'Real-time payment reconciliation', description: 'Automatic payment tracking', included: true },
+      { id: 'invoices', name: 'Up to 4 invoices per month', description: 'Create and send invoices', included: true, limit: 5, unit: 'invoices' },
+      { id: 'clients', name: 'Limited client management', description: 'save & manage upto 3 clients ', included: true },
       { id: 'receivables-tab', name: 'Receivables dashboard', description: 'Manage your incoming payments', included: true },
       { id: 'wallet', name: '1 User', description: 'Supports Safe & Metamask', included: true },
     ],
     limits: {
-      invoicesPerMonth: 5,
+      invoicesPerMonth: 4,
     },
     ctaText: 'Get Started Free',
     ctaVariant: 'outline',
@@ -63,10 +61,10 @@ export const BILLING_PLANS: BillingPlan[] = [
     tier: 'pro',
     name: 'Pro',
     description: 'Ideal for growing businesses',
-    monthlyPrice: 13.99,
-    yearlyPrice: 119.99,
-    monthlyPriceId: 'price_1SAV6rAGa3OwCLplontxFK5u', // Monthly
-    yearlyPriceId: 'price_1SAV6sAGa3OwCLplFnkyUqrm', // Yearly
+    monthlyPrice: 4.49,
+    yearlyPrice: 44.99,
+    monthlyPaystackPlanCode: "PLN_ipgidwru7u85a84", // Set after creating plan in Paystack dashboard
+    yearlyPaystackPlanCode: "PLN_d1fjzsawkjvycz3", // Set after creating plan in Paystack dashboard
     currency: 'USD',
     features: [
       { id: 'unlimited-invoices', name: 'Unlimited invoices', description: 'Create as many invoices as you need', included: true },
@@ -78,7 +76,7 @@ export const BILLING_PLANS: BillingPlan[] = [
       invoicesPerMonth: -1, // Unlimited
     },
     popular: true,
-    ctaText: 'Start Pro Trial',
+    ctaText: 'Start Pr',
     ctaVariant: 'primary',
   },
 
@@ -89,10 +87,10 @@ export const BILLING_PLANS: BillingPlan[] = [
     tier: 'basic',
     name: 'Basic',
     description: 'Essential payables management',
-    monthlyPrice: 119.99,
-    yearlyPrice: 1200,
-    monthlyPriceId: 'price_1SAV9LAGa3OwCLplsqx52qBE', // Monthly
-    yearlyPriceId: 'price_1SAV9MAGa3OwCLplIUXMfXdp', // Yearly
+    monthlyPrice: 49.99,
+    yearlyPrice: 497.99,
+    monthlyPaystackPlanCode: "PLN_6o0yqhwv598dmen", // Set after creating plan in Paystack dashboard
+    yearlyPaystackPlanCode: "PLN_nupjwk0j6k4s76y", // Set after creating plan in Paystack dashboard
     currency: 'USD',
     features: [
       { id: 'batch-payments', name: 'Batch payments', description: 'Process multiple payments at once', included: true },
@@ -111,10 +109,10 @@ export const BILLING_PLANS: BillingPlan[] = [
     tier: 'pro',
     name: 'Pro',
     description: 'Advanced payables with custom features',
-    monthlyPrice: 220,
-    yearlyPrice: 2500,
-    monthlyPriceId: 'price_1SAVArAGa3OwCLplL6B9kssy', // Monthly
-    yearlyPriceId: 'price_1SAVAqAGa3OwCLplNJMxJyJp', // Yearly
+    monthlyPrice: 99.99,
+    yearlyPrice: 995.99,
+    monthlyPaystackPlanCode: "PLN_iajoz8dpmpa4lk7", // Set after creating plan in Paystack dashboard
+    yearlyPaystackPlanCode: "PLN_rhpk1hcr46brm51", // Set after creating plan in Paystack dashboard
     currency: 'USD',
     features: [
       { id: 'batch-payments', name: 'Batch payments', description: 'Process multiple payments at once', included: true },
@@ -137,10 +135,10 @@ export const BILLING_PLANS: BillingPlan[] = [
     tier: 'basic',
     name: 'Basic',
     description: 'Ideal for small businesses',
-    monthlyPrice: 149.99,
-    yearlyPrice: 1700,
-    monthlyPriceId: 'price_1SAVMIAGa3OwCLplJQvi7jk1', // Monthly
-    yearlyPriceId: 'price_1SAVMIAGa3OwCLplHGrhqv40', // Yearly
+    monthlyPrice: 139.99,
+    yearlyPrice: 1399.99,
+    monthlyPaystackPlanCode: "PLN_fff524rpodszv4h", // Set after creating plan in Paystack dashboard
+    yearlyPaystackPlanCode: "PLN_8gtksh08hugt1lk", // Set after creating plan in Paystack dashboard
     currency: 'USD',
     features: [
       { id: 'unlimited-crypto-fiat', name: 'Unlimited crypto-to-fiat payments', description: 'Convert crypto to fiat without limits', included: true },
@@ -164,10 +162,10 @@ export const BILLING_PLANS: BillingPlan[] = [
     tier: 'pro',
     name: 'Pro',
     description: 'Complete business solution',
-    monthlyPrice: 295.99,
-    yearlyPrice: 2800,
-    monthlyPriceId: 'price_1SAVOJAGa3OwCLplq1QNRWcX', // Monthly
-    yearlyPriceId: 'price_1SAVOJAGa3OwCLpltlUKBtbk', // Yearly
+    monthlyPrice: 199.99,
+    yearlyPrice: 1990.99,
+    monthlyPaystackPlanCode: "PLN_erpa6tolz7eht0k", // Set after creating plan in Paystack dashboard
+    yearlyPaystackPlanCode: "PLN_cm6serxczfhh6gm", // Set after creating plan in Paystack dashboard
     currency: 'USD',
     features: [
       { id: 'unlimited-crypto-fiat', name: 'Unlimited crypto-to-fiat payments', description: 'Convert crypto to fiat without limits', included: true },

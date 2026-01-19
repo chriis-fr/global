@@ -227,8 +227,9 @@ export async function toggleService(
 }
 
 /**
- * Update user's subscription plan (without Stripe checkout)
- * This directly updates the database as Stripe is not working
+ * Update user's subscription plan
+ * Note: For new subscriptions, use initializePaystackSubscription from @/lib/actions/paystack
+ * This function is kept for backward compatibility and direct plan updates
  */
 export async function updateUserPlan(
   planId: string,

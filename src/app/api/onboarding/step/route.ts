@@ -55,7 +55,15 @@ export async function POST(request: NextRequest) {
     // Mark as completed if step is 4 (final step)
     const shouldMarkCompleted = step === 4;
     
-    const updatedOnboarding = {
+    // Build the updated onboarding object
+    // Note: User model has isCompleted, but UpdateUserInput uses completed
+    // We'll set both to ensure compatibility
+    const updatedOnboarding: {
+      isCompleted?: boolean;
+      currentStep: number;
+      completedSteps: string[];
+      data: Record<string, unknown>;
+    } = {
       currentStep: step,
       completedSteps: completedSteps || [...(user.onboarding.completedSteps || []), step.toString()],
       data: {
@@ -67,6 +75,19 @@ export async function POST(request: NextRequest) {
         }
       }
     };
+
+    // Set isCompleted flag when step 4 is completed
+    if (shouldMarkCompleted) {
+      updatedOnboarding.isCompleted = true;
+    }
+
+    console.log('✅ [OnboardingStep] Updating onboarding:', {
+      step,
+      shouldMarkCompleted,
+      isCompleted: updatedOnboarding.isCompleted,
+      currentStep: updatedOnboarding.currentStep,
+      completedSteps: updatedOnboarding.completedSteps.length
+    });
 
 
     if (!user._id) {

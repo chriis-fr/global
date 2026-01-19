@@ -21,7 +21,6 @@ import {
   Wallet
 } from 'lucide-react';
 import CurrencyAmount from '@/components/CurrencyAmount';
-import FloatingActionButton from '@/components/dashboard/FloatingActionButton';
 import PendingInvoiceApprovals from '@/components/dashboard/PendingInvoiceApprovals';
 import { getInvoicesListMinimal, getFullInvoicesForExport, InvoiceDetails } from '@/lib/actions/invoices';
 import { deleteInvoice, getInvoiceStats } from '@/app/actions/invoice-actions';
@@ -1176,8 +1175,7 @@ export default function InvoicesPage() {
         />
       )}
 
-      {/* Floating Action Button */}
-      <FloatingActionButton />
+      
     </div>
   );
 } 

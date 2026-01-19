@@ -449,6 +449,69 @@ export default function CreateInvoicePage() {
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [sendingInvoice, setSendingInvoice] = useState(false);
   const [creatingClient, setCreatingClient] = useState(false);
+
+  // Prevent body scroll when modals are open (only for From and To modals, not add client)
+  useEffect(() => {
+    if (showCompanyEditModal || showClientEditModal) {
+      // Save current scroll position
+      const scrollY = window.scrollY;
+      const scrollX = window.scrollX;
+      
+      // Prevent scrolling on body and html
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.left = `-${scrollX}px`;
+      document.body.style.width = '100%';
+      document.body.style.overflow = 'hidden';
+      
+      // Also prevent scroll on html element
+      document.documentElement.style.overflow = 'hidden';
+      
+      // Prevent scroll on main content container if it exists
+      const mainContent = document.querySelector('main');
+      if (mainContent) {
+        (mainContent as HTMLElement).style.overflow = 'hidden';
+      }
+    } else {
+      // Restore scrolling
+      const scrollY = document.body.style.top;
+      const scrollX = document.body.style.left;
+      
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.left = '';
+      document.body.style.width = '';
+      document.body.style.overflow = '';
+      document.documentElement.style.overflow = '';
+      
+      // Restore scroll on main content container
+      const mainContent = document.querySelector('main');
+      if (mainContent) {
+        (mainContent as HTMLElement).style.overflow = '';
+      }
+      
+      if (scrollY) {
+        window.scrollTo(parseInt(scrollX || '0') * -1, parseInt(scrollY || '0') * -1);
+      }
+    }
+
+    // Cleanup function
+    return () => {
+      if (!showCompanyEditModal && !showClientEditModal) {
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.left = '';
+        document.body.style.width = '';
+        document.body.style.overflow = '';
+        document.documentElement.style.overflow = '';
+        
+        const mainContent = document.querySelector('main');
+        if (mainContent) {
+          (mainContent as HTMLElement).style.overflow = '';
+        }
+      }
+    };
+  }, [showCompanyEditModal, showClientEditModal]);
   
   // Phone formatting and validation functions
   const formatPhoneForWhatsApp = (phone: string, countryCode: string = '+1') => {
@@ -4556,7 +4619,7 @@ export default function CreateInvoicePage() {
 
         {/* Company Edit Modal */}
         {showCompanyEditModal && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 p-4 overflow-y-auto">
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 p-4 overflow-hidden">
             <div className="min-h-full flex items-center justify-center py-4">
               <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative shadow-xl touch-manipulation">
                 <div className="flex justify-between items-center mb-4">
@@ -4584,7 +4647,7 @@ export default function CreateInvoicePage() {
 
         {/* Client Edit Modal */}
         {showClientEditModal && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 p-4 overflow-y-auto">
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 p-4 overflow-hidden">
             <div className="min-h-full flex items-center justify-center py-4">
               <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative shadow-xl touch-manipulation">
                 <div className="flex justify-between items-center mb-4">

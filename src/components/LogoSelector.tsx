@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { ChevronDown, Check, AlertCircle } from 'lucide-react';
 
@@ -24,38 +24,46 @@ export function LogoSelector({ onLogoSelectAction, selectedLogoId, className = '
   const [isOpen, setIsOpen] = useState(false);
   const [selectedLogo, setSelectedLogo] = useState<Logo | null>(null);
   const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
-
-  const fetchLogos = useCallback(async () => {
-    try {
-      const response = await fetch('/api/user/logos');
-      const data = await response.json();
-      
-      if (data.success) {
-        const logos = data.logos || [];
-        setLogos(logos);
-        
-        // If there's only one logo, automatically select it
-        if (logos.length === 1) {
-          const singleLogo = logos[0];
-          setSelectedLogo(singleLogo);
-          onLogoSelectAction(singleLogo);
-        }
-        // Set default logo if no logo is selected and there are multiple logos
-        else if (!selectedLogoId && logos.length > 0) {
-          const defaultLogo = logos.find((logo: Logo) => logo.isDefault) || logos[0];
-          setSelectedLogo(defaultLogo);
-          onLogoSelectAction(defaultLogo);
-        }
-      }
-    } catch {
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedLogoId, onLogoSelectAction]);
+  const hasFetchedRef = useRef(false);
 
   useEffect(() => {
+    // Only fetch once on mount
+    if (hasFetchedRef.current) {
+      return;
+    }
+
+    const fetchLogos = async () => {
+      try {
+        hasFetchedRef.current = true;
+        const response = await fetch('/api/user/logos');
+        const data = await response.json();
+        
+        if (data.success) {
+          const fetchedLogos = data.logos || [];
+          setLogos(fetchedLogos);
+          
+          // If there's only one logo, automatically select it
+          if (fetchedLogos.length === 1) {
+            const singleLogo = fetchedLogos[0];
+            setSelectedLogo(singleLogo);
+            onLogoSelectAction(singleLogo);
+          }
+          // Set default logo if no logo is selected and there are multiple logos
+          else if (!selectedLogoId && fetchedLogos.length > 0) {
+            const defaultLogo = fetchedLogos.find((logo: Logo) => logo.isDefault) || fetchedLogos[0];
+            setSelectedLogo(defaultLogo);
+            onLogoSelectAction(defaultLogo);
+          }
+        }
+      } catch {
+      } finally {
+        setLoading(false);
+      }
+    };
+
     fetchLogos();
-  }, [fetchLogos]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only fetch once on mount
 
   useEffect(() => {
     if (selectedLogoId && logos.length > 0) {

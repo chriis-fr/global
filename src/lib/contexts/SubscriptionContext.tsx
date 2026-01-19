@@ -285,7 +285,8 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
 
   const refetch = useCallback(() => {
     clearCache();
-    fetchSubscription(true);
+    // Force refresh with loading indicator
+    fetchSubscription(true, true);
   }, [fetchSubscription, clearCache]);
 
   return (

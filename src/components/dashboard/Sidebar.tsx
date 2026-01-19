@@ -18,7 +18,8 @@ import {
   ImageIcon,
   CheckCircle,
   Receipt,
-  Plus
+  Plus,
+  Loader2
 } from 'lucide-react';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import Image from 'next/image';
@@ -56,6 +57,7 @@ function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isAutoHidden, setIsAutoHidden] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   const sidebarRef = useRef<HTMLDivElement>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -407,15 +409,27 @@ function Sidebar() {
           </div>
 
           <button
-            onClick={() => {
-              clearOnboarding();
-              signOut({ callbackUrl: '/auth' });
+            onClick={async () => {
+              if (isSigningOut) return;
+              setIsSigningOut(true);
+              try {
+                clearOnboarding();
+                await signOut({ callbackUrl: '/auth' });
+              } catch (error) {
+                console.error('Error signing out:', error);
+                setIsSigningOut(false);
+              }
             }}
-            className="flex w-full items-center px-3 py-3 rounded-lg hover:bg-blue-900/50 text-white/80"
+            disabled={isSigningOut}
+            className="flex w-full items-center px-3 py-3 rounded-lg hover:bg-blue-900/50 text-white/80 disabled:opacity-50 disabled:cursor-not-allowed"
             type="button"
           >
-            <LogOut className="h-4 w-4 mr-3" />
-            {(!isCollapsed || isAutoHidden) && 'Sign Out'}
+            {isSigningOut ? (
+              <Loader2 className="h-4 w-4 mr-3 animate-spin" />
+            ) : (
+              <LogOut className="h-4 w-4 mr-3" />
+            )}
+            {(!isCollapsed || isAutoHidden) && (isSigningOut ? 'Signing Out...' : 'Sign Out')}
           </button>
         </div>
       </>

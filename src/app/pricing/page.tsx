@@ -4,8 +4,8 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { 
-  Check, 
+import {
+  Check,
   X,
   Star,
   Zap,
@@ -19,10 +19,11 @@ import { Header } from '@/components/landing/header'
 import { BILLING_PLANS } from '@/data/billingPlans'
 import { BillingPlan, PlanType, BillingPeriod } from '@/models/Billing'
 import { useSubscription } from '@/lib/contexts/SubscriptionContext'
+import { initializePaystackSubscription } from '@/lib/actions/paystack'
 
 export default function PricingPage() {
   const { data: session } = useSession()
-  const { subscription } = useSubscription()
+  const { subscription, refetch } = useSubscription()
   const router = useRouter()
   const [selectedType, setSelectedType] = useState<PlanType>('receivables')
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly')
@@ -52,44 +53,40 @@ export default function PricingPage() {
       return
     }
 
-    if (plan.planId === 'receivables-free') {
-      console.log('✅ [Pricing] Free plan selected, redirecting to dashboard')
-      router.push('/dashboard')
-      return
-    }
-
     setLoading(plan.planId)
-    console.log('⏳ [Pricing] Creating checkout session...')
+    console.log('⏳ [Pricing] Initializing Paystack subscription...')
 
     try {
-      const response = await fetch('/api/stripe/checkout-session', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          planId: plan.planId,
-          billingPeriod,
-        }),
-      })
+      const result = await initializePaystackSubscription(plan.planId, billingPeriod)
 
-      console.log('📡 [Pricing] Checkout session response:', {
-        status: response.status,
-        statusText: response.statusText
-      })
+      console.log('📡 [Pricing] Paystack subscription result:', result)
 
-      const data = await response.json()
-      console.log('📦 [Pricing] Checkout session data:', data)
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to initialize subscription')
+      }
 
-      if (data.success && data.checkoutUrl) {
-        console.log('✅ [Pricing] Checkout session created successfully, redirecting to:', data.checkoutUrl)
-        window.location.href = data.checkoutUrl
+      // Free plan: subscription activated directly, refresh subscription and redirect to dashboard
+      if (plan.planId === 'receivables-free') {
+        console.log('✅ [Pricing] Free plan activated, refreshing subscription and redirecting to dashboard')
+        // Clear cache and refresh subscription data before redirecting
+        refetch()
+        // Wait a moment for the refetch to start, then redirect
+        setTimeout(() => {
+          router.push('/dashboard')
+        }, 500)
+        return
+      }
+
+      // Paid plan: redirect to Paystack authorization URL
+      if (result.authorizationUrl) {
+        console.log('✅ [Pricing] Paystack authorization URL received, redirecting to:', result.authorizationUrl)
+        window.location.href = result.authorizationUrl
       } else {
-        throw new Error(data.error || 'Failed to create checkout session')
+        throw new Error('No authorization URL received from Paystack')
       }
     } catch (error) {
-      console.error('❌ [Pricing] Error creating checkout session:', error)
-      alert('Failed to start checkout process. Please try again.')
+      console.error('❌ [Pricing] Error initializing subscription:', error)
+      alert(error instanceof Error ? error.message : 'Failed to start checkout process. Please try again.')
     } finally {
       setLoading(null)
     }
@@ -114,7 +111,7 @@ export default function PricingPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
-      
+
       {/* Hero Section */}
       <div className="pt-16 bg-gradient-to-br from-blue-900 to-blue-950 text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
@@ -146,9 +143,9 @@ export default function PricingPage() {
               transition={{ delay: 0.2 }}
               className="text-xl text-blue-100 max-w-3xl mx-auto"
             >
-              Start with a 10-day free trial. No credit card required for trial users.
+              Start with a 30-day free trial. No credit card required for trial users.
             </motion.p>
-            
+
             {/* Production Environment Banner */}
             {process.env.NODE_ENV === 'production' && (
               <motion.div
@@ -177,29 +174,27 @@ export default function PricingPage() {
             <div className="bg-gray-100 rounded-lg p-1 flex">
               <button
                 onClick={() => setBillingPeriod('monthly')}
-                className={`px-6 py-2 rounded-md text-sm font-medium transition-colors ${
-                  billingPeriod === 'monthly'
+                className={`px-6 py-2 rounded-md text-sm font-medium transition-colors ${billingPeriod === 'monthly'
                     ? 'bg-white text-gray-900 shadow-sm'
                     : 'text-gray-600 hover:text-gray-900'
-                }`}
+                  }`}
               >
                 Monthly
               </button>
               <button
                 onClick={() => setBillingPeriod('yearly')}
-                className={`px-6 py-2 rounded-md text-sm font-medium transition-colors ${
-                  billingPeriod === 'yearly'
+                className={`px-6 py-2 rounded-md text-sm font-medium transition-colors ${billingPeriod === 'yearly'
                     ? 'bg-white text-gray-900 shadow-sm'
                     : 'text-gray-600 hover:text-gray-900'
-                }`}
+                  }`}
               >
                 Yearly <span className="text-xs bg-green-500 text-white px-1 rounded ml-1">Save 17%</span>
               </button>
-                  </div>
-                    </div>
-                    </div>
-                  </div>
-                  
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Plan Type Selector */}
       <div className="bg-white py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -208,11 +203,10 @@ export default function PricingPage() {
               <button
                 key={type}
                 onClick={() => setSelectedType(type)}
-                className={`flex items-center gap-3 px-6 py-4 rounded-xl border-2 transition-all ${
-                  selectedType === type
+                className={`flex items-center gap-3 px-6 py-4 rounded-xl border-2 transition-all ${selectedType === type
                     ? 'border-blue-600 bg-blue-50 text-blue-900'
                     : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
-                }`}
+                  }`}
               >
                 {getTypeIcon(type)}
                 <div className="text-left">
@@ -221,68 +215,68 @@ export default function PricingPage() {
                 </div>
               </button>
             ))}
-                    </div>
-                  </div>
-                </div>
+          </div>
+        </div>
+      </div>
 
       {/* Plans Grid */}
       <div className="py-16 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
             {filteredPlans.map((plan) => (
-              <PlanCard 
-                key={plan.planId} 
-                plan={plan} 
+              <PlanCard
+                key={plan.planId}
+                plan={plan}
                 billingPeriod={billingPeriod}
                 onSubscribe={handleSubscribe}
                 loading={loading === plan.planId}
                 isCurrentPlan={session && subscription?.plan?.planId === plan.planId ? true : undefined}
               />
             ))}
-                  </div>
-                </div>
+          </div>
         </div>
+      </div>
 
-        {/* FAQ Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.8 }}
+      {/* FAQ Section */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.8 }}
         className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center"
-        >
-          <h2 className="text-3xl font-bold text-gray-900 mb-8">
-            Frequently Asked Questions
-          </h2>
-          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-            <div className="text-left">
-              <h3 className="font-semibold text-gray-900 mb-2">Can I change plans anytime?</h3>
-              <p className="text-gray-600">Yes, you can upgrade or downgrade your plan at any time. Changes take effect immediately.</p>
-            </div>
-            <div className="text-left">
+      >
+        <h2 className="text-3xl font-bold text-gray-900 mb-8">
+          Frequently Asked Questions
+        </h2>
+        <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+          <div className="text-left">
+            <h3 className="font-semibold text-gray-900 mb-2">Can I change plans anytime?</h3>
+            <p className="text-gray-600">Yes, you can upgrade or downgrade your plan at any time. Changes take effect immediately.</p>
+          </div>
+          <div className="text-left">
             <h3 className="font-semibold text-gray-900 mb-2">What happens if I exceed my limits?</h3>
             <p className="text-gray-600">We&apos;ll notify you when you&apos;re approaching your limits. You can upgrade your plan or pay overage fees.</p>
           </div>
           <div className="text-left">
             <h3 className="font-semibold text-gray-900 mb-2">Can I create organizations on free plan?</h3>
             <p className="text-gray-600">No, organization creation requires a paid plan. Upgrade to Pro to create teams and organizations.</p>
-            </div>
-            <div className="text-left">
-              <h3 className="font-semibold text-gray-900 mb-2">What payment methods do you accept?</h3>
-            <p className="text-gray-600">We accept all major credit cards through our secure Stripe payment system.</p>
-            </div>
           </div>
-        </motion.div>
+          <div className="text-left">
+            <h3 className="font-semibold text-gray-900 mb-2">What payment methods do you accept?</h3>
+            <p className="text-gray-600">We accept all major credit cards through our secure payment system.</p>
+          </div>
+        </div>
+      </motion.div>
     </div>
   )
 }
 
-function PlanCard({ 
-  plan, 
-  billingPeriod, 
-  onSubscribe, 
+function PlanCard({
+  plan,
+  billingPeriod,
+  onSubscribe,
   loading,
   isCurrentPlan
-}: { 
+}: {
   plan: BillingPlan
   billingPeriod: BillingPeriod
   onSubscribe: (plan: BillingPlan) => void
@@ -293,9 +287,8 @@ function PlanCard({
   const monthlyEquivalent = billingPeriod === 'yearly' ? plan.yearlyPrice / 12 : plan.monthlyPrice
 
   return (
-    <div className={`relative bg-white rounded-2xl p-8 border-2 transition-all hover:scale-105 ${
-      plan.popular ? 'border-blue-500 shadow-2xl shadow-blue-500/20' : 'border-gray-200'
-    } ${isCurrentPlan ? 'ring-2 ring-green-500 ring-opacity-50' : ''}`}>
+    <div className={`relative bg-white rounded-2xl p-8 border-2 transition-all hover:scale-105 ${plan.popular ? 'border-blue-500 shadow-2xl shadow-blue-500/20' : 'border-gray-200'
+      } ${isCurrentPlan ? 'ring-2 ring-green-500 ring-opacity-50' : ''}`}>
       {plan.popular && (
         <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
           <div className="bg-blue-500 text-white px-4 py-1 rounded-full text-sm font-semibold flex items-center gap-1">
@@ -317,7 +310,7 @@ function PlanCard({
       <div className="text-center mb-6">
         <h3 className="text-2xl font-bold text-gray-900 mb-2">{plan.name}</h3>
         <p className="text-gray-600 mb-4">{plan.description}</p>
-        
+
         <div className="mb-4">
           <span className="text-4xl font-bold text-gray-900">${price}</span>
           <span className="text-gray-600 ml-2">
@@ -354,17 +347,16 @@ function PlanCard({
       <button
         onClick={() => onSubscribe(plan)}
         disabled={loading || isCurrentPlan || process.env.NODE_ENV === 'production'}
-        className={`w-full py-3 px-6 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
-          isCurrentPlan
+        className={`w-full py-3 px-6 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${isCurrentPlan
             ? 'bg-green-100 text-green-700 cursor-not-allowed'
             : process.env.NODE_ENV === 'production'
-            ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            : plan.ctaVariant === 'primary'
-            ? 'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-400'
-            : plan.ctaVariant === 'secondary'
-            ? 'bg-gray-600 text-white hover:bg-gray-700 disabled:bg-gray-400'
-            : 'border-2 border-gray-300 text-gray-700 hover:bg-gray-50 disabled:bg-gray-100'
-        }`}
+              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              : plan.ctaVariant === 'primary'
+                ? 'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-400'
+                : plan.ctaVariant === 'secondary'
+                  ? 'bg-gray-600 text-white hover:bg-gray-700 disabled:bg-gray-400'
+                  : 'border-2 border-gray-300 text-gray-700 hover:bg-gray-50 disabled:bg-gray-100'
+          }`}
       >
         {loading ? (
           <>
@@ -384,7 +376,7 @@ function PlanCard({
         ) : (
           plan.ctaText
         )}
-            </button>
+      </button>
     </div>
   )
 } 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { Receipt, Clock, CheckCircle, XCircle, AlertTriangle, ChevronDown } from 'lucide-react';
 import { getRecentPayables, RecentPayable } from '@/lib/actions/dashboard';
 import CurrencyAmount from '@/components/CurrencyAmount';
@@ -17,10 +17,19 @@ export default function RecentPayables({ className = '' }: RecentPayablesProps) 
   const [isExpanded, setIsExpanded] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  const pathname = usePathname();
   const hasInitialized = useRef(false);
   const CACHE_DURATION = 2 * 60 * 1000; // 2 minutes cache for recent data
 
+  // Only fetch data when on the dashboard page
+  const isOnDashboardPage = pathname === '/dashboard';
+
   useEffect(() => {
+    // Only fetch data when on the dashboard page
+    if (!isOnDashboardPage) {
+      return;
+    }
+
     const loadRecentPayables = async () => {
       // Check localStorage cache first
       const cacheKey = 'recent_payables';
@@ -73,7 +82,7 @@ export default function RecentPayables({ className = '' }: RecentPayablesProps) 
       hasInitialized.current = true;
       loadRecentPayables();
     }
-  }, [CACHE_DURATION]);
+  }, [isOnDashboardPage, CACHE_DURATION]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
