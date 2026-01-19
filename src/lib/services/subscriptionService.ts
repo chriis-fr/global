@@ -242,7 +242,7 @@ export class SubscriptionService {
     currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + (billingPeriod === 'yearly' ? 12 : 1));
 
     // Only update Stripe fields if provided (for backward compatibility)
-    const updateData: any = {
+    const updateData: Record<string, unknown> = {
       'subscription.planId': planId,
       'subscription.status': 'active',
       'subscription.currentPeriodStart': currentPeriodStart,

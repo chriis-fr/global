@@ -61,7 +61,7 @@ export async function initializePaystackSubscription(
       const currentPeriodEnd = new Date();
       currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + (billingPeriod === 'yearly' ? 12 : 1));
 
-      const updateData: any = {
+      const updateData: Record<string, unknown> = {
         'subscription.planId': planId,
         'subscription.status': 'active',
         'subscription.currentPeriodStart': now,
@@ -183,46 +183,67 @@ export async function verifyAndActivateSubscription(
       };
     }
 
+    // Type guard for transaction
+    const transactionData = transaction && typeof transaction === 'object' ? transaction : null;
+    if (!transactionData) {
+      return {
+        success: false,
+        error: 'Invalid transaction data'
+      };
+    }
+
+    const transactionReference = 'reference' in transactionData ? String(transactionData.reference) : undefined;
+    const transactionStatus = 'status' in transactionData ? String(transactionData.status) : undefined;
+    const transactionCustomer = 'customer' in transactionData && transactionData.customer && typeof transactionData.customer === 'object' ? transactionData.customer as { customer_code?: string } : null;
+    const transactionSubscriptionCode = 'subscription_code' in transactionData && transactionData.subscription_code ? String(transactionData.subscription_code) : null;
+    const transactionMetadata = 'metadata' in transactionData && transactionData.metadata && typeof transactionData.metadata === 'object' ? transactionData.metadata as { planId?: string; billingPeriod?: string; customerCode?: string } : null;
+
     console.log('✅ [PaystackAction] Transaction verified:', {
-      reference: transaction.reference,
-      status: transaction.status,
-      customer: transaction.customer,
-      subscription_code: transaction.subscription_code,
-      metadata: transaction.metadata
+      reference: transactionReference,
+      status: transactionStatus,
+      customer: transactionCustomer,
+      subscription_code: transactionSubscriptionCode,
+      metadata: transactionMetadata
     });
 
     // Check transaction metadata first (most reliable)
-    const transactionPlanId = transaction.metadata?.planId;
-    const transactionBillingPeriod = transaction.metadata?.billingPeriod;
+    const transactionPlanId = transactionMetadata?.planId;
+    const transactionBillingPeriod = transactionMetadata?.billingPeriod;
     
     console.log('📋 [PaystackAction] Transaction metadata:', {
       planId: transactionPlanId,
       billingPeriod: transactionBillingPeriod,
-      customerCode: transaction.metadata?.customerCode,
-      fullMetadata: JSON.stringify(transaction.metadata, null, 2)
+      customerCode: transactionMetadata?.customerCode,
+      fullMetadata: JSON.stringify(transactionData.metadata, null, 2)
     });
     
     // CRITICAL: If transaction status is not 'success', don't proceed
-    if (transaction.status !== 'success') {
-      console.error('❌ [PaystackAction] Transaction status is not success:', transaction.status);
+    if (transactionStatus !== 'success') {
+      console.error('❌ [PaystackAction] Transaction status is not success:', transactionStatus);
       return {
         success: false,
-        error: `Transaction status is ${transaction.status}, not success`
+        error: `Transaction status is ${transactionStatus}, not success`
       };
     }
 
     // Get subscription details if available
-    if (transaction.subscription_code) {
-      const subscription = await PaystackService.getSubscription(transaction.subscription_code);
+    const subscriptionCode = transactionSubscriptionCode;
+    if (subscriptionCode) {
+      const subscription = await PaystackService.getSubscription(subscriptionCode);
+      const subscriptionData = subscription && typeof subscription === 'object' ? subscription : null;
+      const subscriptionPlan = subscriptionData && 'plan' in subscriptionData && subscriptionData.plan && typeof subscriptionData.plan === 'object' ? subscriptionData.plan as { plan_code?: string } : null;
+      const subscriptionMetadata = subscriptionData && 'metadata' in subscriptionData && subscriptionData.metadata && typeof subscriptionData.metadata === 'object' ? subscriptionData.metadata as { planId?: string; billingPeriod?: string } : null;
+      const subscriptionCustomer = subscriptionData && 'customer' in subscriptionData && subscriptionData.customer && typeof subscriptionData.customer === 'object' ? subscriptionData.customer as { customer_code?: string } : null;
+      
       console.log('📋 [PaystackAction] Subscription details:', {
-        subscriptionCode: subscription?.subscription_code,
-        planCode: subscription?.plan?.plan_code,
-        metadata: subscription?.metadata
+        subscriptionCode: subscriptionData && 'subscription_code' in subscriptionData ? String(subscriptionData.subscription_code) : undefined,
+        planCode: subscriptionPlan?.plan_code,
+        metadata: subscriptionMetadata
       });
       
       // Prioritize transaction metadata, then subscription metadata
-      const planId = transactionPlanId || subscription?.metadata?.planId;
-      const billingPeriod = (transactionBillingPeriod || subscription?.metadata?.billingPeriod) as 'monthly' | 'yearly' | undefined;
+      const planId = transactionPlanId || subscriptionMetadata?.planId;
+      const billingPeriod = (transactionBillingPeriod || subscriptionMetadata?.billingPeriod) as 'monthly' | 'yearly' | undefined;
       
       if (!planId || !billingPeriod) {
         console.error('❌ [PaystackAction] Missing planId or billingPeriod:', { planId, billingPeriod });
@@ -233,31 +254,33 @@ export async function verifyAndActivateSubscription(
       }
 
       // Get customer to find user
-      const customerCode = transaction.metadata?.customerCode 
-        || transaction.customer?.customer_code 
-        || subscription?.customer?.customer_code;
+      const transactionCustomer = transaction.customer && typeof transaction.customer === 'object' ? transaction.customer as { customer_code?: string } : null;
+      const customerCode = transactionMetadata?.customerCode 
+        || transactionCustomer?.customer_code 
+        || subscriptionCustomer?.customer_code;
       
-      if (customerCode) {
+      if (customerCode && typeof customerCode === 'string') {
         const db = await getDatabase();
         const user = await db.collection('users').findOne({
           paystackCustomerCode: customerCode
         });
 
         if (user && user._id) {
+          const planCode = subscriptionPlan?.plan_code || '';
           console.log('💾 [PaystackAction] Activating subscription for user:', {
             email: user.email,
             userId: user._id.toString(),
             planId,
             billingPeriod,
-            subscriptionCode: transaction.subscription_code
+            subscriptionCode
           });
           
           await SubscriptionServicePaystack.subscribeToPlan(
             user._id,
             planId,
             billingPeriod,
-            transaction.subscription_code,
-            subscription?.plan?.plan_code || ''
+            subscriptionCode,
+            planCode
           );
 
           // Clear subscription cache
@@ -281,7 +304,7 @@ export async function verifyAndActivateSubscription(
       // If no subscription_code yet, try to activate from transaction metadata
       // This happens when the subscription hasn't been created yet by Paystack
       if (transactionPlanId && transactionBillingPeriod) {
-        const customerCode = transaction.metadata?.customerCode || transaction.customer?.customer_code;
+        const customerCode = transactionMetadata?.customerCode || transactionCustomer?.customer_code;
         
         console.log('⚠️ [PaystackAction] No subscription_code in transaction, using metadata fallback:', {
           customerCode,

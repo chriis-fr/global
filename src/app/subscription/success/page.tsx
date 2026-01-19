@@ -15,11 +15,6 @@ export default function SubscriptionSuccessPage() {
 
   // Paystack uses 'trxref' parameter (transaction reference), Stripe uses 'session_id' (for backward compatibility)
   // Paystack redirects with trxref, not reference - check trxref first!
-  const reference = searchParams.get('trxref') || searchParams.get('reference') || searchParams.get('session_id')
-  
-  // Clean up reference if it's empty string
-  const cleanReference = reference && reference.trim() !== '' ? reference.trim() : null
-
   useEffect(() => {
     const handleSuccess = async () => {
       // Get reference again inside useEffect to ensure we have the latest value

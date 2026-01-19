@@ -186,7 +186,17 @@ export class PaystackService {
 
       // Initialize transaction with plan code - this creates subscription automatically on payment
       // Paystack REQUIRES amount to be sent even when using a plan - it must match the plan amount exactly
-      const requestBody: any = {
+      const requestBody: {
+        email: string;
+        amount: number;
+        plan: string;
+        callback_url: string;
+        metadata: {
+          planId: string;
+          billingPeriod: string;
+          customerCode: string;
+        };
+      } = {
         email: customerEmail,
         amount: planAmount, // Amount in kobo/cents - MUST match plan amount exactly (58000 = 580.00 in currency)
         plan: planCode, // This makes it a subscription transaction
@@ -246,7 +256,7 @@ export class PaystackService {
   }
 
   // Get subscription details
-  static async getSubscription(subscriptionCode: string): Promise<any | null> {
+  static async getSubscription(subscriptionCode: string): Promise<Record<string, unknown> | null> {
     console.log('📋 [PaystackService] Getting subscription:', subscriptionCode);
     
     try {
@@ -304,7 +314,7 @@ export class PaystackService {
   }
 
   // Verify transaction (for webhook verification)
-  static async verifyTransaction(reference: string): Promise<any | null> {
+  static async verifyTransaction(reference: string): Promise<Record<string, unknown> | null> {
     console.log('🔍 [PaystackService] Verifying transaction:', reference);
     
     try {

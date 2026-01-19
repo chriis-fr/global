@@ -77,7 +77,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       // Use ref to avoid dependency issues
       fetchOnboardingRef.current();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, status, setOnboarding, router]); // Removed fetchOnboarding from deps to prevent infinite loop
 
   // Listen for sidebar state changes

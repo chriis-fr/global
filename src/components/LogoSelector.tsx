@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { ChevronDown, Check, AlertCircle } from 'lucide-react';
 

@@ -2,11 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { SubscriptionServicePaystack } from '@/lib/services/subscriptionServicePaystack';
 import { clearSubscriptionCache } from '@/lib/actions/subscription';
-import { ObjectId } from 'mongodb';
 import { getDatabase } from '@/lib/database';
 import { PaystackService } from '@/lib/services/paystackService';
 
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || '';
 const PAYSTACK_WEBHOOK_SECRET = process.env.PAYSTACK_WEBHOOK_SECRET || '';
 
 // Paystack webhook IP addresses (whitelist)
@@ -139,9 +137,41 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  let event: any;
+  interface PaystackWebhookEvent {
+    event: string;
+    data?: {
+      reference?: string;
+      subscription?: {
+        subscription_code?: string;
+        plan?: {
+          plan_code?: string;
+        };
+        customer?: {
+          customer_code?: string;
+        };
+        metadata?: {
+          planId?: string;
+          billingPeriod?: string;
+        };
+      };
+      customer?: {
+        customer_code?: string;
+      };
+      metadata?: {
+        planId?: string;
+        billingPeriod?: string;
+      };
+      plan?: {
+        plan_code?: string;
+      };
+      subscription_code?: string;
+      [key: string]: unknown;
+    };
+  }
+
+  let event: PaystackWebhookEvent;
   try {
-    event = JSON.parse(body);
+    event = JSON.parse(body) as PaystackWebhookEvent;
   } catch (error) {
     console.log('❌ [PaystackWebhook] Failed to parse webhook body:', error);
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
@@ -173,21 +203,24 @@ export async function POST(request: NextRequest) {
               allMetadata: newSubscription.metadata
             });
 
-            if (planId && billingPeriod) {
+            if (planId && billingPeriod && newSubscription.subscription_code && newSubscription.plan?.plan_code) {
+              const subscriptionCode = String(newSubscription.subscription_code);
+              const planCode = String(newSubscription.plan.plan_code);
+              
               console.log('💾 [PaystackWebhook] Activating subscription for user:', {
                 email: user.email,
                 userId: user._id.toString(),
                 planId,
                 billingPeriod,
-                subscriptionCode: newSubscription.subscription_code
+                subscriptionCode
               });
               
               await SubscriptionServicePaystack.subscribeToPlan(
                 user._id,
                 planId,
                 billingPeriod,
-                newSubscription.subscription_code,
-                newSubscription.plan.plan_code
+                subscriptionCode,
+                planCode
               );
 
               // Clear subscription cache
@@ -232,15 +265,18 @@ export async function POST(request: NextRequest) {
               allMetadata: updatedSubscription.metadata
             });
 
-            if (planId && billingPeriod) {
+            if (planId && billingPeriod && updatedSubscription.subscription_code && updatedSubscription.plan?.plan_code) {
+              const subscriptionCode = String(updatedSubscription.subscription_code);
+              const planCode = String(updatedSubscription.plan.plan_code);
+              
               console.log('💾 [PaystackWebhook] Updating subscription for user:', user.email);
               
               await SubscriptionServicePaystack.subscribeToPlan(
                 user._id,
                 planId,
                 billingPeriod,
-                updatedSubscription.subscription_code,
-                updatedSubscription.plan.plan_code
+                subscriptionCode,
+                planCode
               );
 
               // Update organization subscription if user is an organization owner
@@ -341,7 +377,7 @@ export async function POST(request: NextRequest) {
           // Verify transaction
           const transaction = await PaystackService.verifyTransaction(charge.reference);
           
-          if (transaction && transaction.status === 'success' && transaction.subscription_code) {
+          if (transaction && typeof transaction === 'object' && 'status' in transaction && transaction.status === 'success' && 'subscription_code' in transaction && transaction.subscription_code) {
             const db = await getDatabase();
             const user = await db.collection('users').findOne({
               paystackCustomerCode: charge.customer.customer_code
@@ -349,12 +385,13 @@ export async function POST(request: NextRequest) {
 
             if (user && user._id) {
               // Get subscription details
-              const subscription = await PaystackService.getSubscription(transaction.subscription_code);
+              const subscriptionCode = String(transaction.subscription_code);
+              const subscription = await PaystackService.getSubscription(subscriptionCode);
               
-              if (subscription && subscription.plan?.plan_code) {
+              if (subscription && typeof subscription === 'object' && 'plan' in subscription && subscription.plan && typeof subscription.plan === 'object' && 'plan_code' in subscription.plan && subscription.plan.plan_code) {
                 // CRITICAL: Use metadata.planId first (most reliable)
-                const planId = subscription.metadata?.planId;
-                const billingPeriod = subscription.metadata?.billingPeriod as 'monthly' | 'yearly' | undefined;
+                const planId = subscription.metadata && typeof subscription.metadata === 'object' && 'planId' in subscription.metadata ? String(subscription.metadata.planId) : undefined;
+                const billingPeriod = subscription.metadata && typeof subscription.metadata === 'object' && 'billingPeriod' in subscription.metadata ? String(subscription.metadata.billingPeriod) as 'monthly' | 'yearly' : undefined;
 
                 console.log('📋 [PaystackWebhook] Charge success subscription metadata:', {
                   planId,
@@ -363,14 +400,15 @@ export async function POST(request: NextRequest) {
                 });
 
                 if (planId && billingPeriod) {
+                  const planCode = String(subscription.plan.plan_code);
                   console.log('💾 [PaystackWebhook] Activating subscription after successful charge:', user.email);
                   
                   await SubscriptionServicePaystack.subscribeToPlan(
                     user._id,
                     planId,
                     billingPeriod,
-                    transaction.subscription_code,
-                    subscription.plan.plan_code
+                    subscriptionCode,
+                    planCode
                   );
 
                   await clearSubscriptionCache(user._id.toString());
