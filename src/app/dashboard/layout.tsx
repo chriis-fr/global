@@ -18,6 +18,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Initialize onboarding store from session on mount and check completion.
   // Guarded with a ref to prevent repeated state updates that can cause update-depth errors.
   const onboardingInitRef = useRef(false);
+  const fetchOnboardingRef = useRef(fetchOnboarding);
+  
+  // Keep ref in sync with fetchOnboarding function
+  useEffect(() => {
+    fetchOnboardingRef.current = fetchOnboarding;
+  }, [fetchOnboarding]);
+
   useEffect(() => {
     if (status === 'loading') return;
     if (onboardingInitRef.current) return;
@@ -67,9 +74,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         session.user.services as Record<string, boolean>
       );
     } else {
-      fetchOnboarding();
+      // Use ref to avoid dependency issues
+      fetchOnboardingRef.current();
     }
-  }, [session, status, setOnboarding, fetchOnboarding, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, status, setOnboarding, router]); // Removed fetchOnboarding from deps to prevent infinite loop
 
   // Listen for sidebar state changes
   useEffect(() => {

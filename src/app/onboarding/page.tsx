@@ -102,6 +102,7 @@ export default function OnboardingPage() {
   const hasInitializedRef = useRef(false);
   const isCheckingStatusRef = useRef(false);
   const onboardingRef = useRef(onboarding);
+  const redirectingRef = useRef(false);
   
   // Keep ref in sync with onboarding state
   useEffect(() => {
@@ -230,10 +231,12 @@ export default function OnboardingPage() {
       const sessionCompleted = session.user.onboarding?.completed || session.user.onboarding?.currentStep === 4;
       
       // If session shows onboarding is completed, redirect immediately
-      if (sessionCompleted) {
+      if (sessionCompleted && !redirectingRef.current) {
+        redirectingRef.current = true;
         console.log('✅ [Onboarding] Session shows onboarding completed, redirecting to dashboard');
         // Initialize store from session before redirect (only if not already set)
-        if (session.user.onboarding && session.user.services && !onboarding?.completed) {
+        // Use onboardingRef to check current state without causing re-render
+        if (session.user.onboarding && session.user.services && !onboardingRef.current?.completed) {
           setOnboarding(
             {
               completed: true,
@@ -255,7 +258,7 @@ export default function OnboardingPage() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, status, loadUserAndServices, setOnboarding]); // Removed onboarding from deps to prevent infinite loop
+  }, [session, status, loadUserAndServices]); // Removed setOnboarding and onboarding from deps to prevent infinite loop
 
   const updateOnboardingStep = async (step: number, stepData?: Record<string, unknown>) => {
     if (!user) return;
@@ -382,32 +385,43 @@ export default function OnboardingPage() {
       .filter(([, service]) => service.ready).length;
   };
 
-  // Early check: if onboarding is completed, redirect immediately (before any loading)
-  // Consider completed if: completed === true OR currentStep === 4 (final step)
-  if (status === 'authenticated' && session?.user) {
-    const sessionCompleted = session.user.onboarding?.completed || session.user.onboarding?.currentStep === 4;
-    if (sessionCompleted) {
-      // Initialize store from session before redirect
-      if (session.user.onboarding && session.user.services) {
-        setOnboarding(
-          {
-            completed: true,
-            currentStep: session.user.onboarding.currentStep || 4,
-            completedSteps: session.user.onboarding.completedSteps || [],
-            serviceOnboarding: session.user.onboarding.serviceOnboarding || {}
-          },
-          session.user.services as Record<string, boolean>
-        );
+  // Early redirect check - moved to useEffect to avoid calling setState during render
+  useEffect(() => {
+    if (status === 'authenticated' && session?.user && !redirectingRef.current) {
+      const sessionCompleted = session.user.onboarding?.completed || session.user.onboarding?.currentStep === 4;
+      if (sessionCompleted) {
+        redirectingRef.current = true;
+        // Initialize store from session before redirect
+        if (session.user.onboarding && session.user.services && !onboardingRef.current?.completed) {
+          setOnboarding(
+            {
+              completed: true,
+              currentStep: session.user.onboarding.currentStep || 4,
+              completedSteps: session.user.onboarding.completedSteps || [],
+              serviceOnboarding: session.user.onboarding.serviceOnboarding || {}
+            },
+            session.user.services as Record<string, boolean>
+          );
+        }
+        // Redirect immediately
+        if (typeof window !== 'undefined') {
+          window.location.href = '/dashboard';
+        }
       }
-      // Redirect immediately without rendering anything
-      if (typeof window !== 'undefined') {
-        window.location.href = '/dashboard';
-      }
-      return null;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, session]); // Removed setOnboarding from deps to prevent infinite loop
+
+  // Only show loading if we're actually loading data (not during initial status check)
+  // Hide loading state during initial status check to avoid irritating UI
+  const shouldShowLoading = loading && (hasInitializedRef.current || !isCheckingStatusRef.current);
+  
+  if (!shouldShowLoading && (status === 'loading' || (loading && !hasInitializedRef.current))) {
+    // Return null to hide loading UI during initial status check
+    return null;
   }
 
-  if (loading) {
+  if (shouldShowLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-900 to-blue-950 flex items-center justify-center">
         <div className="text-center">
