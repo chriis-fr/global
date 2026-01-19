@@ -216,15 +216,19 @@ export class SubscriptionService {
     return count;
   }
 
-  // Subscribe user to a plan (called by webhook)
+  // Subscribe user to a plan (DEPRECATED: Use SubscriptionServicePaystack.subscribeToPlan instead)
+  // Kept for backward compatibility with existing Stripe subscriptions
+  // This method is no longer used for new subscriptions - Paystack is used instead
   static async subscribeToPlan(
     userId: ObjectId, 
     planId: string, 
     billingPeriod: 'monthly' | 'yearly',
-    stripeSubscriptionId: string,
-    stripePriceId: string
+    stripeSubscriptionId?: string,
+    stripePriceId?: string
   ): Promise<void> {
-    console.log('🔄 [SubscriptionService] Subscribing user to plan:', {
+    console.log('⚠️ [SubscriptionService] DEPRECATED: subscribeToPlan called - this is for backward compatibility only');
+    console.log('💡 [SubscriptionService] New subscriptions should use SubscriptionServicePaystack.subscribeToPlan');
+    console.log('🔄 [SubscriptionService] Subscribing user to plan (legacy Stripe method):', {
       userId: userId.toString(),
       planId,
       billingPeriod,
@@ -237,16 +241,23 @@ export class SubscriptionService {
     const currentPeriodEnd = new Date();
     currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + (billingPeriod === 'yearly' ? 12 : 1));
 
-    const updateData = {
+    // Only update Stripe fields if provided (for backward compatibility)
+    const updateData: any = {
       'subscription.planId': planId,
       'subscription.status': 'active',
       'subscription.currentPeriodStart': currentPeriodStart,
       'subscription.currentPeriodEnd': currentPeriodEnd,
       'subscription.billingPeriod': billingPeriod,
-      'subscription.stripeSubscriptionId': stripeSubscriptionId,
-      'subscription.stripePriceId': stripePriceId,
       'subscription.updatedAt': new Date()
     };
+
+    // Only set Stripe fields if provided (preserves existing Paystack subscriptions)
+    if (stripeSubscriptionId) {
+      updateData['subscription.stripeSubscriptionId'] = stripeSubscriptionId;
+    }
+    if (stripePriceId) {
+      updateData['subscription.stripePriceId'] = stripePriceId;
+    }
 
     console.log('💾 [SubscriptionService] Updating database with:', updateData);
 
@@ -256,7 +267,7 @@ export class SubscriptionService {
     );
 
     if (result.modifiedCount === 1) {
-      console.log('✅ [SubscriptionService] User subscription updated successfully:', userId.toString());
+      console.log('✅ [SubscriptionService] User subscription updated successfully (legacy):', userId.toString());
     } else {
       console.log('❌ [SubscriptionService] Failed to update user subscription:', userId.toString());
       throw new Error('Failed to update user subscription');

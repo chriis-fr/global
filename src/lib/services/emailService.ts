@@ -942,4 +942,137 @@ export const sendTestEmail = async (toEmail: string) => {
     console.error('❌ Failed to send test email:', error);
     return { success: false, error: error as Error };
   }
+};
+
+// Send password reset email
+export const sendPasswordResetEmail = async (
+  userEmail: string,
+  userName: string,
+  resetToken: string
+): Promise<{ success: boolean; messageId?: string; error?: Error }> => {
+  const frontendUrl = getFrontendUrl();
+  const resetLink = `${frontendUrl}/auth?resetToken=${resetToken}`;
+
+  const mailOptions = {
+    from: `"Chains ERP-Global" <${emailConfig.auth.user}>`,
+    to: userEmail,
+    subject: 'Reset Your Password - Chains ERP-Global',
+    headers: getEmailHeaders(),
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
+          <div style="margin-bottom: 20px;">
+            <img src="https://chains-erp.com/chainsnobg.png" 
+              alt="Chains ERP-Global Logo" 
+              style="max-width: 150px; height: auto; border-radius: 8px;">
+          </div>
+          <h1 style="margin: 0; font-size: 28px;">Password Reset Request</h1>
+          <p style="margin: 10px 0 0 0; opacity: 0.9;">We received a request to reset your password</p>
+        </div>
+        
+        <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
+          <h2 style="color: #333; margin-top: 0;">Hello ${userName},</h2>
+          
+          <p style="color: #666; line-height: 1.6;">
+            You requested to reset your password for your Chains ERP-Global account. 
+            Click the button below to reset your password:
+          </p>
+          
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${resetLink}" 
+               style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                      color: white; padding: 14px 28px; text-decoration: none; 
+                      border-radius: 6px; font-weight: bold; font-size: 16px;">
+              Reset Password
+            </a>
+          </div>
+          
+          <p style="color: #666; line-height: 1.6; font-size: 14px;">
+            Or copy and paste this link into your browser:
+          </p>
+          <p style="color: #667eea; word-break: break-all; font-size: 12px; background: white; padding: 10px; border-radius: 4px;">
+            ${resetLink}
+          </p>
+          
+          <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <h4 style="color: #856404; margin-top: 0;">⚠️ Important Security Notice</h4>
+            <ul style="color: #856404; margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.6;">
+              <li>This link will expire in <strong>1 hour</strong></li>
+              <li>If you didn't request this, you can safely ignore this email</li>
+              <li>Your current password will remain valid until you complete the reset</li>
+              <li>Never share this link with anyone</li>
+            </ul>
+          </div>
+          
+          <div style="background: #e7f3ff; border-left: 4px solid #2196F3; padding: 15px; border-radius: 4px; margin: 20px 0;">
+            <p style="color: #1976D2; margin: 0; font-size: 14px;">
+              <strong>Remember your password?</strong> You can still log in with your current password. 
+              This reset link will only be used if you complete the password reset process.
+            </p>
+          </div>
+          
+          <p style="color: #999; font-size: 12px; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
+            If you're having trouble clicking the button, copy and paste the URL above into your web browser.
+            <br><br>
+            This is an automated message, please do not reply to this email.
+          </p>
+        </div>
+      </div>
+    `,
+    text: `
+Password Reset Request - Chains ERP-Global
+
+Hello ${userName},
+
+You requested to reset your password for your Chains ERP-Global account.
+
+Click this link to reset your password:
+${resetLink}
+
+⚠️ Important:
+- This link will expire in 1 hour
+- If you didn't request this, you can safely ignore this email
+- Your current password will remain valid until you complete the reset
+- Never share this link with anyone
+
+Remember your password? You can still log in with your current password. 
+This reset link will only be used if you complete the password reset process.
+
+This is an automated message, please do not reply to this email.
+    `,
+  };
+
+  try {
+    const startTime = Date.now();
+    const info = await transporter.sendMail(mailOptions);
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    
+    console.log('✅ Password reset email sent successfully (took', duration, 'ms)');
+    console.log('📧 Password reset email details:', {
+      messageId: info.messageId,
+      to: userEmail,
+      subject: mailOptions.subject,
+      previewUrl: nodemailer.getTestMessageUrl(info),
+    });
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('❌ Failed to send password reset email:', error);
+    
+    let errorMessage = 'Unknown email error';
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      if (error.message.includes('ECONNREFUSED')) {
+        errorMessage = 'SMTP connection refused - check server configuration';
+      } else if (error.message.includes('EAUTH')) {
+        errorMessage = 'SMTP authentication failed - check credentials';
+      } else if (error.message.includes('ETIMEDOUT')) {
+        errorMessage = 'SMTP connection timed out - check network connectivity';
+      } else if (error.message.includes('ENOTFOUND')) {
+        errorMessage = 'SMTP host not found - check SMTP_HOST configuration';
+      }
+    }
+    
+    return { success: false, error: new Error(errorMessage) };
+  }
 }; 

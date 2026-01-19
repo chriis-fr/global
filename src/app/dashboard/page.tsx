@@ -19,10 +19,23 @@ import { getUserSettings } from '@/app/actions/user-actions';
 
 export default function DashboardPage() {
   const { data: session } = useSession();
-  const { subscription } = useSubscription(); // Don't block on loading
+  const { subscription, refetch } = useSubscription(); // Don't block on loading
   const router = useRouter();
   const [userName, setUserName] = useState<string>('');
   const [organizationName, setOrganizationName] = useState<string>('');
+
+  // Refresh subscription on mount to ensure we have the latest data
+  useEffect(() => {
+    if (session?.user?.id) {
+      // Refresh subscription data when dashboard loads to ensure it's up to date
+      // This is especially important after plan changes
+      const timer = setTimeout(() => {
+        refetch();
+      }, 1000); // Small delay to avoid blocking initial render
+      
+      return () => clearTimeout(timer);
+    }
+  }, [session?.user?.id, refetch]);
 
   // Fetch user data in background - don't block render
   useEffect(() => {
@@ -48,6 +61,11 @@ export default function DashboardPage() {
 
   const getPlanDisplayName = () => {
     if (!subscription?.plan) return 'Free Plan';
+    
+    // Special handling for free plan - show "Free Plan" instead of "Receivables Free"
+    if (subscription.plan.planId === 'receivables-free') {
+      return 'Free Plan';
+    }
     
     const { type, tier } = subscription.plan;
     const typeName = type.charAt(0).toUpperCase() + type.slice(1);

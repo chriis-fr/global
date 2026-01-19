@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { CheckCircle, Loader2 } from 'lucide-react'
 import { useSubscription } from '@/lib/contexts/SubscriptionContext'
+import { verifyAndActivateSubscription } from '@/lib/actions/paystack'
 
 export default function SubscriptionSuccessPage() {
   const searchParams = useSearchParams()
@@ -12,32 +13,103 @@ export default function SubscriptionSuccessPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const sessionId = searchParams.get('session_id')
+  // Paystack uses 'trxref' parameter (transaction reference), Stripe uses 'session_id' (for backward compatibility)
+  // Paystack redirects with trxref, not reference - check trxref first!
+  const reference = searchParams.get('trxref') || searchParams.get('reference') || searchParams.get('session_id')
+  
+  // Clean up reference if it's empty string
+  const cleanReference = reference && reference.trim() !== '' ? reference.trim() : null
 
   useEffect(() => {
     const handleSuccess = async () => {
+      // Get reference again inside useEffect to ensure we have the latest value
+      const ref = searchParams.get('trxref') || searchParams.get('reference') || searchParams.get('session_id')
+      const cleanRef = ref && ref.trim() !== '' ? ref.trim() : null
+      
+      console.log('🔔 [SubscriptionSuccess] Success page loaded, reference:', cleanRef, 'raw reference:', ref)
+      console.log('📋 [SubscriptionSuccess] All search params:', Object.fromEntries(searchParams.entries()))
+      
       try {
-        if (sessionId) {
-          // Refresh subscription data
-          await refetch()
+        if (cleanRef) {
+          console.log('🔍 [SubscriptionSuccess] Verifying subscription with reference:', cleanRef)
           
-          // Redirect to dashboard after a short delay
+          // Verify and activate subscription IMMEDIATELY (for Paystack)
+          const result = await verifyAndActivateSubscription(cleanRef)
+          
+          console.log('📊 [SubscriptionSuccess] Verification result:', {
+            success: result.success,
+            error: result.error
+          })
+          
+          if (result.success) {
+            console.log('✅ [SubscriptionSuccess] Subscription activated successfully')
+            
+            // Force clear cache and wait a bit for database to update
+            await new Promise(resolve => setTimeout(resolve, 1000))
+            
+            // Clear cache and refresh subscription data immediately
+            console.log('🔄 [SubscriptionSuccess] First refetch...')
+            await refetch()
+            
+            // Wait a bit more and refetch again to ensure we have the latest data
+            await new Promise(resolve => setTimeout(resolve, 1500))
+            console.log('🔄 [SubscriptionSuccess] Second refetch...')
+            await refetch()
+            
+            console.log('✅ [SubscriptionSuccess] Subscription data refreshed, redirecting to dashboard')
+            
+            // Redirect to dashboard after a short delay
+            setTimeout(() => {
+              router.push('/dashboard')
+            }, 1000)
+          } else {
+            console.error('❌ [SubscriptionSuccess] Verification failed:', result.error)
+            console.log('⚠️ [SubscriptionSuccess] Still attempting to refresh in case webhook processed it')
+            // Still try to refetch in case webhook already processed it
+            await new Promise(resolve => setTimeout(resolve, 2000))
+            await refetch()
+            setTimeout(() => {
+              router.push('/dashboard')
+            }, 2000)
+          }
+        } else {
+          // No reference found, but still try to refresh (might be webhook-activated)
+          console.log('⚠️ [SubscriptionSuccess] No reference found in URL, refreshing subscription data')
+          console.log('📋 [SubscriptionSuccess] Search params:', {
+            trxref: searchParams.get('trxref'),
+            reference: searchParams.get('reference'),
+            session_id: searchParams.get('session_id'),
+            allParams: Object.fromEntries(searchParams.entries())
+          })
+          await refetch()
           setTimeout(() => {
             router.push('/dashboard')
-          }, 3000)
-        } else {
-          setError('No session ID found')
+          }, 2000)
         }
       } catch (err) {
-        console.error('Error handling subscription success:', err)
-        setError('Failed to process subscription')
+        console.error('❌ [SubscriptionSuccess] Error handling subscription success:', err)
+        console.error('❌ [SubscriptionSuccess] Error details:', {
+          message: err instanceof Error ? err.message : 'Unknown error',
+          stack: err instanceof Error ? err.stack : undefined
+        })
+        // Still try to refresh subscription in case webhook processed it
+        try {
+          console.log('🔄 [SubscriptionSuccess] Attempting recovery refetch...')
+          await refetch()
+          setTimeout(() => {
+            router.push('/dashboard')
+          }, 2000)
+        } catch (refetchError) {
+          console.error('❌ [SubscriptionSuccess] Recovery refetch also failed:', refetchError)
+          setError('Failed to process subscription. Please check your dashboard or contact support.')
+        }
       } finally {
         setLoading(false)
       }
     }
 
     handleSuccess()
-  }, [sessionId, refetch, router])
+  }, [refetch, router, searchParams])
 
   if (loading) {
     return (

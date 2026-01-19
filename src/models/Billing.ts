@@ -29,6 +29,8 @@ export interface BillingPlan {
   yearlyPrice: number;
   monthlyPriceId: string | null; // Stripe price ID
   yearlyPriceId: string | null; // Stripe price ID
+  monthlyPaystackPlanCode?: string | null; // Paystack plan code (null for free plans)
+  yearlyPaystackPlanCode?: string | null; // Paystack plan code (null for free plans)
   currency: string;
   features: BillingFeature[];
   limits: BillingLimits;
@@ -48,6 +50,8 @@ export interface UserSubscription {
   billingPeriod: BillingPeriod;
   stripeSubscriptionId?: string;
   stripePriceId?: string;
+  paystackSubscriptionCode?: string; // Paystack subscription code
+  paystackPlanCode?: string; // Paystack plan code
   createdAt: Date;
   updatedAt: Date;
   usage: {

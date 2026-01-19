@@ -116,6 +116,9 @@ export interface User {
   stripeCustomerId?: string;
   stripeSubscriptionId?: string;
 
+  // Paystack fields
+  paystackCustomerCode?: string;
+
   // Subscription & Billing Fields
   subscription: {
     planId: string; // e.g., 'receivables-free', 'payables-pro'
@@ -126,6 +129,8 @@ export interface User {
     currentPeriodEnd?: Date;
     billingPeriod: 'monthly' | 'yearly';
     stripePriceId?: string;
+    paystackSubscriptionCode?: string; // Paystack subscription code
+    paystackPlanCode?: string; // Paystack plan code
     createdAt: Date;
     updatedAt: Date;
     // New trial system fields
