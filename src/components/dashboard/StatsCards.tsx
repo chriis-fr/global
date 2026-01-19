@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
+import { usePathname } from 'next/navigation';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -49,6 +50,10 @@ const getCachedStats = (): DashboardStats | null => {
 export default function StatsCards({ className = '' }: StatsCardsProps) {
   const { data: session } = useSession();
   const { subscription } = useSubscription();
+  const pathname = usePathname();
+  
+  // Only fetch data when on the dashboard page
+  const isOnDashboardPage = pathname === '/dashboard';
   
   // Initialize with cached data if available to avoid loading state
   const cachedStats = getCachedStats();
@@ -94,6 +99,11 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
     1; // Total Clients (always shown)
 
   useEffect(() => {
+    // Only fetch data when on the dashboard page
+    if (!isOnDashboardPage) {
+      return;
+    }
+
     const loadStats = async () => {
       const cacheKey = 'dashboard_stats';
       
@@ -165,7 +175,7 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
     if (!hasInitialized.current) {
       loadStats();
     }
-  }, [session?.user?.id, subscription?.plan?.planId]); // Re-fetch only if user or plan changes
+  }, [isOnDashboardPage, session?.user?.id, subscription?.plan?.planId]); // Re-fetch only if user or plan changes, or when navigating to/from dashboard
 
   // Check if there's more content to scroll (mobile only)
   useEffect(() => {
