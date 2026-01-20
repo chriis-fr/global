@@ -76,7 +76,7 @@ export const BILLING_PLANS: BillingPlan[] = [
       invoicesPerMonth: -1, // Unlimited
     },
     popular: true,
-    ctaText: 'Start Pr',
+    ctaText: 'Start Pro',
     ctaVariant: 'primary',
   },
 
