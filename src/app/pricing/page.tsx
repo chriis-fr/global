@@ -368,7 +368,7 @@ function PlanCard({
             <CheckCircle className="h-4 w-4" />
             <span>Current Plan</span>
           </>
-        ) : process.env.NODE_ENV === 'production' ? (
+        ) : process.env.NODE_ENV != 'production' ? (
           <>
             <CheckCircle className="h-4 w-4" />
             <span>Available in Trial</span>
