@@ -70,6 +70,12 @@ export class PaystackService {
   static async createOrGetCustomer(email: string, name: string, userId: string): Promise<string | null> {
     console.log('👤 [PaystackService] Creating/getting customer:', { email, name, userId });
     
+    // Validate API key
+    if (!PAYSTACK_SECRET_KEY || PAYSTACK_SECRET_KEY.trim() === '') {
+      console.error('❌ [PaystackService] PAYSTACK_SECRET_KEY is missing or empty');
+      throw new Error('Paystack API key is not configured. Please set PAYSTACK_SECRET_KEY environment variable.');
+    }
+    
     try {
       // Check if customer already exists
       const searchUrl = `${PAYSTACK_BASE_URL}/customer?email=${encodeURIComponent(email)}`;
@@ -80,6 +86,27 @@ export class PaystackService {
           'Content-Type': 'application/json',
         },
       });
+
+      // Check response status and content type
+      if (!searchResponse.ok) {
+        const errorText = await searchResponse.text();
+        console.error('❌ [PaystackService] Search customer failed:', {
+          status: searchResponse.status,
+          statusText: searchResponse.statusText,
+          response: errorText.substring(0, 500)
+        });
+        throw new Error(`Paystack API error: ${searchResponse.status} ${searchResponse.statusText}`);
+      }
+
+      const contentType = searchResponse.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const errorText = await searchResponse.text();
+        console.error('❌ [PaystackService] Invalid response type:', {
+          contentType,
+          response: errorText.substring(0, 500)
+        });
+        throw new Error(`Paystack API returned non-JSON response. Check API key configuration.`);
+      }
 
       const searchData = await searchResponse.json();
 
@@ -107,6 +134,27 @@ export class PaystackService {
         }),
       });
 
+      // Check response status and content type
+      if (!createResponse.ok) {
+        const errorText = await createResponse.text();
+        console.error('❌ [PaystackService] Create customer failed:', {
+          status: createResponse.status,
+          statusText: createResponse.statusText,
+          response: errorText.substring(0, 500)
+        });
+        throw new Error(`Paystack API error: ${createResponse.status} ${createResponse.statusText}`);
+      }
+
+      const contentType2 = createResponse.headers.get('content-type');
+      if (!contentType2 || !contentType2.includes('application/json')) {
+        const errorText = await createResponse.text();
+        console.error('❌ [PaystackService] Invalid response type:', {
+          contentType: contentType2,
+          response: errorText.substring(0, 500)
+        });
+        throw new Error(`Paystack API returned non-JSON response. Check API key configuration.`);
+      }
+
       const createData = await createResponse.json();
 
       if (createData.status && createData.data) {
@@ -115,9 +163,12 @@ export class PaystackService {
         return customerCode;
       }
 
-      throw new Error('Failed to create customer');
+      throw new Error(createData.message || 'Failed to create customer');
     } catch (error) {
       console.error('❌ [PaystackService] Error creating/getting customer:', error);
+      if (error instanceof Error) {
+        throw error;
+      }
       throw new Error('Failed to create or get customer');
     }
   }

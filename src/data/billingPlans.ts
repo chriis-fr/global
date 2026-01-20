@@ -63,8 +63,8 @@ export const BILLING_PLANS: BillingPlan[] = [
     description: 'Ideal for growing businesses',
     monthlyPrice: 4.49,
     yearlyPrice: 44.99,
-    monthlyPaystackPlanCode: "PLN_ipgidwru7u85a84", // Set after creating plan in Paystack dashboard
-    yearlyPaystackPlanCode: "PLN_d1fjzsawkjvycz3", // Set after creating plan in Paystack dashboard
+    monthlyPaystackPlanCode: "PLN_0y0kyk5x9wjp56c", // Set after creating plan in Paystack dashboard
+    yearlyPaystackPlanCode: "PLN_1ds98cto81gpb0y", // Set after creating plan in Paystack dashboard
     currency: 'USD',
     features: [
       { id: 'unlimited-invoices', name: 'Unlimited invoices', description: 'Create as many invoices as you need', included: true },
@@ -89,8 +89,8 @@ export const BILLING_PLANS: BillingPlan[] = [
     description: 'Essential payables management',
     monthlyPrice: 49.99,
     yearlyPrice: 497.99,
-    monthlyPaystackPlanCode: "PLN_6o0yqhwv598dmen", // Set after creating plan in Paystack dashboard
-    yearlyPaystackPlanCode: "PLN_nupjwk0j6k4s76y", // Set after creating plan in Paystack dashboard
+    monthlyPaystackPlanCode: "PLN_8nhek518g486ty7", // Set after creating plan in Paystack dashboard
+    yearlyPaystackPlanCode: "PLN_nyxfqpgu96v57qo", // Set after creating plan in Paystack dashboard
     currency: 'USD',
     features: [
       { id: 'batch-payments', name: 'Batch payments', description: 'Process multiple payments at once', included: true },
@@ -111,8 +111,8 @@ export const BILLING_PLANS: BillingPlan[] = [
     description: 'Advanced payables with custom features',
     monthlyPrice: 99.99,
     yearlyPrice: 995.99,
-    monthlyPaystackPlanCode: "PLN_iajoz8dpmpa4lk7", // Set after creating plan in Paystack dashboard
-    yearlyPaystackPlanCode: "PLN_rhpk1hcr46brm51", // Set after creating plan in Paystack dashboard
+    monthlyPaystackPlanCode: "PLN_d94drq6252xmttr", // Set after creating plan in Paystack dashboard
+    yearlyPaystackPlanCode: "PLN_bkf9ud4f12qpkb0", // Set after creating plan in Paystack dashboard
     currency: 'USD',
     features: [
       { id: 'batch-payments', name: 'Batch payments', description: 'Process multiple payments at once', included: true },
@@ -137,7 +137,7 @@ export const BILLING_PLANS: BillingPlan[] = [
     description: 'Ideal for small businesses',
     monthlyPrice: 139.99,
     yearlyPrice: 1399.99,
-    monthlyPaystackPlanCode: "PLN_fff524rpodszv4h", // Set after creating plan in Paystack dashboard
+    monthlyPaystackPlanCode: "PLN_1t5uc6aj2nb6gjw", // Set after creating plan in Paystack dashboard
     yearlyPaystackPlanCode: "PLN_8gtksh08hugt1lk", // Set after creating plan in Paystack dashboard
     currency: 'USD',
     features: [
@@ -164,8 +164,8 @@ export const BILLING_PLANS: BillingPlan[] = [
     description: 'Complete business solution',
     monthlyPrice: 199.99,
     yearlyPrice: 1990.99,
-    monthlyPaystackPlanCode: "PLN_erpa6tolz7eht0k", // Set after creating plan in Paystack dashboard
-    yearlyPaystackPlanCode: "PLN_cm6serxczfhh6gm", // Set after creating plan in Paystack dashboard
+    monthlyPaystackPlanCode: "PLN_ibdiu89bru9srpu", // Set after creating plan in Paystack dashboard
+    yearlyPaystackPlanCode: "PLN_o9a396680uqpb9g", // Set after creating plan in Paystack dashboard
     currency: 'USD',
     features: [
       { id: 'unlimited-crypto-fiat', name: 'Unlimited crypto-to-fiat payments', description: 'Convert crypto to fiat without limits', included: true },
