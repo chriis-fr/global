@@ -40,13 +40,6 @@ export default function PricingPage() {
       userId: session?.user?.id
     })
 
-    // Block subscriptions in production environment
-    if (process.env.NODE_ENV === 'production') {
-      console.log('🚫 [Pricing] Subscriptions disabled in production environment')
-      alert('Subscriptions are currently disabled. All features are available for free during the trial period.')
-      return
-    }
-
     if (!session) {
       console.log('❌ [Pricing] User not authenticated, redirecting to auth')
       router.push('/auth')
@@ -346,16 +339,14 @@ function PlanCard({
 
       <button
         onClick={() => onSubscribe(plan)}
-        disabled={loading || isCurrentPlan || process.env.NODE_ENV === 'production'}
+        disabled={loading || isCurrentPlan}
         className={`w-full py-3 px-6 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${isCurrentPlan
             ? 'bg-green-100 text-green-700 cursor-not-allowed'
-            : process.env.NODE_ENV === 'production'
-              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              : plan.ctaVariant === 'primary'
-                ? 'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-400'
-                : plan.ctaVariant === 'secondary'
-                  ? 'bg-gray-600 text-white hover:bg-gray-700 disabled:bg-gray-400'
-                  : 'border-2 border-gray-300 text-gray-700 hover:bg-gray-50 disabled:bg-gray-100'
+            : plan.ctaVariant === 'primary'
+              ? 'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-400'
+              : plan.ctaVariant === 'secondary'
+                ? 'bg-gray-600 text-white hover:bg-gray-700 disabled:bg-gray-400'
+                : 'border-2 border-gray-300 text-gray-700 hover:bg-gray-50 disabled:bg-gray-100'
           }`}
       >
         {loading ? (
@@ -367,11 +358,6 @@ function PlanCard({
           <>
             <CheckCircle className="h-4 w-4" />
             <span>Current Plan</span>
-          </>
-        ) : process.env.NODE_ENV != 'production' ? (
-          <>
-            <CheckCircle className="h-4 w-4" />
-            <span>Available in Trial</span>
           </>
         ) : (
           plan.ctaText
