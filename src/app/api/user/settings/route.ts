@@ -38,9 +38,12 @@ export async function GET() {
         organizationData = {
           _id: organization._id?.toString(),
           name: organization.name,
+          email: organization.billingEmail, // Use billingEmail as email
+          phone: organization.phone || '',
           industry: organization.industry || '',
           address: organization.address,
           billingEmail: organization.billingEmail,
+          taxId: organization.taxId || '', // CRITICAL: Include taxId
           services: organization.services || [],
           onboarding: organization.onboarding || {},
           subscription: organization.subscription

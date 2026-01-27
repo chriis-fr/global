@@ -35,6 +35,8 @@ const BATCH_DELAY = 100; // Wait 100ms to batch conversions
 async function processBatchConversions() {
   if (conversionQueue.size === 0) return;
   
+  const store = useCurrencyStore.getState();
+  
   const conversions = Array.from(conversionQueue.entries()).map(([key, item]) => ({
     key,
     ...item,
@@ -43,40 +45,98 @@ async function processBatchConversions() {
   // Clear queue
   conversionQueue.clear();
   
+  // OPTIMIZATION: Check cache first - if we have rates, use them immediately
+  const conversionsWithCachedRates: typeof conversions = [];
+  const conversionsNeedingFetch: typeof conversions = [];
+  
+  conversions.forEach(conversion => {
+    const cachedRate = store.getCachedRate(conversion.fromCurrency, conversion.toCurrency);
+    if (cachedRate !== null) {
+      // We have a cached rate - resolve immediately without API call
+      conversionsWithCachedRates.push(conversion);
+      const convertedAmount = conversion.amount * cachedRate;
+      conversion.resolve({
+        originalAmount: conversion.amount,
+        convertedAmount,
+        fromCurrency: conversion.fromCurrency,
+        toCurrency: conversion.toCurrency,
+        rate: cachedRate,
+        converted: true,
+        isLoading: false,
+        error: null,
+      });
+    } else {
+      conversionsNeedingFetch.push(conversion);
+    }
+  });
+  
+  // If all conversions used cached rates, we're done!
+  if (conversionsNeedingFetch.length === 0) {
+    return;
+  }
+  
+  // OPTIMIZATION: Deduplicate currency pairs - only fetch rate once per pair
+  const uniquePairs = new Map<string, { fromCurrency: string; toCurrency: string; conversions: typeof conversions }>();
+  
+  conversionsNeedingFetch.forEach(conversion => {
+    const pairKey = `${conversion.fromCurrency}_${conversion.toCurrency}`;
+    if (!uniquePairs.has(pairKey)) {
+      uniquePairs.set(pairKey, {
+        fromCurrency: conversion.fromCurrency,
+        toCurrency: conversion.toCurrency,
+        conversions: []
+      });
+    }
+    uniquePairs.get(pairKey)!.conversions.push(conversion);
+  });
+  
+  // Fetch one conversion per unique pair (we'll reuse the rate for all amounts of that pair)
+  const fetchConversions = Array.from(uniquePairs.values()).map(pair => ({
+    amount: 1, // Amount doesn't matter, we just need the rate
+    fromCurrency: pair.fromCurrency,
+    toCurrency: pair.toCurrency,
+  }));
+  
   try {
-    const result = await batchConvertCurrency(
-      conversions.map(c => ({
-        amount: c.amount,
-        fromCurrency: c.fromCurrency,
-        toCurrency: c.toCurrency,
-      }))
-    );
+    const result = await batchConvertCurrency(fetchConversions);
     
     if (result.success && result.data) {
-      conversions.forEach((conversion, index) => {
+      // Cache rates and resolve all conversions
+      Array.from(uniquePairs.entries()).forEach(([pairKey, pair], index) => {
         const conversionResult = result.data[index];
-        if (conversionResult) {
-          conversion.resolve({
-            originalAmount: conversionResult.originalAmount,
-            convertedAmount: conversionResult.convertedAmount,
-            fromCurrency: conversionResult.fromCurrency,
-            toCurrency: conversionResult.toCurrency,
-            rate: conversionResult.rate,
-            converted: conversionResult.converted,
-            isLoading: false,
-            error: null,
+        if (conversionResult && conversionResult.converted) {
+          const isCrypto = isCryptoCurrency(pair.fromCurrency);
+          // Cache the rate for this currency pair (works for any amount!)
+          store.setCachedRate(pair.fromCurrency, pair.toCurrency, conversionResult.rate, isCrypto);
+          
+          // Resolve all conversions for this pair using the cached rate
+          pair.conversions.forEach(conversion => {
+            const convertedAmount = conversion.amount * conversionResult.rate;
+            conversion.resolve({
+              originalAmount: conversion.amount,
+              convertedAmount,
+              fromCurrency: conversion.fromCurrency,
+              toCurrency: conversion.toCurrency,
+              rate: conversionResult.rate,
+              converted: true,
+              isLoading: false,
+              error: null,
+            });
           });
         } else {
-          conversion.reject(new Error('Conversion failed'));
+          // Conversion failed - reject all for this pair
+          pair.conversions.forEach(conversion => {
+            conversion.reject(new Error('Conversion failed'));
+          });
         }
       });
     } else {
-      conversions.forEach(conversion => {
+      conversionsNeedingFetch.forEach(conversion => {
         conversion.reject(new Error(result.error || 'Conversion failed'));
       });
     }
   } catch (error) {
-    conversions.forEach(conversion => {
+    conversionsNeedingFetch.forEach(conversion => {
       conversion.reject(error instanceof Error ? error : new Error('Conversion failed'));
     });
   }
@@ -88,7 +148,13 @@ export function useCurrencyConversion(
   toCurrency?: string
 ): ConversionResult {
   const { preferredCurrency } = useCurrency();
-  const { getCachedConversion, setCachedConversion, getCacheKey } = useCurrencyStore();
+  const { 
+    getCachedConversion, 
+    setCachedConversion, 
+    getCachedRate,
+    setCachedRate,
+    getCacheKey 
+  } = useCurrencyStore();
   const [result, setResult] = useState<ConversionResult>({
     originalAmount: amount,
     convertedAmount: amount,
@@ -133,11 +199,31 @@ export function useCurrencyConversion(
       return;
     }
 
-    // Check cache first
+    // CRITICAL: Check for cached exchange rate first (currency pair only, works for any amount)
+    const cachedRate = getCachedRate(fromCurrency, actualTargetCurrency);
+    if (cachedRate !== null) {
+      // Use cached rate to calculate conversion (no API call needed!)
+      const convertedAmount = amount * cachedRate;
+      setResult({
+        originalAmount: amount,
+        convertedAmount,
+        fromCurrency,
+        toCurrency: actualTargetCurrency,
+        rate: cachedRate,
+        converted: true,
+        isLoading: false,
+        error: null
+      });
+      return;
+    }
+
+    // Fallback: Check per-amount conversion cache
     const cacheKey = getCacheKey(amount, fromCurrency, actualTargetCurrency);
     const cached = getCachedConversion(cacheKey);
     
     if (cached) {
+      // Also cache the rate for future use
+      setCachedRate(fromCurrency, actualTargetCurrency, cached.rate, fromIsCrypto);
       setResult({
         originalAmount: cached.originalAmount,
         convertedAmount: cached.convertedAmount,
@@ -182,7 +268,13 @@ export function useCurrencyConversion(
         resolve: (result) => {
           clearTimeout(timeoutId);
           if (mountedRef.current) {
-            // Cache the result
+            // CRITICAL: Cache the exchange rate (currency pair only) for future use
+            // This allows any amount to use the same rate without API calls
+            if (result.converted && result.rate !== 1) {
+              setCachedRate(fromCurrency, actualTargetCurrency, result.rate, fromIsCrypto);
+            }
+            
+            // Also cache the per-amount conversion (for backward compatibility)
             setCachedConversion(cacheKey, {
               originalAmount: result.originalAmount,
               convertedAmount: result.convertedAmount,
@@ -225,7 +317,7 @@ export function useCurrencyConversion(
       clearTimeout(timeoutId);
       conversionQueue.delete(queueKey);
     };
-  }, [amount, fromCurrency, toCurrency, preferredCurrency, getCachedConversion, setCachedConversion, getCacheKey]);
+  }, [amount, fromCurrency, toCurrency, preferredCurrency, getCachedConversion, setCachedConversion, getCachedRate, setCachedRate, getCacheKey]);
 
   return result;
 } 
