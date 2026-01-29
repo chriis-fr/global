@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { sendInvoiceWhatsApp } from '@/lib/actions/whatsapp';
@@ -34,8 +35,6 @@ import {
 import { fiatCurrencies, cryptoCurrencies, getCurrencyByCode } from '@/data/currencies';
 import { countries, getTaxRatesByCountry } from '@/data/countries';
 import { networks } from '@/data/networks';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import InvoicePdfView from '@/components/invoicing/InvoicePdfView';
 import { LogoSelector } from '@/components/LogoSelector';
 import BankSelector from '@/components/BankSelector';
@@ -47,6 +46,9 @@ import PaymentMethodSelector from '@/components/payments/PaymentMethodSelector';
 import SavePaymentMethodButton from '@/components/payments/SavePaymentMethodButton';
 import ReceivingAddressInput from '@/components/wallet/ReceivingAddressInput';
 import { getInvoiceDraft } from '@/lib/actions/pdf-invoice';
+import toast from 'react-hot-toast';
+import { pdf } from '@react-pdf/renderer';
+import { InvoicePdfDocument, type InvoicePdfData } from '@/components/invoicing/InvoicePdfDocument';
 
 interface Client {
   _id: string;
@@ -363,136 +365,48 @@ const useFormPersistence = (key: string, initialData: InvoiceFormData, setAutoSa
   return { formData, setFormData: updateFormData, clearSavedData };
 };
 
-// Add this utility function at the top of the file, after imports
-const optimizeCanvasForPdf = (canvas: HTMLCanvasElement): HTMLCanvasElement => {
-  const optimizedCanvas = document.createElement('canvas');
-  const ctx = optimizedCanvas.getContext('2d');
-  
-  // Optimize dimensions for PDF while maintaining quality
-  const maxWidth = 1200; // Reduced from 1600 (800 * 2)
-  const maxHeight = 1600;
-  
-  let { width, height } = canvas;
-  
-  // Scale down if too large
-  if (width > maxWidth || height > maxHeight) {
-    const scale = Math.min(maxWidth / width, maxHeight / height);
-    width *= scale;
-    height *= scale;
-  }
-  
-  optimizedCanvas.width = width;
-  optimizedCanvas.height = height;
-  
-  // Enable image smoothing for better quality
-  if (ctx) {
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(canvas, 0, 0, width, height);
-  }
-  
-  return optimizedCanvas;
-};
+/** Round to 2 decimal places for money; avoids 500 becoming 499.99999999999994. */
+function round2(x: number): number {
+  if (!Number.isFinite(x)) return 0;
+  return Math.round(x * 100) / 100;
+}
 
-// Add PDF caching utility
-const pdfCache = new Map<string, string>();
+/** Normalize all monetary fields to 2 decimals before sending to API so 500 stays 500. */
+function normalizeInvoicePayload(
+  data: InvoiceFormData,
+  overrides: Partial<InvoiceFormData> & { withholdingTaxAmount?: number; withholdingTaxRatePercent?: number } = {}
+): InvoiceFormData & { withholdingTaxAmount?: number; withholdingTaxRatePercent?: number } {
+  const sub = round2(Number(data.subtotal) ?? 0);
+  const tax = round2(Number(data.totalTax) ?? 0);
+  const tot = round2(Number(data.total) ?? 0);
+  const items = (data.items ?? []).map((item) => ({
+    ...item,
+    unitPrice: round2(Number(item.unitPrice) ?? 0),
+    amount: round2(Number(item.amount) ?? 0),
+    discount: round2(Number(item.discount) ?? 0),
+    tax: round2(Number(item.tax) ?? 0)
+  }));
+  return { ...data, subtotal: sub, totalTax: tax, total: tot, items, ...overrides };
+}
 
-const generateOptimizedPdf = async (pdfContainer: HTMLElement, cacheKey?: string): Promise<{ pdf: jsPDF; base64: string }> => {
-  // Ensure cacheKey is always a string
-  const safeCacheKey = cacheKey || 'temp';
-  
-  // Check cache first
-  if (pdfCache.has(safeCacheKey)) {
-    const cachedBase64 = pdfCache.get(safeCacheKey)!;
-    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    // Note: We can't directly restore PDF from base64, but we can return the cached base64
-    return { pdf, base64: cachedBase64 };
-  }
-
-
-
-  // Generate PDF using html2canvas with optimized options
-  const canvas = await html2canvas(pdfContainer, {
-    logging: false,
-    useCORS: true,
-    allowTaint: true,
-    backgroundColor: '#ffffff',
-    scale: 1.5, // Reduced from 2 for better size/quality balance
-    width: 800,
-    height: pdfContainer.scrollHeight,
-    scrollX: 0,
-    scrollY: 0,
-    // Add performance optimizations
-    removeContainer: true,
-    foreignObjectRendering: false, // Disable for better performance
-    imageTimeout: 15000 // 15 second timeout for images
+/** Generate professional vector PDF (react-pdf) and return base64. Used for send and download. */
+async function generateInvoicePdfBase64(
+  data: InvoicePdfData,
+  invoiceNumber?: string
+): Promise<string> {
+  const blob = await pdf(
+    <InvoicePdfDocument data={data} invoiceNumber={invoiceNumber} />
+  ).toBlob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      resolve(dataUrl.split(',')[1] ?? '');
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
   });
-
-
-
-  // Optimize canvas
-  const optimizedCanvas = optimizeCanvasForPdf(canvas);
-  
-  // Create PDF with optimized settings
-  const pdf = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4',
-    compress: true // Enable PDF compression
-  });
-
-  const imgWidth = pdf.internal.pageSize.getWidth();
-  const imgHeight = (optimizedCanvas.height * imgWidth) / optimizedCanvas.width;
-
-  // If the content is too tall, split into multiple pages
-  const pageHeight = pdf.internal.pageSize.getHeight();
-  const margin = 10;
-  const contentHeight = pageHeight - (2 * margin);
-  
-  if (imgHeight <= contentHeight) {
-    // Single page - use JPEG for smaller size
-    const imageData = optimizedCanvas.toDataURL('image/jpeg', 0.85);
-    pdf.addImage(imageData, 'JPEG', margin, margin, imgWidth - (2 * margin), imgHeight);
-  } else {
-    // Multiple pages - optimized for performance
-    const pages = Math.ceil(imgHeight / contentHeight);
-    for (let i = 0; i < pages; i++) {
-      if (i > 0) pdf.addPage();
-      
-      const sourceY = i * contentHeight * (optimizedCanvas.width / (imgWidth - (2 * margin)));
-      const sourceHeight = Math.min(contentHeight * (optimizedCanvas.width / (imgWidth - (2 * margin))), optimizedCanvas.height - sourceY);
-      
-      const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = optimizedCanvas.width;
-      tempCanvas.height = sourceHeight;
-      const tempCtx = tempCanvas.getContext('2d');
-      tempCtx?.drawImage(optimizedCanvas, 0, sourceY, optimizedCanvas.width, sourceHeight, 0, 0, optimizedCanvas.width, sourceHeight);
-      
-      // Use JPEG for smaller size
-      const imageData = tempCanvas.toDataURL('image/jpeg', 0.85);
-      pdf.addImage(imageData, 'JPEG', margin, margin, imgWidth - (2 * margin), Math.min(contentHeight, imgHeight - (i * contentHeight)));
-    }
-  }
-
-  // Convert to base64 with optimization
-  const pdfBase64 = pdf.output('datauristring').split(',')[1];
-  
-  // Cache the result
-  pdfCache.set(safeCacheKey, pdfBase64);
-  // Limit cache size to prevent memory issues
-  if (pdfCache.size > 10) {
-    const firstKey = pdfCache.keys().next().value;
-    if (firstKey) {
-      pdfCache.delete(firstKey);
-    }
-  }
-
-
-
-  return { pdf, base64: pdfBase64 };
-};
-
-
+}
 
 export default function CreateInvoicePage() {
   const router = useRouter();
@@ -520,6 +434,19 @@ export default function CreateInvoicePage() {
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [sendingInvoice, setSendingInvoice] = useState(false);
   const [creatingClient, setCreatingClient] = useState(false);
+
+  // Lock body scroll when send overlay is visible so page cannot scroll
+  useEffect(() => {
+    if (!sendingInvoice) return;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    const prevBodyOverflow = document.body.style.overflow;
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      document.body.style.overflow = prevBodyOverflow;
+    };
+  }, [sendingInvoice]);
 
   // Handler functions that scroll to top before opening modals
   const handleOpenCompanyModal = () => {
@@ -1027,10 +954,9 @@ export default function CreateInvoicePage() {
   const fromPdfDraftId = searchParams.get('fromPdfDraft');
   const pdfDraftLoadDone = useRef(false);
 
-  // Check if any items have discounts
-      const hasAnyDiscounts = formData.items.some(item => item.discount > 0);
-    const hasAnyTaxes = formData.items.some(item => item.tax > 0);
-  
+  // Check if any items have discounts (used to conditionally show Discount column)
+  const hasAnyDiscounts = formData.items.some(item => item.discount > 0);
+
   // Download dropdown state
   const [showDownloadDropdown, setShowDownloadDropdown] = useState(false);
 
@@ -1048,20 +974,27 @@ export default function CreateInvoicePage() {
           return;
         }
         
-        // Ensure all required fields are present with defaults
+        const raw = data.data;
+        const items = (raw.items || []).map((item: { unitPrice?: number; amount?: number; quantity?: number; [k: string]: unknown }) => ({
+          ...item,
+          unitPrice: round2(Number(item.unitPrice) ?? 0),
+          amount: round2(Number(item.amount) ?? 0),
+          quantity: Math.max(0, Math.round(Number(item.quantity) || 1))
+        }));
         const loadedData = {
           ...defaultInvoiceData,
-          ...data.data,
-          attachedFiles: data.data.attachedFiles || [],
-          ccClients: data.data.ccClients || [],
-          chainId: data.data.paymentSettings?.chainId || data.data.chainId,
-          tokenAddress: data.data.paymentSettings?.tokenAddress || data.data.tokenAddress,
-          withholdingTaxEnabled: (data.data.withholdingTaxAmount != null && data.data.withholdingTaxAmount > 0),
-          withholdingTaxRatePercent: Number(data.data.withholdingTaxRatePercent) || 5
+          ...raw,
+          items,
+          attachedFiles: raw.attachedFiles || [],
+          ccClients: raw.ccClients || [],
+          chainId: raw.paymentSettings?.chainId || raw.chainId,
+          tokenAddress: raw.paymentSettings?.tokenAddress || raw.tokenAddress,
+          withholdingTaxEnabled: (raw.withholdingTaxAmount != null && raw.withholdingTaxAmount > 0),
+          withholdingTaxRatePercent: Number(raw.withholdingTaxRatePercent) || 5,
+          subtotal: round2(Number(raw.subtotal) ?? 0),
+          totalTax: round2(Number(raw.totalTax) ?? 0),
+          total: round2(Number(raw.total) ?? 0)
         };
-        
-        // Keep amounts exactly as stored - no recalculation
-        
         setFormData(loadedData);
         setIsEditing(true);
       }
@@ -1240,9 +1173,10 @@ export default function CreateInvoicePage() {
       
       if (!hasCompanyData || currentUserId !== lastUserId.current) {
         // User changed or company data is missing - load it
+        // When user changes, reset initialLoadDone so we run loadClients/loadLogo for the new user
         if (currentUserId !== lastUserId.current) {
           lastUserId.current = currentUserId;
-          initialLoadDone.current = true;
+          initialLoadDone.current = false;
         }
         
         // Always load company data if it's missing, even if initialLoadDone is true
@@ -1254,10 +1188,11 @@ export default function CreateInvoicePage() {
         // Always load payment methods - they should be available every time
         loadSavedPaymentMethods();
         
-        // Only load these once per user session
+        // Only load clients and logo once per user session (initialLoadDone was false on first run or after user change)
         if (!initialLoadDone.current) {
           loadClients();
           loadLogoFromSettings();
+          initialLoadDone.current = true;
         }
       }
     }
@@ -1287,8 +1222,8 @@ export default function CreateInvoicePage() {
         const draftItems = Array.isArray(raw.items) ? raw.items as Array<{ description?: string; quantity?: number; unitPrice?: number; total?: number; taxRate?: number }> : [];
         if (astItems.length > 0) {
           items = astItems.map((item, i) => {
-            const qty = Number(item.quantity) || 1;
-            const up = Number(item.unit_price) ?? 0;
+            const qty = Math.max(0, Math.round(Number(item.quantity) || 1));
+            const up = round2(Number(item.unit_price) ?? 0);
             const desc = String(item.label ?? '').trim();
             return {
               id: String(i + 1),
@@ -1297,30 +1232,30 @@ export default function CreateInvoicePage() {
               unitPrice: up,
               discount: 0,
               tax: 0,
-              amount: qty * up,
+              amount: round2(qty * up),
             };
           });
         } else if (draftItems.length > 0) {
           items = draftItems.map((item, i) => {
-            const qty = Number(item.quantity) || 1;
-            const up = Number(item.unitPrice) ?? 0;
-            const amount = (item.total ?? qty * up) as number;
+            const qty = Math.max(0, Math.round(Number(item.quantity) || 1));
+            const up = round2(Number(item.unitPrice) ?? 0);
+            const amount = round2((item.total ?? qty * up) as number);
             return {
               id: String(i + 1),
               description: String(item.description ?? '').trim(),
               quantity: qty,
               unitPrice: up,
               discount: 0,
-              tax: Number(item.taxRate) ?? 0,
+              tax: round2(Number(item.taxRate) ?? 0),
               amount,
             };
           });
         } else {
           items = defaultInvoiceData.items;
         }
-        const subtotal = Number(raw.subtotal) ?? items.reduce((s, i) => s + (i.quantity ?? 0) * (i.unitPrice ?? 0), 0);
-        const totalAmount = Number(raw.totalAmount) ?? subtotal;
-        const totalTax = Number((raw as Record<string, unknown>).totalTax) ?? Math.max(0, totalAmount - subtotal);
+        const subtotal = round2(Number(raw.subtotal) ?? items.reduce((s, i) => s + (i.quantity ?? 0) * (i.unitPrice ?? 0), 0));
+        const totalAmount = round2(Number(raw.totalAmount) ?? subtotal);
+        const totalTax = round2(Number((raw as Record<string, unknown>).totalTax) ?? Math.max(0, totalAmount - subtotal));
         const safeSubtotal = Number.isFinite(subtotal) ? subtotal : 0;
         const safeTotal = Number.isFinite(totalAmount) ? totalAmount : 0;
         const safeTotalTax = Number.isFinite(totalTax) ? totalTax : 0;
@@ -1577,7 +1512,7 @@ export default function CreateInvoicePage() {
     const validFiles = files.filter(file => {
       const maxSize = 10 * 1024 * 1024; // 10MB
       if (file.size > maxSize) {
-        alert(`File ${file.name} is too large. Maximum size is 10MB.`);
+        toast.error(`File ${file.name} is too large. Maximum size is 10MB.`);
         return false;
       }
       return true;
@@ -1669,13 +1604,13 @@ export default function CreateInvoicePage() {
     // Check if client is already in CC list
     const isAlreadyCc = formData.ccClients?.some(cc => cc.email === client.email);
     if (isAlreadyCc) {
-      alert('This client is already in the CC list.');
+      toast.error('This client is already in the CC list.');
       return;
     }
 
     // Check if client is the primary client
     if (formData.clientEmail === client.email) {
-      alert('This client is already the primary recipient.');
+      toast.error('This client is already the primary recipient.');
       return;
     }
 
@@ -1724,11 +1659,11 @@ export default function CreateInvoicePage() {
         selectClient(data.data);
         setShowNewClientModal(false);
       } else {
-        alert(data.message || 'Failed to create client');
+        toast.error(data.message || 'Failed to create client');
       }
     } catch (error) {
       console.error('Failed to create client:', error);
-      alert('Failed to create client. Please try again.');
+      toast.error('Failed to create client. Please try again.');
     } finally {
       setCreatingClient(false);
     }
@@ -1756,29 +1691,38 @@ export default function CreateInvoicePage() {
 
   const handleItemChange = (index: number, field: string, value: string | number) => {
     const newItems = [...formData.items];
-    newItems[index] = { ...newItems[index], [field]: value };
-    
-    // Recalculate item amount with proper precision
+    // Description is a string; keep it as-is
+    if (field === 'description') {
+      newItems[index] = { ...newItems[index], description: String(value ?? '') };
+    } else {
+      const numValue = typeof value === 'number' ? value : parseFloat(String(value)) || 0;
+      // Round monetary/percent inputs so 500 stays 500 (no float drift)
+      const rounded =
+        field === 'unitPrice' || field === 'discount' || field === 'tax' ? round2(numValue) :
+        field === 'quantity' ? Math.max(0, Math.round(numValue)) : numValue;
+      newItems[index] = { ...newItems[index], [field]: rounded };
+    }
+
     const item = newItems[index];
-    const subtotalBeforeTax = item.quantity * item.unitPrice * (1 - item.discount / 100);
-    item.amount = subtotalBeforeTax * (1 + item.tax / 100);
-    
-    // Recalculate totals with proper precision
+    const subtotalBeforeTax = round2(item.quantity * item.unitPrice * (1 - item.discount / 100));
+    item.amount = round2(subtotalBeforeTax * (1 + item.tax / 100));
+
     let subtotal = 0;
     let totalTax = 0;
-    
-    newItems.forEach(item => {
-      const itemSubtotal = item.quantity * item.unitPrice * (1 - item.discount / 100);
-      const itemTax = itemSubtotal * (item.tax / 100);
+    newItems.forEach(i => {
+      const itemSubtotal = round2(i.quantity * i.unitPrice * (1 - i.discount / 100));
+      const itemTax = round2(itemSubtotal * (i.tax / 100));
       subtotal += itemSubtotal;
       totalTax += itemTax;
     });
+    subtotal = round2(subtotal);
+    totalTax = round2(totalTax);
 
     setFormData(prev => {
-      const totalBeforeWithholding = subtotal + totalTax;
-      const rate = ((prev.withholdingTaxRatePercent ?? 5) / 100);
-      const withholdingAmount = (prev.withholdingTaxEnabled ?? false) ? totalBeforeWithholding * rate : 0;
-      const total = totalBeforeWithholding - withholdingAmount;
+      const totalBeforeWithholding = round2(subtotal + totalTax);
+      const rate = (prev.withholdingTaxRatePercent ?? 5) / 100;
+      const withholdingAmount = (prev.withholdingTaxEnabled ?? false) ? round2(totalBeforeWithholding * rate) : 0;
+      const total = round2(totalBeforeWithholding - withholdingAmount);
       return {
         ...prev,
         items: newItems,
@@ -1809,23 +1753,22 @@ export default function CreateInvoicePage() {
   const removeItem = (index: number) => {
     if (formData.items.length > 1) {
       const newItems = formData.items.filter((_, i) => i !== index);
-      
-      // Recalculate totals with proper precision
       let subtotal = 0;
       let totalTax = 0;
-      
       newItems.forEach(item => {
-        const itemSubtotal = item.quantity * item.unitPrice * (1 - item.discount / 100);
-        const itemTax = itemSubtotal * (item.tax / 100);
+        const itemSubtotal = round2(item.quantity * item.unitPrice * (1 - item.discount / 100));
+        const itemTax = round2(itemSubtotal * (item.tax / 100));
         subtotal += itemSubtotal;
         totalTax += itemTax;
       });
+      subtotal = round2(subtotal);
+      totalTax = round2(totalTax);
 
       setFormData(prev => {
-        const totalBeforeWithholding = subtotal + totalTax;
-        const rate = ((prev.withholdingTaxRatePercent ?? 5) / 100);
-        const withholdingAmount = (prev.withholdingTaxEnabled ?? false) ? totalBeforeWithholding * rate : 0;
-        const total = totalBeforeWithholding - withholdingAmount;
+        const totalBeforeWithholding = round2(subtotal + totalTax);
+        const rate = (prev.withholdingTaxRatePercent ?? 5) / 100;
+        const withholdingAmount = (prev.withholdingTaxEnabled ?? false) ? round2(totalBeforeWithholding * rate) : 0;
+        const total = round2(totalBeforeWithholding - withholdingAmount);
         return {
           ...prev,
           items: newItems,
@@ -1846,12 +1789,11 @@ export default function CreateInvoicePage() {
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
+        body: JSON.stringify(normalizeInvoicePayload(formData, {
           status: 'draft',
-          withholdingTaxAmount: formData.withholdingTaxEnabled ? ((formData.subtotal ?? 0) + (formData.totalTax ?? 0)) * ((formData.withholdingTaxRatePercent ?? 5) / 100) : 0,
+          withholdingTaxAmount: formData.withholdingTaxEnabled ? round2(((formData.subtotal ?? 0) + (formData.totalTax ?? 0)) * ((formData.withholdingTaxRatePercent ?? 5) / 100)) : 0,
           withholdingTaxRatePercent: formData.withholdingTaxEnabled ? (formData.withholdingTaxRatePercent ?? 5) : undefined
-        })
+        }))
       });
       
       if (response.ok) {
@@ -1896,11 +1838,10 @@ export default function CreateInvoicePage() {
         const updateResponse = await fetch(`/api/invoices/${formData._id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...formData,
+          body: JSON.stringify(normalizeInvoicePayload(formData, {
             status: 'sent',
-            withholdingTaxAmount: formData.withholdingTaxEnabled ? ((formData.subtotal ?? 0) + (formData.totalTax ?? 0)) * ((formData.withholdingTaxRatePercent ?? 5) / 100) : 0
-          })
+            withholdingTaxAmount: formData.withholdingTaxEnabled ? round2(((formData.subtotal ?? 0) + (formData.totalTax ?? 0)) * ((formData.withholdingTaxRatePercent ?? 5) / 100)) : 0
+          }))
         });
 
         // Update invoice response status received
@@ -1929,11 +1870,10 @@ export default function CreateInvoicePage() {
         const primaryInvoiceResponse = await fetch('/api/invoices', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...formData,
+          body: JSON.stringify(normalizeInvoicePayload(formData, {
             status: 'sent',
-            withholdingTaxAmount: formData.withholdingTaxEnabled ? ((formData.subtotal ?? 0) + (formData.totalTax ?? 0)) * ((formData.withholdingTaxRatePercent ?? 5) / 100) : 0
-          })
+            withholdingTaxAmount: formData.withholdingTaxEnabled ? round2(((formData.subtotal ?? 0) + (formData.totalTax ?? 0)) * ((formData.withholdingTaxRatePercent ?? 5) / 100)) : 0
+          }))
         });
 
         // Primary invoice response status received
@@ -1973,10 +1913,7 @@ export default function CreateInvoicePage() {
             primaryInvoiceId,
             primaryInvoiceNumber,
             ccClients: formData.ccClients,
-            invoiceData: {
-              ...formData,
-              status: 'sent'
-            }
+            invoiceData: normalizeInvoicePayload(formData, { status: 'sent' })
           })
         });
 
@@ -1987,311 +1924,8 @@ export default function CreateInvoicePage() {
         await ccInvoiceResponse.json();
       }
 
-      // Create a simplified version of the invoice for PDF generation (same as handleDownloadPdf)
-      const pdfContainer = document.createElement('div');
-      pdfContainer.style.cssText = `
-        position: absolute;
-        left: -9999px;
-        top: 0;
-        width: 800px;
-        background: white;
-        color: black;
-        font-family: Arial, sans-serif;
-        padding: 32px;
-        border: none;
-        outline: none;
-      `;
-
-      // Create the exact invoice structure (same as handleDownloadPdf)
-      pdfContainer.innerHTML = `
-        <div style="border-bottom: 1px solid #e5e7eb; padding-bottom: 32px; margin-bottom: 32px;">
-          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-            <div style="flex: 1;">
-              <h1 style="font-size: 30px; font-weight: bold; color: #111827; margin: 0;">
-                ${formData.invoiceName || 'Invoice'}
-              </h1>
-            </div>
-            <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end;">
-              <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 16px;">
-                <div>
-                  <div style="font-size: 14px; color: #6b7280; margin-bottom: 4px;">
-                    Issued on ${formatDate(formData.issueDate)}
-                  </div>
-                  <div style="font-size: 14px; color: #6b7280;">
-                    Payment due by ${formatDate(formData.dueDate)}
-                  </div>
-                  ${primaryInvoiceNumber || formData.invoiceNumber ? `
-                    <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                      Invoice: ${primaryInvoiceNumber || formData.invoiceNumber}
-                    </div>
-                  ` : ''}
-                </div>
-                ${formData.companyLogo ? `
-                  <div style="width: 80px; height: 80px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
-                    <img src="${formData.companyLogo}" alt="Company Logo" style="width: 100%; height: 100%; object-fit: contain; background: white;" />
-                  </div>
-                ` : `
-                  <div style="width: 80px; height: 80px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-                    <svg style="width: 32px; height: 32px; color: #9ca3af;" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 2L2 7v10c0 5.55 3.84 9.74 9 11 5.16-1.26 9-5.45 9-11V7l-10-5zM12 22c-4.75-1.11-8-4.67-8-9V8l8-4v18z"/>
-                    </svg>
-                  </div>
-                `}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
-          <div style="display: flex; justify-content: space-between; gap: 48px;">
-            <div style="flex: 1;">
-              <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0; display: flex; align-items: center;">
-                <svg style="width: 20px; height: 20px; color: #6b7280; margin-right: 8px;" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 2L2 7v10c0 5.55 3.84 9.74 9 11 5.16-1.26 9-5.45 9-11V7l-10-5zM12 22c-4.75-1.11-8-4.67-8-9V8l8-4v18z"/>
-                </svg>
-                From
-              </h3>
-              <div style="font-weight: 500; margin-bottom: 8px;">
-                ${formData.companyName || 'Company Name'}
-              </div>
-              <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
-                <div>${formData.companyAddress.street || 'Street Address'}</div>
-                <div>${formData.companyAddress.city || 'City'}, ${formData.companyAddress.state || 'State'} ${formData.companyAddress.zipCode || 'ZIP'}</div>
-                <div>${formData.companyAddress.country ? countries.find(c => c.code === formData.companyAddress.country)?.name || formData.companyAddress.country : 'Country'}</div>
-                <div>Tax: ${formData.companyTaxNumber || 'Tax Number'}</div>
-                <div>${formData.companyEmail || 'Email'}</div>
-                <div>${formData.companyPhone || 'Phone'}</div>
-              </div>
-            </div>
-            <div style="flex: 1;">
-              <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0; display: flex; align-items: center;">
-                <svg style="width: 20px; height: 20px; color: #6b7280; margin-right: 8px;" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                </svg>
-                Bill To
-              </h3>
-              <div style="font-weight: 500; margin-bottom: 8px;">
-                ${formData.clientCompany ? formData.clientCompany : formData.clientName || 'Client Name'}
-              </div>
-              ${formData.clientCompany ? `
-              <div style="color: #6b7280; font-size: 14px; margin-bottom: 8px;">
-                Contact Person: ${formData.clientName || 'Client Name'}
-              </div>
-              ` : ''}
-              <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
-                ${formData.clientAddress.street ? `<div>${formData.clientAddress.street}</div>` : ''}
-                ${formData.clientAddress.city || formData.clientAddress.state || formData.clientAddress.zipCode ? `
-                  <div>
-                    ${formData.clientAddress.city || ''}${formData.clientAddress.city && (formData.clientAddress.state || formData.clientAddress.zipCode) ? ', ' : ''}
-                    ${formData.clientAddress.state || ''}${formData.clientAddress.state && formData.clientAddress.zipCode ? ' ' : ''}
-                    ${formData.clientAddress.zipCode || ''}
-                  </div>
-                ` : ''}
-                ${formData.clientAddress.country ? `<div>${countries.find(c => c.code === formData.clientAddress.country)?.name || formData.clientAddress.country}</div>` : ''}
-                <div>${formData.clientEmail || 'Email'}</div>
-                <div>${formData.clientPhone || 'Phone'}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
-          <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 24px 0;">Invoice Items</h3>
-          
-          <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
-            <thead style="background: #f9fafb;">
-              <tr>
-                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Description</th>
-                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Qty</th>
-                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Unit Price</th>
-                ${hasAnyDiscounts ? '<th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Discount</th>' : ''}
-                ${hasAnyTaxes ? '<th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Tax</th>' : ''}
-                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${formData.items.map(item => `
-                <tr style="border-bottom: 1px solid #e5e7eb;">
-                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.description || 'Item description'}</td>
-                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.quantity}</td>
-                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${getCurrencySymbol()}${(item.unitPrice ?? 0).toFixed(2)}</td>
-                  ${hasAnyDiscounts ? `<td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.discount > 0 ? `${item.discount}%` : ''}</td>` : ''}
-                  ${hasAnyTaxes ? `<td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.tax > 0 ? `${item.tax}%` : ''}</td>` : ''}
-                  <td style="padding: 12px 16px; font-size: 14px; font-weight: 500; color: #111827;">${getCurrencySymbol()}${(item.amount ?? 0).toFixed(2)}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-
-          <div style="display: flex; justify-content: flex-end;">
-            <div style="width: 256px;">
-              <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 14px; margin-bottom: 8px;">
-                <span>Amount without tax</span>
-                <span>${getCurrencySymbol()}${(formData.subtotal ?? 0).toFixed(2)}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 14px; margin-bottom: 8px;">
-                <span>Total Tax amount</span>
-                <span>${getCurrencySymbol()}${(formData.totalTax ?? 0).toFixed(2)}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 600; border-top: 1px solid #e5e7eb; padding-top: 8px; margin-bottom: 8px;">
-                <span>Total amount</span>
-                <span>${getCurrencySymbol()}${(formData.total ?? 0).toFixed(2)}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 600; color: #2563eb;">
-                <span>Due</span>
-                <span>${getCurrencySymbol()}${(formData.total ?? 0).toFixed(2)}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
-          <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0;">Payment Information</h3>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
-            <div>
-              <h4 style="font-weight: 500; color: #111827; margin: 0 0 8px 0;">Payment Method</h4>
-              <div style="font-size: 14px; color: #6b7280;">
-                ${formData.paymentMethod === 'crypto' ? 'Cryptocurrency' : 
-                  formData.fiatPaymentSubtype === 'phone' ? 'Phone Number' :
-                  formData.fiatPaymentSubtype === 'mpesa_paybill' ? 'M-Pesa Paybill' :
-                  formData.fiatPaymentSubtype === 'mpesa_till' ? 'M-Pesa Till' :
-                  'Bank Transfer'}
-              </div>
-              ${formData.paymentMethod === 'crypto' && formData.paymentNetwork ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Network: ${formData.paymentNetwork}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'crypto' && formData.paymentAddress ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Address: ${formData.paymentAddress}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.bankName ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Bank: ${formData.bankName}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.accountNumber ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Account: ${formData.accountNumber}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.swiftCode ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  SWIFT Code: ${formData.swiftCode}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.accountName ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Account Name: ${formData.accountName}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.branchAddress ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Branch Address: ${formData.branchAddress}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'phone' && formData.paymentPhoneNumber ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Phone Number: ${formData.paymentPhoneNumber}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'mpesa_paybill' && formData.paybillNumber ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Paybill Number: ${formData.paybillNumber}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'mpesa_paybill' && formData.mpesaAccountNumber ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Account Number: ${formData.mpesaAccountNumber}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'mpesa_till' && formData.tillNumber ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Till Number: ${formData.tillNumber}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && (formData.fiatPaymentSubtype === 'mpesa_paybill' || formData.fiatPaymentSubtype === 'mpesa_till' || formData.fiatPaymentSubtype === 'phone') && formData.businessName ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Business Name: ${formData.businessName}
-                </div>
-              ` : ''}
-            </div>
-            <div>
-              <h4 style="font-weight: 500; color: #111827; margin: 0 0 8px 0;">Currency</h4>
-              <div style="font-size: 14px; color: #6b7280;">
-                ${formData.currency} (${getCurrencySymbol()})
-              </div>
-            </div>
-          </div>
-        </div>
-
-        ${formData.memo ? `
-          <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
-            <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0;">Memo</h3>
-            <div style="font-size: 14px; color: #374151; white-space: pre-wrap;">
-              ${formData.memo}
-            </div>
-          </div>
-        ` : ''}
-
-        ${formData.invoiceNumber ? `
-          <div style="padding: 32px 0; text-align: center;">
-            <div style="font-size: 14px; color: #6b7280;">
-              Invoice Number: ${formData.invoiceNumber}
-            </div>
-          </div>
-        ` : ''}
-
-        <!-- Footer with watermark and security info -->
-        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center;">
-          <div style="font-size: 12px; color: #9ca3af; line-height: 1.5;">
-            <div style="margin-bottom: 8px; font-weight: 500;">
-              Generated by Chains-ERP for ${formData.companyName || 'Company'}
-            </div>
-            <div style="margin-bottom: 8px; font-size: 11px;">
-              Invoice Number: ${formData.invoiceNumber || 'N/A'} | Date: ${formatDate(formData.issueDate)}
-            </div>
-            <div style="font-size: 10px; color: #d1d5db;">
-              Digital Invoice | Secure Payment Processing | Blockchain Verification
-            </div>
-          </div>
-        </div>
-      `;
-
-      // Append to body temporarily
-      document.body.appendChild(pdfContainer);
-
-      // Wait for images to load
-      const images = pdfContainer.querySelectorAll('img');
-      if (images.length > 0) {
-        await Promise.all(Array.from(images).map(img => {
-          return new Promise((resolve) => {
-            if (img.complete) {
-              resolve(null);
-            } else {
-              img.onload = () => resolve(null);
-              img.onerror = () => resolve(null);
-            }
-          });
-        }));
-      }
-
-      // Generate optimized PDF
-      const { pdf, base64: pdfBase64 } = await generateOptimizedPdf(pdfContainer, formData.invoiceNumber || 'temp');
-
-      // Remove the temporary element
-      document.body.removeChild(pdfContainer);
-
-      // Add watermark
-      addWatermark(pdf, formData.invoiceNumber || 'temp');
-
-      console.log('📄 [PDF Generation] Converting PDF to base64...');
-      const base64StartTime = Date.now();
-      
-      const base64EndTime = Date.now();
-      console.log('📄 [PDF Generation] PDF base64 conversion completed in', base64EndTime - base64StartTime, 'ms');
+      // Generate professional vector PDF (react-pdf) — use actual invoice number from API
+      const pdfBase64 = await generateInvoicePdfBase64(formData, primaryInvoiceNumber);
       console.log('📄 [PDF Generation] PDF size:', (pdfBase64.length / 1024).toFixed(2), 'KB');
       
       // Sending invoice via email...
@@ -2438,10 +2072,12 @@ export default function CreateInvoicePage() {
           messageId: result.messageId
         });
         
-        const successMessage = formData.sendViaWhatsapp 
-          ? `Invoice sent successfully via WhatsApp to ${formData.clientPhone}!`
-          : 'Invoice sent successfully to Your Client!';
-        alert(successMessage);
+        const recipient = formData.sendViaWhatsapp ? formData.clientPhone : formData.clientEmail;
+        toast.success(
+          formData.sendViaWhatsapp
+            ? `Invoice sent via WhatsApp to ${recipient}`
+            : `Invoice sent to ${recipient}`
+        );
         // Clear saved form data after successful send
         clearSavedData();
         // Redirect to invoices page
@@ -2454,7 +2090,7 @@ export default function CreateInvoicePage() {
           method: formData.sendViaWhatsapp ? 'WhatsApp' : 'Email',
           fullResult: result
         });
-        alert(`Failed to send invoice: ${result.error || 'Unknown error occurred'}`);
+        toast.error(`Failed to send invoice: ${result.error || 'Unknown error occurred'}`);
       }
     } catch (error) {
       console.error('❌ [Smart Invoicing] ========== EXCEPTION IN SEND INVOICE ==========');
@@ -2469,14 +2105,14 @@ export default function CreateInvoicePage() {
       if (error instanceof Error) {
         if (error.name === 'AbortError') {
           console.error('❌ [Smart Invoicing] Request timed out');
-          alert('Request timed out. Please try again or contact support if the issue persists.');
+          toast.error('Request timed out. Please try again or contact support if the issue persists.');
         } else {
           console.error('❌ [Smart Invoicing] Error:', error.message);
-          alert(`Failed to send invoice: ${error.message}`);
+          toast.error(`Failed to send invoice: ${error.message}`);
         }
       } else {
         console.error('❌ [Smart Invoicing] Unknown error type');
-        alert('Failed to send invoice. Please try again.');
+        toast.error('Failed to send invoice. Please try again.');
       }
     } finally {
       console.log('📱 [Smart Invoicing] Cleaning up - setting sendingInvoice to false');
@@ -2597,9 +2233,9 @@ export default function CreateInvoicePage() {
     }
     
     // Items validation
-    const hasValidItems = formData.items.some((item: { description: string; quantity: number; unitPrice: number }) => 
-      item.description && item.description.trim() !== '' && 
-      item.quantity > 0 && item.unitPrice > 0
+    const hasValidItems = formData.items.some((item: { description?: string; quantity?: number; unitPrice?: number }) => 
+      String(item.description ?? '').trim() !== '' && 
+      (item.quantity ?? 0) > 0 && (item.unitPrice ?? 0) > 0
     );
     if (!hasValidItems) {
       errors.push('At least one item with description, quantity, and unit price is required');
@@ -2634,11 +2270,10 @@ export default function CreateInvoicePage() {
         const updateResponse = await fetch(`/api/invoices/${formData._id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...formData,
+          body: JSON.stringify(normalizeInvoicePayload(formData, {
             status: 'sent',
-            withholdingTaxAmount: formData.withholdingTaxEnabled ? ((formData.subtotal ?? 0) + (formData.totalTax ?? 0)) * ((formData.withholdingTaxRatePercent ?? 5) / 100) : 0
-          })
+            withholdingTaxAmount: formData.withholdingTaxEnabled ? round2(((formData.subtotal ?? 0) + (formData.totalTax ?? 0)) * ((formData.withholdingTaxRatePercent ?? 5) / 100)) : 0
+          }))
         });
 
         if (!updateResponse.ok) {
@@ -2662,11 +2297,10 @@ export default function CreateInvoicePage() {
         const primaryInvoiceResponse = await fetch('/api/invoices', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...formData,
+          body: JSON.stringify(normalizeInvoicePayload(formData, {
             status: 'sent',
-            withholdingTaxAmount: formData.withholdingTaxEnabled ? ((formData.subtotal ?? 0) + (formData.totalTax ?? 0)) * ((formData.withholdingTaxRatePercent ?? 5) / 100) : 0
-          })
+            withholdingTaxAmount: formData.withholdingTaxEnabled ? round2(((formData.subtotal ?? 0) + (formData.totalTax ?? 0)) * ((formData.withholdingTaxRatePercent ?? 5) / 100)) : 0
+          }))
         });
 
         if (!primaryInvoiceResponse.ok) {
@@ -2694,313 +2328,16 @@ export default function CreateInvoicePage() {
         invoiceNumber: primaryInvoiceNumber
       }));
 
-      // Create a simplified version of the invoice for PDF generation
-      const pdfContainer = document.createElement('div');
-      pdfContainer.style.cssText = `
-        position: absolute;
-        left: -9999px;
-        top: 0;
-        width: 800px;
-        background: white;
-        color: black;
-        font-family: Arial, sans-serif;
-        padding: 32px;
-        border: none;
-        outline: none;
-      `;
-
-      // Create the exact invoice structure
-      pdfContainer.innerHTML = `
-        <div style="border-bottom: 1px solid #e5e7eb; padding-bottom: 32px; margin-bottom: 32px;">
-          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-            <div style="flex: 1;">
-              <h1 style="font-size: 30px; font-weight: bold; color: #111827; margin: 0;">
-                ${formData.invoiceName || 'Invoice'}
-              </h1>
-            </div>
-            <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end;">
-              <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 16px;">
-                <div>
-                  <div style="font-size: 14px; color: #6b7280; margin-bottom: 4px;">
-                    Issued on ${formatDate(formData.issueDate)}
-                  </div>
-                  <div style="font-size: 14px; color: #6b7280;">
-                    Payment due by ${formatDate(formData.dueDate)}
-                  </div>
-                  ${primaryInvoiceNumber ? `
-                    <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                      Invoice: ${primaryInvoiceNumber}
-                    </div>
-                  ` : ''}
-                </div>
-                ${formData.companyLogo ? `
-                  <div style="width: 80px; height: 80px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
-                    <img src="${formData.companyLogo}" alt="Company Logo" style="width: 100%; height: 100%; object-fit: contain; background: white;" />
-                  </div>
-                ` : `
-                  <div style="width: 80px; height: 80px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-                    <svg style="width: 32px; height: 32px; color: #9ca3af;" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 2L2 7v10c0 5.55 3.84 9.74 9 11 5.16-1.26 9-5.45 9-11V7l-10-5zM12 22c-4.75-1.11-8-4.67-8-9V8l8-4v18z"/>
-                    </svg>
-                  </div>
-                `}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
-          <div style="display: flex; justify-content: space-between; gap: 48px;">
-            <div style="flex: 1;">
-              <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0; display: flex; align-items: center;">
-                <svg style="width: 20px; height: 20px; color: #6b7280; margin-right: 8px;" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 2L2 7v10c0 5.55 3.84 9.74 9 11 5.16-1.26 9-5.45 9-11V7l-10-5zM12 22c-4.75-1.11-8-4.67-8-9V8l8-4v18z"/>
-                </svg>
-                From
-              </h3>
-              <div style="font-weight: 500; margin-bottom: 8px;">
-                ${formData.companyName || 'Company Name'}
-              </div>
-              <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
-                <div>${formData.companyAddress.street || 'Street Address'}</div>
-                <div>${formData.companyAddress.city || 'City'}, ${formData.companyAddress.state || 'State'} ${formData.companyAddress.zipCode || 'ZIP'}</div>
-                <div>${formData.companyAddress.country ? countries.find(c => c.code === formData.companyAddress.country)?.name || formData.companyAddress.country : 'Country'}</div>
-                <div>Tax: ${formData.companyTaxNumber || 'Tax Number'}</div>
-                <div>${formData.companyEmail || 'Email'}</div>
-                <div>${formData.companyPhone || 'Phone'}</div>
-              </div>
-            </div>
-            <div style="flex: 1;">
-              <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0; display: flex; align-items: center;">
-                <svg style="width: 20px; height: 20px; color: #6b7280; margin-right: 8px;" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                </svg>
-                Bill To
-              </h3>
-              <div style="font-weight: 500; margin-bottom: 8px;">
-                ${formData.clientCompany ? formData.clientCompany : formData.clientName || 'Client Name'}
-              </div>
-              ${formData.clientCompany ? `
-              <div style="color: #6b7280; font-size: 14px; margin-bottom: 8px;">
-                Contact Person: ${formData.clientName || 'Client Name'}
-              </div>
-              ` : ''}
-              <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
-                ${formData.clientAddress.street ? `<div>${formData.clientAddress.street}</div>` : ''}
-                ${formData.clientAddress.city || formData.clientAddress.state || formData.clientAddress.zipCode ? `
-                  <div>
-                    ${formData.clientAddress.city || ''}${formData.clientAddress.city && (formData.clientAddress.state || formData.clientAddress.zipCode) ? ', ' : ''}
-                    ${formData.clientAddress.state || ''}${formData.clientAddress.state && formData.clientAddress.zipCode ? ' ' : ''}
-                    ${formData.clientAddress.zipCode || ''}
-                  </div>
-                ` : ''}
-                ${formData.clientAddress.country ? `<div>${countries.find(c => c.code === formData.clientAddress.country)?.name || formData.clientAddress.country}</div>` : ''}
-                <div>${formData.clientEmail || 'Email'}</div>
-                <div>${formData.clientPhone || 'Phone'}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
-          <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 24px 0;">Invoice Items</h3>
-          
-          <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
-            <thead style="background: #f9fafb;">
-              <tr>
-                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Description</th>
-                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Qty</th>
-                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Unit Price</th>
-                ${hasAnyDiscounts ? '<th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Discount</th>' : ''}
-                ${hasAnyTaxes ? '<th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Tax</th>' : ''}
-                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${formData.items.map(item => `
-                <tr style="border-bottom: 1px solid #e5e7eb;">
-                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.description || 'Item description'}</td>
-                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.quantity}</td>
-                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${getCurrencySymbol()}${(item.unitPrice ?? 0).toFixed(2)}</td>
-                  ${hasAnyDiscounts ? `<td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.discount > 0 ? `${item.discount}%` : ''}</td>` : ''}
-                  ${hasAnyTaxes ? `<td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.tax > 0 ? `${item.tax}%` : ''}</td>` : ''}
-                  <td style="padding: 12px 16px; font-size: 14px; font-weight: 500; color: #111827;">${getCurrencySymbol()}${(item.amount ?? 0).toFixed(2)}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-
-          <div style="display: flex; justify-content: flex-end;">
-            <div style="width: 256px;">
-              <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 14px; margin-bottom: 8px;">
-                <span>Amount without tax</span>
-                <span>${getCurrencySymbol()}${(formData.subtotal ?? 0).toFixed(2)}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 14px; margin-bottom: 8px;">
-                <span>Total Tax amount</span>
-                <span>${getCurrencySymbol()}${(formData.totalTax ?? 0).toFixed(2)}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 600; border-top: 1px solid #e5e7eb; padding-top: 8px; margin-bottom: 8px;">
-                <span>Total amount</span>
-                <span>${getCurrencySymbol()}${(formData.total ?? 0).toFixed(2)}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 600; color: #2563eb;">
-                <span>Due</span>
-                <span>${getCurrencySymbol()}${(formData.total ?? 0).toFixed(2)}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
-          <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0;">Payment Information</h3>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
-            <div>
-              <h4 style="font-weight: 500; color: #111827; margin: 0 0 8px 0;">Payment Method</h4>
-              <div style="font-size: 14px; color: #6b7280;">
-                ${formData.paymentMethod === 'crypto' ? 'Cryptocurrency' : 
-                  formData.fiatPaymentSubtype === 'phone' ? 'Phone Number' :
-                  formData.fiatPaymentSubtype === 'mpesa_paybill' ? 'M-Pesa Paybill' :
-                  formData.fiatPaymentSubtype === 'mpesa_till' ? 'M-Pesa Till' :
-                  'Bank Transfer'}
-              </div>
-              ${formData.paymentMethod === 'crypto' && formData.paymentNetwork ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Network: ${formData.paymentNetwork}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'crypto' && formData.paymentAddress ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Address: ${formData.paymentAddress}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.bankName ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Bank: ${formData.bankName}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.accountNumber ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Account: ${formData.accountNumber}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.swiftCode ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  SWIFT Code: ${formData.swiftCode}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.accountName ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Account Name: ${formData.accountName}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.branchAddress ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Branch Address: ${formData.branchAddress}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'phone' && formData.paymentPhoneNumber ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Phone Number: ${formData.paymentPhoneNumber}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'mpesa_paybill' && formData.paybillNumber ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Paybill Number: ${formData.paybillNumber}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'mpesa_paybill' && formData.mpesaAccountNumber ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Account Number: ${formData.mpesaAccountNumber}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'mpesa_till' && formData.tillNumber ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Till Number: ${formData.tillNumber}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && (formData.fiatPaymentSubtype === 'mpesa_paybill' || formData.fiatPaymentSubtype === 'mpesa_till' || formData.fiatPaymentSubtype === 'phone') && formData.businessName ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Business Name: ${formData.businessName}
-                </div>
-              ` : ''}
-            </div>
-            <div>
-              <h4 style="font-weight: 500; color: #111827; margin: 0 0 8px 0;">Currency</h4>
-              <div style="font-size: 14px; color: #6b7280;">
-                ${formData.currency} (${getCurrencySymbol()})
-              </div>
-            </div>
-          </div>
-        </div>
-
-        ${formData.memo ? `
-          <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
-            <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0;">Memo</h3>
-            <div style="font-size: 14px; color: #374151; white-space: pre-wrap;">
-              ${formData.memo}
-            </div>
-          </div>
-        ` : ''}
-
-        ${primaryInvoiceNumber ? `
-          <div style="padding: 32px 0; text-align: center;">
-            <div style="font-size: 14px; color: #6b7280;">
-              Invoice Number: ${primaryInvoiceNumber}
-            </div>
-          </div>
-        ` : ''}
-
-        <!-- Footer with watermark and security info -->
-        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center;">
-          <div style="font-size: 12px; color: #9ca3af; line-height: 1.5;">
-            <div style="margin-bottom: 8px; font-weight: 500;">
-              Generated by Chains-ERP for ${formData.companyName || 'Company'}
-            </div>
-            <div style="margin-bottom: 8px; font-size: 11px;">
-              Invoice Number: ${primaryInvoiceNumber || 'N/A'} | Date: ${formatDate(formData.issueDate)}
-            </div>
-            <div style="font-size: 10px; color: #d1d5db;">
-              Digital Invoice | Secure Payment Processing | Blockchain Verification
-            </div>
-          </div>
-        </div>
-      `;
-
-      // Append to body temporarily
-      document.body.appendChild(pdfContainer);
-
-      // Wait for images to load
-      const images = pdfContainer.querySelectorAll('img');
-      if (images.length > 0) {
-        await Promise.all(Array.from(images).map(img => {
-          return new Promise((resolve) => {
-            if (img.complete) {
-              resolve(null);
-            } else {
-              img.onload = () => resolve(null);
-              img.onerror = () => resolve(null);
-            }
-          });
-        }));
-      }
-
-            // Generate optimized PDF
-      const { pdf, base64: pdfBase64 } = await generateOptimizedPdf(pdfContainer, primaryInvoiceNumber);
-
-      // Remove the temporary element
-      document.body.removeChild(pdfContainer);
-
-      // Add watermark
-      addWatermark(pdf, primaryInvoiceNumber);
-      
+      // Generate professional vector PDF (react-pdf)
+      const pdfBase64 = await generateInvoicePdfBase64(formData, primaryInvoiceNumber);
       console.log('📄 [Smart Invoicing] Downloading PDF...', {
         invoiceNumber: primaryInvoiceNumber,
         pdfSize: pdfBase64.length
       });
-      
-      // Download the PDF directly
-      const blob = new Blob([pdf.output('blob')], { type: 'application/pdf' });
+      const byteChars = atob(pdfBase64);
+      const byteNumbers = new Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+      const blob = new Blob([new Uint8Array(byteNumbers)], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -3015,7 +2352,7 @@ export default function CreateInvoicePage() {
         total: formData.total
       });
       
-      alert(`PDF downloaded successfully! Invoice ${primaryInvoiceNumber} has been saved to your invoices.`);
+      toast.success(`PDF saved. Invoice ${primaryInvoiceNumber} added to your invoices.`);
       
       // Clear saved form data after successful download (same as send invoice)
       clearSavedData();
@@ -3023,7 +2360,7 @@ export default function CreateInvoicePage() {
       router.push('/dashboard/services/smart-invoicing/invoices');
     } catch (error) {
       console.error('❌ [Smart Invoicing] Failed to download PDF:', error);
-      alert('Failed to download PDF. Please try again.');
+      toast.error('Failed to download PDF. Please try again.');
     } finally {
       setSendingInvoice(false);
     }
@@ -3172,7 +2509,7 @@ export default function CreateInvoicePage() {
       
     } catch (error) {
       console.error('❌ [Smart Invoicing] Failed to download CSV:', error);
-      alert('Failed to download CSV. Please try again.');
+      toast.error('Failed to download CSV. Please try again.');
     }
   };
 
@@ -3180,41 +2517,6 @@ export default function CreateInvoicePage() {
 
   // Note: Invoice numbers are now generated by the backend API
   // No need to generate them on the frontend
-
-  // Add watermark to PDF
-  const addWatermark = (pdf: jsPDF, invoiceNumber?: string) => {
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    
-    // Add watermark text with better styling
-    pdf.setTextColor(240, 240, 240); // Very light gray
-    pdf.setFontSize(24);
-    pdf.setFont('helvetica', 'normal');
-    
-    // Add watermark in center
-    const text = 'DIGITAL INVOICE';
-    const textWidth = pdf.getTextWidth(text);
-    const x = (pageWidth - textWidth) / 2;
-    const y = pageHeight / 2;
-    
-    // Add watermark with transparency effect
-    pdf.text(text, x, y);
-    
-    // Add invoice number watermark if provided
-    if (invoiceNumber) {
-      pdf.setFontSize(16);
-      const invoiceText = `Invoice: ${invoiceNumber}`;
-      const invoiceTextWidth = pdf.getTextWidth(invoiceText);
-      const invoiceX = (pageWidth - invoiceTextWidth) / 2;
-      const invoiceY = y + 20; // Below the main watermark
-      
-      pdf.text(invoiceText, invoiceX, invoiceY);
-    }
-    
-    // Reset text color for normal content
-    pdf.setTextColor(0, 0, 0);
-  };
-
 
   // Handle payment method selection
   const handlePaymentMethodSelect = (methodId: string) => {
@@ -3299,6 +2601,24 @@ export default function CreateInvoicePage() {
   return (
     <div className="min-h-screen rounded-xl bg-gray-50 py-8">
       <div className="max-w-4xl mx-auto px-4">
+        {/* Sending overlay - rendered in body so it covers full viewport and prevents scroll */}
+        {sendingInvoice && typeof document !== 'undefined' && createPortal(
+          <div
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm overflow-hidden"
+            style={{ pointerEvents: 'auto', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
+            aria-live="polite"
+            aria-busy="true"
+            role="alert"
+          >
+            <div className="bg-white rounded-xl shadow-2xl border border-gray-200 p-8 max-w-sm mx-4 flex flex-col items-center gap-4">
+              <Loader2 className="h-12 w-12 animate-spin text-blue-600" aria-hidden />
+              <h3 className="text-lg font-semibold text-gray-900">Sending invoice</h3>
+              <p className="text-sm text-gray-600 text-center">Please wait. Do not close or refresh this page.</p>
+            </div>
+          </div>,
+          document.body
+        )}
+
         {/* Disabled Overlay - Show when limit is reached */}
         {subscription && !subscription.canCreateInvoice && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
@@ -3327,8 +2647,8 @@ export default function CreateInvoicePage() {
           </div>
         )}
 
-        {/* Original Form Content - Always rendered but disabled when limit reached */}
-        <div className={`${subscription && !subscription.canCreateInvoice ? 'pointer-events-none opacity-50' : ''}`}>
+        {/* Original Form Content - Disabled when limit reached or when sending invoice */}
+        <div className={`${subscription && !subscription.canCreateInvoice ? 'pointer-events-none opacity-50' : ''} ${sendingInvoice ? 'pointer-events-none select-none' : ''}`}>
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 space-y-4 sm:space-y-0">
           <button

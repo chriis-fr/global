@@ -172,7 +172,7 @@ export function PayablesProvider({ children }: { children: ReactNode }) {
         })
       ]);
 
-      if (statsResult.success && 'data' in statsResult && statsResult.data) {
+      if (statsResult?.success && 'data' in statsResult && statsResult.data) {
         const statsData: PayableStats = {
           totalPayables: statsResult.data.totalPayables || 0,
           pendingCount: (statsResult.data.statusCounts?.pending || 0) + (statsResult.data.statusCounts?.approved || 0),
@@ -187,7 +187,7 @@ export function PayablesProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      if (onboardingResult.success && 'data' in onboardingResult && onboardingResult.data) {
+      if (onboardingResult?.success && 'data' in onboardingResult && onboardingResult.data) {
         const isCompleted = onboardingResult.data.isCompleted;
         setIsOnboardingCompleted(isCompleted);
         try {

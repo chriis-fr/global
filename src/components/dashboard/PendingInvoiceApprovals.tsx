@@ -5,6 +5,7 @@ import { approveInvoice, rejectInvoice, getPendingApprovals } from '@/lib/action
 import { autoSendApprovedInvoice } from '@/lib/utils/autoSendInvoice';
 import { CheckCircle, XCircle, Clock, DollarSign, User, Mail } from 'lucide-react';
 import { formatDateTimeReadable } from '@/lib/utils/dateFormat';
+import toast from 'react-hot-toast';
 
 interface PendingInvoice {
   _id: string;
@@ -97,20 +98,20 @@ export default function PendingInvoiceApprovals() {
                if (result.fullyApproved && result.invoiceData) {
                  console.log('🚀 [Auto-Send] Invoice fully approved, starting auto-send process...');
                  
-                 // Show loading message
-                 alert('✅ Invoice approved! Generating PDF and sending to recipient...');
+                // Show loading toast while sending
+                 const toastId = toast.loading('Generating PDF and sending to recipient...');
                  
                  // Auto-send the invoice with PDF
                 const autoSendResult = await autoSendApprovedInvoice(result.invoiceData as unknown as { _id: string; invoiceNumber: string; clientEmail: string; greetingName: string; total: number; currency: string; dueDate: string; companyName: string; clientName: string; paymentMethods: string[] });
-                 
+                
                  if (autoSendResult.success) {
-                   alert(`🎉 ${autoSendResult.message}`);
+                   toast.success(`Invoice sent to ${(result.invoiceData as { clientEmail?: string })?.clientEmail ?? 'recipient'}`, { id: toastId });
                  } else {
-                   alert(`⚠️ ${autoSendResult.message}`);
+                   toast.error(autoSendResult.message ?? 'Failed to send invoice', { id: toastId });
                  }
                } else {
                  // Regular approval (not fully approved yet)
-                 alert(result.message);
+                 toast.success(result.message);
                }
                
                // Remove from pending list
@@ -122,17 +123,17 @@ export default function PendingInvoiceApprovals() {
                    localStorage.removeItem(key);
                  }
                });
-             } else {
-               // Show more detailed error message for owners trying to approve their own invoices
-               if (result.message.includes('cannot approve your own invoices')) {
-                 alert('❌ You cannot approve your own invoices.\n\nPlease ask another admin or approver to review and approve this invoice. They will receive an email notification about this pending approval.\n\nNote: If your organization has insufficient approvers, you may be able to approve your own invoices to prevent deadlocks.');
-               } else {
-                 alert(result.message);
-               }
-             }
-           } catch (error) {
-             console.error('Error approving invoice:', error);
-             alert('Failed to approve invoice');
+            } else {
+              // Show more detailed error message for owners trying to approve their own invoices
+              if (result.message.includes('cannot approve your own invoices')) {
+                toast.error('You cannot approve your own invoices. Ask another approver to review this invoice.');
+              } else {
+                toast.error(result.message);
+              }
+            }
+          } catch (error) {
+            console.error('Error approving invoice:', error);
+            toast.error('Failed to approve invoice');
            } finally {
              setActionLoading(null);
            }
@@ -156,18 +157,18 @@ export default function PendingInvoiceApprovals() {
                  }
                });
                
-               alert(result.message);
-             } else {
-               // Show more detailed error message for owners trying to reject their own invoices
-               if (result.message.includes('cannot reject your own invoices')) {
-                 alert('❌ You cannot reject your own invoices.\n\nPlease ask another admin or approver to review this invoice. They will receive an email notification about this pending approval.\n\nNote: If your organization has insufficient approvers, you may be able to reject your own invoices to prevent deadlocks.');
-               } else {
-                 alert(result.message);
-               }
-             }
-           } catch (error) {
-             console.error('Error rejecting invoice:', error);
-             alert('Failed to reject invoice');
+              toast.success(result.message);
+            } else {
+              // Show more detailed error message for owners trying to reject their own invoices
+              if (result.message.includes('cannot reject your own invoices')) {
+                toast.error('You cannot reject your own invoices. Ask another approver to review this invoice.');
+              } else {
+                toast.error(result.message);
+              }
+            }
+          } catch (error) {
+            console.error('Error rejecting invoice:', error);
+            toast.error('Failed to reject invoice');
            } finally {
              setActionLoading(null);
            }

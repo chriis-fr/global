@@ -12,6 +12,7 @@
   "dependencies": {
     "@auth/mongodb-adapter": "^3.10.0",
     "@radix-ui/react-slot": "^1.2.4",
+    "@react-pdf/renderer": "^4.3.2",
     "@reown/appkit": "^1.8.14",
     "@safe-global/api-kit": "^4.0.1",
     "@safe-global/protocol-kit": "^6.1.2",

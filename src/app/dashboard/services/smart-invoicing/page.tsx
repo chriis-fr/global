@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useRef, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { motion } from 'framer-motion';
@@ -15,7 +16,8 @@ import {
   RotateCcw,
   Upload,
   Settings,
-  ChevronRight
+  ChevronRight,
+  Mail
 } from 'lucide-react';
 import { useSubscription } from '@/lib/contexts/SubscriptionContext';
 import InvoiceStatCard from '@/components/smart-invoicing/InvoiceStatCard';
@@ -414,6 +416,15 @@ export default function SmartInvoicingPage() {
             </div>
           </div>
         )}
+
+        {/* Invoice email preview (temporary – edit wording then delete this page) */}
+        <Link
+          href="/dashboard/services/smart-invoicing/invoice-email-preview"
+          className="flex-shrink-0 w-[calc(50%-8px)] min-w-[160px] md:w-auto md:min-w-0 snap-start overflow-hidden bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 p-3 md:p-4 hover:bg-white/10 hover:border-white/20 transition-colors flex flex-col justify-center items-center gap-2 min-h-[80px]"
+        >
+          <Mail className="h-5 w-5 text-blue-300/80" />
+          <span className="text-xs font-medium text-blue-200/90 text-center">Preview invoice email</span>
+        </Link>
       </div>
 
       {/* Recent Activity - Independent Loading with Suspense */}
