@@ -12,7 +12,9 @@ import {
   Lock,
   Users,
   ArrowRight,
-  RotateCcw
+  RotateCcw,
+  Upload,
+  Settings
 } from 'lucide-react';
 import { useSubscription } from '@/lib/contexts/SubscriptionContext';
 import InvoiceStatCard from '@/components/smart-invoicing/InvoiceStatCard';
@@ -44,6 +46,14 @@ export default function SmartInvoicingPage() {
 
   const handleManageClients = () => {
     router.push('/dashboard/clients');
+  };
+
+  const handleUploadPdf = () => {
+    router.push('/dashboard/services/smart-invoicing/pdf-upload');
+  };
+
+  const handleConfigurePdfMapping = () => {
+    router.push('/dashboard/services/smart-invoicing/pdf-mapping-config');
   };
 
   const handleRefresh = () => {
@@ -83,6 +93,16 @@ export default function SmartInvoicingPage() {
               >
                 <RotateCcw className="h-3 w-3" />
               </button>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleUploadPdf}
+                className="flex items-center space-x-1 sm:space-x-2 bg-indigo-600 text-white px-2 sm:px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors text-sm"
+              >
+                <Upload className="h-4 w-4" />
+                <span className="hidden sm:inline">Upload PDF</span>
+                <span className="sm:hidden">PDF</span>
+              </motion.button>
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
@@ -126,8 +146,8 @@ export default function SmartInvoicingPage() {
       </Suspense>
 
       {/* Stats Cards - Independent Loading with Suspense */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Suspense fallback={
             <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 animate-pulse">
               <div className="flex items-center justify-between">
@@ -194,101 +214,134 @@ export default function SmartInvoicingPage() {
         </div>
       </div>
 
-      {/* Quick Actions - Always Visible */}
+      {/* Quick Actions - 4 cards max; PDF actions grouped into one card */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
-            className={`bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200 cursor-pointer ${
+            className={`bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 hover:bg-white/15 transition-all duration-200 cursor-pointer ${
               !subscription?.canCreateInvoice ? 'opacity-50 cursor-not-allowed' : ''
             }`}
             onClick={subscription?.canCreateInvoice ? handleCreateInvoice : undefined}
           >
-            <div className="flex items-center space-x-4">
-              <div className={`p-3 rounded-lg ${
+            <div className="flex items-center gap-3">
+              <div className={`p-2.5 rounded-lg shrink-0 ${
                 subscription?.canCreateInvoice ? 'bg-blue-500/20' : 'bg-gray-500/20'
               }`}>
                 {subscription?.canCreateInvoice ? (
-                  <Plus className="h-6 w-6 text-blue-400" />
+                  <Plus className="h-5 w-5 text-blue-400" />
                 ) : (
-                  <Lock className="h-6 w-6 text-gray-400" />
+                  <Lock className="h-5 w-5 text-gray-400" />
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="text-lg font-semibold text-white">
-                  {subscription?.canCreateInvoice ? 'Create New Invoice' : 'Invoice Limit Reached'}
+                <h3 className="text-base font-semibold text-white">
+                  {subscription?.canCreateInvoice ? 'Create Invoice' : 'Limit Reached'}
                 </h3>
-                <p className="text-blue-200 text-sm">
-                  {subscription?.canCreateInvoice 
-                    ? 'Start with our guided walkthrough' 
-                    : 'Upgrade to create more invoices'
-                  }
+                <p className="text-blue-200/90 text-xs truncate">
+                  {subscription?.canCreateInvoice ? 'Guided walkthrough' : 'Upgrade for more'}
                 </p>
               </div>
               {subscription?.canCreateInvoice && (
-                <ArrowRight className="h-5 w-5 text-blue-400 flex-shrink-0" />
+                <ArrowRight className="h-4 w-4 text-blue-400 shrink-0" />
               )}
             </div>
           </motion.div>
 
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
-            className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200 cursor-pointer"
+            className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 hover:bg-white/15 transition-all duration-200 cursor-pointer"
             onClick={handleManageInvoiceInfo}
           >
-            <div className="flex items-center space-x-4">
-              <div className="p-3 bg-orange-500/20 rounded-lg">
-                <Building2 className="h-6 w-6 text-orange-400" />
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-orange-500/20 rounded-lg shrink-0">
+                <Building2 className="h-5 w-5 text-orange-400" />
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="text-lg font-semibold text-white">Manage Invoice Info</h3>
-                <p className="text-blue-200 text-sm">Configure business information and settings</p>
+                <h3 className="text-base font-semibold text-white">Invoice Info</h3>
+                <p className="text-blue-200/90 text-xs truncate">Business details & settings</p>
               </div>
-              <ArrowRight className="h-5 w-5 text-blue-400 flex-shrink-0" />
+              <ArrowRight className="h-4 w-4 text-blue-400 shrink-0" />
             </div>
           </motion.div>
 
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.6 }}
-            className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200 cursor-pointer"
+            className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 hover:bg-white/15 transition-all duration-200 cursor-pointer"
             onClick={handleManageClients}
           >
-            <div className="flex items-center space-x-4">
-              <div className="p-3 bg-green-500/20 rounded-lg">
-                <Users className="h-6 w-6 text-green-400" />
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-green-500/20 rounded-lg shrink-0">
+                <Users className="h-5 w-5 text-green-400" />
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="text-lg font-semibold text-white">Manage Clients</h3>
-                <p className="text-blue-200 text-sm">Add and organize your clients</p>
+                <h3 className="text-base font-semibold text-white">Clients</h3>
+                <p className="text-blue-200/90 text-xs truncate">Add & organize clients</p>
               </div>
-              <ArrowRight className="h-5 w-5 text-blue-400 flex-shrink-0" />
+              <ArrowRight className="h-4 w-4 text-blue-400 shrink-0" />
             </div>
           </motion.div>
 
-          {/* Only show Team Settings for business users with organizations */}
+          {/* PDF Invoicing: one card with two actions inside */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.65 }}
+            className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 hover:bg-white/15 transition-all duration-200"
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2.5 bg-indigo-500/20 rounded-lg shrink-0">
+                <Upload className="h-5 w-5 text-indigo-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-semibold text-white">From PDF</h3>
+                <p className="text-blue-200/90 text-xs">Upload or set mapping</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleUploadPdf}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-indigo-600/80 hover:bg-indigo-600 text-white text-sm font-medium transition-colors"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                Upload
+              </button>
+              <button
+                type="button"
+                onClick={handleConfigurePdfMapping}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-white/10 hover:bg-white/20 text-blue-200 text-sm font-medium border border-white/20 transition-colors"
+              >
+                <Settings className="h-3.5 w-3.5" />
+                Config
+              </button>
+            </div>
+          </motion.div>
+
+          {/* Team Settings - only for business with org */}
           {session?.user?.userType === 'business' && session?.user?.organizationId && (
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.7 }}
-              className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200 cursor-pointer"
+              className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 hover:bg-white/15 transition-all duration-200 cursor-pointer"
               onClick={() => router.push('/dashboard/settings/organization')}
             >
-              <div className="flex items-center space-x-4">
-                <div className="p-3 bg-purple-500/20 rounded-lg">
-                  <Users className="h-6 w-6 text-purple-400" />
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-purple-500/20 rounded-lg shrink-0">
+                  <Users className="h-5 w-5 text-purple-400" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-lg font-semibold text-white">Team Settings</h3>
-                  <p className="text-blue-200 text-sm">Configure team permissions</p>
+                  <h3 className="text-base font-semibold text-white">Team Settings</h3>
+                  <p className="text-blue-200/90 text-xs truncate">Permissions & team</p>
                 </div>
-                <ArrowRight className="h-5 w-5 text-blue-400 flex-shrink-0" />
+                <ArrowRight className="h-4 w-4 text-blue-400 shrink-0" />
               </div>
             </motion.div>
           )}

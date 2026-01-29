@@ -41,12 +41,13 @@ export async function GET(
     const collection = db.collection('invoices');
 
     // Query based on owner type - Organization members should always see organization's invoices
+    // issuerId is stored as ObjectId in DB; session.user.id is string - must use ObjectId for match
     const query = isOrganization 
       ? { _id: new ObjectId(id), organizationId: session.user.organizationId }
       : { 
           _id: new ObjectId(id),
           $or: [
-            { issuerId: session.user.id },
+            ...(session.user.id ? [{ issuerId: new ObjectId(session.user.id) }] : []),
             { userId: session.user.email }
           ]
         };
@@ -127,13 +128,13 @@ export async function PUT(
     const db = await connectToDatabase();
     const collection = db.collection('invoices');
 
-    // Check if invoice exists and belongs to user/organization - use same logic as GET
+    // Check if invoice exists and belongs to user/organization - use same logic as GET (issuerId as ObjectId)
     const query = isOrganization 
       ? { _id: new ObjectId(id), organizationId: session.user.organizationId }
       : { 
           _id: new ObjectId(id),
           $or: [
-            { issuerId: session.user.id },
+            ...(session.user.id ? [{ issuerId: new ObjectId(session.user.id) }] : []),
             { userId: session.user.email }
           ]
         };
@@ -341,13 +342,13 @@ export async function DELETE(
     const db = await connectToDatabase();
     const collection = db.collection('invoices');
 
-    // Query based on owner type - use same logic as GET
+    // Query based on owner type - use same logic as GET (issuerId as ObjectId)
     const query = isOrganization 
       ? { _id: new ObjectId(id), organizationId: session.user.organizationId }
       : { 
           _id: new ObjectId(id),
           $or: [
-            { issuerId: session.user.id },
+            ...(session.user.id ? [{ issuerId: new ObjectId(session.user.id) }] : []),
             { userId: session.user.email }
           ]
         };

@@ -46,6 +46,7 @@ import { CELO_TOKENS } from '@/lib/chains/celo';
 import PaymentMethodSelector from '@/components/payments/PaymentMethodSelector';
 import SavePaymentMethodButton from '@/components/payments/SavePaymentMethodButton';
 import ReceivingAddressInput from '@/components/wallet/ReceivingAddressInput';
+import { getInvoiceDraft } from '@/lib/actions/pdf-invoice';
 
 interface Client {
   _id: string;
@@ -1019,6 +1020,8 @@ export default function CreateInvoicePage() {
 
   // Check if we're editing an existing invoice
   const invoiceId = searchParams.get('id');
+  const fromPdfDraftId = searchParams.get('fromPdfDraft');
+  const pdfDraftLoadDone = useRef(false);
 
   // Check if any items have discounts
       const hasAnyDiscounts = formData.items.some(item => item.discount > 0);
@@ -1202,6 +1205,11 @@ export default function CreateInvoicePage() {
   const companyDataLoaded = useRef(false); // Track if company data has been loaded from server
   
   useEffect(() => {
+    // When pre-filling from PDF draft (or just finished loading one), only load payment methods; don't overwrite company/client/items
+    if (fromPdfDraftId || pdfDraftLoadDone.current) {
+      loadSavedPaymentMethods();
+      return;
+    }
     // Prevent multiple loads for the same user
     const currentUserId = session?.user?.id;
     if (invoiceId) {
@@ -1238,7 +1246,103 @@ export default function CreateInvoicePage() {
         }
       }
     }
-  }, [invoiceId, session?.user?.id, formData.companyName, loadInvoice, loadServiceOnboardingData, loadOrganizationData, loadClients, loadLogoFromSettings, loadSavedPaymentMethods]);
+  }, [invoiceId, fromPdfDraftId, session?.user?.id, formData.companyName, loadInvoice, loadServiceOnboardingData, loadOrganizationData, loadClients, loadLogoFromSettings, loadSavedPaymentMethods]);
+
+  // When arriving from PDF upload: load draft and pre-fill create form (items, client, company, etc.). Use documentAst when invoiceData is empty.
+  useEffect(() => {
+    if (!fromPdfDraftId || pdfDraftLoadDone.current) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const result = await getInvoiceDraft(fromPdfDraftId);
+        if (cancelled || !result.success || !result.data) return;
+        const raw = (result.data.invoiceData || {}) as Record<string, unknown>;
+        const ast = result.data.documentAst as { meta?: { title?: string; reference_numbers?: Record<string, string> }; parties?: { issuer?: string; recipient?: string }; dates?: { due?: string; signed?: string }; items?: Array<{ label?: string; quantity?: number; unit_price?: number }> } | null | undefined;
+        const toDateStr = (v: unknown) => {
+          if (v == null) return '';
+          const d = v instanceof Date ? v : new Date(String(v));
+          return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
+        };
+        const company = (raw.companyDetails as Record<string, string> | undefined) ?? {};
+        const client = (raw.clientDetails as Record<string, string> | undefined) ?? {};
+        // Items: prefer documentAst.items (parser = source of truth for description); fallback to invoiceData.items
+        let items: Array<{ id: string; description: string; quantity: number; unitPrice: number; discount: number; tax: number; amount: number }>;
+        const astItems = ast?.items ?? [];
+        const draftItems = Array.isArray(raw.items) ? raw.items as Array<{ description?: string; quantity?: number; unitPrice?: number; total?: number; taxRate?: number }> : [];
+        if (astItems.length > 0) {
+          items = astItems.map((item, i) => {
+            const qty = Number(item.quantity) || 1;
+            const up = Number(item.unit_price) ?? 0;
+            const desc = String(item.label ?? '').trim();
+            return {
+              id: String(i + 1),
+              description: desc,
+              quantity: qty,
+              unitPrice: up,
+              discount: 0,
+              tax: 0,
+              amount: qty * up,
+            };
+          });
+        } else if (draftItems.length > 0) {
+          items = draftItems.map((item, i) => {
+            const qty = Number(item.quantity) || 1;
+            const up = Number(item.unitPrice) ?? 0;
+            const amount = (item.total ?? qty * up) as number;
+            return {
+              id: String(i + 1),
+              description: String(item.description ?? '').trim(),
+              quantity: qty,
+              unitPrice: up,
+              discount: 0,
+              tax: Number(item.taxRate) ?? 0,
+              amount,
+            };
+          });
+        } else {
+          items = defaultInvoiceData.items;
+        }
+        const subtotal = Number(raw.subtotal) ?? items.reduce((s, i) => s + (i.quantity ?? 0) * (i.unitPrice ?? 0), 0);
+        const totalAmount = Number(raw.totalAmount) ?? subtotal;
+        const totalTax = Number((raw as Record<string, unknown>).totalTax) ?? Math.max(0, totalAmount - subtotal);
+        const safeSubtotal = Number.isFinite(subtotal) ? subtotal : 0;
+        const safeTotal = Number.isFinite(totalAmount) ? totalAmount : 0;
+        const safeTotalTax = Number.isFinite(totalTax) ? totalTax : 0;
+        const invoiceNumber = (raw.invoiceNumber as string) || (ast?.meta?.reference_numbers?.task_order || ast?.meta?.reference_numbers?.contract || ast?.meta?.title) || '';
+        const currency = (raw.currency as string) || 'USD';
+        const issueDate = toDateStr(raw.issueDate) || (ast?.dates?.signed ? toDateStr(ast.dates.signed) : '') || defaultInvoiceData.issueDate;
+        const dueDate = toDateStr(raw.dueDate) || (ast?.dates?.due ? toDateStr(ast.dates.due) : '') || defaultInvoiceData.dueDate;
+        const companyName = company.name ?? ast?.parties?.issuer ?? '';
+        const clientName = client.name ?? ast?.parties?.recipient ?? '';
+        setFormData(prev => ({
+          ...prev,
+          invoiceNumber: invoiceNumber || prev.invoiceNumber,
+          currency: currency || prev.currency,
+          issueDate: issueDate || prev.issueDate,
+          dueDate: dueDate || prev.dueDate,
+          companyName: companyName || prev.companyName,
+          companyEmail: company.email ?? prev.companyEmail,
+          companyPhone: company.phone ?? prev.companyPhone,
+          clientName: clientName || prev.clientName,
+          clientEmail: client.email ?? prev.clientEmail,
+          clientPhone: client.phone ?? prev.clientPhone,
+          items,
+          subtotal: safeSubtotal,
+          totalTax: safeTotalTax,
+          total: safeTotal,
+          memo: (raw.notes as string) ?? prev.memo,
+        }));
+        pdfDraftLoadDone.current = true;
+        router.replace('/dashboard/services/smart-invoicing/create');
+      } catch (e) {
+        console.error('Failed to load PDF draft into create form:', e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [fromPdfDraftId, router, setFormData]);
 
   // Set client country to user's country if client country is empty and user has a country
   // This only runs once when session becomes available and formData is initialized
@@ -1981,10 +2085,10 @@ export default function CreateInvoicePage() {
                 <tr style="border-bottom: 1px solid #e5e7eb;">
                   <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.description || 'Item description'}</td>
                   <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.quantity}</td>
-                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${getCurrencySymbol()}${item.unitPrice.toFixed(2)}</td>
+                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${getCurrencySymbol()}${(item.unitPrice ?? 0).toFixed(2)}</td>
                   ${hasAnyDiscounts ? `<td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.discount > 0 ? `${item.discount}%` : ''}</td>` : ''}
                   ${hasAnyTaxes ? `<td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.tax > 0 ? `${item.tax}%` : ''}</td>` : ''}
-                  <td style="padding: 12px 16px; font-size: 14px; font-weight: 500; color: #111827;">${getCurrencySymbol()}${item.amount.toFixed(2)}</td>
+                  <td style="padding: 12px 16px; font-size: 14px; font-weight: 500; color: #111827;">${getCurrencySymbol()}${(item.amount ?? 0).toFixed(2)}</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -1994,19 +2098,19 @@ export default function CreateInvoicePage() {
             <div style="width: 256px;">
               <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 14px; margin-bottom: 8px;">
                 <span>Amount without tax</span>
-                <span>${getCurrencySymbol()}${formData.subtotal.toFixed(2)}</span>
+                <span>${getCurrencySymbol()}${(formData.subtotal ?? 0).toFixed(2)}</span>
               </div>
               <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 14px; margin-bottom: 8px;">
                 <span>Total Tax amount</span>
-                <span>${getCurrencySymbol()}${formData.totalTax.toFixed(2)}</span>
+                <span>${getCurrencySymbol()}${(formData.totalTax ?? 0).toFixed(2)}</span>
               </div>
               <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 600; border-top: 1px solid #e5e7eb; padding-top: 8px; margin-bottom: 8px;">
                 <span>Total amount</span>
-                <span>${getCurrencySymbol()}${formData.total.toFixed(2)}</span>
+                <span>${getCurrencySymbol()}${(formData.total ?? 0).toFixed(2)}</span>
               </div>
               <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 600; color: #2563eb;">
                 <span>Due</span>
-                <span>${getCurrencySymbol()}${formData.total.toFixed(2)}</span>
+                <span>${getCurrencySymbol()}${(formData.total ?? 0).toFixed(2)}</span>
               </div>
             </div>
           </div>
@@ -2686,10 +2790,10 @@ export default function CreateInvoicePage() {
                 <tr style="border-bottom: 1px solid #e5e7eb;">
                   <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.description || 'Item description'}</td>
                   <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.quantity}</td>
-                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${getCurrencySymbol()}${item.unitPrice.toFixed(2)}</td>
+                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${getCurrencySymbol()}${(item.unitPrice ?? 0).toFixed(2)}</td>
                   ${hasAnyDiscounts ? `<td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.discount > 0 ? `${item.discount}%` : ''}</td>` : ''}
                   ${hasAnyTaxes ? `<td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.tax > 0 ? `${item.tax}%` : ''}</td>` : ''}
-                  <td style="padding: 12px 16px; font-size: 14px; font-weight: 500; color: #111827;">${getCurrencySymbol()}${item.amount.toFixed(2)}</td>
+                  <td style="padding: 12px 16px; font-size: 14px; font-weight: 500; color: #111827;">${getCurrencySymbol()}${(item.amount ?? 0).toFixed(2)}</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -2699,19 +2803,19 @@ export default function CreateInvoicePage() {
             <div style="width: 256px;">
               <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 14px; margin-bottom: 8px;">
                 <span>Amount without tax</span>
-                <span>${getCurrencySymbol()}${formData.subtotal.toFixed(2)}</span>
+                <span>${getCurrencySymbol()}${(formData.subtotal ?? 0).toFixed(2)}</span>
               </div>
               <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 14px; margin-bottom: 8px;">
                 <span>Total Tax amount</span>
-                <span>${getCurrencySymbol()}${formData.totalTax.toFixed(2)}</span>
+                <span>${getCurrencySymbol()}${(formData.totalTax ?? 0).toFixed(2)}</span>
               </div>
               <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 600; border-top: 1px solid #e5e7eb; padding-top: 8px; margin-bottom: 8px;">
                 <span>Total amount</span>
-                <span>${getCurrencySymbol()}${formData.total.toFixed(2)}</span>
+                <span>${getCurrencySymbol()}${(formData.total ?? 0).toFixed(2)}</span>
               </div>
               <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 600; color: #2563eb;">
                 <span>Due</span>
-                <span>${getCurrencySymbol()}${formData.total.toFixed(2)}</span>
+                <span>${getCurrencySymbol()}${(formData.total ?? 0).toFixed(2)}</span>
               </div>
             </div>
           </div>
@@ -2977,7 +3081,7 @@ export default function CreateInvoicePage() {
       
       // Create one row per invoice (combine all items into a single description)
       const itemsDescription = formData.items && formData.items.length > 0 
-        ? formData.items.map(item => `${item.description || 'Item'} (Qty: ${item.quantity}, Price: ${item.unitPrice.toFixed(2)})`).join('; ')
+        ? formData.items.map(item => `${item.description || 'Item'} (Qty: ${item.quantity}, Price: ${(item.unitPrice ?? 0).toFixed(2)})`).join('; ')
         : 'No items';
       
       const totalQuantity = formData.items ? formData.items.reduce((sum, item) => sum + item.quantity, 0) : 0;
@@ -3000,9 +3104,9 @@ export default function CreateInvoicePage() {
         `"${clientAddress}"`,
         `"${itemsDescription}"`,
         `"${totalQuantity}"`,
-        `"${formData.subtotal.toFixed(2)}"`,
-        `"${formData.totalTax.toFixed(2)}"`,
-        `"${formData.total.toFixed(2)}"`,
+        `"${(formData.subtotal ?? 0).toFixed(2)}"`,
+        `"${(formData.totalTax ?? 0).toFixed(2)}"`,
+        `"${(formData.total ?? 0).toFixed(2)}"`,
         `"${originalCurrency}"`,
         `"${paymentMethodText}"`,
         `"${bankName}"`,
@@ -4651,7 +4755,7 @@ export default function CreateInvoicePage() {
                         </div>
                       </td>
                       <td className="py-3 px-4 font-medium text-gray-700">
-                        {getCurrencySymbol()}{item.amount.toFixed(2)}
+                        {getCurrencySymbol()}{(item.amount ?? 0).toFixed(2)}
                       </td>
                       <td className="py-3 px-4">
                         {formData.items.length > 1 && (
@@ -4675,19 +4779,19 @@ export default function CreateInvoicePage() {
               <div className="w-full sm:w-64 space-y-2">
                 <div className="flex justify-between text-gray-600">
                   <span>Amount without tax</span>
-                  <span>{getCurrencySymbol()}{formData.subtotal.toFixed(2)}</span>
+                  <span>{getCurrencySymbol()}{(formData.subtotal ?? 0).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-gray-600">
                   <span>Total Tax amount</span>
-                  <span>{getCurrencySymbol()}{formData.totalTax.toFixed(2)}</span>
+                  <span>{getCurrencySymbol()}{(formData.totalTax ?? 0).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-gray-700 text-lg font-semibold border-t pt-2">
                   <span>Total amount</span>
-                  <span>{getCurrencySymbol()}{formData.total.toFixed(2)}</span>
+                  <span>{getCurrencySymbol()}{(formData.total ?? 0).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-lg font-semibold text-blue-600">
                   <span>Due</span>
-                  <span>{getCurrencySymbol()}{formData.total.toFixed(2)}</span>
+                  <span>{getCurrencySymbol()}{(formData.total ?? 0).toFixed(2)}</span>
                 </div>
               </div>
             </div>

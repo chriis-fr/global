@@ -1,5 +1,6 @@
 import { ObjectId } from 'mongodb';
 import { UserServices, ServiceOnboarding } from './User';
+import type { OrgPdfMappingConfig, PdfMappingEntry } from './DocumentAST';
 
 export interface Address {
   street: string;
@@ -119,6 +120,11 @@ export interface Organization {
     completedSteps: string[];
     serviceOnboarding: ServiceOnboarding;
   };
+
+  /** Legacy: single PDF mapping (migrated to pdfInvoiceMappings on read if present). */
+  pdfInvoiceMapping?: OrgPdfMappingConfig;
+  /** Named PDF mappings (user can choose which to use when uploading). */
+  pdfInvoiceMappings?: PdfMappingEntry[];
   
   // Status
   status: 'pending' | 'active' | 'suspended';
