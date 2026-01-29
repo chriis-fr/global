@@ -135,7 +135,7 @@ export default function SmartInvoicingPage() {
               >
                 <RotateCcw className="h-3 w-3" />
               </button>
-              <motion.button
+              {/* <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={handleUploadPdf}
@@ -144,7 +144,7 @@ export default function SmartInvoicingPage() {
                 <Upload className="h-4 w-4" />
                 <span className="hidden sm:inline">Upload PDF</span>
                 <span className="sm:hidden">PDF</span>
-              </motion.button>
+              </motion.button> */}
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
@@ -277,13 +277,13 @@ export default function SmartInvoicingPage() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
-            className={`flex-shrink-0 w-[calc(50%-8px)] min-w-[160px] md:w-auto md:min-w-0 h-[116px] md:h-auto md:min-h-0 snap-start overflow-hidden bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 hover:bg-white/15 transition-all duration-200 cursor-pointer flex flex-col justify-between ${
+            className={`flex-shrink-0 w-[calc(50%-8px)] min-w-[160px] md:w-auto md:min-w-0 h-[116px] md:h-auto md:min-h-0 snap-start overflow-hidden bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-3 md:p-4 hover:bg-white/15 transition-all duration-200 cursor-pointer flex flex-col justify-between ${
               !subscription?.canCreateInvoice ? 'opacity-50 cursor-not-allowed' : ''
             }`}
             onClick={subscription?.canCreateInvoice ? handleCreateInvoice : undefined}
           >
-            <div className="flex items-center gap-3 min-w-0 flex-1 min-h-0">
-              <div className={`w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-lg ${
+            <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1 min-h-0">
+              <div className={`w-9 h-9 md:w-10 md:h-10 flex-shrink-0 flex items-center justify-center rounded-lg ${
                 subscription?.canCreateInvoice ? 'bg-blue-500/20' : 'bg-gray-500/20'
               }`}>
                 {subscription?.canCreateInvoice ? (
@@ -292,16 +292,16 @@ export default function SmartInvoicingPage() {
                   <Lock className="h-5 w-5 text-gray-400" />
                 )}
               </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-base font-semibold text-white truncate">
+              <div className="flex-1 min-w-0 overflow-hidden">
+                <h3 className="text-base font-semibold text-white line-clamp-2 break-words leading-tight">
                   {subscription?.canCreateInvoice ? 'Create Invoice' : 'Limit Reached'}
                 </h3>
-                <p className="text-blue-200/90 text-xs truncate">
+                <p className="text-blue-200/90 text-xs line-clamp-2 break-words leading-snug mt-0.5">
                   {subscription?.canCreateInvoice ? 'Guided walkthrough' : 'Upgrade for more'}
                 </p>
               </div>
               {subscription?.canCreateInvoice && (
-                <ArrowRight className="h-4 w-4 text-blue-400 shrink-0" />
+                <ArrowRight className="h-4 w-4 text-blue-400 shrink-0 hidden md:block" />
               )}
             </div>
             <div className="h-9 flex-shrink-0" aria-hidden />
@@ -311,18 +311,18 @@ export default function SmartInvoicingPage() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
-            className="flex-shrink-0 w-[calc(50%-8px)] min-w-[160px] md:w-auto md:min-w-0 h-[116px] md:h-auto md:min-h-0 snap-start overflow-hidden bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 hover:bg-white/15 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+            className="flex-shrink-0 w-[calc(50%-8px)] min-w-[160px] md:w-auto md:min-w-0 h-[116px] md:h-auto md:min-h-0 snap-start overflow-hidden bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-3 md:p-4 hover:bg-white/15 transition-all duration-200 cursor-pointer flex flex-col justify-between"
             onClick={handleManageInvoiceInfo}
           >
-            <div className="flex items-center gap-3 min-w-0 flex-1 min-h-0">
-              <div className="w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-lg bg-orange-500/20">
+            <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1 min-h-0">
+              <div className="w-9 h-9 md:w-10 md:h-10 flex-shrink-0 flex items-center justify-center rounded-lg bg-orange-500/20">
                 <Building2 className="h-5 w-5 text-orange-400" />
               </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-base font-semibold text-white truncate">Invoice Info</h3>
-                <p className="text-blue-200/90 text-xs truncate">Business details & settings</p>
+              <div className="flex-1 min-w-0 overflow-hidden">
+                <h3 className="text-base font-semibold text-white line-clamp-2 break-words leading-tight">Invoice Info</h3>
+                <p className="text-blue-200/90 text-xs line-clamp-2 break-words leading-snug mt-0.5">Business details and settings</p>
               </div>
-              <ArrowRight className="h-4 w-4 text-blue-400 shrink-0" />
+              <ArrowRight className="h-4 w-4 text-blue-400 shrink-0 hidden md:block" />
             </div>
             <div className="h-9 flex-shrink-0" aria-hidden />
           </motion.div>
@@ -331,18 +331,18 @@ export default function SmartInvoicingPage() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.6 }}
-            className="flex-shrink-0 w-[calc(50%-8px)] min-w-[160px] md:w-auto md:min-w-0 h-[116px] md:h-auto md:min-h-0 snap-start overflow-hidden bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 hover:bg-white/15 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+            className="flex-shrink-0 w-[calc(50%-8px)] min-w-[160px] md:w-auto md:min-w-0 h-[116px] md:h-auto md:min-h-0 snap-start overflow-hidden bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-3 md:p-4 hover:bg-white/15 transition-all duration-200 cursor-pointer flex flex-col justify-between"
             onClick={handleManageClients}
           >
-            <div className="flex items-center gap-3 min-w-0 flex-1 min-h-0">
-              <div className="w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-lg bg-green-500/20">
+            <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1 min-h-0">
+              <div className="w-9 h-9 md:w-10 md:h-10 flex-shrink-0 flex items-center justify-center rounded-lg bg-green-500/20">
                 <Users className="h-5 w-5 text-green-400" />
               </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-base font-semibold text-white truncate">Clients</h3>
-                <p className="text-blue-200/90 text-xs truncate">Add & organize clients</p>
+              <div className="flex-1 min-w-0 overflow-hidden">
+                <h3 className="text-base font-semibold text-white line-clamp-2 break-words leading-tight">Clients</h3>
+                <p className="text-blue-200/90 text-xs line-clamp-2 break-words leading-snug mt-0.5">Add and organize clients</p>
               </div>
-              <ArrowRight className="h-4 w-4 text-blue-400 shrink-0" />
+              <ArrowRight className="h-4 w-4 text-blue-400 shrink-0 hidden md:block" />
             </div>
             <div className="h-9 flex-shrink-0" aria-hidden />
           </motion.div>
@@ -352,18 +352,18 @@ export default function SmartInvoicingPage() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.65 }}
-            className="flex-shrink-0 w-[calc(50%-8px)] min-w-[160px] md:w-auto md:min-w-0 h-[116px] md:h-auto md:min-h-0 snap-start overflow-hidden bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 hover:bg-white/15 transition-all duration-200 flex flex-col justify-between"
+            className="flex-shrink-0 w-[calc(50%-8px)] min-w-[160px] md:w-auto md:min-w-0 h-[116px] md:h-auto md:min-h-0 snap-start overflow-hidden bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-3 md:p-4 hover:bg-white/15 transition-all duration-200 flex flex-col justify-between"
           >
-            <div className="flex items-center gap-3 min-w-0 flex-1 min-h-0">
-              <div className="w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-lg bg-indigo-500/20">
+            <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1 min-h-0">
+              <div className="w-9 h-9 md:w-10 md:h-10 flex-shrink-0 flex items-center justify-center rounded-lg bg-indigo-500/20">
                 <Upload className="h-5 w-5 text-indigo-400" />
               </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-base font-semibold text-white truncate">From PDF</h3>
-                <p className="text-blue-200/90 text-xs truncate">Upload or set mapping</p>
+              <div className="flex-1 min-w-0 overflow-hidden">
+                <h3 className="text-base font-semibold text-white line-clamp-2 break-words leading-tight">From PDF</h3>
+                <p className="text-blue-200/90 text-xs line-clamp-2 break-words leading-snug mt-0.5">Upload PDF or set mapping</p>
               </div>
             </div>
-            <div className="h-9 flex-shrink-0 flex gap-2 min-w-0">
+            <div className="h-9 flex-shrink-0 flex gap-1.5 md:gap-2 min-w-0">
               <button
                 type="button"
                 onClick={handleUploadPdf}
@@ -389,18 +389,18 @@ export default function SmartInvoicingPage() {
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.7 }}
-              className="flex-shrink-0 w-[calc(50%-8px)] min-w-[160px] md:w-auto md:min-w-0 h-[116px] md:h-auto md:min-h-0 snap-start overflow-hidden bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 hover:bg-white/15 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+              className="flex-shrink-0 w-[calc(50%-8px)] min-w-[160px] md:w-auto md:min-w-0 h-[116px] md:h-auto md:min-h-0 snap-start overflow-hidden bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-3 md:p-4 hover:bg-white/15 transition-all duration-200 cursor-pointer flex flex-col justify-between"
               onClick={() => router.push('/dashboard/settings/organization')}
             >
-              <div className="flex items-center gap-3 min-w-0 flex-1 min-h-0">
-                <div className="w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-lg bg-purple-500/20">
+              <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1 min-h-0">
+                <div className="w-9 h-9 md:w-10 md:h-10 flex-shrink-0 flex items-center justify-center rounded-lg bg-purple-500/20">
                   <Users className="h-5 w-5 text-purple-400" />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-base font-semibold text-white truncate">Team Settings</h3>
-                  <p className="text-blue-200/90 text-xs truncate">Permissions & team</p>
+                <div className="flex-1 min-w-0 overflow-hidden">
+                  <h3 className="text-base font-semibold text-white line-clamp-2 break-words leading-tight">Team Settings</h3>
+                  <p className="text-blue-200/90 text-xs line-clamp-2 break-words leading-snug mt-0.5">Permissions and team</p>
                 </div>
-                <ArrowRight className="h-4 w-4 text-blue-400 shrink-0" />
+                <ArrowRight className="h-4 w-4 text-blue-400 shrink-0 hidden md:block" />
               </div>
               <div className="h-9 flex-shrink-0" aria-hidden />
             </motion.div>
