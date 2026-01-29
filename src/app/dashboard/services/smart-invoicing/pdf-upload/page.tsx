@@ -12,7 +12,7 @@ export default function PdfUploadPage() {
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [draftId, setDraftId] = useState<string | null>(null);
+  const [, setDraftId] = useState<string | null>(null);
   const [mappingNames, setMappingNames] = useState<string[]>([]);
   const [defaultMappingName, setDefaultMappingName] = useState<string | null>(null);
   const [selectedMappingName, setSelectedMappingName] = useState<string>('');

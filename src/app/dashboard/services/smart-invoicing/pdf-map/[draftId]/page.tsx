@@ -49,6 +49,7 @@ export default function PdfMappingPage() {
       return;
     }
     loadDraft();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadDraft is stable, draftId is the trigger
   }, [draftId]);
 
   const loadDraft = async () => {
@@ -85,12 +86,14 @@ export default function PdfMappingPage() {
   };
 
   const handleSave = async () => {
+    const id = typeof draftId === 'string' ? draftId : undefined;
+    if (!id) return;
     try {
       setSaving(true);
       setError(null);
       setSuccess(null);
 
-      const result = await updateDraftMappings(draftId, mappings);
+      const result = await updateDraftMappings(id, mappings);
 
       if (!result.success) {
         setError(result.error || 'Failed to save mappings');
@@ -101,7 +104,7 @@ export default function PdfMappingPage() {
       
       // Redirect to create page with draft pre-filled (same flow as PDF upload when mapping applied)
       setTimeout(() => {
-        router.push(`/dashboard/services/smart-invoicing/create?fromPdfDraft=${draftId}`);
+        router.push(`/dashboard/services/smart-invoicing/create?fromPdfDraft=${id}`);
       }, 1500);
     } catch (err) {
       console.error('Error saving mappings:', err);

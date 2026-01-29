@@ -187,6 +187,7 @@ function extractAmounts(lines: LayoutField[]): PatternField[] {
 }
 
 /** Build table-like fields from pdf-parse getTable() (rows = string[][]). */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- reserved for future table extraction
 function tableFieldsFromRows(rows: string[][], pageNum: number): TableField[] {
   const tableFields: TableField[] = [];
   if (rows.length < 2) return tableFields;
@@ -359,7 +360,7 @@ function buildDocumentAst(
     const fullLine = (f.value ?? '').trim();
     const rawLabel =
       (td['label'] ?? td['Description'] ?? td['description'] ?? td['Deliverable'] ?? '').trim() || fullLine;
-    let label = stripTrailingDateAndComplete(stripTrailingDateOrdinal(rawLabel)) || fullLine;
+    const label = stripTrailingDateAndComplete(stripTrailingDateOrdinal(rawLabel)) || fullLine;
     // Skip rows that are only date/status junk (e.g. "th NovCOMPLETE") — not real line items
     if (isDateStatusJunkOnly(label)) continue;
     const row: (typeof items)[0] = {

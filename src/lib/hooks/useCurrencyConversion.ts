@@ -102,7 +102,7 @@ async function processBatchConversions() {
     
     if (result.success && result.data) {
       // Cache rates and resolve all conversions
-      Array.from(uniquePairs.entries()).forEach(([pairKey, pair], index) => {
+      Array.from(uniquePairs.entries()).forEach(([, pair], index) => {
         const conversionResult = result.data[index];
         if (conversionResult && conversionResult.converted) {
           const isCrypto = isCryptoCurrency(pair.fromCurrency);

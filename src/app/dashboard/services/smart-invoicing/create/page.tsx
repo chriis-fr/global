@@ -4995,7 +4995,7 @@ export default function CreateInvoicePage() {
                   className="w-full flex items-center space-x-2 px-4 py-2 text-left hover:bg-gray-50 transition-colors"
                 >
                   <File className="h-4 w-4 text-red-500" />
-                  <span>Download as PDF</span>
+                  <span className="text-gray-900">Download as PDF</span>
                 </button>
                 <button
                   onClick={() => {
@@ -5005,7 +5005,7 @@ export default function CreateInvoicePage() {
                   className="w-full flex items-center space-x-2 px-4 py-2 text-left hover:bg-gray-50 transition-colors"
                 >
                   <File className="h-4 w-4 text-blue-500" />
-                  <span>Download as CSV</span>
+                  <span className="text-gray-900">Download as CSV</span>
                 </button>
               </div>
             )}

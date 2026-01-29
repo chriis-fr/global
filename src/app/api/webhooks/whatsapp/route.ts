@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { getDatabase } from '@/lib/database';
-import { ObjectId } from 'mongodb';
 
 const WHATSAPP_WEBHOOK_VERIFY_TOKEN = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || '';
 const WHATSAPP_WEBHOOK_SECRET = process.env.WHATSAPP_WEBHOOK_SECRET || '';
@@ -196,7 +195,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Parse webhook payload
-    let payload: any;
+    let payload: Record<string, unknown>;
     try {
       payload = JSON.parse(body);
       console.log(`${logPrefix} ✅ Payload parsed successfully`);
@@ -214,7 +213,7 @@ export async function POST(request: NextRequest) {
     // Log full payload structure
     console.log(`${logPrefix} 📋 Payload structure:`, {
       object: payload.object,
-      entryCount: payload.entry?.length || 0,
+      entryCount: Array.isArray(payload.entry) ? payload.entry.length : 0,
       fullPayload: JSON.stringify(payload, null, 2)
     });
 
@@ -296,29 +295,30 @@ export async function POST(request: NextRequest) {
  * Handles statuses: sent, delivered, read, failed
  */
 async function processMessageStatusUpdate(
-  value: any,
+  value: Record<string, unknown>,
   logPrefix: string
 ): Promise<{ messageId: string; status: string; updated: boolean }> {
   console.log(`${logPrefix} [MessageStatus] ========== PROCESSING MESSAGE STATUS ==========`);
 
   // Extract status information
-  const statuses = value.statuses || [];
-  const messages = value.messages || [];
+  const statuses = (value.statuses as Array<Record<string, unknown>>) || [];
+  const messages = (value.messages as Array<Record<string, unknown>>) || [];
 
   console.log(`${logPrefix} [MessageStatus] Status updates:`, {
     statusCount: statuses.length,
     messageCount: messages.length
   });
 
-  const results = [];
+  const results: Array<{ messageId: string; status: string; updated: boolean; recipientId?: unknown; timestamp?: unknown; error?: { code: unknown; message: unknown; details: unknown } | null }> = [];
 
   // Process each status update
   for (const status of statuses) {
-    const messageId = status.id;
-    const statusType = status.status; // sent, delivered, read, failed
+    const messageId = status.id as string | undefined;
+    const statusType = status.status as string; // sent, delivered, read, failed
     const recipientId = status.recipient_id;
     const timestamp = status.timestamp;
-    const error = status.errors?.[0];
+    const errorsArr = status.errors as unknown[] | undefined;
+    const error = errorsArr?.[0] as Record<string, unknown> | undefined;
 
     console.log(`${logPrefix} [MessageStatus] Status update:`, {
       messageId,
@@ -328,7 +328,7 @@ async function processMessageStatusUpdate(
       hasError: !!error,
       errorCode: error?.code,
       errorMessage: error?.message,
-      errorTitle: error?.error_data?.details,
+      errorTitle: (error?.error_data as Record<string, unknown>)?.details,
       fullStatus: JSON.stringify(status, null, 2)
     });
 
@@ -353,7 +353,7 @@ async function processMessageStatusUpdate(
           });
 
           // Update invoice status based on message status
-          const updateData: any = {
+          const updateData: Record<string, unknown> = {
             whatsappStatus: statusType,
             whatsappStatusUpdatedAt: new Date()
           };
@@ -370,7 +370,7 @@ async function processMessageStatusUpdate(
           } else if (statusType === 'failed') {
             updateData.status = 'failed';
             updateData.failedAt = new Date();
-            updateData.failureReason = error?.message || error?.error_data?.details || 'Unknown error';
+            updateData.failureReason = (error?.message as string) || ((error?.error_data as Record<string, unknown>)?.details as string) || 'Unknown error';
           }
           // For "sent" status, we just update whatsappStatus but keep invoice status as "sent"
 
@@ -407,7 +407,7 @@ async function processMessageStatusUpdate(
       error: error ? {
         code: error.code,
         message: error.message,
-        details: error.error_data?.details
+        details: (error.error_data as Record<string, unknown>)?.details
       } : null
     });
   }

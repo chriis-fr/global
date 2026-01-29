@@ -5,29 +5,29 @@ import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
 import { InvoiceDraft, CreateInvoiceDraftInput, ExtractedField } from '@/models/InvoiceDraft';
-import { CreateInvoiceInput } from '@/models/Invoice';
+import { CreateInvoiceInput, ClientDetails } from '@/models/Invoice';
 import type { DocumentAST, OrgPdfMappingConfig, PdfMappingEntry } from '@/models/DocumentAST';
 import { applyPdfMapping } from '@/lib/utils/pdfMappingEngine';
 import { parsePdfBuffer } from '@/lib/services/pdfParser';
 
 /** Serialize draft for Client Components (ObjectId/Date to plain values; documentAst as plain object for fromPdfDraft prefill). */
 function serializeDraft(draft: Record<string, unknown>): InvoiceDraft {
-  const toStr = (v: unknown) => (v && typeof (v as any).toString === 'function' ? (v as any).toString() : v);
+  const toStr = (v: unknown) => (v != null && typeof (v as { toString?: () => string }).toString === 'function' ? (v as { toString: () => string }).toString() : v);
   const toDate = (v: unknown) => (v instanceof Date ? v.toISOString() : v);
   const plainInvoiceData = draft.invoiceData != null ? JSON.parse(JSON.stringify(draft.invoiceData)) : {};
   const plainDocumentAst = draft.documentAst != null ? JSON.parse(JSON.stringify(draft.documentAst)) : null;
   return {
     ...draft,
-    _id: toStr(draft._id) as any,
-    userId: toStr(draft.userId) as any,
-    organizationId: draft.organizationId != null ? toStr(draft.organizationId) as any : undefined,
-    sourcePdfId: toStr(draft.sourcePdfId) as any,
-    createdAt: toDate(draft.createdAt) as any,
-    updatedAt: toDate(draft.updatedAt) as any,
+    _id: toStr(draft._id) as string,
+    userId: toStr(draft.userId) as string,
+    organizationId: draft.organizationId != null ? (toStr(draft.organizationId) as string) : undefined,
+    sourcePdfId: (toStr(draft.sourcePdfId) as string) || undefined,
+    createdAt: toDate(draft.createdAt) as string,
+    updatedAt: toDate(draft.updatedAt) as string,
     extractedFields: Array.isArray(draft.extractedFields) ? draft.extractedFields : [],
     invoiceData: plainInvoiceData,
     documentAst: plainDocumentAst,
-  } as InvoiceDraft;
+  } as unknown as InvoiceDraft;
 }
 
 /** Upload PDF and parse in memory only — no file is saved. Creates draft from extracted data; PDF is never stored. */
@@ -71,7 +71,7 @@ export async function uploadAndParsePdf(formData: FormData, mappingName?: string
       return { success: false, error: parseResult.error ?? 'Failed to parse PDF' };
     }
 
-    const { fields, document_ast, stats } = parseResult;
+    const { document_ast, stats } = parseResult;
     const documentAst = document_ast as DocumentAST | undefined;
 
     // ——— Log parsed output so you can align mapping ———
@@ -95,16 +95,17 @@ export async function uploadAndParsePdf(formData: FormData, mappingName?: string
     });
     console.log('========== [PDF Parse] End ==========\n');
 
-    const extractedFields: ExtractedField[] = parseResult.fields.map((field: any, index: number) => ({
+    type ParsedField = { field_type?: string; value?: string; text?: string; confidence?: number; source?: string; position?: unknown; original_line?: string; table_data?: unknown };
+    const extractedFields = parseResult.fields.map((field: ParsedField, index: number) => ({
       key: field.field_type ? `field_${field.field_type}_${index}` : `field_${index + 1}`,
       value: field.value || field.text || '',
       confidence: field.confidence || 0.5,
-      source: field.source || 'layout',
+      source: (field.source || 'layout') as ExtractedField['source'],
       position: field.position,
       fieldType: field.field_type,
       originalLine: field.original_line,
       tableData: field.table_data,
-    }));
+    })) as ExtractedField[];
 
     let invoiceData: Partial<CreateInvoiceInput> = {};
     const doc = user.organizationId
@@ -543,15 +544,15 @@ export async function updateDraftMappings(
             break;
           case 'clientName':
             if (!invoiceData.clientDetails) {
-              invoiceData.clientDetails = {} as any;
+              invoiceData.clientDetails = {} as unknown as ClientDetails;
             }
-            (invoiceData.clientDetails as any).name = field.value;
+            (invoiceData.clientDetails as ClientDetails & { name?: string }).name = field.value;
             break;
           case 'clientEmail':
             if (!invoiceData.clientDetails) {
-              invoiceData.clientDetails = {} as any;
+              invoiceData.clientDetails = {} as unknown as ClientDetails;
             }
-            (invoiceData.clientDetails as any).email = field.value;
+            (invoiceData.clientDetails as ClientDetails).email = field.value;
             break;
           case 'total':
             invoiceData.totalAmount = parseFloat(field.value.replace(/[^0-9.-]/g, '')) || 0;

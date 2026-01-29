@@ -46,7 +46,7 @@ export default function DraftEditorPage() {
   const [converting, setConverting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [draft, setDraft] = useState<{ invoiceData?: Record<string, unknown>; sourcePdfUrl?: string; extractedFields?: unknown[] } | null>(null);
+  const [draft, setDraft] = useState<{ invoiceData?: Record<string, unknown>; sourcePdfUrl?: string | null; extractedFields?: unknown[] } | null>(null);
   const [invoiceData, setInvoiceData] = useState<Record<string, unknown>>({});
   const [items, setItems] = useState<InvoiceItemRow[]>([]);
 
