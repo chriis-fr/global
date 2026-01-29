@@ -56,6 +56,9 @@ export async function POST(request: NextRequest) {
       // User not found, isRegistered remains false
     }
 
+    const paymentSettings = invoice.paymentSettings as { method?: string; currency?: string; chainId?: number; tokenAddress?: string; walletAddress?: string; cryptoNetwork?: string; bankAccount?: { bankName?: string; accountNumber?: string; routingNumber?: string } } | undefined;
+    const totalAmount = invoice.total ?? invoice.totalAmount ?? 0;
+
     return NextResponse.json({
       success: true,
       data: {
@@ -81,12 +84,20 @@ export async function POST(request: NextRequest) {
           },
           currency: invoice.currency,
           paymentMethod: invoice.paymentMethod,
-          paymentNetwork: invoice.paymentNetwork,
-          paymentAddress: invoice.paymentAddress,
+          paymentNetwork: invoice.paymentNetwork ?? paymentSettings?.cryptoNetwork,
+          paymentAddress: invoice.paymentAddress ?? paymentSettings?.walletAddress ?? invoice.payeeAddress,
+          payeeAddress: invoice.payeeAddress ?? invoice.paymentAddress ?? paymentSettings?.walletAddress,
+          bankName: invoice.bankName ?? paymentSettings?.bankAccount?.bankName,
+          accountNumber: invoice.accountNumber ?? paymentSettings?.bankAccount?.accountNumber,
+          routingNumber: invoice.routingNumber ?? paymentSettings?.bankAccount?.routingNumber,
+          chainId: (invoice as { chainId?: number }).chainId ?? paymentSettings?.chainId,
+          tokenAddress: (invoice as { tokenAddress?: string }).tokenAddress ?? paymentSettings?.tokenAddress,
+          paymentSettings: paymentSettings ?? undefined,
           items: invoice.items || [],
           subtotal: invoice.subtotal || 0,
           totalTax: invoice.totalTax || 0,
-          totalAmount: invoice.totalAmount || 0,
+          totalAmount,
+          total: totalAmount,
           memo: invoice.memo,
           status: invoice.status,
           createdAt: invoice.createdAt,
