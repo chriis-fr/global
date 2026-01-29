@@ -42,6 +42,10 @@ interface InvoiceSettings {
     description?: string;
   }>;
   invoiceTemplate: 'standard' | 'custom';
+  /** When true, invoices show optional withholding tax deducted from total; user can remove per invoice. */
+  showWithholdingTaxOnInvoices?: boolean;
+  /** Withholding tax rate % (e.g. 5 for 5%); default 5. */
+  withholdingTaxRatePercent?: number;
 }
 
 interface ServiceOnboardingData {
@@ -84,7 +88,9 @@ export default function SmartInvoicingOnboardingPage() {
           description: 'Default tax rate'
         }
       ],
-      invoiceTemplate: 'standard'
+      invoiceTemplate: 'standard',
+      showWithholdingTaxOnInvoices: false,
+      withholdingTaxRatePercent: 5
     }
   });
 
@@ -124,7 +130,9 @@ export default function SmartInvoicingOnboardingPage() {
               defaultCurrency: existingData.invoiceSettings?.defaultCurrency || prev.invoiceSettings.defaultCurrency,
               paymentTerms: existingData.invoiceSettings?.paymentTerms || prev.invoiceSettings.paymentTerms,
               taxRates: existingData.invoiceSettings?.taxRates || prev.invoiceSettings.taxRates,
-              invoiceTemplate: existingData.invoiceSettings?.invoiceTemplate || prev.invoiceSettings.invoiceTemplate
+              invoiceTemplate: existingData.invoiceSettings?.invoiceTemplate || prev.invoiceSettings.invoiceTemplate,
+              showWithholdingTaxOnInvoices: existingData.invoiceSettings?.showWithholdingTaxOnInvoices ?? prev.invoiceSettings.showWithholdingTaxOnInvoices ?? false,
+              withholdingTaxRatePercent: existingData.invoiceSettings?.withholdingTaxRatePercent ?? prev.invoiceSettings.withholdingTaxRatePercent ?? 5
             }
           }));
           return; // Exit early if we found saved data
@@ -178,7 +186,7 @@ export default function SmartInvoicingOnboardingPage() {
     loadData();
   }, [session]);
 
-  const handleInputChange = (section: 'businessInfo' | 'invoiceSettings', field: string, value: string | number) => {
+  const handleInputChange = (section: 'businessInfo' | 'invoiceSettings', field: string, value: string | number | boolean) => {
     setFormData(prev => ({
       ...prev,
       [section]: {
@@ -584,9 +592,12 @@ export default function SmartInvoicingOnboardingPage() {
                   <label className="block text-sm font-medium mb-2">Payment Terms (days)</label>
                   <input
                     type="number"
-                    value={formData.invoiceSettings.paymentTerms}
-                    onChange={(e) => handleInputChange('invoiceSettings', 'paymentTerms', parseInt(e.target.value))}
-                    className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                    value={Number(formData.invoiceSettings.paymentTerms) || 30}
+                    onChange={(e) => {
+                      const n = parseInt(e.target.value, 10);
+                      handleInputChange('invoiceSettings', 'paymentTerms', Number.isNaN(n) ? 30 : n);
+                    }}
+                    className="w-full bg-white/15 border border-white/30 rounded-lg px-4 py-3 text-white placeholder-gray-300 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 [color-scheme:dark]"
                     min="1"
                     max="365"
                   />
@@ -597,7 +608,7 @@ export default function SmartInvoicingOnboardingPage() {
                   <select
                     value={formData.invoiceSettings.invoiceTemplate}
                     onChange={(e) => handleInputChange('invoiceSettings', 'invoiceTemplate', e.target.value)}
-                    className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500"
+                    className="w-full bg-white/15 border border-white/30 rounded-lg px-4 py-3 text-white placeholder-gray-300 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 [color-scheme:dark]"
                   >
                     <option value="standard">Standard Template</option>
                     <option value="custom">Custom Template</option>
@@ -624,14 +635,14 @@ export default function SmartInvoicingOnboardingPage() {
                           type="text"
                           value={taxRate.name}
                           onChange={(e) => handleTaxRateChange(index, 'name', e.target.value)}
-                          className="bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                          className="bg-white/15 border border-white/30 rounded-lg px-3 py-2 text-white placeholder-gray-300 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
                           placeholder="Tax name"
                         />
                         <input
                           type="number"
                           value={taxRate.rate}
                           onChange={(e) => handleTaxRateChange(index, 'rate', parseFloat(e.target.value))}
-                          className="bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                          className="bg-white/15 border border-white/30 rounded-lg px-3 py-2 text-white placeholder-gray-300 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 [color-scheme:dark]"
                           placeholder="Rate %"
                           step="0.01"
                           min="0"
@@ -641,7 +652,7 @@ export default function SmartInvoicingOnboardingPage() {
                           type="text"
                           value={taxRate.description || ''}
                           onChange={(e) => handleTaxRateChange(index, 'description', e.target.value)}
-                          className="bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                          className="bg-white/15 border border-white/30 rounded-lg px-3 py-2 text-white placeholder-gray-300 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
                           placeholder="Description"
                         />
                       </div>
@@ -656,6 +667,36 @@ export default function SmartInvoicingOnboardingPage() {
                     </div>
                   ))}
                 </div>
+              </div>
+
+              <div className="mt-6 p-4 bg-white/5 rounded-lg space-y-3">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.invoiceSettings.showWithholdingTaxOnInvoices ?? false}
+                    onChange={(e) => handleInputChange('invoiceSettings', 'showWithholdingTaxOnInvoices', e.target.checked)}
+                    className="w-4 h-4 rounded border-white/30 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm font-medium">Show withholding tax on invoices</span>
+                </label>
+                {(formData.invoiceSettings.showWithholdingTaxOnInvoices ?? false) && (
+                  <div className="ml-7 flex items-center gap-2">
+                    <label className="text-sm text-white/90 font-medium">Rate (%)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.5"
+                      value={Number(formData.invoiceSettings.withholdingTaxRatePercent) || 5}
+                      onChange={(e) => {
+                        const n = parseFloat(e.target.value);
+                        handleInputChange('invoiceSettings', 'withholdingTaxRatePercent', Number.isNaN(n) ? 5 : n);
+                      }}
+                      className="w-20 bg-white/15 border border-white/30 rounded-lg px-3 py-2 text-white placeholder-gray-300 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 [color-scheme:dark]"
+                    />
+                  </div>
+                )}
+                <p className="text-xs text-gray-400 ml-7">When enabled, invoices will show an optional withholding tax row (deducted from total). You can remove it per invoice with the × button when not needed.</p>
               </div>
             </div>
           </motion.div>

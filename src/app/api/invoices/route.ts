@@ -151,6 +151,8 @@ export async function POST(request: NextRequest) {
       subtotal,
       totalTax,
       total,
+      withholdingTaxAmount,
+      withholdingTaxRatePercent,
       memo,
       status,
       createdAt,
@@ -346,8 +348,10 @@ export async function POST(request: NextRequest) {
       subtotal: subtotal,
       totalTax: totalTax,
       total: total,
+      ...(withholdingTaxAmount != null && withholdingTaxAmount > 0 && { withholdingTaxAmount }),
+      ...(withholdingTaxRatePercent != null && { withholdingTaxRatePercent }),
       memo: memo,
-      
+
       // Status and metadata
       status: initialStatus,
       createdAt: createdAt ? new Date(createdAt) : new Date(),

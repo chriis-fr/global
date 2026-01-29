@@ -338,7 +338,7 @@ export default function PdfMappingConfigPage() {
                     value={mappingName}
                     onChange={(e) => setMappingName(e.target.value)}
                     placeholder="e.g. Task Order, Acme Invoice"
-                    className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-blue-300/50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 bg-white/15 border border-white/30 rounded-lg text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
                   />
                 </div>
                 <label className="flex items-center gap-2 text-blue-200 cursor-pointer">
@@ -360,7 +360,7 @@ export default function PdfMappingConfigPage() {
                   <select
                     value={(mapping as Record<string, string>)[fieldKey] ?? ''}
                     onChange={(e) => handleFieldChange(fieldKey as keyof OrgPdfMappingConfig, e.target.value)}
-                    className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 bg-white/15 border border-white/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
                   >
                     {PDF_AST_PATH_OPTIONS.map((opt) => (
                       <option key={opt.value || 'empty'} value={opt.value} className="bg-gray-800 text-white">
@@ -383,7 +383,7 @@ export default function PdfMappingConfigPage() {
                     <select
                       value={mapping.lineItems?.map?.description ?? 'label'}
                       onChange={(e) => handleLineItemMapChange('description', e.target.value)}
-                      className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-2 bg-white/15 border border-white/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
                     >
                       {ITEM_FIELD_PATH_OPTIONS.filter((o) => ['label', 'description'].includes(o.value)).map((opt) => (
                         <option key={opt.value} value={opt.value} className="bg-gray-800 text-white">{opt.label}</option>
@@ -395,7 +395,7 @@ export default function PdfMappingConfigPage() {
                     <select
                       value={mapping.lineItems?.map?.quantity ?? 'quantity'}
                       onChange={(e) => handleLineItemMapChange('quantity', e.target.value)}
-                      className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-2 bg-white/15 border border-white/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
                     >
                       {ITEM_FIELD_PATH_OPTIONS.filter((o) => ['quantity', 'index'].includes(o.value)).map((opt) => (
                         <option key={opt.value} value={opt.value} className="bg-gray-800 text-white">{opt.label}</option>
@@ -408,7 +408,7 @@ export default function PdfMappingConfigPage() {
                     <select
                       value={mapping.lineItems?.map?.unitPrice ?? ''}
                       onChange={(e) => handleLineItemMapChange('unitPrice', e.target.value)}
-                      className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-2 bg-white/15 border border-white/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
                     >
                       <option value="" className="bg-gray-800 text-white">— Don&apos;t map —</option>
                       {ITEM_FIELD_PATH_OPTIONS.filter((o) => o.value === 'unit_price').map((opt) => (

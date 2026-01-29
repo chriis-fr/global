@@ -57,6 +57,12 @@ interface InvoiceFormData {
   subtotal: number;
   totalTax: number;
   total: number;
+  /** When true, withholding tax is shown as deducted; amount computed or use withholdingTaxAmount. */
+  withholdingTaxEnabled?: boolean;
+  /** Deducted withholding amount (when set, shown on PDF). */
+  withholdingTaxAmount?: number;
+  /** Withholding tax rate % (e.g. 5 for 5%); for label on PDF. */
+  withholdingTaxRatePercent?: number;
   memo?: string;
 }
 
@@ -243,6 +249,12 @@ const InvoicePdfView = memo(forwardRef<HTMLDivElement, InvoicePdfViewProps>(
                 <div className="flex justify-between text-gray-600">
                   <span>Tax:</span>
                   <span>{getCurrencySymbol()}{formData.totalTax.toFixed(2)}</span>
+                </div>
+              )}
+              {(formData.withholdingTaxEnabled || (formData.withholdingTaxAmount != null && formData.withholdingTaxAmount > 0)) && (
+                <div className="flex justify-between text-gray-600">
+                  <span>Withholding tax ({(formData.withholdingTaxRatePercent ?? 5)}%):</span>
+                  <span className="text-red-600">-{getCurrencySymbol()}{(formData.withholdingTaxAmount ?? (formData.subtotal + formData.totalTax) * ((formData.withholdingTaxRatePercent ?? 5) / 100)).toFixed(2)}</span>
                 </div>
               )}
               <div className="flex justify-between text-lg font-semibold text-gray-900 border-t border-gray-200 pt-2">

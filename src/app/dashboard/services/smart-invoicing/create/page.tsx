@@ -131,6 +131,10 @@ interface InvoiceFormData {
   subtotal: number;
   totalTax: number;
   total: number;
+  /** When true, withholding tax is deducted from (subtotal + totalTax); can be removed per invoice with ×. */
+  withholdingTaxEnabled?: boolean;
+  /** Withholding tax rate % (e.g. 5 for 5%); default 5. */
+  withholdingTaxRatePercent?: number;
   memo: string;
   attachedFiles: File[];
   status: 'draft' | 'sent' | 'paid' | 'overdue';
@@ -1050,9 +1054,10 @@ export default function CreateInvoicePage() {
           ...data.data,
           attachedFiles: data.data.attachedFiles || [],
           ccClients: data.data.ccClients || [],
-          // Map chainId and tokenAddress from paymentSettings if they exist
           chainId: data.data.paymentSettings?.chainId || data.data.chainId,
-          tokenAddress: data.data.paymentSettings?.tokenAddress || data.data.tokenAddress
+          tokenAddress: data.data.paymentSettings?.tokenAddress || data.data.tokenAddress,
+          withholdingTaxEnabled: (data.data.withholdingTaxAmount != null && data.data.withholdingTaxAmount > 0),
+          withholdingTaxRatePercent: Number(data.data.withholdingTaxRatePercent) || 5
         };
         
         // Keep amounts exactly as stored - no recalculation
@@ -1075,11 +1080,19 @@ export default function CreateInvoicePage() {
       
       if (data.success && data.data.serviceOnboarding) {
         const onboardingData = data.data.serviceOnboarding;
-        
+        const showWithholding = onboardingData.invoiceSettings?.showWithholdingTaxOnInvoices ?? false;
+        const ratePercent = Number(onboardingData.invoiceSettings?.withholdingTaxRatePercent) || 5;
+        const rate = ratePercent / 100;
+
         // Update form data with service onboarding information
         setFormData(prev => {
           const finalCountry = onboardingData.businessInfo?.address?.country || prev.companyAddress.country;
-          
+          const sub = prev.subtotal ?? 0;
+          const tax = prev.totalTax ?? 0;
+          const totalBeforeWithholding = sub + tax;
+          const withholdingAmount = showWithholding ? totalBeforeWithholding * rate : 0;
+          const newTotal = totalBeforeWithholding - withholdingAmount;
+
           return {
             ...prev,
             companyName: onboardingData.businessInfo?.name || prev.companyName,
@@ -1093,10 +1106,12 @@ export default function CreateInvoicePage() {
               country: finalCountry
             },
             companyTaxNumber: onboardingData.businessInfo?.taxId || prev.companyTaxNumber,
-            // Only set currency from onboarding if user hasn't manually selected one
-            currency: (!userHasSelectedCurrency && onboardingData.invoiceSettings?.defaultCurrency) 
-              ? onboardingData.invoiceSettings.defaultCurrency 
-              : prev.currency
+            currency: (!userHasSelectedCurrency && onboardingData.invoiceSettings?.defaultCurrency)
+              ? onboardingData.invoiceSettings.defaultCurrency
+              : prev.currency,
+            withholdingTaxEnabled: showWithholding,
+            withholdingTaxRatePercent: ratePercent,
+            total: showWithholding ? newTotal : prev.total
           };
         });
       }
@@ -1758,16 +1773,20 @@ export default function CreateInvoicePage() {
       subtotal += itemSubtotal;
       totalTax += itemTax;
     });
-    
-    const total = subtotal + totalTax;
-    
-    setFormData(prev => ({
-      ...prev,
-      items: newItems,
-      subtotal,
-      totalTax,
-      total
-    }));
+
+    setFormData(prev => {
+      const totalBeforeWithholding = subtotal + totalTax;
+      const rate = ((prev.withholdingTaxRatePercent ?? 5) / 100);
+      const withholdingAmount = (prev.withholdingTaxEnabled ?? false) ? totalBeforeWithholding * rate : 0;
+      const total = totalBeforeWithholding - withholdingAmount;
+      return {
+        ...prev,
+        items: newItems,
+        subtotal,
+        totalTax,
+        total
+      };
+    });
   };
 
   const addItem = () => {
@@ -1801,16 +1820,20 @@ export default function CreateInvoicePage() {
         subtotal += itemSubtotal;
         totalTax += itemTax;
       });
-      
-      const total = subtotal + totalTax;
-      
-      setFormData(prev => ({
-        ...prev,
-        items: newItems,
-        subtotal,
-        totalTax,
-        total
-      }));
+
+      setFormData(prev => {
+        const totalBeforeWithholding = subtotal + totalTax;
+        const rate = ((prev.withholdingTaxRatePercent ?? 5) / 100);
+        const withholdingAmount = (prev.withholdingTaxEnabled ?? false) ? totalBeforeWithholding * rate : 0;
+        const total = totalBeforeWithholding - withholdingAmount;
+        return {
+          ...prev,
+          items: newItems,
+          subtotal,
+          totalTax,
+          total
+        };
+      });
     }
   };
 
@@ -1825,7 +1848,9 @@ export default function CreateInvoicePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
-          status: 'draft'
+          status: 'draft',
+          withholdingTaxAmount: formData.withholdingTaxEnabled ? ((formData.subtotal ?? 0) + (formData.totalTax ?? 0)) * ((formData.withholdingTaxRatePercent ?? 5) / 100) : 0,
+          withholdingTaxRatePercent: formData.withholdingTaxEnabled ? (formData.withholdingTaxRatePercent ?? 5) : undefined
         })
       });
       
@@ -1873,7 +1898,8 @@ export default function CreateInvoicePage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ...formData,
-            status: 'sent'
+            status: 'sent',
+            withholdingTaxAmount: formData.withholdingTaxEnabled ? ((formData.subtotal ?? 0) + (formData.totalTax ?? 0)) * ((formData.withholdingTaxRatePercent ?? 5) / 100) : 0
           })
         });
 
@@ -1905,7 +1931,8 @@ export default function CreateInvoicePage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ...formData,
-            status: 'sent'
+            status: 'sent',
+            withholdingTaxAmount: formData.withholdingTaxEnabled ? ((formData.subtotal ?? 0) + (formData.totalTax ?? 0)) * ((formData.withholdingTaxRatePercent ?? 5) / 100) : 0
           })
         });
 
@@ -2482,7 +2509,7 @@ export default function CreateInvoicePage() {
         value={value}
         onChange={(e) => handleInputChange(field as keyof InvoiceFormData, e.target.value)}
         onBlur={() => setEditingField(null)}
-        className={`${className} border-none outline-none bg-transparent`}
+        className={`${className} border border-gray-300 rounded px-2 py-1 bg-white text-gray-900 placeholder-gray-500 outline-none`}
         autoFocus
       />
     ) : (
@@ -2609,7 +2636,8 @@ export default function CreateInvoicePage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ...formData,
-            status: 'sent'
+            status: 'sent',
+            withholdingTaxAmount: formData.withholdingTaxEnabled ? ((formData.subtotal ?? 0) + (formData.totalTax ?? 0)) * ((formData.withholdingTaxRatePercent ?? 5) / 100) : 0
           })
         });
 
@@ -2636,7 +2664,8 @@ export default function CreateInvoicePage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ...formData,
-            status: 'sent'
+            status: 'sent',
+            withholdingTaxAmount: formData.withholdingTaxEnabled ? ((formData.subtotal ?? 0) + (formData.totalTax ?? 0)) * ((formData.withholdingTaxRatePercent ?? 5) / 100) : 0
           })
         });
 
@@ -4242,7 +4271,7 @@ export default function CreateInvoicePage() {
                               <select
                                 value={formData.bankCountryCode || 'KE'}
                                 onChange={(e) => handleInputChange('bankCountryCode', e.target.value)}
-                                className="text-xs text-gray-600 bg-transparent border-none outline-none cursor-pointer pr-4 appearance-none"
+                                className="text-xs bg-white text-gray-900 border border-gray-300 rounded outline-none cursor-pointer pr-4 appearance-none focus:ring-2 focus:ring-blue-500"
                               >
                                 <option value="GH">Ghana</option>
                                 <option value="KE">Kenya</option>
@@ -4646,28 +4675,30 @@ export default function CreateInvoicePage() {
                           type="text"
                           value={item.description}
                           onChange={(e) => handleItemChange(index, 'description', e.target.value)}
-                          className="w-full px-2 py-1 border text-gray-600 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-2 py-1 border border-gray-300 rounded bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                           placeholder="Enter description"
                         />
                       </td>
                       <td className="py-3 px-4">
                         <input
                           type="number"
-                          value={item.quantity}
-                          onChange={(e) => handleItemChange(index, 'quantity', parseFloat(e.target.value) || 0)}
-                          className="w-20 px-2 py-1 text-gray-600 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          value={item.quantity === 0 ? '' : item.quantity}
+                          onChange={(e) => handleItemChange(index, 'quantity', e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)}
+                          className="w-20 px-2 py-1 bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                           min="0"
                           step="1"
+                          placeholder="0"
                         />
                       </td>
                       <td className="py-3 px-4">
                         <input
                           type="number"
-                          value={item.unitPrice}
-                          onChange={(e) => handleItemChange(index, 'unitPrice', parseFloat(e.target.value) || 0)}
-                          className="w-24 px-2 py-1 border text-gray-600 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          value={item.unitPrice === 0 ? '' : item.unitPrice}
+                          onChange={(e) => handleItemChange(index, 'unitPrice', e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)}
+                          className="w-24 px-2 py-1 bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                           min="0"
                           step="0.01"
+                          placeholder="0"
                         />
                       </td>
                       {hasAnyDiscounts && (
@@ -4676,12 +4707,13 @@ export default function CreateInvoicePage() {
                             <div className="relative">
                               <input
                                 type="number"
-                                value={item.discount}
-                                onChange={(e) => handleItemChange(index, 'discount', parseFloat(e.target.value) || 0)}
-                                className="w-20 px-2 pr-6 py-1 border text-gray-600 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                value={item.discount === 0 ? '' : item.discount}
+                                onChange={(e) => handleItemChange(index, 'discount', e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)}
+                                className="w-20 px-2 pr-6 py-1 bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 min="0"
                                 max="100"
                                 step="0.01"
+                                placeholder="0"
                               />
                               <span className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">%</span>
                             </div>
@@ -4701,12 +4733,13 @@ export default function CreateInvoicePage() {
                         <div className="relative">
                           <input
                             type="number"
-                            value={item.tax}
-                            onChange={(e) => handleItemChange(index, 'tax', parseFloat(e.target.value) || 0)}
-                            className="w-20 px-2 pr-6 py-1 border text-gray-600 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            value={item.tax === 0 ? '' : item.tax}
+                            onChange={(e) => handleItemChange(index, 'tax', e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)}
+                            className="w-20 px-2 pr-6 py-1 bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             min="0"
                             max="100"
                             step="0.01"
+                            placeholder="0"
                           />
                           <span className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">%</span>
                         </div>
@@ -4718,13 +4751,31 @@ export default function CreateInvoicePage() {
                               if (selectedTax) {
                                 const [, rate] = selectedTax.split(':');
                                 const taxRate = parseFloat(rate);
-                                if (taxRate > 0) {
+                                if (!Number.isNaN(taxRate) && taxRate >= 0) {
                                   handleItemChange(index, 'tax', taxRate);
                                 }
                               }
                             }}
-                            className="w-full text-xs px-1 py-0.5 border text-gray-600 border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                            value=""
+                            className="w-full text-xs px-1 py-0.5 bg-white border border-gray-200 rounded text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 [color-scheme:light]"
+                            value={(() => {
+                              const r = item.tax;
+                              if (r === 0) return 'custom:0';
+                              if (r === 5) return 'custom:5';
+                              if (r === 10) return 'custom:10';
+                              if (r === 16) return 'custom:16';
+                              if (r === 20) return 'custom:20';
+                              if (r === 25) return 'custom:25';
+                              if (r === 30) return 'custom:30';
+                              const countryTaxes = getTaxRatesByCountry(formData.companyAddress.country);
+                              if (countryTaxes) {
+                                if (countryTaxes.vat === r) return `vat:${r}`;
+                                if (countryTaxes.gst === r) return `gst:${r}`;
+                                if (countryTaxes.salesTax === r) return `salesTax:${r}`;
+                                if (countryTaxes.corporateTax === r) return `corporateTax:${r}`;
+                                if (countryTaxes.personalTax === r) return `personalTax:${r}`;
+                              }
+                              return '';
+                            })()}
                           >
                             <option value="">Select tax type</option>
                             <optgroup label="Common Rates">
@@ -4779,14 +4830,81 @@ export default function CreateInvoicePage() {
             {/* Totals */}
             <div className="mt-6 flex justify-end">
               <div className="w-full sm:w-64 space-y-2">
-                <div className="flex justify-between text-gray-600">
+                <div className="flex justify-between text-gray-800">
                   <span>Amount without tax</span>
                   <span>{getCurrencySymbol()}{(formData.subtotal ?? 0).toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-gray-600">
+                <div className="flex justify-between text-gray-800">
                   <span>Total Tax amount</span>
                   <span>{getCurrencySymbol()}{(formData.totalTax ?? 0).toFixed(2)}</span>
                 </div>
+                {!formData.withholdingTaxEnabled ? (
+                  <div className="flex justify-between text-gray-800 items-center gap-2">
+                    <span className="text-sm text-gray-700">Withholding tax</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const sub = formData.subtotal ?? 0;
+                        const tax = formData.totalTax ?? 0;
+                        const ratePercent = formData.withholdingTaxRatePercent ?? 5;
+                        const rate = ratePercent / 100;
+                        setFormData(prev => ({
+                          ...prev,
+                          withholdingTaxEnabled: true,
+                          withholdingTaxRatePercent: ratePercent,
+                          total: sub + tax - (sub + tax) * rate
+                        }));
+                      }}
+                      className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                    >
+                      Add withholding tax
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex justify-between text-gray-800 items-center gap-2 flex-wrap">
+                    <span className="flex items-center gap-2">
+                      <span className="text-gray-800">Withholding tax (</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.5"
+                        className="w-14 px-1 py-0.5 text-sm bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        value={formData.withholdingTaxRatePercent ?? 5}
+                        onChange={(e) => {
+                          const sub = formData.subtotal ?? 0;
+                          const tax = formData.totalTax ?? 0;
+                          const n = parseFloat(e.target.value);
+                          const ratePercent = Number.isNaN(n) ? 5 : Math.max(0, Math.min(100, n));
+                          const rate = ratePercent / 100;
+                          setFormData(prev => ({
+                            ...prev,
+                            withholdingTaxRatePercent: ratePercent,
+                            total: sub + tax - (sub + tax) * rate
+                          }));
+                        }}
+                      />
+                      <span className="text-gray-800">%)</span>
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="text-red-600">
+                        -{getCurrencySymbol()}{(((formData.subtotal ?? 0) + (formData.totalTax ?? 0)) * ((formData.withholdingTaxRatePercent ?? 5) / 100)).toFixed(2)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const sub = formData.subtotal ?? 0;
+                          const tax = formData.totalTax ?? 0;
+                          setFormData(prev => ({ ...prev, withholdingTaxEnabled: false, total: sub + tax }));
+                        }}
+                        className="p-0.5 rounded hover:bg-red-100 text-gray-500 hover:text-red-600 transition-colors"
+                        title="Remove withholding tax"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between text-gray-700 text-lg font-semibold border-t pt-2">
                   <span>Total amount</span>
                   <span>{getCurrencySymbol()}{(formData.total ?? 0).toFixed(2)}</span>

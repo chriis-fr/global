@@ -99,8 +99,12 @@ export interface Invoice {
   items: InvoiceItem[];
   taxes: InvoiceTax[];
   subtotal: number;
-  total: number; // Primary total field
+  total: number; // Primary total field (after withholding deduction if any)
   totalAmount: number; // Backward compatibility
+  /** When set, withholding tax was deducted from (subtotal + tax); shown on PDF. */
+  withholdingTaxAmount?: number;
+  /** Withholding tax rate % used (e.g. 5 for 5%); for PDF display. */
+  withholdingTaxRatePercent?: number;
   
   // Payment Settings
   paymentSettings: PaymentSettings;
