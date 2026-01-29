@@ -17,6 +17,7 @@ export const PDF_AST_PATH_OPTIONS: { value: string; label: string }[] = [
 
 export const INVOICE_FIELD_KEYS: (keyof import('@/models/DocumentAST').OrgPdfMappingConfig)[] = [
   'invoiceNumber',
+  'invoiceTitle',
   'issueDate',
   'dueDate',
   'clientName',
@@ -27,6 +28,7 @@ export const INVOICE_FIELD_KEYS: (keyof import('@/models/DocumentAST').OrgPdfMap
 
 export const INVOICE_FIELD_LABELS: Record<string, string> = {
   invoiceNumber: 'Invoice number',
+  invoiceTitle: 'Invoice title',
   issueDate: 'Issue date',
   dueDate: 'Due date',
   clientName: 'Client name',

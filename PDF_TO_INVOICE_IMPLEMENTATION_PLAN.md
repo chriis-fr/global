@@ -1,5 +1,9 @@
 # PDF-to-Invoice Feature Implementation Plan
 
+**Current implementation (MVP):** PDF parsing is done in Node.js only (`src/lib/services/pdfParser.ts`). The upload flow uses `uploadAndParsePdf` (server action); PDFs are parsed in-memory and never stored. No Python service, no `pdfUploads` collection, no `/api/pdf-invoice/parse` route. See `PDF_INVOICE_SETUP.md` for setup.
+
+---
+
 ## Executive Summary
 
 This document outlines a comprehensive, production-ready implementation plan for adding PDF-to-Invoice functionality to the Global Finance invoicing platform. The solution prioritizes **low latency**, **low cost**, **high control**, and **enterprise-grade UX** while maintaining complete separation from existing invoice creation logic.

@@ -1309,7 +1309,8 @@ export default function CreateInvoicePage() {
         const safeSubtotal = Number.isFinite(subtotal) ? subtotal : 0;
         const safeTotal = Number.isFinite(totalAmount) ? totalAmount : 0;
         const safeTotalTax = Number.isFinite(totalTax) ? totalTax : 0;
-        const invoiceNumber = (raw.invoiceNumber as string) || (ast?.meta?.reference_numbers?.task_order || ast?.meta?.reference_numbers?.contract || ast?.meta?.title) || '';
+        const invoiceNumber = (raw.invoiceNumber as string) || ''; // We generate; only pre-fill if mapping set it
+        const invoiceName = (raw.invoiceTitle as string) || ast?.meta?.reference_numbers?.task_order || ast?.meta?.title || defaultInvoiceData.invoiceName;
         const currency = (raw.currency as string) || 'USD';
         const issueDate = toDateStr(raw.issueDate) || (ast?.dates?.signed ? toDateStr(ast.dates.signed) : '') || defaultInvoiceData.issueDate;
         const dueDate = toDateStr(raw.dueDate) || (ast?.dates?.due ? toDateStr(ast.dates.due) : '') || defaultInvoiceData.dueDate;
@@ -1318,6 +1319,7 @@ export default function CreateInvoicePage() {
         setFormData(prev => ({
           ...prev,
           invoiceNumber: invoiceNumber || prev.invoiceNumber,
+          invoiceName: invoiceName || prev.invoiceName,
           currency: currency || prev.currency,
           issueDate: issueDate || prev.issueDate,
           dueDate: dueDate || prev.dueDate,

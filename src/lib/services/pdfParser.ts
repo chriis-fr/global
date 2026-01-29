@@ -1,5 +1,5 @@
 /**
- * Node.js PDF parser — port of Python pdfplumber/regex logic for Vercel/serverless.
+ * Node.js PDF parser for Vercel/serverless.
  * Extracts text, pattern-matched fields, amounts, and table-like rows; builds Document AST.
  */
 import { createRequire } from 'module';
@@ -218,6 +218,55 @@ function tableFieldsFromRows(rows: string[][], pageNum: number): TableField[] {
   return tableFields;
 }
 
+/** Strip trailing day ordinals (e.g. 17th, 1st) from text — often due-date text bleeding into line-item descriptions. */
+function stripTrailingDateOrdinal(s: string): string {
+  return s.replace(/\s*\d{1,2}(?:st|nd|rd|th)$/i, '').trim();
+}
+
+/** Strip trailing "25th Nov COMPLETE" / "th NovCOMPLETE" style date+status from descriptions. */
+function stripTrailingDateAndComplete(s: string): string {
+  return s
+    .replace(/\s*\d{0,2}(?:st|nd|rd|th)?\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*COMPLETE\s*$/i, '')
+    .trim();
+}
+
+/** True if label is only date/status junk (e.g. "th NovCOMPLETE", "25th Nov COMPLETE") — should not be a line item. */
+function isDateStatusJunkOnly(label: string): boolean {
+  const t = label.trim();
+  if (!t) return true;
+  // "th NovCOMPLETE", "25th Nov COMPLETE", "COMPLETE", "Nov COMPLETE", etc.
+  if (/^COMPLETE\s*$/i.test(t)) return true;
+  if (/^(?:\d{1,2}(?:st|nd|rd|th)\s*)?(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*COMPLETE\s*$/i.test(t)) return true;
+  if (/^th\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*COMPLETE\s*$/i.test(t)) return true;
+  return false;
+}
+
+const numberedRow = /^(\d+)\.?\s*(\d*)\s*(.+)$/;
+
+/** Merge continuation lines (e.g. "MVS" after "Quality Control for Chapter 336 of") into the previous line for accurate descriptions. */
+function mergeContinuationLines(lines: LayoutField[]): LayoutField[] {
+  const out: LayoutField[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const lineObj = lines[i];
+    const line = (lineObj.value ?? '').trim();
+    const nextLine = i + 1 < lines.length ? (lines[i + 1].value ?? '').trim() : '';
+    const isNumbered = numberedRow.test(line);
+    const isContinuation =
+      nextLine.length > 0 &&
+      nextLine.length <= 120 &&
+      !numberedRow.test(nextLine) &&
+      !isDateStatusJunkOnly(nextLine) &&
+      !/^(deliverable|#|date|for:|name:)/i.test(nextLine);
+    if (isNumbered && isContinuation) {
+      out.push({ ...lineObj, value: `${line} ${nextLine}`.trim() });
+      i++; // skip next line
+    } else {
+      out.push(lineObj);
+    }
+  }
+  return out;
+}
+
 /**
  * Heuristic: lines that look like "1.348 Script Writing...", "2.349 Script...", "1. CODE Description"
  * Leading number is row index, NOT quantity. Each row = one deliverable with quantity 1.
@@ -226,14 +275,13 @@ function tableFieldsFromRows(rows: string[][], pageNum: number): TableField[] {
 function heuristicTableFromLines(lines: LayoutField[]): TableField[] {
   const tableFields: TableField[] = [];
   // Match: 1.348Script..., 1. 348 Script..., 1. Script Writing... (leading digits, optional .code, rest = description)
-  const numberedRow = /^(\d+)\.?\s*(\d*)\s*(.+)$/;
   lines.forEach((lineObj, i) => {
     const line = (lineObj.value ?? '').trim();
     const m = line.match(numberedRow);
     if (!m || !m[3] || m[3].length < 2) return;
     const rowIndex = m[1];
     const code = m[2]?.trim() ?? '';
-    const description = m[3].trim();
+    const description = stripTrailingDateAndComplete(stripTrailingDateOrdinal(m[3].trim()));
     const rowData: Record<string, string> = {
       index: rowIndex,
       quantity: '1',
@@ -283,7 +331,8 @@ function buildDocumentAst(
     rawLines.push(line);
     const lower = line.toLowerCase();
     if (lower.includes('task order') || lower.includes('t.o')) {
-      const m = line.match(/#?\s*([A-Z0-9\-]+)/i);
+      // Prefer number after # (e.g. "Task Order: #TS1-ND-0013" -> TS1-ND-0013); else skip so we don't capture "Task"
+      const m = line.match(/#\s*([A-Z0-9\-]+)/i);
       if (m) meta.reference_numbers.task_order = m[1].trim();
     }
     if (lower.includes('contract') && lower.includes('number')) {
@@ -308,8 +357,11 @@ function buildDocumentAst(
   for (const f of tableFields) {
     const td = f.table_data ?? {};
     const fullLine = (f.value ?? '').trim();
-    const label =
+    const rawLabel =
       (td['label'] ?? td['Description'] ?? td['description'] ?? td['Deliverable'] ?? '').trim() || fullLine;
+    let label = stripTrailingDateAndComplete(stripTrailingDateOrdinal(rawLabel)) || fullLine;
+    // Skip rows that are only date/status junk (e.g. "th NovCOMPLETE") — not real line items
+    if (isDateStatusJunkOnly(label)) continue;
     const row: (typeof items)[0] = {
       label: label || fullLine,
       quantity: 1,
@@ -320,7 +372,10 @@ function buildDocumentAst(
       const kl = k.toLowerCase();
       if (kl === 'label' || kl.includes('desc')) {
         const val = String(v ?? '').trim();
-        if (val) row.label = val;
+        if (val) {
+          const cleaned = stripTrailingDateAndComplete(stripTrailingDateOrdinal(val));
+          if (!isDateStatusJunkOnly(cleaned)) row.label = cleaned;
+        }
       } else if (kl === 'quantity' || kl.includes('qty') || kl.includes('quantity') || kl === 'index') {
         const n = parseInt(String(v).replace(/,/g, ''), 10);
         if (!Number.isNaN(n) && n > 0) row.quantity = n;
@@ -329,6 +384,7 @@ function buildDocumentAst(
         if (!Number.isNaN(n)) row.unit_price = n;
       } else if (kl.includes('status')) row.status = v ?? row.status;
     }
+    if (isDateStatusJunkOnly(row.label)) continue;
     if (row.label || row.status) items.push(row);
   }
 
@@ -341,7 +397,7 @@ function buildDocumentAst(
   };
 }
 
-/** Parse PDF buffer and return fields + document_ast (same contract as Python /parse). */
+/** Parse PDF buffer and return fields + document_ast. */
 export async function parsePdfBuffer(buffer: Buffer): Promise<ParseResult | ParseError> {
   try {
     // pdf-parse v1.1.1: load lib directly to avoid index.js test block that reads ./test/data/05-versions-space.pdf from cwd
@@ -351,9 +407,10 @@ export async function parsePdfBuffer(buffer: Buffer): Promise<ParseResult | Pars
     const numPages = (data as { numpages?: number }).numpages ?? 1;
 
     const layoutFields = extractLinesFromText(text, numPages);
+    const mergedLayout = mergeContinuationLines(layoutFields);
     const patternFields = patternMatchFields(layoutFields);
     const amountFields = extractAmounts(layoutFields);
-    const tableFields = heuristicTableFromLines(layoutFields);
+    const tableFields = heuristicTableFromLines(mergedLayout);
 
     const allFields: Array<PatternField | TableField | LayoutField> = [];
     const seenValues = new Set<string>();

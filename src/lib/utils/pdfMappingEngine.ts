@@ -39,6 +39,10 @@ export function applyPdfMapping(
     const v = get(mapping.invoiceNumber);
     if (v != null) out.invoiceNumber = String(v);
   }
+  if (mapping.invoiceTitle) {
+    const v = get(mapping.invoiceTitle);
+    if (v != null) (out as Record<string, unknown>).invoiceTitle = String(v);
+  }
   if (mapping.issueDate) {
     const v = get(mapping.issueDate);
     const d = parseDate(v);
@@ -98,8 +102,10 @@ export function applyPdfMapping(
     unitPrice: 'unit_price',
   };
   if (Array.isArray(arr) && arr.length > 0) {
+    // AST items use "label" for the description text; config may say "description" — resolve to label when needed
+    const descriptionPath = (map.description === 'description' || map.description === 'Description') ? 'label' : (map.description || 'label');
     out.items = arr.map((item: Record<string, unknown>) => {
-      const description = map.description ? String(getByPath(item, map.description) ?? '') : '';
+      const description = String(getByPath(item, descriptionPath) ?? '') || String(getByPath(item, 'label') ?? '');
       const quantity = map.quantity
         ? Number(getByPath(item, map.quantity)) || 1
         : 1;

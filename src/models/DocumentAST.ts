@@ -29,7 +29,8 @@ export interface DocumentAST {
  * Keys = invoice field names; values = dot path into DocumentAST.
  */
 export interface OrgPdfMappingConfig {
-  invoiceNumber?: string;   // e.g. "meta.reference_numbers.task_order"
+  invoiceNumber?: string;   // e.g. "meta.reference_numbers.contract" (leave unmapped to generate)
+  invoiceTitle?: string;    // e.g. "meta.reference_numbers.task_order" -> editable "Invoice" heading
   issueDate?: string;       // e.g. "dates.signed"
   dueDate?: string;        // e.g. "dates.due"
   clientName?: string;     // e.g. "parties.recipient"

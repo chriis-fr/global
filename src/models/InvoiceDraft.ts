@@ -23,8 +23,8 @@ export interface InvoiceDraft {
   _id?: ObjectId;
   userId: ObjectId;
   organizationId?: ObjectId;
-  sourcePdfId: ObjectId; // Reference to PdfUpload
-  sourcePdfUrl: string; // URL to stored PDF
+  sourcePdfId?: ObjectId | null; // Optional; not set when PDF was parsed in-memory only
+  sourcePdfUrl?: string | null; // Optional; not set when PDF was not stored
   templateId?: ObjectId; // Reference to PdfTemplate (for Phase 2)
   status: 'extracting' | 'mapping' | 'ready' | 'converted' | 'error';
   
@@ -56,8 +56,8 @@ export interface InvoiceDraft {
 export interface CreateInvoiceDraftInput {
   userId: ObjectId;
   organizationId?: ObjectId;
-  sourcePdfId: ObjectId;
-  sourcePdfUrl: string;
+  sourcePdfId?: ObjectId | null;
+  sourcePdfUrl?: string | null;
   extractedFields: ExtractedField[];
   status: 'extracting' | 'mapping' | 'ready' | 'error';
 }

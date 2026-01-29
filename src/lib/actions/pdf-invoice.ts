@@ -4,10 +4,6 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
-import { writeFile, mkdir, readFile } from 'fs/promises';
-import { join } from 'path';
-import { existsSync } from 'fs';
-import { PdfUpload, CreatePdfUploadInput } from '@/models/PdfUpload';
 import { InvoiceDraft, CreateInvoiceDraftInput, ExtractedField } from '@/models/InvoiceDraft';
 import { CreateInvoiceInput } from '@/models/Invoice';
 import type { DocumentAST, OrgPdfMappingConfig, PdfMappingEntry } from '@/models/DocumentAST';
@@ -34,31 +30,25 @@ function serializeDraft(draft: Record<string, unknown>): InvoiceDraft {
   } as InvoiceDraft;
 }
 
-// Upload PDF file
-export async function uploadPdfFile(formData: FormData): Promise<{
+/** Upload PDF and parse in memory only — no file is saved. Creates draft from extracted data; PDF is never stored. */
+export async function uploadAndParsePdf(formData: FormData, mappingName?: string | null): Promise<{
   success: boolean;
-  data?: { uploadId: string; filename: string; fileSize: number };
+  data?: { draftId: string; extractedFields: ExtractedField[]; status: 'ready' | 'mapping' };
   error?: string;
 }> {
   try {
     const session = await getServerSession(authOptions);
-    
     if (!session?.user?.email) {
       return { success: false, error: 'Unauthorized' };
     }
 
     const file = formData.get('file') as File;
-    
     if (!file) {
       return { success: false, error: 'No file provided' };
     }
-
-    // Validate file type
     if (file.type !== 'application/pdf') {
       return { success: false, error: 'Only PDF files are allowed' };
     }
-
-    // Validate file size (max 10MB)
     const maxSize = 10 * 1024 * 1024; // 10MB
     if (file.size > maxSize) {
       return { success: false, error: 'File size must be less than 10MB' };
@@ -67,169 +57,79 @@ export async function uploadPdfFile(formData: FormData): Promise<{
     await connectToDatabase();
     const db = await connectToDatabase();
     const usersCollection = db.collection('users');
-    
     const user = await usersCollection.findOne({ email: session.user.email });
     if (!user) {
       return { success: false, error: 'User not found' };
     }
 
-    // Create uploads directory if it doesn't exist
-    const uploadsDir = join(process.cwd(), 'public', 'uploads', 'pdf-invoices');
-    if (!existsSync(uploadsDir)) {
-      await mkdir(uploadsDir, { recursive: true });
-    }
-
-    // Generate unique filename
-    const fileExtension = file.name.split('.').pop();
-    const timestamp = Date.now();
-    const filename = `${user._id}_${timestamp}.${fileExtension}`;
-    const filePath = join(uploadsDir, filename);
-
-    // Convert file to buffer and save
+    // Parse from buffer — no file written to disk
     const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    await writeFile(filePath, buffer);
-
-    // Generate public URL
-    const fileUrl = `/uploads/pdf-invoices/${filename}`;
-
-    // Create PDF upload record
-    const pdfUpload: CreatePdfUploadInput = {
-      userId: user._id!,
-      organizationId: user.organizationId,
-      filename,
-      originalName: file.name,
-      filePath: fileUrl,
-      fileSize: file.size,
-      contentType: file.type,
-    };
-
-    const pdfUploadsCollection = db.collection('pdfUploads');
-    const result = await pdfUploadsCollection.insertOne({
-      ...pdfUpload,
-      status: 'uploaded',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-
-    return {
-      success: true,
-      data: {
-        uploadId: result.insertedId.toString(),
-        filename: file.name,
-        fileSize: file.size,
-      },
-    };
-  } catch (error) {
-    console.error('Error uploading PDF:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to upload PDF',
-    };
-  }
-}
-
-// Parse PDF (Node.js parser). Optionally use a named mapping; otherwise uses default. Returns status so client can redirect.
-export async function parsePdf(uploadId: string, mappingName?: string | null): Promise<{
-  success: boolean;
-  data?: { draftId: string; extractedFields: ExtractedField[]; status: 'ready' | 'mapping' };
-  error?: string;
-}> {
-  try {
-    const session = await getServerSession(authOptions);
-    
-    if (!session?.user?.email) {
-      return { success: false, error: 'Unauthorized' };
-    }
-
-    await connectToDatabase();
-    const db = await connectToDatabase();
-    const pdfUploadsCollection = db.collection('pdfUploads');
-    
-    const pdfUpload = await pdfUploadsCollection.findOne({
-      _id: new ObjectId(uploadId),
-    });
-
-    if (!pdfUpload) {
-      return { success: false, error: 'PDF upload not found' };
-    }
-
-    // Update status to processing
-    await pdfUploadsCollection.updateOne(
-      { _id: new ObjectId(uploadId) },
-      { $set: { status: 'processing', updatedAt: new Date() } }
-    );
-
-    // Parse PDF with Node.js parser (Vercel/serverless compatible)
-    const pdfPath = join(process.cwd(), 'public', pdfUpload.filePath);
-    const pdfBuffer = await readFile(pdfPath);
+    const pdfBuffer = Buffer.from(bytes);
     const parseResult = await parsePdfBuffer(pdfBuffer);
 
     if (!parseResult.success || !('fields' in parseResult)) {
-      throw new Error(parseResult.error ?? 'Failed to parse PDF');
+      return { success: false, error: parseResult.error ?? 'Failed to parse PDF' };
     }
 
-    // Log what was parsed (visible in terminal)
     const { fields, document_ast, stats } = parseResult;
-    console.log('[PDF Parse] Stats:', stats);
-    console.log('[PDF Parse] Document AST:', {
-      meta: document_ast.meta,
-      parties: document_ast.parties,
-      dates: document_ast.dates,
-      itemsCount: document_ast.items?.length ?? 0,
-      rawLinesCount: document_ast.raw_lines?.length ?? 0,
-    });
-    console.log('[PDF Parse] Extracted fields sample (first 15):', fields.slice(0, 15).map((f: { value?: string; source?: string; field_type?: string }) => ({
-      value: (f.value ?? '').slice(0, 60),
-      source: f.source,
-      fieldType: f.field_type,
-    })));
+    const documentAst = document_ast as DocumentAST | undefined;
 
-    // Convert parser response to our format (prioritize field_type hints for mapping)
+    // ——— Log parsed output so you can align mapping ———
+    console.log('\n========== [PDF Parse] Uploaded file:', file.name, '==========');
+    if (stats) console.log('[PDF Parse] Stats:', JSON.stringify(stats, null, 2));
+    console.log('[PDF Parse] Document AST (what mapping uses):');
+    console.log('  meta:', JSON.stringify(documentAst?.meta ?? {}, null, 2));
+    console.log('  parties:', JSON.stringify(documentAst?.parties ?? {}, null, 2));
+    console.log('  dates:', JSON.stringify(documentAst?.dates ?? {}, null, 2));
+    console.log('  items (line items):', documentAst?.items?.length ?? 0);
+    if (documentAst?.items?.length) {
+      documentAst.items.forEach((item: { label?: string; quantity?: number; unit_price?: number | null }, i: number) => {
+        console.log(`    [${i}] qty ${item.quantity ?? 1}: ${(item.label ?? '').slice(0, 80)}`);
+      });
+    }
+    console.log('  raw_lines (first 20):', documentAst?.raw_lines?.slice(0, 20) ?? []);
+    console.log('[PDF Parse] All extracted fields (order matters for mapping):');
+    parseResult.fields.forEach((f: { value?: string; source?: string; field_type?: string }, i: number) => {
+      const val = (f.value ?? '').slice(0, 70);
+      console.log(`  ${i + 1}. [${f.source ?? '?'}] ${f.field_type ?? '—'} | ${val}`);
+    });
+    console.log('========== [PDF Parse] End ==========\n');
+
     const extractedFields: ExtractedField[] = parseResult.fields.map((field: any, index: number) => ({
       key: field.field_type ? `field_${field.field_type}_${index}` : `field_${index + 1}`,
       value: field.value || field.text || '',
       confidence: field.confidence || 0.5,
       source: field.source || 'layout',
       position: field.position,
-      fieldType: field.field_type, // Hint for mapping (e.g., "invoice_number", "total", "date")
-      originalLine: field.original_line, // Original line text for context
-      tableData: field.table_data, // Structured table data if available
+      fieldType: field.field_type,
+      originalLine: field.original_line,
+      tableData: field.table_data,
     }));
 
-    // Get user
-    const usersCollection = db.collection('users');
-    const user = await usersCollection.findOne({ email: session.user.email });
-    if (!user) {
-      return { success: false, error: 'User not found' };
-    }
-
-    // If org (or admin user-level) has PDF mapping and we have document_ast, auto-fill invoiceData
     let invoiceData: Partial<CreateInvoiceInput> = {};
-    const documentAst = parseResult.document_ast as DocumentAST | undefined;
-    let mapping: OrgPdfMappingConfig | undefined;
     const doc = user.organizationId
       ? await db.collection('organizations').findOne({ _id: user.organizationId })
       : isAdminPdfMappingBypass(user as { email?: string; adminTag?: boolean })
         ? user
         : null;
     if (doc) {
-      const list = getMappingsList(doc as Record<string, unknown>);
-      mapping = resolveConfig(list, mappingName);
-    }
-    if (documentAst && mapping && Object.keys(mapping).length > 0) {
-      invoiceData = applyPdfMapping(documentAst, mapping);
+      const mapping = resolveConfig(getMappingsList(doc as Record<string, unknown>), mappingName);
+      if (documentAst && mapping && Object.keys(mapping).length > 0) {
+        invoiceData = applyPdfMapping(documentAst, mapping);
+        console.log('[PDF Parse] Applied mapping:', mappingName ?? 'default');
+        console.log('[PDF Parse] Mapped result (invoiceData):', JSON.stringify(invoiceData, null, 2));
+      } else {
+        console.log('[PDF Parse] No mapping applied (no org mapping or empty config)');
+      }
     }
 
-    // Create invoice draft (with prefilled invoiceData if org mapping applied)
     const draftStatus: 'ready' | 'mapping' = Object.keys(invoiceData).length > 0 ? 'ready' : 'mapping';
     const draftInput: CreateInvoiceDraftInput = {
       userId: user._id!,
       organizationId: user.organizationId,
-      sourcePdfId: new ObjectId(uploadId),
-      sourcePdfUrl: pdfUpload.filePath,
       extractedFields,
       status: draftStatus,
+      // No sourcePdfId / sourcePdfUrl — PDF was never stored
     };
 
     const draftsCollection = db.collection('invoiceDrafts');
@@ -241,12 +141,6 @@ export async function parsePdf(uploadId: string, mappingName?: string | null): P
       updatedAt: new Date(),
     });
 
-    // Update PDF upload status
-    await pdfUploadsCollection.updateOne(
-      { _id: new ObjectId(uploadId) },
-      { $set: { status: 'completed', updatedAt: new Date() } }
-    );
-
     return {
       success: true,
       data: {
@@ -256,26 +150,7 @@ export async function parsePdf(uploadId: string, mappingName?: string | null): P
       },
     };
   } catch (error) {
-    console.error('Error parsing PDF:', error);
-    
-    // Update PDF upload status to error
-    try {
-      const db = await connectToDatabase();
-      const pdfUploadsCollection = db.collection('pdfUploads');
-      await pdfUploadsCollection.updateOne(
-        { _id: new ObjectId(uploadId) },
-        {
-          $set: {
-            status: 'error',
-            errorMessage: error instanceof Error ? error.message : 'Unknown error',
-            updatedAt: new Date(),
-          },
-        }
-      );
-    } catch (updateError) {
-      console.error('Error updating PDF upload status:', updateError);
-    }
-
+    console.error('Error in uploadAndParsePdf:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to parse PDF',

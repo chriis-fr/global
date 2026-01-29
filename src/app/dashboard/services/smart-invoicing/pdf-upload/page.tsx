@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { uploadPdfFile, parsePdf, getOrgPdfMappingList } from '@/lib/actions/pdf-invoice';
+import { uploadAndParsePdf, getOrgPdfMappingList } from '@/lib/actions/pdf-invoice';
 import { Upload, FileText, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 
 export default function PdfUploadPage() {
@@ -12,7 +12,6 @@ export default function PdfUploadPage() {
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [uploadId, setUploadId] = useState<string | null>(null);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [mappingNames, setMappingNames] = useState<string[]>([]);
   const [defaultMappingName, setDefaultMappingName] = useState<string | null>(null);
@@ -51,6 +50,7 @@ export default function PdfUploadPage() {
     }
 
     setUploading(true);
+    setParsing(true);
     setError(null);
     setSuccess(null);
 
@@ -58,44 +58,28 @@ export default function PdfUploadPage() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const result = await uploadPdfFile(formData);
+      // Parse PDF in memory — file is never saved to disk
+      const result = await uploadAndParsePdf(formData, selectedMappingName || undefined);
 
       if (!result.success) {
-        setError(result.error || 'Upload failed');
-        setUploading(false);
+        setError(result.error || 'Failed to parse PDF');
         return;
       }
 
-      setUploadId(result.data!.uploadId);
-      setSuccess(`File uploaded successfully: ${result.data!.filename}`);
-
-      // Automatically parse the PDF with selected mapping (or default)
-      setParsing(true);
-      const parseResult = await parsePdf(
-        result.data!.uploadId,
-        selectedMappingName || undefined
-      );
-
-      if (!parseResult.success) {
-        setError(parseResult.error || 'Failed to parse PDF');
-        setParsing(false);
-        return;
-      }
-
-      setDraftId(parseResult.data!.draftId);
-      const status = parseResult.data!.status ?? 'mapping';
+      setDraftId(result.data!.draftId);
+      const status = result.data!.status ?? 'mapping';
       setSuccess(
         status === 'ready'
           ? 'PDF parsed and mapped. Opening Create Invoice with items pre-filled…'
-          : `PDF parsed successfully! Found ${parseResult.data!.extractedFields.length} fields.`
+          : `PDF parsed successfully! Found ${result.data!.extractedFields.length} fields.`
       );
 
       // Redirect: if mapping was applied (ready), go straight to create page with draft pre-filled; otherwise to mapping page
       setTimeout(() => {
         if (status === 'ready') {
-          router.push(`/dashboard/services/smart-invoicing/create?fromPdfDraft=${parseResult.data!.draftId}`);
+          router.push(`/dashboard/services/smart-invoicing/create?fromPdfDraft=${result.data!.draftId}`);
         } else {
-          router.push(`/dashboard/services/smart-invoicing/pdf-map/${parseResult.data!.draftId}`);
+          router.push(`/dashboard/services/smart-invoicing/pdf-map/${result.data!.draftId}`);
         }
       }, status === 'ready' ? 800 : 1500);
     } catch (err) {
