@@ -20,17 +20,10 @@ import {
   ChevronDown as ChevronDownIcon,
   Receipt
 } from 'lucide-react';
-// Lazy load heavy PDF libraries - they're only needed when downloading
-const loadPdfLibraries = async () => {
-  const [jsPDF, html2canvas] = await Promise.all([
-    import('jspdf'),
-    import('html2canvas')
-  ]);
-  return { jsPDF: jsPDF.default, html2canvas: html2canvas.default };
-};
 import { countries } from '@/data/countries';
-import { getCurrencyByCode } from '@/data/currencies';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
+import { generatePdfBlob } from '@/lib/utils/pdfDocument';
+import type { InvoicePdfData } from '@/components/invoicing/InvoicePdfDocument';
 import { getExplorerUrl } from '@/lib/utils/blockchain';
 import { ExternalLink } from 'lucide-react';
 import { getChainByNumericId, SUPPORTED_CHAINS } from '@/lib/chains';
@@ -79,12 +72,16 @@ interface Invoice {
     unitPrice?: number;
     discount?: number;
     tax?: number;
+    taxRate?: number;
     amount?: number;
   }>;
   subtotal?: number;
   totalTax?: number;
+  taxAmount?: number;
   total?: number;
   totalAmount?: number;
+  withholdingTaxAmount?: number;
+  withholdingTaxRatePercent?: number;
   memo?: string;
   status?: 'draft' | 'sent' | 'pending' | 'paid' | 'overdue';
   createdAt?: string;
@@ -127,6 +124,75 @@ interface Invoice {
   tokenAddress?: string;
 }
 
+// Map invoice to InvoicePdfData for invoice PDF (react-pdf, same as email)
+function invoiceToPdfData(inv: Invoice): InvoicePdfData {
+  const companyAddr = inv.companyAddress ?? (inv.companyDetails ? {
+    street: inv.companyDetails.addressLine1 ?? '',
+    city: inv.companyDetails.city ?? '',
+    state: inv.companyDetails.region ?? '',
+    zipCode: inv.companyDetails.postalCode ?? '',
+    country: inv.companyDetails.country ?? '',
+  } : undefined);
+  const clientAddr = inv.clientAddress ?? (inv.clientDetails ? {
+    street: inv.clientDetails.addressLine1 ?? '',
+    city: inv.clientDetails.city ?? '',
+    state: inv.clientDetails.region ?? '',
+    zipCode: inv.clientDetails.postalCode ?? '',
+    country: inv.clientDetails.country ?? '',
+  } : undefined);
+  const addr = (r: { street?: string; city?: string; state?: string; zipCode?: string; country?: string } | undefined) => ({
+    street: r?.street ?? '',
+    city: r?.city ?? '',
+    state: r?.state ?? '',
+    zipCode: r?.zipCode ?? '',
+    country: r?.country ?? '',
+  });
+  const paymentMethod = (inv.paymentMethod ?? inv.paymentSettings?.method) === 'crypto' ? 'crypto' : 'fiat';
+  const bank = inv.paymentSettings?.bankAccount;
+  return {
+    invoiceName: inv.invoiceName ?? 'Invoice',
+    issueDate: inv.issueDate ?? '',
+    dueDate: inv.dueDate ?? '',
+    companyName: inv.companyName ?? inv.companyDetails?.name ?? '',
+    companyEmail: inv.companyEmail ?? '',
+    companyPhone: inv.companyPhone ?? '',
+    companyAddress: addr(companyAddr),
+    companyTaxNumber: inv.companyTaxNumber ?? inv.companyDetails?.taxNumber,
+    companyLogo: inv.companyLogo,
+    clientName: inv.clientName ?? ([inv.clientDetails?.firstName, inv.clientDetails?.lastName].filter(Boolean).join(' ') || (inv.clientDetails?.companyName ?? '')),
+    clientCompany: inv.clientDetails?.companyName,
+    clientEmail: inv.clientEmail ?? '',
+    clientPhone: inv.clientPhone ?? '',
+    clientAddress: addr(clientAddr),
+    currency: inv.currency ?? inv.paymentSettings?.currency ?? 'USD',
+    paymentMethod,
+    paymentNetwork: inv.paymentNetwork ?? inv.paymentSettings?.cryptoNetwork,
+    paymentAddress: inv.paymentAddress ?? inv.paymentSettings?.walletAddress,
+    bankName: inv.bankName ?? bank?.bankName,
+    accountNumber: inv.accountNumber ?? bank?.accountNumber,
+    routingNumber: inv.routingNumber ?? bank?.routingNumber,
+    items: (inv.items ?? []).map((item) => {
+      const rawTax = item.tax ?? (item as { taxRate?: number }).taxRate;
+      return {
+        id: item.id,
+        description: typeof item.description === 'string' ? item.description : (item.description ?? '').toString(),
+        quantity: item.quantity ?? 0,
+        unitPrice: item.unitPrice ?? 0,
+        discount: item.discount ?? 0,
+        tax: Number(rawTax ?? 0),
+        amount: item.amount ?? 0,
+      };
+    }),
+    subtotal: inv.subtotal ?? 0,
+    totalTax: Number(inv.totalTax ?? (inv as { taxAmount?: number }).taxAmount ?? 0),
+    total: inv.total ?? inv.totalAmount ?? 0,
+    withholdingTaxEnabled: (inv.withholdingTaxAmount ?? 0) > 0,
+    withholdingTaxAmount: inv.withholdingTaxAmount,
+    withholdingTaxRatePercent: inv.withholdingTaxRatePercent,
+    memo: inv.memo,
+  };
+}
+
 export default function InvoiceViewPage() {
   const router = useRouter();
   const params = useParams();
@@ -145,7 +211,7 @@ export default function InvoiceViewPage() {
     [invoice?.items]
   );
   const hasAnyTaxes = useMemo(() => 
-    invoice?.items?.some(item => (item.tax || 0) > 0) || false,
+    invoice?.items?.some(item => ((item.tax ?? (item as { taxRate?: number }).taxRate) || 0) > 0) || false,
     [invoice?.items]
   );
 
@@ -157,11 +223,6 @@ export default function InvoiceViewPage() {
       month: 'long', 
       day: 'numeric' 
     });
-  }, []);
-
-  // Memoize getCurrencySymbol
-  const getCurrencySymbol = useCallback((currency: string) => {
-    return getCurrencyByCode(currency)?.symbol || currency;
   }, []);
 
   // Memoize getDisplayCurrency - expensive computation
@@ -218,121 +279,6 @@ export default function InvoiceViewPage() {
     if (!invoice) return 'USD';
     return getDisplayCurrency(invoice);
   }, [invoice, getDisplayCurrency]);
-
-  // PDF generation functions - only load when needed
-  const optimizeCanvasForPdf = (canvas: HTMLCanvasElement): HTMLCanvasElement => {
-    const optimizedCanvas = document.createElement('canvas');
-    const ctx = optimizedCanvas.getContext('2d');
-    if (!ctx) return canvas;
-
-    // Set optimized dimensions
-    const maxWidth = 800;
-    const maxHeight = 1200;
-    const scale = Math.min(maxWidth / canvas.width, maxHeight / canvas.height, 1);
-    
-    optimizedCanvas.width = canvas.width * scale;
-    optimizedCanvas.height = canvas.height * scale;
-
-    // Draw with optimization
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(canvas, 0, 0, optimizedCanvas.width, optimizedCanvas.height);
-
-    return optimizedCanvas;
-  };
-
-  const generateOptimizedPdf = useCallback(async (
-    pdfContainer: HTMLElement, 
-    jsPDFLib: typeof import('jspdf')['default'], 
-    html2canvasLib: typeof import('html2canvas')['default']
-  ): Promise<{ pdf: import('jspdf').jsPDF; base64: string }> => {
-    // Generate PDF using html2canvas with optimized options
-    const canvas = await html2canvasLib(pdfContainer, {
-      logging: false,
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: '#ffffff',
-      scale: 1.5, // Reduced from 2 for better size/quality balance
-      width: 800,
-      height: pdfContainer.scrollHeight,
-      scrollX: 0,
-      scrollY: 0,
-      // Add performance optimizations
-      removeContainer: true,
-      foreignObjectRendering: false, // Disable for better performance
-      imageTimeout: 15000 // 15 second timeout for images
-    });
-
-    // Optimize canvas
-    const optimizedCanvas = optimizeCanvasForPdf(canvas);
-    
-    // Create PDF with optimized settings
-    const pdf = new jsPDFLib({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4',
-      compress: true
-    });
-
-    // Calculate dimensions
-    const imgWidth = 210; // A4 width in mm
-    const pageHeight = 297; // A4 height in mm
-    const imgHeight = (optimizedCanvas.height * imgWidth) / optimizedCanvas.width;
-    let heightLeft = imgHeight;
-
-    let position = 0;
-
-    // Add image to PDF - use JPEG for better quality and smaller size
-    const imgData = optimizedCanvas.toDataURL('image/jpeg', 0.85);
-    pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-    heightLeft -= pageHeight;
-
-    // Add additional pages if needed
-    while (heightLeft >= 0) {
-      position = heightLeft - imgHeight;
-      pdf.addPage();
-      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-    }
-
-    // Generate base64
-    const base64 = pdf.output('datauristring').split(',')[1];
-    
-    return { pdf, base64 };
-  }, []); // No dependencies - pure function that only uses its parameters
-
-  const addWatermark = (pdf: import('jspdf').jsPDF, invoiceNumber?: string) => {
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    
-    // Add watermark text with better styling
-    pdf.setTextColor(240, 240, 240); // Very light gray
-    pdf.setFontSize(24);
-    pdf.setFont('helvetica', 'normal');
-    
-    // Add watermark in center
-    const text = 'DIGITAL INVOICE';
-    const textWidth = pdf.getTextWidth(text);
-    const x = (pageWidth - textWidth) / 2;
-    const y = pageHeight / 2;
-    
-    // Add watermark with transparency effect
-    pdf.text(text, x, y);
-    
-    // Add invoice number watermark if provided
-    if (invoiceNumber) {
-      pdf.setFontSize(16);
-      const invoiceText = `Invoice: ${invoiceNumber}`;
-      const invoiceTextWidth = pdf.getTextWidth(invoiceText);
-      const invoiceX = (pageWidth - invoiceTextWidth) / 2;
-      const invoiceY = y + 20; // Below the main watermark
-      
-      pdf.text(invoiceText, invoiceX, invoiceY);
-    }
-    
-    // Reset text color for normal content
-    pdf.setTextColor(0, 0, 0);
-  };
 
   const loadInvoice = useCallback(async (id: string) => {
     try {
@@ -625,7 +571,7 @@ export default function InvoiceViewPage() {
     }
   };
 
-  // Handle PDF download - lazy load libraries
+  // Handle PDF download - same react-pdf as email (InvoicePdfDocument variant='invoice')
   const handleDownloadPdf = useCallback(async () => {
     if (!invoice) return;
 
@@ -633,223 +579,16 @@ export default function InvoiceViewPage() {
       startTransition(() => {
         setDownloadingPdf(true);
       });
-      
-      // Lazy load PDF libraries
-      const { jsPDF, html2canvas } = await loadPdfLibraries();
-      console.log('📤 [Smart Invoicing] Starting PDF download for invoice:', invoice.invoiceNumber);
-
-      // Create a temporary container for PDF generation
-      const pdfContainer = document.createElement('div');
-      pdfContainer.style.position = 'absolute';
-      pdfContainer.style.left = '-9999px';
-      pdfContainer.style.top = '-9999px';
-      pdfContainer.style.width = '800px';
-      pdfContainer.style.backgroundColor = '#ffffff';
-      pdfContainer.style.padding = '40px';
-      pdfContainer.style.fontFamily = 'Arial, sans-serif';
-      document.body.appendChild(pdfContainer);
-
-      // Generate the PDF content HTML
-      const pdfContent = `
-        <div style="max-width: 800px; margin: 0 auto; background: white; padding: 40px; font-family: Arial, sans-serif;">
-          <!-- Header -->
-          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; border-bottom: 2px solid #e5e7eb; padding-bottom: 20px;">
-            <div>
-              <h1 style="color: #1f2937; font-size: 32px; font-weight: bold; margin: 0;">${invoice.invoiceName || 'INVOICE'}</h1>
-              <p style="color: #6b7280; font-size: 16px; margin: 5px 0 0 0;">Invoice #: ${invoice.invoiceNumber || 'N/A'}</p>
-            </div>
-            <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 10px;">
-              <!-- Dates -->
-              <div style="text-align: right;">
-                <div style="color: #6b7280; font-size: 14px; margin-bottom: 5px;">
-                  <span style="display: inline-flex; align-items: center; margin-bottom: 3px;">
-                    📅 Issued on ${formatDate(invoice.issueDate || new Date().toISOString())}
-                  </span>
-                </div>
-                <div style="color: #6b7280; font-size: 14px;">
-                  <span style="display: inline-flex; align-items: center;">
-                    🕐 Payment due by ${formatDate(invoice.dueDate || new Date().toISOString())}
-                  </span>
-                </div>
-              </div>
-              <!-- Logo -->
-              ${invoice.companyLogo ? `<img src="${invoice.companyLogo}" alt="Company Logo" style="max-height: 60px; max-width: 200px;">` : ''}
-            </div>
-          </div>
-
-          <!-- Company and Client Info -->
-          <div style="display: flex; justify-content: space-between; margin-bottom: 40px;">
-            <div style="flex: 1; margin-right: 20px;">
-              <h3 style="color: #374151; font-size: 18px; font-weight: bold; margin: 0 0 15px 0;">From:</h3>
-              <div style="color: #4b5563; line-height: 1.6;">
-                <p style="font-weight: bold; margin: 0 0 5px 0; font-size: 16px;">${invoice.companyName || invoice.companyDetails?.name || 'Company Name'}</p>
-                <p style="margin: 0 0 5px 0;">${invoice.companyEmail || 'N/A'}</p>
-                <p style="margin: 0 0 5px 0;">${invoice.companyPhone || 'N/A'}</p>
-                <p style="margin: 0 0 5px 0;">
-                  ${invoice.companyAddress ? 
-                    `${invoice.companyAddress.street || ''}, ${invoice.companyAddress.city || ''}, ${invoice.companyAddress.state || ''} ${invoice.companyAddress.zipCode || ''}, ${invoice.companyAddress.country || ''}` :
-                    invoice.companyDetails ? 
-                    `${invoice.companyDetails.addressLine1 || ''}, ${invoice.companyDetails.city || ''}, ${invoice.companyDetails.region || ''} ${invoice.companyDetails.postalCode || ''}, ${invoice.companyDetails.country || ''}` :
-                    'N/A'
-                  }
-                </p>
-                <p style="margin: 0;">Tax Number: ${invoice.companyTaxNumber || invoice.companyDetails?.taxNumber || 'N/A'}</p>
-              </div>
-            </div>
-            <div style="flex: 1; margin-left: 20px;">
-              <h3 style="color: #374151; font-size: 18px; font-weight: bold; margin: 0 0 15px 0;">To:</h3>
-              <div style="color: #4b5563; line-height: 1.6;">
-                <p style="font-weight: bold; margin: 0 0 5px 0; font-size: 16px;">${invoice.clientName || [invoice.clientDetails?.firstName, invoice.clientDetails?.lastName].filter(Boolean).join(' ') || 'Client Name'}</p>
-                ${invoice.clientDetails?.companyName ? `<p style="margin: 0 0 5px 0; font-weight: bold;">${invoice.clientDetails.companyName}</p>` : ''}
-                <p style="margin: 0 0 5px 0;">${invoice.clientEmail || 'N/A'}</p>
-                <p style="margin: 0 0 5px 0;">${invoice.clientPhone || 'N/A'}</p>
-                <p style="margin: 0 0 5px 0;">
-                  ${invoice.clientAddress ? 
-                    `${invoice.clientAddress.street || ''}, ${invoice.clientAddress.city || ''}, ${invoice.clientAddress.state || ''} ${invoice.clientAddress.zipCode || ''}, ${invoice.clientAddress.country || ''}` :
-                    invoice.clientDetails ? 
-                    `${invoice.clientDetails.addressLine1 || ''}, ${invoice.clientDetails.city || ''}, ${invoice.clientDetails.region || ''}, ${invoice.clientDetails.postalCode || ''}, ${invoice.clientDetails.country || ''}` :
-                    'N/A'
-                  }
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Invoice Details -->
-          <div style="display: flex; justify-content: space-between; margin-bottom: 40px; background: #f9fafb; padding: 20px; border-radius: 8px;">
-            <div>
-              <p style="margin: 0 0 5px 0; color: #6b7280; font-size: 14px;">Issue Date</p>
-              <p style="margin: 0; font-weight: bold; color: #374151;">${formatDate(invoice.issueDate || '')}</p>
-            </div>
-            <div>
-              <p style="margin: 0 0 5px 0; color: #6b7280; font-size: 14px;">Due Date</p>
-              <p style="margin: 0; font-weight: bold; color: #374151;">${formatDate(invoice.dueDate || '')}</p>
-            </div>
-            <div>
-              <p style="margin: 0 0 5px 0; color: #6b7280; font-size: 14px;">Status</p>
-              <p style="margin: 0; font-weight: bold; color: #374151;">${invoice.status || 'Draft'}</p>
-            </div>
-            <div>
-              <p style="margin: 0 0 5px 0; color: #6b7280; font-size: 14px;">Currency</p>
-              <p style="margin: 0; font-weight: bold; color: #374151;">${invoice.currency || 'USD'}</p>
-            </div>
-          </div>
-
-          <!-- Items Table -->
-          <div style="margin-bottom: 40px;">
-            <table style="width: 100%; border-collapse: collapse; border: 1px solid #e5e7eb;">
-              <thead>
-                <tr style="background: #f9fafb;">
-                  <th style="padding: 15px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Description</th>
-                  <th style="padding: 15px; text-align: center; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Qty</th>
-                  <th style="padding: 15px; text-align: right; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Unit Price</th>
-                  ${hasAnyDiscounts ? '<th style="padding: 15px; text-align: center; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Discount</th>' : ''}
-                  ${hasAnyTaxes ? '<th style="padding: 15px; text-align: center; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Tax</th>' : ''}
-                  <th style="padding: 15px; text-align: right; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: #374151;">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${invoice.items?.map(item => `
-                  <tr>
-                    <td style="padding: 15px; border-bottom: 1px solid #e5e7eb; color: #374151;">${item.description || 'Item description'}</td>
-                    <td style="padding: 15px; text-align: center; border-bottom: 1px solid #e5e7eb; color: #374151;">${item.quantity || 0}</td>
-                    <td style="padding: 15px; text-align: right; border-bottom: 1px solid #e5e7eb; color: #374151;">${getCurrencySymbol(invoice.currency || '')}${item.unitPrice?.toFixed(2) || '0.00'}</td>
-                    ${hasAnyDiscounts ? `<td style="padding: 15px; text-align: center; border-bottom: 1px solid #e5e7eb; color: #374151;">${(item.discount || 0) > 0 ? (item.discount || 0) + '%' : ''}</td>` : ''}
-                    ${hasAnyTaxes ? `<td style="padding: 15px; text-align: center; border-bottom: 1px solid #e5e7eb; color: #374151;">${(item.tax || 0) > 0 ? (item.tax || 0) + '%' : ''}</td>` : ''}
-                    <td style="padding: 15px; text-align: right; border-bottom: 1px solid #e5e7eb; color: #374151; font-weight: bold;">${getCurrencySymbol(invoice.currency || '')}${item.amount?.toFixed(2) || '0.00'}</td>
-                  </tr>
-                `).join('') || '<tr><td colspan="6" style="padding: 15px; text-align: center; color: #6b7280;">No items</td></tr>'}
-              </tbody>
-            </table>
-          </div>
-
-          <!-- Summary -->
-          <div style="display: flex; justify-content: flex-end; margin-bottom: 40px;">
-            <div style="width: 300px;">
-              <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e5e7eb;">
-                <span style="color: #6b7280;">Subtotal:</span>
-                <span style="font-weight: bold; color: #374151;">${getCurrencySymbol(invoice.currency || '')}${invoice.subtotal?.toFixed(2) || '0.00'}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e5e7eb;">
-                <span style="color: #6b7280;">Tax:</span>
-                <span style="font-weight: bold; color: #374151;">${getCurrencySymbol(invoice.currency || '')}${invoice.totalTax?.toFixed(2) || '0.00'}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; padding: 15px 0; background: #f9fafb; margin-top: 10px; border-radius: 8px; padding: 15px;">
-                <span style="font-size: 18px; font-weight: bold; color: #1f2937;">Total:</span>
-                <span style="font-size: 18px; font-weight: bold; color: #1f2937;">${getCurrencySymbol(invoice.currency || '')}${(invoice.total || invoice.total || invoice.totalAmount || 0).toFixed(2)}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Payment Information -->
-          <div style="margin-bottom: 40px; background: #f9fafb; padding: 20px; border-radius: 8px;">
-            <h3 style="color: #374151; font-size: 18px; font-weight: bold; margin: 0 0 15px 0;">Payment Information</h3>
-            <div style="color: #4b5563; line-height: 1.6;">
-              <p style="margin: 0 0 10px 0;"><strong>Payment Method:</strong> ${(invoice.paymentMethod || invoice.paymentSettings?.method) === 'fiat' ? 'Bank Transfer' : 'Cryptocurrency'}</p>
-              <p style="margin: 0 0 10px 0;"><strong>Currency:</strong> ${invoice.currency || invoice.paymentSettings?.currency || 'USD'}</p>
-              ${(invoice.paymentMethod || invoice.paymentSettings?.method) === 'fiat' ? `
-                ${invoice.paymentSettings?.bankAccount?.bankName ? `<p style="margin: 0 0 5px 0;"><strong>Bank:</strong> ${invoice.paymentSettings.bankAccount.bankName}</p>` : ''}
-                ${invoice.paymentSettings?.bankAccount?.accountNumber ? `<p style="margin: 0 0 5px 0;"><strong>Account Number:</strong> ${invoice.paymentSettings.bankAccount.accountNumber}</p>` : ''}
-                ${invoice.paymentSettings?.bankAccount?.routingNumber ? `<p style="margin: 0 0 5px 0;"><strong>Routing Number:</strong> ${invoice.paymentSettings.bankAccount.routingNumber}</p>` : ''}
-              ` : `
-                ${invoice.paymentNetwork || invoice.paymentSettings?.cryptoNetwork ? `<p style="margin: 0 0 5px 0;"><strong>Network:</strong> ${invoice.paymentNetwork || invoice.paymentSettings?.cryptoNetwork}</p>` : ''}
-                ${invoice.paymentAddress || invoice.paymentSettings?.walletAddress ? `<p style="margin: 0 0 5px 0;"><strong>Payment Address:</strong> ${invoice.paymentAddress || invoice.paymentSettings?.walletAddress}</p>` : ''}
-              `}
-            </div>
-          </div>
-
-          <!-- Memo -->
-          ${invoice.memo ? `
-            <div style="margin-bottom: 40px;">
-              <h3 style="color: #374151; font-size: 18px; font-weight: bold; margin: 0 0 15px 0;">Notes</h3>
-              <p style="color: #4b5563; line-height: 1.6; margin: 0;">${invoice.memo}</p>
-            </div>
-          ` : ''}
-
-          <!-- Footer -->
-          <div style="text-align: center; margin-top: 60px; padding-top: 20px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 14px;">
-            <p style="margin: 0;">Generated by Chains-ERP</p>
-            <p style="margin: 5px 0 0 0;">Invoice Number: ${invoice.invoiceNumber || 'N/A'} | Date: ${formatDate(invoice.issueDate || '')}</p>
-          </div>
-        </div>
-      `;
-
-      pdfContainer.innerHTML = pdfContent;
-
-      // Wait for images to load
-      const images = pdfContainer.querySelectorAll('img');
-      if (images.length > 0) {
-        await Promise.all(Array.from(images).map(img => {
-          return new Promise((resolve) => {
-            if (img.complete) {
-              resolve(null);
-            } else {
-              img.onload = () => resolve(null);
-              img.onerror = () => resolve(null);
-            }
-          });
-        }));
-      }
-
-      // Generate optimized PDF
-      const { pdf } = await generateOptimizedPdf(pdfContainer, jsPDF, html2canvas);
-
-      // Remove the temporary element
-      document.body.removeChild(pdfContainer);
-
-      // Add watermark
-      addWatermark(pdf, invoice.invoiceNumber);
-
-      // Download the PDF
+      const pdfData = invoiceToPdfData(invoice);
+      const blob = await generatePdfBlob(pdfData, invoice.invoiceNumber ?? undefined, 'invoice');
+      const url = URL.createObjectURL(blob);
       const filename = `${invoice.invoiceNumber || 'invoice'}_${formatDate(invoice.issueDate || '').replace(/,/g, '')}.pdf`;
-      pdf.save(filename);
-
-      console.log('✅ [Smart Invoicing] PDF downloaded successfully:', {
-        invoiceNumber: invoice.invoiceNumber,
-        filename: filename,
-        currency: invoice.currency
-      });
-
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      console.log('✅ [Smart Invoicing] PDF downloaded successfully:', { invoiceNumber: invoice.invoiceNumber, filename, currency: invoice.currency });
     } catch (error) {
       console.error('❌ [Smart Invoicing] Failed to download PDF:', error);
       alert('Failed to download PDF. Please try again.');
@@ -858,9 +597,9 @@ export default function InvoiceViewPage() {
         setDownloadingPdf(false);
       });
     }
-  }, [invoice, formatDate, getCurrencySymbol, hasAnyDiscounts, hasAnyTaxes, generateOptimizedPdf]);
+  }, [invoice, formatDate]);
 
-  // Handle Receipt download - lazy load libraries
+  // Handle Receipt download - same react-pdf as payables (InvoicePdfDocument variant='receipt')
   const handleDownloadReceipt = useCallback(async () => {
     if (!invoice) return;
 
@@ -868,162 +607,15 @@ export default function InvoiceViewPage() {
       startTransition(() => {
         setDownloadingReceipt(true);
       });
-      
-      // Lazy load PDF libraries
-      const { jsPDF, html2canvas } = await loadPdfLibraries();
-      console.log('📤 [Smart Invoicing] Starting receipt download for invoice:', invoice.invoiceNumber);
-
-      // Create a temporary container for receipt generation
-      const receiptContainer = document.createElement('div');
-      receiptContainer.style.position = 'absolute';
-      receiptContainer.style.left = '-9999px';
-      receiptContainer.style.top = '-9999px';
-      receiptContainer.style.width = '750px';
-      receiptContainer.style.backgroundColor = 'white';
-      receiptContainer.style.padding = '30px';
-      receiptContainer.style.fontFamily = 'Arial, sans-serif';
-      document.body.appendChild(receiptContainer);
-
-      // Generate receipt HTML
-      const receiptHTML = `
-        <div style="max-width: 600px; margin: 0 auto; background: white; padding: 20px; border: 1px solid #e5e7eb; box-sizing: border-box; width: 100%;">
-          <!-- Header -->
-          <div style="text-align: center; margin-bottom: 20px; border-bottom: 2px solid #3b82f6; padding-bottom: 15px;">
-            ${invoice.companyLogo ? `<img src="${invoice.companyLogo}" alt="Company Logo" style="max-height: 50px; margin-bottom: 8px; max-width: 100%;">` : ''}
-            <h1 style="color: #1f2937; font-size: 24px; font-weight: bold; margin: 0; word-wrap: break-word;">PAYMENT RECEIPT</h1>
-            <p style="color: #6b7280; font-size: 12px; margin: 3px 0 0 0; word-wrap: break-word;">Receipt #${invoice.invoiceNumber || 'N/A'}</p>
-          </div>
-
-          <!-- Payment Details -->
-          <div style="margin-bottom: 18px;">
-            <h2 style="color: #1f2937; font-size: 16px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px;">Payment Details</h2>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-              <div>
-                <p style="margin: 5px 0; color: #6b7280; font-size: 14px; word-wrap: break-word;"><strong>Payment Date:</strong> ${formatDate(invoice.updatedAt || new Date().toISOString())}</p>
-                <p style="margin: 5px 0; color: #6b7280; font-size: 14px; word-wrap: break-word;"><strong>Invoice Date:</strong> ${formatDate(invoice.issueDate || '')}</p>
-                <p style="margin: 5px 0; color: #6b7280; font-size: 14px; word-wrap: break-word;"><strong>Due Date:</strong> ${formatDate(invoice.dueDate || '')}</p>
-              </div>
-              <div>
-                <p style="margin: 5px 0; color: #6b7280; font-size: 14px; word-wrap: break-word;"><strong>Payment Method:</strong> ${invoice.paymentMethod === 'crypto' ? 'Cryptocurrency' : 'Bank Transfer'}</p>
-                <p style="margin: 5px 0; color: #6b7280; font-size: 14px; word-wrap: break-word;"><strong>Status:</strong> <span style="color: #059669; font-weight: bold;">PAID</span></p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Company Information -->
-          <div style="margin-bottom: 18px;">
-            <h2 style="color: #1f2937; font-size: 16px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px;">From</h2>
-            <div style="background: #f9fafb; padding: 12px; border-radius: 6px;">
-              <p style="margin: 0 0 3px 0; font-weight: bold; color: #1f2937; font-size: 14px; word-wrap: break-word;">${invoice.companyName || 'Company Name'}</p>
-              <p style="margin: 0 0 3px 0; color: #6b7280; font-size: 12px; word-wrap: break-word;">${invoice.companyEmail || ''}</p>
-              <p style="margin: 0 0 3px 0; color: #6b7280; font-size: 12px; word-wrap: break-word;">${invoice.companyPhone || ''}</p>
-              ${invoice.companyAddress ? `
-                <p style="margin: 0; color: #6b7280; font-size: 12px; word-wrap: break-word;">
-                  ${invoice.companyAddress.street || ''}<br>
-                  ${invoice.companyAddress.city || ''}, ${invoice.companyAddress.state || ''} ${invoice.companyAddress.zipCode || ''}<br>
-                  ${invoice.companyAddress.country || ''}
-                </p>
-              ` : ''}
-            </div>
-          </div>
-
-          <!-- Client Information -->
-          <div style="margin-bottom: 18px;">
-            <h2 style="color: #1f2937; font-size: 16px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px;">To</h2>
-            <div style="background: #f9fafb; padding: 12px; border-radius: 6px;">
-              <p style="margin: 0 0 3px 0; font-weight: bold; color: #1f2937; font-size: 14px; word-wrap: break-word;">${invoice.clientName || 'Client Name'}</p>
-              <p style="margin: 0 0 3px 0; color: #6b7280; font-size: 12px; word-wrap: break-word;">${invoice.clientEmail || ''}</p>
-              <p style="margin: 0 0 3px 0; color: #6b7280; font-size: 12px; word-wrap: break-word;">${invoice.clientPhone || ''}</p>
-              ${invoice.clientAddress ? `
-                <p style="margin: 0; color: #6b7280; font-size: 12px; word-wrap: break-word;">
-                  ${invoice.clientAddress.street || ''}<br>
-                  ${invoice.clientAddress.city || ''}, ${invoice.clientAddress.state || ''} ${invoice.clientAddress.zipCode || ''}<br>
-                  ${invoice.clientAddress.country || ''}
-                </p>
-              ` : ''}
-            </div>
-          </div>
-
-          <!-- Items -->
-          <div style="margin-bottom: 18px;">
-            <h2 style="color: #1f2937; font-size: 16px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px;">Items Paid</h2>
-            <div style="border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; overflow-x: auto;">
-              <table style="width: 100%; border-collapse: collapse; min-width: 300px;">
-                <thead style="background: #f9fafb;">
-                  <tr>
-                    <th style="padding: 8px; text-align: left; font-weight: bold; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-size: 12px; white-space: nowrap;">Description</th>
-                    <th style="padding: 8px; text-align: center; font-weight: bold; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-size: 12px; white-space: nowrap;">Qty</th>
-                    <th style="padding: 8px; text-align: right; font-weight: bold; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-size: 12px; white-space: nowrap;">Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${invoice.items?.map(item => `
-                    <tr>
-                      <td style="padding: 8px; border-bottom: 1px solid #f3f4f6; color: #1f2937; font-size: 12px; word-wrap: break-word; max-width: 200px;">${item.description || ''}</td>
-                      <td style="padding: 8px; text-align: center; border-bottom: 1px solid #f3f4f6; color: #6b7280; font-size: 12px; white-space: nowrap;">${item.quantity || 0}</td>
-                      <td style="padding: 8px; text-align: right; border-bottom: 1px solid #f3f4f6; color: #1f2937; font-weight: bold; font-size: 12px; white-space: nowrap;">${getCurrencyByCode(invoice.currency || 'USD')?.symbol || '$'}${(item.amount || 0).toFixed(2)}</td>
-                    </tr>
-                  `).join('') || ''}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <!-- Total -->
-          <div style="margin-bottom: 15px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: #3b82f6; color: white; border-radius: 6px; flex-wrap: wrap; gap: 10px;">
-              <span style="font-size: 16px; font-weight: bold; word-wrap: break-word;">TOTAL PAID:</span>
-              <span style="font-size: 20px; font-weight: bold; word-wrap: break-word;">${getCurrencyByCode(invoice.currency || 'USD')?.symbol || '$'}${(invoice.total || invoice.total || invoice.totalAmount || 0).toFixed(2)}</span>
-            </div>
-          </div>
-
-          <!-- Footer -->
-          <div style="text-align: center; margin-top: 20px; padding-top: 15px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 11px;">
-            <p style="margin: 0; word-wrap: break-word;">Thank you for your payment!</p>
-            <p style="margin: 3px 0 0 0; word-wrap: break-word;">This receipt confirms that payment has been received and processed.</p>
-            <p style="margin: 8px 0 0 0; font-weight: bold; word-wrap: break-word;">Generated by <span style="color: #3b82f6;">Chains ERP</span> on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}</p>
-          </div>
-        </div>
-      `;
-
-      receiptContainer.innerHTML = receiptHTML;
-
-      // Generate PDF with lazy-loaded library
-      const canvas = await html2canvas(receiptContainer, {
-        scale: 1.5,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        height: 1000, // Limit height to fit on one page
-        width: 750
-      });
-
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      
-      const imgWidth = 210;
-      const pageHeight = 295;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-      // Scale down if content is too tall for one page
-      const maxHeight = pageHeight - 20; // Leave 10mm margin on top and bottom
-      let finalWidth = imgWidth;
-      let finalHeight = imgHeight;
-      
-      if (imgHeight > maxHeight) {
-        const scale = maxHeight / imgHeight;
-        finalHeight = maxHeight;
-        finalWidth = imgWidth * scale;
-      }
-
-      pdf.addImage(imgData, 'PNG', (210 - finalWidth) / 2, 10, finalWidth, finalHeight);
-
-      // Clean up
-      document.body.removeChild(receiptContainer);
-
-      // Download the PDF
+      const pdfData = invoiceToPdfData(invoice);
+      const blob = await generatePdfBlob(pdfData, invoice.invoiceNumber ?? undefined, 'receipt');
+      const url = URL.createObjectURL(blob);
       const filename = `Receipt_${invoice.invoiceNumber || 'invoice'}_${formatDate(invoice.updatedAt || new Date().toISOString()).replace(/,/g, '')}.pdf`;
-      pdf.save(filename);
-
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
       console.log('✅ [Smart Invoicing] Receipt downloaded successfully');
     } catch (error) {
       console.error('❌ [Smart Invoicing] Error downloading receipt:', error);
@@ -1410,9 +1002,9 @@ export default function InvoiceViewPage() {
                 </thead>
                 <tbody>
                   {invoice.items?.map((item, index) => {
-                    // Pre-compute values to avoid recalculation during render
+                    // Pre-compute values to avoid recalculation during render (support both tax and taxRate)
                     const discount = item.discount || 0;
-                    const tax = item.tax || 0;
+                    const tax = item.tax ?? (item as { taxRate?: number }).taxRate ?? 0;
                     const hasDiscount = discount > 0;
                     const hasTax = tax > 0;
                     
@@ -1477,10 +1069,18 @@ export default function InvoiceViewPage() {
                   <span>Total Tax amount</span>
                   <span>
                     <FormattedNumberDisplay 
-                      value={invoice.totalTax || 0} 
+                      value={invoice.totalTax ?? (invoice as { taxAmount?: number }).taxAmount ?? 0} 
                     />
                   </span>
                 </div>
+                {(invoice.withholdingTaxAmount ?? 0) > 0 && (
+                  <div className="flex justify-between text-gray-600">
+                    <span>Withholding ({invoice.withholdingTaxRatePercent ?? 5}%)</span>
+                    <span className="text-red-600">
+                      -<FormattedNumberDisplay value={invoice.withholdingTaxAmount ?? 0} />
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between text-black text-lg font-semibold border-t pt-2">
                   <span>Total amount</span>
                   <span>

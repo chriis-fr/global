@@ -83,6 +83,13 @@ function InvoiceAccessContent() {
 
   const token = searchParams.get('token');
 
+  // Redirect to dedicated pay-invoice page so users can pay without signing up
+  useEffect(() => {
+    if (token) {
+      router.replace(`/pay-invoice?token=${token}`);
+    }
+  }, [token, router]);
+
   const markTokenAsUsed = useCallback(async () => {
     try {
       await fetch('/api/invoice-access/mark-used', {

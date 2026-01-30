@@ -183,112 +183,67 @@ export const sendInvoiceNotification = async (
   const mailOptions: nodemailer.SendMailOptions = {
     from: `"${companyName || 'Chains ERP-Global'} via Chains ERP-Global" <${emailConfig.auth.user}>`,
     to: userEmail,
-    subject: `Invoice #${invoiceNumber} from ${companyName || 'Chains ERP-Global'}`,
+    subject: `New Invoice #${invoiceNumber} from ${companyName || 'Chains ERP-Global Finance'}`,
     headers: getEmailHeaders(),
     html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
-          <div style="margin-bottom: 20px;">
-            <img src="https://chains-erp.com/chainsnobg.png" 
-              alt="Chains ERP-Global Logo" 
-              style="max-width: 150px; height: auto; border-radius: 8px;">
+      <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+      </style>
+      <div style="font-family: 'Plus Jakarta Sans', 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #1a1a2e;">
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 24px; border-radius: 10px 10px 0 0; display: flex; align-items: center; gap: 28px; text-align: left;">
+          <img src="https://global.chains-erp.com/chainsnobg.png"
+            alt="Chains ERP-Global Logo"
+            style="max-width: 80px; height: auto; border-radius: 8px; flex-shrink: 0; margin-right: 8px;">
+          <div style="flex: 1;">
+            <h1 style="margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2;">New Invoice</h1>
+            <p style="margin: 10px 0 0 0; opacity: 0.95; font-size: 16px; font-weight: 500; letter-spacing: 0.01em;">From ${companyName || 'Chains ERP-Global'}</p>
           </div>
-          <h1 style="margin: 0; font-size: 28px;">Invoice</h1>
-          <p style="margin: 10px 0 0 0; opacity: 0.9;">Invoice #${invoiceNumber} from ${companyName || 'Chains ERP-Global'}</p>
         </div>
-        
+
         <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
-          <h2 style="color: #333; margin-top: 0;">Hello ${clientName},</h2>
-          
-          <p style="color: #666; line-height: 1.6;">
-            You have received an invoice from <strong>${companyName || 'Chains ERP-Global'}</strong>.
-          </p>
-          
-          <p style="color: #666; line-height: 1.6;">
-            This invoice is intended for <strong>${recipientName}</strong> and has been automatically added to your account.
-          </p>
-          
-          <div style="background: #e8f5e8; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #28a745;">
-            <p style="color: #155724; margin: 0; font-weight: bold;">
-              ✅ Invoice automatically added to your account
-            </p>
-            <p style="color: #155724; margin: 5px 0 0 0; font-size: 14px;">
-              If you have an account, this invoice is now visible in your Bills section. If you don't have an account yet, it will appear when you sign up.
-            </p>
+          <div style="background: white; padding: 22px; border-radius: 8px; margin: 0 0 24px 0; border-left: 4px solid #667eea; box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
+            <p style="color: #1a1a2e; margin: 0 0 8px 0; font-size: 15px; font-weight: 500; line-height: 1.5; letter-spacing: 0.01em;"><strong style="font-weight: 600;">Invoice #:</strong> ${invoiceNumber}</p>
+            <p style="color: #1a1a2e; margin: 0 0 8px 0; font-size: 15px; font-weight: 500; line-height: 1.5; letter-spacing: 0.01em;"><strong style="font-weight: 600;">Amount Due:</strong> ${currency} ${invoiceAmount.toFixed(2)}</p>
+            <p style="color: #1a1a2e; margin: 0 0 8px 0; font-size: 15px; font-weight: 500; line-height: 1.5; letter-spacing: 0.01em;"><strong style="font-weight: 600;">Due Date:</strong> ${dueDate}</p>
+            <p style="color: #1a1a2e; margin: 0; font-size: 15px; font-weight: 500; line-height: 1.5; letter-spacing: 0.01em;"><strong style="font-weight: 600;">Payment Methods:</strong> ${paymentMethods.join(', ')}</p>
           </div>
-          
-          <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #667eea;">
-            <h3 style="color: #333; margin-top: 0;">Invoice Details</h3>
-            <p style="color: #666; margin: 5px 0;"><strong>Invoice Number:</strong> ${invoiceNumber}</p>
-            <p style="color: #666; margin: 5px 0;"><strong>Amount:</strong> ${currency} ${invoiceAmount.toFixed(2)}</p>
-            <p style="color: #666; margin: 5px 0;"><strong>Due Date:</strong> ${dueDate}</p>
-            <p style="color: #666; margin: 5px 0;"><strong>Payment Methods:</strong> ${paymentMethods.join(', ')}</p>
+
+          <p style="color: #4a5568; font-size: 15px; margin: 0 0 24px 0; line-height: 1.6; letter-spacing: 0.01em; font-weight: 400;">A PDF copy is attached to this email for your records.</p>
+          <p style="color: #4a5568; font-size: 15px; margin: 0 0 12px 0; line-height: 1.6; letter-spacing: 0.01em; font-weight: 400;">This invoice will be added to your account if you sign up using this email.</p>
+
+
+          ${invoiceUrl ? `
+          <div style="text-align: center; margin: 28px 0;">
+            <a href="${invoiceUrl}" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-size: 16px; font-weight: 600; letter-spacing: 0.02em;">Pay Invoice online</a>
           </div>
-          
-          <div style="text-align: center; margin: 30px 0;">
-            <a href="${invoiceUrl}" 
-               style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                      color: white; 
-                      padding: 15px 30px; 
-                      text-decoration: none; 
-                      border-radius: 25px; 
-                      display: inline-block; 
-                      font-weight: bold;
-                      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);">
-              View Invoice Online (Optional)
-            </a>
-          </div>
-          
-          <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #dee2e6;">
-            <p style="color: #666; font-size: 14px; margin: 0;">
-              <strong>Note:</strong> This invoice supports both traditional and cryptocurrency payments.
-            </p>
-            
-            <p style="color: #666; font-size: 14px; margin: 10px 0 0 0;">
-              <strong>How to pay:</strong> You can pay this invoice directly in your app (if you have an account) or use the PDF attachment. The online link above is optional and provides additional payment options.
-            </p>
-            
-            <p style="color: #666; font-size: 14px; margin: 10px 0 0 0;">
-              <strong>PDF Attachment:</strong> A complete invoice PDF is attached to this email for your records and offline payment.
-            </p>
-            
-            <p style="color: #666; font-size: 14px; margin: 10px 0 0 0;">
-              If you have any questions about this invoice, please contact ${companyName || 'Chains ERP-Global'}.
-            </p>
-          </div>
+          ` : ''}
+
+          <p style="color: #4a5568; font-size: 14px; margin: 0; line-height: 1.6; letter-spacing: 0.01em;">For questions regarding this invoice, please contact ${companyName || 'Chains ERP-Global Finance'}.</p>
         </div>
-        
-        <div style="text-align: center; margin-top: 20px; color: #6c757d; font-size: 12px;">
-          <p>This is an automated message from Chains ERP-Global</p>
-          <p>Please do not reply to this email</p>
+
+        <div style="text-align: center; margin-top: 24px; padding-top: 16px; border-top: 1px solid #e2e8f0; color: #64748b; font-size: 12px; font-weight: 500; letter-spacing: 0.02em;">
+          <p style="margin: 0 0 4px 0;">This is an automated message from Chains ERP-Global Finance</p>
+          <p style="margin: 0;">Please do not reply to this email</p>
         </div>
       </div>
     `,
     text: `
-Invoice from ${companyName || 'Chains ERP-Global'}
+Invoice from ${companyName || 'Chains ERP-Global Finance'}
 
-Hello ${clientName},
-
-You have received an invoice from ${companyName || 'Chains ERP-Global'}.
-
-This invoice is intended for ${recipientName}.
-
-Invoice Details:
-Invoice Number: ${invoiceNumber}
-Amount: ${currency} ${invoiceAmount.toFixed(2)}
+Invoice #: ${invoiceNumber}
+Amount Due: ${currency} ${invoiceAmount.toFixed(2)}
 Due Date: ${dueDate}
 Payment Methods: ${paymentMethods.join(', ')}
 
-View and pay your invoice online: ${invoiceUrl}
+This invoice has been added to your account.
+A PDF copy is attached for your records.
+${invoiceUrl ? `\nPay online: ${invoiceUrl}\n` : ''}
 
-This invoice supports both traditional and cryptocurrency payments.
+For questions regarding this invoice, please contact ${companyName || 'Chains ERP-Global Finance'}.
 
-The invoice PDF is attached to this email for your records.
-
-If you have any questions about this invoice, please contact ${companyName || 'Chains ERP-Global'}.
-
-Best regards,
-The Chains ERP-Global Team
+—
+This is an automated message from Chains ERP-Global Finance
+Please do not reply to this email
     `,
   };
 

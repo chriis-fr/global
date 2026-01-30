@@ -8,6 +8,12 @@ import { LedgerSyncService } from '@/lib/services/ledgerSyncService';
 import { SubscriptionService } from '@/lib/services/subscriptionService';
 import { canCreateInvoice } from '@/lib/actions/subscription';
 
+/** Round to 2 decimal places for money; avoids float drift (e.g. 500 becoming 499.99). */
+function round2(x: number): number {
+  if (typeof x !== 'number' || !Number.isFinite(x)) return 0;
+  return Math.round(x * 100) / 100;
+}
+
 // Secure invoice number generation function
 const generateSecureInvoiceNumber = async (db: Db, organizationId: string, ownerId: string, excludeNumber?: string): Promise<string> => {
   const currentYear = new Date().getFullYear();
@@ -145,12 +151,16 @@ export async function POST(request: NextRequest) {
       bankName,
       accountNumber,
       routingNumber,
+      swiftCode,
+      bankCode,
       enableMultiCurrency,
       invoiceType,
       items,
       subtotal,
       totalTax,
       total,
+      withholdingTaxAmount,
+      withholdingTaxRatePercent,
       memo,
       status,
       createdAt,
@@ -161,11 +171,28 @@ export async function POST(request: NextRequest) {
       clientPhone
     } = body;
 
+    // Use routing number, or SWIFT/bank code (e.g. Kenya) when routingNumber not sent
+    const routingNumberResolved = routingNumber || swiftCode || bankCode || '';
+
+    // Normalize amounts to 2 decimals so 500 stays 500 (no float drift)
+    const subtotalRounded = round2(parseFloat(subtotal) || 0);
+    const totalTaxRounded = round2(parseFloat(totalTax) || 0);
+    const totalRounded = round2(parseFloat(total) || 0);
+    const itemsNormalized = Array.isArray(items)
+      ? items.map((item: { unitPrice?: number; amount?: number; discount?: number; tax?: number; [k: string]: unknown }) => ({
+          ...item,
+          unitPrice: round2(Number(item?.unitPrice) || 0),
+          amount: round2(Number(item?.amount) || 0),
+          discount: round2(Number(item?.discount) || 0),
+          tax: round2(Number(item?.tax) || 0)
+        }))
+      : [];
+
     // Amount validation and logging
     console.log('📊 [API Invoices] Received invoice amounts:', {
-      subtotal,
-      totalTax,
-      total,
+      subtotal: subtotalRounded,
+      totalTax: totalTaxRounded,
+      total: totalRounded,
       currency
     });
 
@@ -195,7 +222,7 @@ export async function POST(request: NextRequest) {
         hasApprovalSettings: !!organization?.approvalSettings,
         requireApproval: organization?.approvalSettings?.requireApproval,
         amountThresholds: organization?.approvalSettings?.approvalRules?.amountThresholds,
-        invoiceAmount: parseFloat(total) || 0
+        invoiceAmount: totalRounded
       });
 
       if (organization?.approvalSettings?.requireApproval) {
@@ -270,7 +297,7 @@ export async function POST(request: NextRequest) {
       invoiceNumber: finalInvoiceNumber,
       ownerType,
       ownerId,
-      total,
+      total: totalRounded,
       requiresApproval,
       initialStatus,
       isOrganization,
@@ -329,25 +356,27 @@ export async function POST(request: NextRequest) {
       receivingWalletType: receivingWalletType || null, // Wallet type if connected
       bankName: bankName,
       accountNumber: accountNumber,
-      routingNumber: routingNumber,
+      routingNumber: routingNumberResolved,
       enableMultiCurrency: enableMultiCurrency,
       
-      // Invoice details
+      // Invoice details (use normalized amounts so 500 stays 500)
       invoiceType: invoiceType || 'regular',
-      items: items.map((item: { id?: string; description: string; quantity: number; unitPrice: number; amount: number; tax: number; discount?: number }) => ({
+      items: itemsNormalized.map((item: { id?: string; description?: string; quantity?: number; unitPrice?: number; amount?: number; tax?: number; discount?: number; [k: string]: unknown }) => ({
         id: item.id || `item-${Date.now()}-${Math.random()}`,
-        description: item.description,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        discount: item.discount || 0,
-        tax: item.tax || 0,
-        amount: item.amount
+        description: item.description ?? '',
+        quantity: item.quantity ?? 0,
+        unitPrice: item.unitPrice ?? 0,
+        discount: item.discount ?? 0,
+        tax: item.tax ?? 0,
+        amount: item.amount ?? 0
       })),
-      subtotal: subtotal,
-      totalTax: totalTax,
-      total: total,
+      subtotal: subtotalRounded,
+      totalTax: totalTaxRounded,
+      total: totalRounded,
+      ...(withholdingTaxAmount != null && withholdingTaxAmount > 0 && { withholdingTaxAmount: round2(parseFloat(withholdingTaxAmount as string) || 0) }),
+      ...(withholdingTaxRatePercent != null && { withholdingTaxRatePercent }),
       memo: memo,
-      
+
       // Status and metadata
       status: initialStatus,
       createdAt: createdAt ? new Date(createdAt) : new Date(),
@@ -366,7 +395,7 @@ export async function POST(request: NextRequest) {
       requiredApprovals: requiresApproval ? (() => {
         // Calculate required approvals based on amount and settings
         if (organization?.approvalSettings) {
-          const amount = parseFloat(total) || 0;
+          const amount = totalRounded;
           const settings = organization.approvalSettings.approvalRules;
           if (amount >= settings.amountThresholds.high) {
             return settings.requiredApprovers.high;
@@ -409,10 +438,10 @@ export async function POST(request: NextRequest) {
       },
       taxes: [{
         name: 'Tax',
-        rate: totalTax / subtotal,
-        amount: totalTax
+        rate: subtotalRounded ? totalTaxRounded / subtotalRounded : 0,
+        amount: totalTaxRounded
       }],
-      totalAmount: total,
+      totalAmount: totalRounded,
       
       paymentSettings: {
         method: paymentMethod,
@@ -424,7 +453,7 @@ export async function POST(request: NextRequest) {
         ...(tokenAddress && { tokenAddress }), // Only include if provided
         bankAccount: bankName ? {
           accountNumber: accountNumber || '',
-          routingNumber: routingNumber || '',
+          routingNumber: routingNumberResolved || '',
           bankName,
           accountType: 'checking'
         } : undefined
@@ -531,7 +560,7 @@ export async function POST(request: NextRequest) {
                      {
                        invoiceNumber: finalInvoiceNumber,
                        invoiceName: invoiceName || 'Invoice',
-                       amount: parseFloat(total) || 0,
+                       amount: totalRounded,
                        currency: currency || 'USD',
                        clientName: clientName || 'Unknown Client',
                        clientEmail: clientEmail || '',

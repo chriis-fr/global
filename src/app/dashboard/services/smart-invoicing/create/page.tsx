@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { sendInvoiceWhatsApp } from '@/lib/actions/whatsapp';
@@ -34,8 +35,6 @@ import {
 import { fiatCurrencies, cryptoCurrencies, getCurrencyByCode } from '@/data/currencies';
 import { countries, getTaxRatesByCountry } from '@/data/countries';
 import { networks } from '@/data/networks';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import InvoicePdfView from '@/components/invoicing/InvoicePdfView';
 import { LogoSelector } from '@/components/LogoSelector';
 import BankSelector from '@/components/BankSelector';
@@ -46,6 +45,10 @@ import { CELO_TOKENS } from '@/lib/chains/celo';
 import PaymentMethodSelector from '@/components/payments/PaymentMethodSelector';
 import SavePaymentMethodButton from '@/components/payments/SavePaymentMethodButton';
 import ReceivingAddressInput from '@/components/wallet/ReceivingAddressInput';
+import { getInvoiceDraft } from '@/lib/actions/pdf-invoice';
+import toast from 'react-hot-toast';
+import { pdf } from '@react-pdf/renderer';
+import { InvoicePdfDocument, type InvoicePdfData } from '@/components/invoicing/InvoicePdfDocument';
 
 interface Client {
   _id: string;
@@ -130,6 +133,10 @@ interface InvoiceFormData {
   subtotal: number;
   totalTax: number;
   total: number;
+  /** When true, withholding tax is deducted from (subtotal + totalTax); can be removed per invoice with ×. */
+  withholdingTaxEnabled?: boolean;
+  /** Withholding tax rate % (e.g. 5 for 5%); default 5. */
+  withholdingTaxRatePercent?: number;
   memo: string;
   attachedFiles: File[];
   status: 'draft' | 'sent' | 'paid' | 'overdue';
@@ -262,7 +269,38 @@ const useFormPersistence = (key: string, initialData: InvoiceFormData, setAutoSa
 
   const updateFormData = (newData: InvoiceFormData | ((prev: InvoiceFormData) => InvoiceFormData)) => {
     setFormData(prev => {
-      const updated = typeof newData === 'function' ? newData(prev) : newData;
+      let updated = typeof newData === 'function' ? newData(prev) : newData;
+      
+      // SAFEGUARD: Don't save empty company data if we have loaded data
+      // This prevents overwriting good data with empty values
+      const hasCompanyData = updated.companyName && updated.companyName.trim() !== '';
+      const prevHasCompanyData = prev.companyName && prev.companyName.trim() !== '';
+      
+      // If company data is being cleared but we had data before, preserve it
+      // This prevents accidental clearing of company information
+      const shouldPreserveCompanyData = !hasCompanyData && prevHasCompanyData;
+      
+      if (shouldPreserveCompanyData) {
+        console.warn('⚠️ [Form Persistence] Attempted to clear company data, preserving existing data', {
+          prevCompanyName: prev.companyName,
+          updatedCompanyName: updated.companyName
+        });
+        updated = {
+          ...updated,
+          companyName: prev.companyName,
+          companyEmail: prev.companyEmail || updated.companyEmail,
+          companyPhone: prev.companyPhone || updated.companyPhone,
+          companyAddress: {
+            ...updated.companyAddress,
+            street: prev.companyAddress?.street || updated.companyAddress?.street || '',
+            city: prev.companyAddress?.city || updated.companyAddress?.city || '',
+            state: prev.companyAddress?.state || updated.companyAddress?.state || '',
+            zipCode: prev.companyAddress?.zipCode || updated.companyAddress?.zipCode || '',
+            country: prev.companyAddress?.country || updated.companyAddress?.country || 'US'
+          },
+          companyTaxNumber: prev.companyTaxNumber || updated.companyTaxNumber
+        };
+      }
       
       // Auto-save to localStorage with status indication
       if (typeof window !== 'undefined') {
@@ -285,143 +323,92 @@ const useFormPersistence = (key: string, initialData: InvoiceFormData, setAutoSa
 
   const clearSavedData = () => {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem(key);
+      // CRITICAL: Preserve company data when clearing saved invoice data
+      // Company data should persist across invoice creations
+      try {
+        const saved = localStorage.getItem(key);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          // Extract company data to preserve
+          const companyData = {
+            companyName: parsed.companyName,
+            companyEmail: parsed.companyEmail,
+            companyPhone: parsed.companyPhone,
+            companyAddress: parsed.companyAddress,
+            companyTaxNumber: parsed.companyTaxNumber,
+            companyLogo: parsed.companyLogo
+          };
+          
+          // Clear the invoice draft
+          localStorage.removeItem(key);
+          
+          // Immediately save back only the company data
+          // This ensures company info persists for next invoice
+          if (companyData.companyName || companyData.companyEmail) {
+            const companyOnlyData = {
+              ...initialData,
+              ...companyData
+            };
+            localStorage.setItem(key, JSON.stringify(companyOnlyData));
+            console.log('✅ [Form Persistence] Preserved company data after clearing invoice draft');
+          }
+        } else {
+          localStorage.removeItem(key);
+        }
+      } catch (error) {
+        console.warn('Failed to preserve company data:', error);
+        localStorage.removeItem(key);
+      }
     }
   };
 
   return { formData, setFormData: updateFormData, clearSavedData };
 };
 
-// Add this utility function at the top of the file, after imports
-const optimizeCanvasForPdf = (canvas: HTMLCanvasElement): HTMLCanvasElement => {
-  const optimizedCanvas = document.createElement('canvas');
-  const ctx = optimizedCanvas.getContext('2d');
-  
-  // Optimize dimensions for PDF while maintaining quality
-  const maxWidth = 1200; // Reduced from 1600 (800 * 2)
-  const maxHeight = 1600;
-  
-  let { width, height } = canvas;
-  
-  // Scale down if too large
-  if (width > maxWidth || height > maxHeight) {
-    const scale = Math.min(maxWidth / width, maxHeight / height);
-    width *= scale;
-    height *= scale;
-  }
-  
-  optimizedCanvas.width = width;
-  optimizedCanvas.height = height;
-  
-  // Enable image smoothing for better quality
-  if (ctx) {
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(canvas, 0, 0, width, height);
-  }
-  
-  return optimizedCanvas;
-};
+/** Round to 2 decimal places for money; avoids 500 becoming 499.99999999999994. */
+function round2(x: number): number {
+  if (!Number.isFinite(x)) return 0;
+  return Math.round(x * 100) / 100;
+}
 
-// Add PDF caching utility
-const pdfCache = new Map<string, string>();
+/** Normalize all monetary fields to 2 decimals before sending to API so 500 stays 500. */
+function normalizeInvoicePayload(
+  data: InvoiceFormData,
+  overrides: Partial<InvoiceFormData> & { withholdingTaxAmount?: number; withholdingTaxRatePercent?: number } = {}
+): InvoiceFormData & { withholdingTaxAmount?: number; withholdingTaxRatePercent?: number; routingNumber?: string } {
+  const sub = round2(Number(data.subtotal) ?? 0);
+  const tax = round2(Number(data.totalTax) ?? 0);
+  const tot = round2(Number(data.total) ?? 0);
+  const items = (data.items ?? []).map((item) => ({
+    ...item,
+    unitPrice: round2(Number(item.unitPrice) ?? 0),
+    amount: round2(Number(item.amount) ?? 0),
+    discount: round2(Number(item.discount) ?? 0),
+    tax: round2(Number(item.tax) ?? 0)
+  }));
+  // API expects routingNumber; create form uses swiftCode/bankCode (e.g. Kenya) — send as routingNumber
+  const routingNumber = data.swiftCode || data.bankCode || '';
+  return { ...data, subtotal: sub, totalTax: tax, total: tot, items, routingNumber, ...overrides };
+}
 
-const generateOptimizedPdf = async (pdfContainer: HTMLElement, cacheKey?: string): Promise<{ pdf: jsPDF; base64: string }> => {
-  // Ensure cacheKey is always a string
-  const safeCacheKey = cacheKey || 'temp';
-  
-  // Check cache first
-  if (pdfCache.has(safeCacheKey)) {
-    const cachedBase64 = pdfCache.get(safeCacheKey)!;
-    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    // Note: We can't directly restore PDF from base64, but we can return the cached base64
-    return { pdf, base64: cachedBase64 };
-  }
-
-
-
-  // Generate PDF using html2canvas with optimized options
-  const canvas = await html2canvas(pdfContainer, {
-    logging: false,
-    useCORS: true,
-    allowTaint: true,
-    backgroundColor: '#ffffff',
-    scale: 1.5, // Reduced from 2 for better size/quality balance
-    width: 800,
-    height: pdfContainer.scrollHeight,
-    scrollX: 0,
-    scrollY: 0,
-    // Add performance optimizations
-    removeContainer: true,
-    foreignObjectRendering: false, // Disable for better performance
-    imageTimeout: 15000 // 15 second timeout for images
+/** Generate professional vector PDF (react-pdf) and return base64. Used for send and download. */
+async function generateInvoicePdfBase64(
+  data: InvoicePdfData,
+  invoiceNumber?: string
+): Promise<string> {
+  const blob = await pdf(
+    <InvoicePdfDocument data={data} invoiceNumber={invoiceNumber} />
+  ).toBlob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      resolve(dataUrl.split(',')[1] ?? '');
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
   });
-
-
-
-  // Optimize canvas
-  const optimizedCanvas = optimizeCanvasForPdf(canvas);
-  
-  // Create PDF with optimized settings
-  const pdf = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4',
-    compress: true // Enable PDF compression
-  });
-
-  const imgWidth = pdf.internal.pageSize.getWidth();
-  const imgHeight = (optimizedCanvas.height * imgWidth) / optimizedCanvas.width;
-
-  // If the content is too tall, split into multiple pages
-  const pageHeight = pdf.internal.pageSize.getHeight();
-  const margin = 10;
-  const contentHeight = pageHeight - (2 * margin);
-  
-  if (imgHeight <= contentHeight) {
-    // Single page - use JPEG for smaller size
-    const imageData = optimizedCanvas.toDataURL('image/jpeg', 0.85);
-    pdf.addImage(imageData, 'JPEG', margin, margin, imgWidth - (2 * margin), imgHeight);
-  } else {
-    // Multiple pages - optimized for performance
-    const pages = Math.ceil(imgHeight / contentHeight);
-    for (let i = 0; i < pages; i++) {
-      if (i > 0) pdf.addPage();
-      
-      const sourceY = i * contentHeight * (optimizedCanvas.width / (imgWidth - (2 * margin)));
-      const sourceHeight = Math.min(contentHeight * (optimizedCanvas.width / (imgWidth - (2 * margin))), optimizedCanvas.height - sourceY);
-      
-      const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = optimizedCanvas.width;
-      tempCanvas.height = sourceHeight;
-      const tempCtx = tempCanvas.getContext('2d');
-      tempCtx?.drawImage(optimizedCanvas, 0, sourceY, optimizedCanvas.width, sourceHeight, 0, 0, optimizedCanvas.width, sourceHeight);
-      
-      // Use JPEG for smaller size
-      const imageData = tempCanvas.toDataURL('image/jpeg', 0.85);
-      pdf.addImage(imageData, 'JPEG', margin, margin, imgWidth - (2 * margin), Math.min(contentHeight, imgHeight - (i * contentHeight)));
-    }
-  }
-
-  // Convert to base64 with optimization
-  const pdfBase64 = pdf.output('datauristring').split(',')[1];
-  
-  // Cache the result
-  pdfCache.set(safeCacheKey, pdfBase64);
-  // Limit cache size to prevent memory issues
-  if (pdfCache.size > 10) {
-    const firstKey = pdfCache.keys().next().value;
-    if (firstKey) {
-      pdfCache.delete(firstKey);
-    }
-  }
-
-
-
-  return { pdf, base64: pdfBase64 };
-};
-
-
+}
 
 export default function CreateInvoicePage() {
   const router = useRouter();
@@ -450,60 +437,143 @@ export default function CreateInvoicePage() {
   const [sendingInvoice, setSendingInvoice] = useState(false);
   const [creatingClient, setCreatingClient] = useState(false);
 
+  // Lock body scroll when send overlay is visible so page cannot scroll
+  useEffect(() => {
+    if (!sendingInvoice) return;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    const prevBodyOverflow = document.body.style.overflow;
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      document.body.style.overflow = prevBodyOverflow;
+    };
+  }, [sendingInvoice]);
+
+  // Handler functions that scroll to top before opening modals
+  const handleOpenCompanyModal = () => {
+    // Immediately scroll to top - use all methods
+    window.scrollTo(0, 0);
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    if (document.documentElement) {
+      document.documentElement.scrollTop = 0;
+    }
+    if (document.body) {
+      document.body.scrollTop = 0;
+    }
+    
+    // Lock body at top immediately
+    document.body.style.cssText = `
+      position: fixed !important;
+      top: 0px !important;
+      left: 0px !important;
+      width: 100% !important;
+      overflow: hidden !important;
+    `;
+    
+    document.documentElement.style.cssText = `
+      overflow: hidden !important;
+      position: fixed !important;
+      top: 0px !important;
+      left: 0px !important;
+      width: 100% !important;
+    `;
+    
+    // Force scroll to 0 again after locking
+    window.scrollTo(0, 0);
+    
+    // Wait for browser to process, then open modal
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setShowCompanyEditModal(true);
+      });
+    });
+  };
+
+  const handleOpenClientModal = () => {
+    // Immediately scroll to top - use all methods
+    window.scrollTo(0, 0);
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    if (document.documentElement) {
+      document.documentElement.scrollTop = 0;
+    }
+    if (document.body) {
+      document.body.scrollTop = 0;
+    }
+    
+    // Lock body at top immediately
+    document.body.style.cssText = `
+      position: fixed !important;
+      top: 0px !important;
+      left: 0px !important;
+      width: 100% !important;
+      overflow: hidden !important;
+    `;
+    
+    document.documentElement.style.cssText = `
+      overflow: hidden !important;
+      position: fixed !important;
+      top: 0px !important;
+      left: 0px !important;
+      width: 100% !important;
+    `;
+    
+    // Force scroll to 0 again after locking
+    window.scrollTo(0, 0);
+    
+    // Wait for browser to process, then open modal
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setShowClientEditModal(true);
+      });
+    });
+  };
+
   // Prevent body scroll when modals are open (only for From and To modals, not add client)
   useEffect(() => {
     if (showCompanyEditModal || showClientEditModal) {
-      // Save current scroll position
-      const scrollY = window.scrollY;
-      const scrollX = window.scrollX;
+      // Double-check we're at top
+      window.scrollTo(0, 0);
       
-      // Prevent scrolling on body and html
-      document.body.style.position = 'fixed';
-      document.body.style.top = `-${scrollY}px`;
-      document.body.style.left = `-${scrollX}px`;
-      document.body.style.width = '100%';
-      document.body.style.overflow = 'hidden';
+      // Ensure scroll is locked - use !important to override any conflicts
+      document.body.style.cssText = `
+        position: fixed !important;
+        top: 0px !important;
+        left: 0px !important;
+        width: 100% !important;
+        overflow: hidden !important;
+      `;
       
-      // Also prevent scroll on html element
-      document.documentElement.style.overflow = 'hidden';
+      document.documentElement.style.cssText = `
+        overflow: hidden !important;
+        position: fixed !important;
+        top: 0px !important;
+        left: 0px !important;
+        width: 100% !important;
+      `;
       
       // Prevent scroll on main content container if it exists
       const mainContent = document.querySelector('main');
       if (mainContent) {
-        (mainContent as HTMLElement).style.overflow = 'hidden';
+        (mainContent as HTMLElement).style.cssText = 'overflow: hidden !important;';
       }
     } else {
-      // Restore scrolling
-      const scrollY = document.body.style.top;
-      const scrollX = document.body.style.left;
-      
-      document.body.style.position = '';
-      document.body.style.top = '';
-      document.body.style.left = '';
-      document.body.style.width = '';
-      document.body.style.overflow = '';
-      document.documentElement.style.overflow = '';
+      // Restore scrolling - clear all styles
+      document.body.style.cssText = '';
+      document.documentElement.style.cssText = '';
       
       // Restore scroll on main content container
       const mainContent = document.querySelector('main');
       if (mainContent) {
         (mainContent as HTMLElement).style.overflow = '';
       }
-      
-      if (scrollY) {
-        window.scrollTo(parseInt(scrollX || '0') * -1, parseInt(scrollY || '0') * -1);
-      }
     }
 
     // Cleanup function
     return () => {
       if (!showCompanyEditModal && !showClientEditModal) {
-        document.body.style.position = '';
-        document.body.style.top = '';
-        document.body.style.left = '';
-        document.body.style.width = '';
-        document.body.style.overflow = '';
-        document.documentElement.style.overflow = '';
+        document.body.style.cssText = '';
+        document.documentElement.style.cssText = '';
         
         const mainContent = document.querySelector('main');
         if (mainContent) {
@@ -883,11 +953,12 @@ export default function CreateInvoicePage() {
 
   // Check if we're editing an existing invoice
   const invoiceId = searchParams.get('id');
+  const fromPdfDraftId = searchParams.get('fromPdfDraft');
+  const pdfDraftLoadDone = useRef(false);
 
-  // Check if any items have discounts
-      const hasAnyDiscounts = formData.items.some(item => item.discount > 0);
-    const hasAnyTaxes = formData.items.some(item => item.tax > 0);
-  
+  // Check if any items have discounts (used to conditionally show Discount column)
+  const hasAnyDiscounts = formData.items.some(item => item.discount > 0);
+
   // Download dropdown state
   const [showDownloadDropdown, setShowDownloadDropdown] = useState(false);
 
@@ -905,19 +976,27 @@ export default function CreateInvoicePage() {
           return;
         }
         
-        // Ensure all required fields are present with defaults
+        const raw = data.data;
+        const items = (raw.items || []).map((item: { unitPrice?: number; amount?: number; quantity?: number; [k: string]: unknown }) => ({
+          ...item,
+          unitPrice: round2(Number(item.unitPrice) ?? 0),
+          amount: round2(Number(item.amount) ?? 0),
+          quantity: Math.max(0, Math.round(Number(item.quantity) || 1))
+        }));
         const loadedData = {
           ...defaultInvoiceData,
-          ...data.data,
-          attachedFiles: data.data.attachedFiles || [],
-          ccClients: data.data.ccClients || [],
-          // Map chainId and tokenAddress from paymentSettings if they exist
-          chainId: data.data.paymentSettings?.chainId || data.data.chainId,
-          tokenAddress: data.data.paymentSettings?.tokenAddress || data.data.tokenAddress
+          ...raw,
+          items,
+          attachedFiles: raw.attachedFiles || [],
+          ccClients: raw.ccClients || [],
+          chainId: raw.paymentSettings?.chainId || raw.chainId,
+          tokenAddress: raw.paymentSettings?.tokenAddress || raw.tokenAddress,
+          withholdingTaxEnabled: (raw.withholdingTaxAmount != null && raw.withholdingTaxAmount > 0),
+          withholdingTaxRatePercent: Number(raw.withholdingTaxRatePercent) || 5,
+          subtotal: round2(Number(raw.subtotal) ?? 0),
+          totalTax: round2(Number(raw.totalTax) ?? 0),
+          total: round2(Number(raw.total) ?? 0)
         };
-        
-        // Keep amounts exactly as stored - no recalculation
-        
         setFormData(loadedData);
         setIsEditing(true);
       }
@@ -936,13 +1015,19 @@ export default function CreateInvoicePage() {
       
       if (data.success && data.data.serviceOnboarding) {
         const onboardingData = data.data.serviceOnboarding;
-        
+        const showWithholding = onboardingData.invoiceSettings?.showWithholdingTaxOnInvoices ?? false;
+        const ratePercent = Number(onboardingData.invoiceSettings?.withholdingTaxRatePercent) || 5;
+        const rate = ratePercent / 100;
+
         // Update form data with service onboarding information
         setFormData(prev => {
           const finalCountry = onboardingData.businessInfo?.address?.country || prev.companyAddress.country;
-          
-          // Service onboarding data loaded
-          
+          const sub = prev.subtotal ?? 0;
+          const tax = prev.totalTax ?? 0;
+          const totalBeforeWithholding = sub + tax;
+          const withholdingAmount = showWithholding ? totalBeforeWithholding * rate : 0;
+          const newTotal = totalBeforeWithholding - withholdingAmount;
+
           return {
             ...prev,
             companyName: onboardingData.businessInfo?.name || prev.companyName,
@@ -956,10 +1041,12 @@ export default function CreateInvoicePage() {
               country: finalCountry
             },
             companyTaxNumber: onboardingData.businessInfo?.taxId || prev.companyTaxNumber,
-            // Only set currency from onboarding if user hasn't manually selected one
-            currency: (!userHasSelectedCurrency && onboardingData.invoiceSettings?.defaultCurrency) 
-              ? onboardingData.invoiceSettings.defaultCurrency 
-              : prev.currency
+            currency: (!userHasSelectedCurrency && onboardingData.invoiceSettings?.defaultCurrency)
+              ? onboardingData.invoiceSettings.defaultCurrency
+              : prev.currency,
+            withholdingTaxEnabled: showWithholding,
+            withholdingTaxRatePercent: ratePercent,
+            total: showWithholding ? newTotal : prev.total
           };
         });
       }
@@ -994,12 +1081,10 @@ export default function CreateInvoicePage() {
         setFormData(prev => {
           const finalCountry = org.address?.country && org.address.country !== 'US' ? org.address.country : prev.companyAddress.country;
           
-          
-          
           return {
             ...prev,
             companyName: org.name || prev.companyName,
-            companyEmail: org.email || prev.companyEmail,
+            companyEmail: org.billingEmail || org.email || prev.companyEmail,
             companyPhone: org.phone || prev.companyPhone,
             companyAddress: {
               street: org.address?.street || prev.companyAddress.street,
@@ -1067,27 +1152,151 @@ export default function CreateInvoicePage() {
   // Track if initial load has been done to prevent re-renders
   const initialLoadDone = useRef(false);
   const lastUserId = useRef<string | undefined>(undefined);
+  const companyDataLoaded = useRef(false); // Track if company data has been loaded from server
   
   useEffect(() => {
+    // When pre-filling from PDF draft (or just finished loading one), only load payment methods; don't overwrite company/client/items
+    if (fromPdfDraftId || pdfDraftLoadDone.current) {
+      loadSavedPaymentMethods();
+      return;
+    }
     // Prevent multiple loads for the same user
     const currentUserId = session?.user?.id;
     if (invoiceId) {
       if (!initialLoadDone.current) {
         initialLoadDone.current = true;
         loadInvoice(invoiceId);
+        companyDataLoaded.current = true; // Invoice data includes company info
       }
-    } else if (currentUserId && currentUserId !== lastUserId.current && !initialLoadDone.current) {
-      // Only load if user changed or hasn't loaded yet, and only once
-      lastUserId.current = currentUserId;
-      initialLoadDone.current = true;
-      // Loading data for user - only once per user
-      loadServiceOnboardingData();
-      loadOrganizationData();
-      loadClients();
-      loadLogoFromSettings();
-      loadSavedPaymentMethods();
+    } else if (currentUserId) {
+      // CRITICAL: Always load company data when creating new invoice (not editing)
+      // Check if company data is missing, and if so, load it
+      const hasCompanyData = formData.companyName && formData.companyName.trim() !== '';
+      
+      if (!hasCompanyData || currentUserId !== lastUserId.current) {
+        // User changed or company data is missing - load it
+        // When user changes, reset initialLoadDone so we run loadClients/loadLogo for the new user
+        if (currentUserId !== lastUserId.current) {
+          lastUserId.current = currentUserId;
+          initialLoadDone.current = false;
+        }
+        
+        // Always load company data if it's missing, even if initialLoadDone is true
+        // This ensures company data loads when returning to the page after sending invoice
+        loadServiceOnboardingData();
+        loadOrganizationData();
+        companyDataLoaded.current = true;
+        
+        // Always load payment methods - they should be available every time
+        loadSavedPaymentMethods();
+        
+        // Only load clients and logo once per user session (initialLoadDone was false on first run or after user change)
+        if (!initialLoadDone.current) {
+          loadClients();
+          loadLogoFromSettings();
+          initialLoadDone.current = true;
+        }
+      }
     }
-  }, [invoiceId, session?.user?.id, loadInvoice, loadServiceOnboardingData, loadOrganizationData, loadClients, loadLogoFromSettings, loadSavedPaymentMethods]);
+  }, [invoiceId, fromPdfDraftId, session?.user?.id, formData.companyName, loadInvoice, loadServiceOnboardingData, loadOrganizationData, loadClients, loadLogoFromSettings, loadSavedPaymentMethods]);
+
+  // When arriving from PDF upload: load draft and pre-fill create form (items, client, company, etc.). Use documentAst when invoiceData is empty.
+  useEffect(() => {
+    if (!fromPdfDraftId || pdfDraftLoadDone.current) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const result = await getInvoiceDraft(fromPdfDraftId);
+        if (cancelled || !result.success || !result.data) return;
+        const raw = (result.data.invoiceData || {}) as Record<string, unknown>;
+        const ast = result.data.documentAst as { meta?: { title?: string; reference_numbers?: Record<string, string> }; parties?: { issuer?: string; recipient?: string }; dates?: { due?: string; signed?: string }; items?: Array<{ label?: string; quantity?: number; unit_price?: number }> } | null | undefined;
+        const toDateStr = (v: unknown) => {
+          if (v == null) return '';
+          const d = v instanceof Date ? v : new Date(String(v));
+          return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
+        };
+        const company = (raw.companyDetails as Record<string, string> | undefined) ?? {};
+        const client = (raw.clientDetails as Record<string, string> | undefined) ?? {};
+        // Items: prefer documentAst.items (parser = source of truth for description); fallback to invoiceData.items
+        let items: Array<{ id: string; description: string; quantity: number; unitPrice: number; discount: number; tax: number; amount: number }>;
+        const astItems = ast?.items ?? [];
+        const draftItems = Array.isArray(raw.items) ? raw.items as Array<{ description?: string; quantity?: number; unitPrice?: number; total?: number; taxRate?: number }> : [];
+        if (astItems.length > 0) {
+          items = astItems.map((item, i) => {
+            const qty = Math.max(0, Math.round(Number(item.quantity) || 1));
+            const up = round2(Number(item.unit_price) ?? 0);
+            const desc = String(item.label ?? '').trim();
+            return {
+              id: String(i + 1),
+              description: desc,
+              quantity: qty,
+              unitPrice: up,
+              discount: 0,
+              tax: 0,
+              amount: round2(qty * up),
+            };
+          });
+        } else if (draftItems.length > 0) {
+          items = draftItems.map((item, i) => {
+            const qty = Math.max(0, Math.round(Number(item.quantity) || 1));
+            const up = round2(Number(item.unitPrice) ?? 0);
+            const amount = round2((item.total ?? qty * up) as number);
+            return {
+              id: String(i + 1),
+              description: String(item.description ?? '').trim(),
+              quantity: qty,
+              unitPrice: up,
+              discount: 0,
+              tax: round2(Number(item.taxRate) ?? 0),
+              amount,
+            };
+          });
+        } else {
+          items = defaultInvoiceData.items;
+        }
+        const subtotal = round2(Number(raw.subtotal) ?? items.reduce((s, i) => s + (i.quantity ?? 0) * (i.unitPrice ?? 0), 0));
+        const totalAmount = round2(Number(raw.totalAmount) ?? subtotal);
+        const totalTax = round2(Number((raw as Record<string, unknown>).totalTax) ?? Math.max(0, totalAmount - subtotal));
+        const safeSubtotal = Number.isFinite(subtotal) ? subtotal : 0;
+        const safeTotal = Number.isFinite(totalAmount) ? totalAmount : 0;
+        const safeTotalTax = Number.isFinite(totalTax) ? totalTax : 0;
+        const invoiceNumber = (raw.invoiceNumber as string) || ''; // We generate; only pre-fill if mapping set it
+        const invoiceName = (raw.invoiceTitle as string) || ast?.meta?.reference_numbers?.task_order || ast?.meta?.title || defaultInvoiceData.invoiceName;
+        const currency = (raw.currency as string) || 'USD';
+        const issueDate = toDateStr(raw.issueDate) || (ast?.dates?.signed ? toDateStr(ast.dates.signed) : '') || defaultInvoiceData.issueDate;
+        const dueDate = toDateStr(raw.dueDate) || (ast?.dates?.due ? toDateStr(ast.dates.due) : '') || defaultInvoiceData.dueDate;
+        const companyName = company.name ?? ast?.parties?.issuer ?? '';
+        const clientName = client.name ?? ast?.parties?.recipient ?? '';
+        setFormData(prev => ({
+          ...prev,
+          invoiceNumber: invoiceNumber || prev.invoiceNumber,
+          invoiceName: invoiceName || prev.invoiceName,
+          currency: currency || prev.currency,
+          issueDate: issueDate || prev.issueDate,
+          dueDate: dueDate || prev.dueDate,
+          companyName: companyName || prev.companyName,
+          companyEmail: company.email ?? prev.companyEmail,
+          companyPhone: company.phone ?? prev.companyPhone,
+          clientName: clientName || prev.clientName,
+          clientEmail: client.email ?? prev.clientEmail,
+          clientPhone: client.phone ?? prev.clientPhone,
+          items,
+          subtotal: safeSubtotal,
+          totalTax: safeTotalTax,
+          total: safeTotal,
+          memo: (raw.notes as string) ?? prev.memo,
+        }));
+        pdfDraftLoadDone.current = true;
+        router.replace('/dashboard/services/smart-invoicing/create');
+      } catch (e) {
+        console.error('Failed to load PDF draft into create form:', e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [fromPdfDraftId, router, setFormData]);
 
   // Set client country to user's country if client country is empty and user has a country
   // This only runs once when session becomes available and formData is initialized
@@ -1305,7 +1514,7 @@ export default function CreateInvoicePage() {
     const validFiles = files.filter(file => {
       const maxSize = 10 * 1024 * 1024; // 10MB
       if (file.size > maxSize) {
-        alert(`File ${file.name} is too large. Maximum size is 10MB.`);
+        toast.error(`File ${file.name} is too large. Maximum size is 10MB.`);
         return false;
       }
       return true;
@@ -1379,18 +1588,10 @@ export default function CreateInvoicePage() {
     }));
 
     // Auto-detect best sending method after client selection
+    // WhatsApp is disabled, so always use email
     setTimeout(() => {
-      const hasEmail = client.email && client.email.trim() !== '';
-      const hasPhone = client.phone && client.phone.trim() !== '';
-      
-      if (!hasEmail && hasPhone) {
-        // Only phone available, auto-switch to WhatsApp
-        setFormData(prev => ({ ...prev, sendViaWhatsapp: true }));
-      } else if (hasEmail && !hasPhone) {
-        // Only email available, auto-switch to email
-        setFormData(prev => ({ ...prev, sendViaWhatsapp: false }));
-      }
-      // If both or neither, don't auto-switch
+      // Force email mode since WhatsApp is disabled
+      setFormData(prev => ({ ...prev, sendViaWhatsapp: false }));
     }, 100);
     setShowClientSelector(false);
   };
@@ -1405,13 +1606,13 @@ export default function CreateInvoicePage() {
     // Check if client is already in CC list
     const isAlreadyCc = formData.ccClients?.some(cc => cc.email === client.email);
     if (isAlreadyCc) {
-      alert('This client is already in the CC list.');
+      toast.error('This client is already in the CC list.');
       return;
     }
 
     // Check if client is the primary client
     if (formData.clientEmail === client.email) {
-      alert('This client is already the primary recipient.');
+      toast.error('This client is already the primary recipient.');
       return;
     }
 
@@ -1460,11 +1661,11 @@ export default function CreateInvoicePage() {
         selectClient(data.data);
         setShowNewClientModal(false);
       } else {
-        alert(data.message || 'Failed to create client');
+        toast.error(data.message || 'Failed to create client');
       }
     } catch (error) {
       console.error('Failed to create client:', error);
-      alert('Failed to create client. Please try again.');
+      toast.error('Failed to create client. Please try again.');
     } finally {
       setCreatingClient(false);
     }
@@ -1492,33 +1693,46 @@ export default function CreateInvoicePage() {
 
   const handleItemChange = (index: number, field: string, value: string | number) => {
     const newItems = [...formData.items];
-    newItems[index] = { ...newItems[index], [field]: value };
-    
-    // Recalculate item amount with proper precision
+    // Description is a string; keep it as-is
+    if (field === 'description') {
+      newItems[index] = { ...newItems[index], description: String(value ?? '') };
+    } else {
+      const numValue = typeof value === 'number' ? value : parseFloat(String(value)) || 0;
+      // Round monetary/percent inputs so 500 stays 500 (no float drift)
+      const rounded =
+        field === 'unitPrice' || field === 'discount' || field === 'tax' ? round2(numValue) :
+        field === 'quantity' ? Math.max(0, Math.round(numValue)) : numValue;
+      newItems[index] = { ...newItems[index], [field]: rounded };
+    }
+
     const item = newItems[index];
-    const subtotalBeforeTax = item.quantity * item.unitPrice * (1 - item.discount / 100);
-    item.amount = subtotalBeforeTax * (1 + item.tax / 100);
-    
-    // Recalculate totals with proper precision
+    const subtotalBeforeTax = round2(item.quantity * item.unitPrice * (1 - item.discount / 100));
+    item.amount = round2(subtotalBeforeTax * (1 + item.tax / 100));
+
     let subtotal = 0;
     let totalTax = 0;
-    
-    newItems.forEach(item => {
-      const itemSubtotal = item.quantity * item.unitPrice * (1 - item.discount / 100);
-      const itemTax = itemSubtotal * (item.tax / 100);
+    newItems.forEach(i => {
+      const itemSubtotal = round2(i.quantity * i.unitPrice * (1 - i.discount / 100));
+      const itemTax = round2(itemSubtotal * (i.tax / 100));
       subtotal += itemSubtotal;
       totalTax += itemTax;
     });
-    
-    const total = subtotal + totalTax;
-    
-    setFormData(prev => ({
-      ...prev,
-      items: newItems,
-      subtotal,
-      totalTax,
-      total
-    }));
+    subtotal = round2(subtotal);
+    totalTax = round2(totalTax);
+
+    setFormData(prev => {
+      const totalBeforeWithholding = round2(subtotal + totalTax);
+      const rate = (prev.withholdingTaxRatePercent ?? 5) / 100;
+      const withholdingAmount = (prev.withholdingTaxEnabled ?? false) ? round2(totalBeforeWithholding * rate) : 0;
+      const total = round2(totalBeforeWithholding - withholdingAmount);
+      return {
+        ...prev,
+        items: newItems,
+        subtotal,
+        totalTax,
+        total
+      };
+    });
   };
 
   const addItem = () => {
@@ -1541,27 +1755,30 @@ export default function CreateInvoicePage() {
   const removeItem = (index: number) => {
     if (formData.items.length > 1) {
       const newItems = formData.items.filter((_, i) => i !== index);
-      
-      // Recalculate totals with proper precision
       let subtotal = 0;
       let totalTax = 0;
-      
       newItems.forEach(item => {
-        const itemSubtotal = item.quantity * item.unitPrice * (1 - item.discount / 100);
-        const itemTax = itemSubtotal * (item.tax / 100);
+        const itemSubtotal = round2(item.quantity * item.unitPrice * (1 - item.discount / 100));
+        const itemTax = round2(itemSubtotal * (item.tax / 100));
         subtotal += itemSubtotal;
         totalTax += itemTax;
       });
-      
-      const total = subtotal + totalTax;
-      
-      setFormData(prev => ({
-        ...prev,
-        items: newItems,
-        subtotal,
-        totalTax,
-        total
-      }));
+      subtotal = round2(subtotal);
+      totalTax = round2(totalTax);
+
+      setFormData(prev => {
+        const totalBeforeWithholding = round2(subtotal + totalTax);
+        const rate = (prev.withholdingTaxRatePercent ?? 5) / 100;
+        const withholdingAmount = (prev.withholdingTaxEnabled ?? false) ? round2(totalBeforeWithholding * rate) : 0;
+        const total = round2(totalBeforeWithholding - withholdingAmount);
+        return {
+          ...prev,
+          items: newItems,
+          subtotal,
+          totalTax,
+          total
+        };
+      });
     }
   };
 
@@ -1574,10 +1791,11 @@ export default function CreateInvoicePage() {
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          status: 'draft'
-        })
+        body: JSON.stringify(normalizeInvoicePayload(formData, {
+          status: 'draft',
+          withholdingTaxAmount: formData.withholdingTaxEnabled ? round2(((formData.subtotal ?? 0) + (formData.totalTax ?? 0)) * ((formData.withholdingTaxRatePercent ?? 5) / 100)) : 0,
+          withholdingTaxRatePercent: formData.withholdingTaxEnabled ? (formData.withholdingTaxRatePercent ?? 5) : undefined
+        }))
       });
       
       if (response.ok) {
@@ -1622,10 +1840,10 @@ export default function CreateInvoicePage() {
         const updateResponse = await fetch(`/api/invoices/${formData._id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...formData,
-            status: 'sent'
-          })
+          body: JSON.stringify(normalizeInvoicePayload(formData, {
+            status: 'sent',
+            withholdingTaxAmount: formData.withholdingTaxEnabled ? round2(((formData.subtotal ?? 0) + (formData.totalTax ?? 0)) * ((formData.withholdingTaxRatePercent ?? 5) / 100)) : 0
+          }))
         });
 
         // Update invoice response status received
@@ -1654,10 +1872,10 @@ export default function CreateInvoicePage() {
         const primaryInvoiceResponse = await fetch('/api/invoices', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...formData,
-            status: 'sent'
-          })
+          body: JSON.stringify(normalizeInvoicePayload(formData, {
+            status: 'sent',
+            withholdingTaxAmount: formData.withholdingTaxEnabled ? round2(((formData.subtotal ?? 0) + (formData.totalTax ?? 0)) * ((formData.withholdingTaxRatePercent ?? 5) / 100)) : 0
+          }))
         });
 
         // Primary invoice response status received
@@ -1697,10 +1915,7 @@ export default function CreateInvoicePage() {
             primaryInvoiceId,
             primaryInvoiceNumber,
             ccClients: formData.ccClients,
-            invoiceData: {
-              ...formData,
-              status: 'sent'
-            }
+            invoiceData: normalizeInvoicePayload(formData, { status: 'sent' })
           })
         });
 
@@ -1711,311 +1926,8 @@ export default function CreateInvoicePage() {
         await ccInvoiceResponse.json();
       }
 
-      // Create a simplified version of the invoice for PDF generation (same as handleDownloadPdf)
-      const pdfContainer = document.createElement('div');
-      pdfContainer.style.cssText = `
-        position: absolute;
-        left: -9999px;
-        top: 0;
-        width: 800px;
-        background: white;
-        color: black;
-        font-family: Arial, sans-serif;
-        padding: 32px;
-        border: none;
-        outline: none;
-      `;
-
-      // Create the exact invoice structure (same as handleDownloadPdf)
-      pdfContainer.innerHTML = `
-        <div style="border-bottom: 1px solid #e5e7eb; padding-bottom: 32px; margin-bottom: 32px;">
-          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-            <div style="flex: 1;">
-              <h1 style="font-size: 30px; font-weight: bold; color: #111827; margin: 0;">
-                ${formData.invoiceName || 'Invoice'}
-              </h1>
-            </div>
-            <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end;">
-              <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 16px;">
-                <div>
-                  <div style="font-size: 14px; color: #6b7280; margin-bottom: 4px;">
-                    Issued on ${formatDate(formData.issueDate)}
-                  </div>
-                  <div style="font-size: 14px; color: #6b7280;">
-                    Payment due by ${formatDate(formData.dueDate)}
-                  </div>
-                  ${primaryInvoiceNumber || formData.invoiceNumber ? `
-                    <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                      Invoice: ${primaryInvoiceNumber || formData.invoiceNumber}
-                    </div>
-                  ` : ''}
-                </div>
-                ${formData.companyLogo ? `
-                  <div style="width: 80px; height: 80px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
-                    <img src="${formData.companyLogo}" alt="Company Logo" style="width: 100%; height: 100%; object-fit: contain; background: white;" />
-                  </div>
-                ` : `
-                  <div style="width: 80px; height: 80px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-                    <svg style="width: 32px; height: 32px; color: #9ca3af;" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 2L2 7v10c0 5.55 3.84 9.74 9 11 5.16-1.26 9-5.45 9-11V7l-10-5zM12 22c-4.75-1.11-8-4.67-8-9V8l8-4v18z"/>
-                    </svg>
-                  </div>
-                `}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
-          <div style="display: flex; justify-content: space-between; gap: 48px;">
-            <div style="flex: 1;">
-              <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0; display: flex; align-items: center;">
-                <svg style="width: 20px; height: 20px; color: #6b7280; margin-right: 8px;" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 2L2 7v10c0 5.55 3.84 9.74 9 11 5.16-1.26 9-5.45 9-11V7l-10-5zM12 22c-4.75-1.11-8-4.67-8-9V8l8-4v18z"/>
-                </svg>
-                From
-              </h3>
-              <div style="font-weight: 500; margin-bottom: 8px;">
-                ${formData.companyName || 'Company Name'}
-              </div>
-              <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
-                <div>${formData.companyAddress.street || 'Street Address'}</div>
-                <div>${formData.companyAddress.city || 'City'}, ${formData.companyAddress.state || 'State'} ${formData.companyAddress.zipCode || 'ZIP'}</div>
-                <div>${formData.companyAddress.country ? countries.find(c => c.code === formData.companyAddress.country)?.name || formData.companyAddress.country : 'Country'}</div>
-                <div>Tax: ${formData.companyTaxNumber || 'Tax Number'}</div>
-                <div>${formData.companyEmail || 'Email'}</div>
-                <div>${formData.companyPhone || 'Phone'}</div>
-              </div>
-            </div>
-            <div style="flex: 1;">
-              <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0; display: flex; align-items: center;">
-                <svg style="width: 20px; height: 20px; color: #6b7280; margin-right: 8px;" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                </svg>
-                Bill To
-              </h3>
-              <div style="font-weight: 500; margin-bottom: 8px;">
-                ${formData.clientCompany ? formData.clientCompany : formData.clientName || 'Client Name'}
-              </div>
-              ${formData.clientCompany ? `
-              <div style="color: #6b7280; font-size: 14px; margin-bottom: 8px;">
-                Contact Person: ${formData.clientName || 'Client Name'}
-              </div>
-              ` : ''}
-              <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
-                ${formData.clientAddress.street ? `<div>${formData.clientAddress.street}</div>` : ''}
-                ${formData.clientAddress.city || formData.clientAddress.state || formData.clientAddress.zipCode ? `
-                  <div>
-                    ${formData.clientAddress.city || ''}${formData.clientAddress.city && (formData.clientAddress.state || formData.clientAddress.zipCode) ? ', ' : ''}
-                    ${formData.clientAddress.state || ''}${formData.clientAddress.state && formData.clientAddress.zipCode ? ' ' : ''}
-                    ${formData.clientAddress.zipCode || ''}
-                  </div>
-                ` : ''}
-                ${formData.clientAddress.country ? `<div>${countries.find(c => c.code === formData.clientAddress.country)?.name || formData.clientAddress.country}</div>` : ''}
-                <div>${formData.clientEmail || 'Email'}</div>
-                <div>${formData.clientPhone || 'Phone'}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
-          <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 24px 0;">Invoice Items</h3>
-          
-          <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
-            <thead style="background: #f9fafb;">
-              <tr>
-                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Description</th>
-                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Qty</th>
-                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Unit Price</th>
-                ${hasAnyDiscounts ? '<th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Discount</th>' : ''}
-                ${hasAnyTaxes ? '<th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Tax</th>' : ''}
-                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${formData.items.map(item => `
-                <tr style="border-bottom: 1px solid #e5e7eb;">
-                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.description || 'Item description'}</td>
-                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.quantity}</td>
-                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${getCurrencySymbol()}${item.unitPrice.toFixed(2)}</td>
-                  ${hasAnyDiscounts ? `<td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.discount > 0 ? `${item.discount}%` : ''}</td>` : ''}
-                  ${hasAnyTaxes ? `<td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.tax > 0 ? `${item.tax}%` : ''}</td>` : ''}
-                  <td style="padding: 12px 16px; font-size: 14px; font-weight: 500; color: #111827;">${getCurrencySymbol()}${item.amount.toFixed(2)}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-
-          <div style="display: flex; justify-content: flex-end;">
-            <div style="width: 256px;">
-              <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 14px; margin-bottom: 8px;">
-                <span>Amount without tax</span>
-                <span>${getCurrencySymbol()}${formData.subtotal.toFixed(2)}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 14px; margin-bottom: 8px;">
-                <span>Total Tax amount</span>
-                <span>${getCurrencySymbol()}${formData.totalTax.toFixed(2)}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 600; border-top: 1px solid #e5e7eb; padding-top: 8px; margin-bottom: 8px;">
-                <span>Total amount</span>
-                <span>${getCurrencySymbol()}${formData.total.toFixed(2)}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 600; color: #2563eb;">
-                <span>Due</span>
-                <span>${getCurrencySymbol()}${formData.total.toFixed(2)}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
-          <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0;">Payment Information</h3>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
-            <div>
-              <h4 style="font-weight: 500; color: #111827; margin: 0 0 8px 0;">Payment Method</h4>
-              <div style="font-size: 14px; color: #6b7280;">
-                ${formData.paymentMethod === 'crypto' ? 'Cryptocurrency' : 
-                  formData.fiatPaymentSubtype === 'phone' ? 'Phone Number' :
-                  formData.fiatPaymentSubtype === 'mpesa_paybill' ? 'M-Pesa Paybill' :
-                  formData.fiatPaymentSubtype === 'mpesa_till' ? 'M-Pesa Till' :
-                  'Bank Transfer'}
-              </div>
-              ${formData.paymentMethod === 'crypto' && formData.paymentNetwork ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Network: ${formData.paymentNetwork}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'crypto' && formData.paymentAddress ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Address: ${formData.paymentAddress}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.bankName ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Bank: ${formData.bankName}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.accountNumber ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Account: ${formData.accountNumber}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.swiftCode ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  SWIFT Code: ${formData.swiftCode}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.accountName ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Account Name: ${formData.accountName}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.branchAddress ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Branch Address: ${formData.branchAddress}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'phone' && formData.paymentPhoneNumber ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Phone Number: ${formData.paymentPhoneNumber}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'mpesa_paybill' && formData.paybillNumber ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Paybill Number: ${formData.paybillNumber}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'mpesa_paybill' && formData.mpesaAccountNumber ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Account Number: ${formData.mpesaAccountNumber}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'mpesa_till' && formData.tillNumber ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Till Number: ${formData.tillNumber}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && (formData.fiatPaymentSubtype === 'mpesa_paybill' || formData.fiatPaymentSubtype === 'mpesa_till' || formData.fiatPaymentSubtype === 'phone') && formData.businessName ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Business Name: ${formData.businessName}
-                </div>
-              ` : ''}
-            </div>
-            <div>
-              <h4 style="font-weight: 500; color: #111827; margin: 0 0 8px 0;">Currency</h4>
-              <div style="font-size: 14px; color: #6b7280;">
-                ${formData.currency} (${getCurrencySymbol()})
-              </div>
-            </div>
-          </div>
-        </div>
-
-        ${formData.memo ? `
-          <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
-            <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0;">Memo</h3>
-            <div style="font-size: 14px; color: #374151; white-space: pre-wrap;">
-              ${formData.memo}
-            </div>
-          </div>
-        ` : ''}
-
-        ${formData.invoiceNumber ? `
-          <div style="padding: 32px 0; text-align: center;">
-            <div style="font-size: 14px; color: #6b7280;">
-              Invoice Number: ${formData.invoiceNumber}
-            </div>
-          </div>
-        ` : ''}
-
-        <!-- Footer with watermark and security info -->
-        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center;">
-          <div style="font-size: 12px; color: #9ca3af; line-height: 1.5;">
-            <div style="margin-bottom: 8px; font-weight: 500;">
-              Generated by Chains-ERP for ${formData.companyName || 'Company'}
-            </div>
-            <div style="margin-bottom: 8px; font-size: 11px;">
-              Invoice Number: ${formData.invoiceNumber || 'N/A'} | Date: ${formatDate(formData.issueDate)}
-            </div>
-            <div style="font-size: 10px; color: #d1d5db;">
-              Digital Invoice | Secure Payment Processing | Blockchain Verification
-            </div>
-          </div>
-        </div>
-      `;
-
-      // Append to body temporarily
-      document.body.appendChild(pdfContainer);
-
-      // Wait for images to load
-      const images = pdfContainer.querySelectorAll('img');
-      if (images.length > 0) {
-        await Promise.all(Array.from(images).map(img => {
-          return new Promise((resolve) => {
-            if (img.complete) {
-              resolve(null);
-            } else {
-              img.onload = () => resolve(null);
-              img.onerror = () => resolve(null);
-            }
-          });
-        }));
-      }
-
-      // Generate optimized PDF
-      const { pdf, base64: pdfBase64 } = await generateOptimizedPdf(pdfContainer, formData.invoiceNumber || 'temp');
-
-      // Remove the temporary element
-      document.body.removeChild(pdfContainer);
-
-      // Add watermark
-      addWatermark(pdf, formData.invoiceNumber || 'temp');
-
-      console.log('📄 [PDF Generation] Converting PDF to base64...');
-      const base64StartTime = Date.now();
-      
-      const base64EndTime = Date.now();
-      console.log('📄 [PDF Generation] PDF base64 conversion completed in', base64EndTime - base64StartTime, 'ms');
+      // Generate professional vector PDF (react-pdf) — use actual invoice number from API
+      const pdfBase64 = await generateInvoicePdfBase64(formData, primaryInvoiceNumber);
       console.log('📄 [PDF Generation] PDF size:', (pdfBase64.length / 1024).toFixed(2), 'KB');
       
       // Sending invoice via email...
@@ -2046,19 +1958,82 @@ export default function CreateInvoicePage() {
 
       let result: { success: boolean; messageId?: string; error?: string };
 
-      if (formData.sendViaWhatsapp) {
+      // WhatsApp is disabled - force email mode
+      // TODO: Remove this check when re-enabling WhatsApp
+      if (false && formData.sendViaWhatsapp) {
         // Send via WhatsApp
-        console.log('📱 [WhatsApp Sending] Starting WhatsApp request...');
+        console.log('📱 [WhatsApp Sending] ========== STARTING WHATSAPP SEND FROM FRONTEND ==========');
+        console.log('📱 [WhatsApp Sending] Input parameters:', {
+          invoiceId: primaryInvoiceId,
+          clientPhone: formData.clientPhone,
+          phoneLength: formData.clientPhone?.length || 0,
+          pdfBase64Length: pdfBase64?.length || 0,
+          pdfBase64Preview: pdfBase64?.substring(0, 50) || 'EMPTY',
+          invoiceNumber: formData.invoiceNumber,
+          clientName: formData.clientName,
+          companyName: formData.companyName
+        });
+        
         const whatsappStartTime = Date.now();
         
-        result = await sendInvoiceWhatsApp(
-          primaryInvoiceId,
-          formData.clientPhone,
-          pdfBase64
-        );
+        try {
+          result = await sendInvoiceWhatsApp(
+            primaryInvoiceId,
+            formData.clientPhone,
+            pdfBase64
+          );
+          
+          const whatsappEndTime = Date.now();
+          const whatsappDuration = whatsappEndTime - whatsappStartTime;
+          
+          console.log('📱 [WhatsApp Sending] WhatsApp request completed in', whatsappDuration, 'ms');
+          console.log('📱 [WhatsApp Sending] Result:', {
+            success: result.success,
+            messageId: result.messageId,
+            error: result.error
+          });
+        } catch (err: unknown) {
+          const whatsappEndTime = Date.now();
+          const whatsappDuration = whatsappEndTime - whatsappStartTime;
+          
+          // Helper function to safely extract error message
+          const getErrorMessage = (error: unknown): string => {
+            if (error instanceof Error) {
+              return error.message;
+            }
+            if (typeof error === 'string') {
+              return error as string;
+            }
+            return String(error);
+          };
+          
+          // Helper function to safely extract error stack
+          const getErrorStack = (error: unknown): string | undefined => {
+            return error instanceof Error ? error.stack : undefined;
+          };
+          
+          // Helper function to safely extract error name
+          const getErrorName = (error: unknown): string | undefined => {
+            return error instanceof Error ? error.name : undefined;
+          };
+          
+          const errorMessage = getErrorMessage(err);
+          const errorStack = getErrorStack(err);
+          const errorName = getErrorName(err);
+          
+          console.error('📱 [WhatsApp Sending] ❌ Frontend error after', whatsappDuration, 'ms:', {
+            error: errorMessage,
+            stack: errorStack,
+            name: errorName
+          });
+          
+          result = {
+            success: false,
+            error: errorMessage
+          };
+        }
         
-        const whatsappEndTime = Date.now();
-        console.log('📱 [WhatsApp Sending] WhatsApp request completed in', whatsappEndTime - whatsappStartTime, 'ms');
+        console.log('📱 [WhatsApp Sending] ========== WHATSAPP SEND FROM FRONTEND COMPLETED ==========');
       } else {
         // Send via Email
         console.log('📧 [Email Sending] Starting email request...');
@@ -2095,34 +2070,54 @@ export default function CreateInvoicePage() {
           invoiceNumber: formData.invoiceNumber,
           recipient: formData.sendViaWhatsapp ? formData.clientPhone : formData.clientEmail,
           method: formData.sendViaWhatsapp ? 'WhatsApp' : 'Email',
-          total: formData.total
+          total: formData.total,
+          messageId: result.messageId
         });
         
-        const successMessage = formData.sendViaWhatsapp 
-          ? `Invoice sent successfully via WhatsApp to ${formData.clientPhone}!`
-          : 'Invoice sent successfully to Your Client!';
-        alert(successMessage);
+        const recipient = formData.sendViaWhatsapp ? formData.clientPhone : formData.clientEmail;
+        toast.success(
+          formData.sendViaWhatsapp
+            ? `Invoice sent via WhatsApp to ${recipient}`
+            : `Invoice sent to ${recipient}`
+        );
         // Clear saved form data after successful send
         clearSavedData();
         // Redirect to invoices page
         router.push('/dashboard/services/smart-invoicing/invoices');
       } else {
-        console.error('❌ [Smart Invoicing] Failed to send invoice:', result.error);
-        alert(`Failed to send invoice: ${result.error || 'Unknown error occurred'}`);
+        console.error('❌ [Smart Invoicing] Failed to send invoice:', {
+          error: result.error,
+          invoiceNumber: formData.invoiceNumber,
+          recipient: formData.sendViaWhatsapp ? formData.clientPhone : formData.clientEmail,
+          method: formData.sendViaWhatsapp ? 'WhatsApp' : 'Email',
+          fullResult: result
+        });
+        toast.error(`Failed to send invoice: ${result.error || 'Unknown error occurred'}`);
       }
     } catch (error) {
-      console.error('❌ [Smart Invoicing] Failed to send invoice:', error);
+      console.error('❌ [Smart Invoicing] ========== EXCEPTION IN SEND INVOICE ==========');
+      console.error('❌ [Smart Invoicing] Error details:', {
+        errorType: error instanceof Error ? error.constructor.name : typeof error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
+        errorName: error instanceof Error ? error.name : undefined,
+        fullError: JSON.stringify(error, Object.getOwnPropertyNames(error), 2)
+      });
       
       if (error instanceof Error) {
         if (error.name === 'AbortError') {
-          alert('Request timed out. Please try again or contact support if the issue persists.');
+          console.error('❌ [Smart Invoicing] Request timed out');
+          toast.error('Request timed out. Please try again or contact support if the issue persists.');
         } else {
-          alert(`Failed to send invoice: ${error.message}`);
+          console.error('❌ [Smart Invoicing] Error:', error.message);
+          toast.error(`Failed to send invoice: ${error.message}`);
         }
       } else {
-        alert('Failed to send invoice. Please try again.');
+        console.error('❌ [Smart Invoicing] Unknown error type');
+        toast.error('Failed to send invoice. Please try again.');
       }
     } finally {
+      console.log('📱 [Smart Invoicing] Cleaning up - setting sendingInvoice to false');
       setSendingInvoice(false);
     }
   };
@@ -2152,7 +2147,7 @@ export default function CreateInvoicePage() {
         value={value}
         onChange={(e) => handleInputChange(field as keyof InvoiceFormData, e.target.value)}
         onBlur={() => setEditingField(null)}
-        className={`${className} border-none outline-none bg-transparent`}
+        className={`${className} border border-gray-300 rounded px-2 py-1 bg-white text-gray-900 placeholder-gray-500 outline-none`}
         autoFocus
       />
     ) : (
@@ -2222,7 +2217,9 @@ export default function CreateInvoicePage() {
       errors.push('At least one contact method (email or phone) is required');
     } else {
       // Validate based on selected sending method
-      if (formData.sendViaWhatsapp) {
+      // WhatsApp is disabled - always validate email
+      // TODO: Re-enable WhatsApp validation when WhatsApp is re-enabled
+      if (false && formData.sendViaWhatsapp) {
         // WhatsApp mode: phone number is required and must be valid format
         if (!hasPhone) {
           errors.push('Phone number is required for WhatsApp sending');
@@ -2238,9 +2235,9 @@ export default function CreateInvoicePage() {
     }
     
     // Items validation
-    const hasValidItems = formData.items.some((item: { description: string; quantity: number; unitPrice: number }) => 
-      item.description && item.description.trim() !== '' && 
-      item.quantity > 0 && item.unitPrice > 0
+    const hasValidItems = formData.items.some((item: { description?: string; quantity?: number; unitPrice?: number }) => 
+      String(item.description ?? '').trim() !== '' && 
+      (item.quantity ?? 0) > 0 && (item.unitPrice ?? 0) > 0
     );
     if (!hasValidItems) {
       errors.push('At least one item with description, quantity, and unit price is required');
@@ -2275,10 +2272,10 @@ export default function CreateInvoicePage() {
         const updateResponse = await fetch(`/api/invoices/${formData._id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...formData,
-            status: 'sent'
-          })
+          body: JSON.stringify(normalizeInvoicePayload(formData, {
+            status: 'sent',
+            withholdingTaxAmount: formData.withholdingTaxEnabled ? round2(((formData.subtotal ?? 0) + (formData.totalTax ?? 0)) * ((formData.withholdingTaxRatePercent ?? 5) / 100)) : 0
+          }))
         });
 
         if (!updateResponse.ok) {
@@ -2302,10 +2299,10 @@ export default function CreateInvoicePage() {
         const primaryInvoiceResponse = await fetch('/api/invoices', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...formData,
-            status: 'sent'
-          })
+          body: JSON.stringify(normalizeInvoicePayload(formData, {
+            status: 'sent',
+            withholdingTaxAmount: formData.withholdingTaxEnabled ? round2(((formData.subtotal ?? 0) + (formData.totalTax ?? 0)) * ((formData.withholdingTaxRatePercent ?? 5) / 100)) : 0
+          }))
         });
 
         if (!primaryInvoiceResponse.ok) {
@@ -2333,313 +2330,16 @@ export default function CreateInvoicePage() {
         invoiceNumber: primaryInvoiceNumber
       }));
 
-      // Create a simplified version of the invoice for PDF generation
-      const pdfContainer = document.createElement('div');
-      pdfContainer.style.cssText = `
-        position: absolute;
-        left: -9999px;
-        top: 0;
-        width: 800px;
-        background: white;
-        color: black;
-        font-family: Arial, sans-serif;
-        padding: 32px;
-        border: none;
-        outline: none;
-      `;
-
-      // Create the exact invoice structure
-      pdfContainer.innerHTML = `
-        <div style="border-bottom: 1px solid #e5e7eb; padding-bottom: 32px; margin-bottom: 32px;">
-          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-            <div style="flex: 1;">
-              <h1 style="font-size: 30px; font-weight: bold; color: #111827; margin: 0;">
-                ${formData.invoiceName || 'Invoice'}
-              </h1>
-            </div>
-            <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end;">
-              <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 16px;">
-                <div>
-                  <div style="font-size: 14px; color: #6b7280; margin-bottom: 4px;">
-                    Issued on ${formatDate(formData.issueDate)}
-                  </div>
-                  <div style="font-size: 14px; color: #6b7280;">
-                    Payment due by ${formatDate(formData.dueDate)}
-                  </div>
-                  ${primaryInvoiceNumber ? `
-                    <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                      Invoice: ${primaryInvoiceNumber}
-                    </div>
-                  ` : ''}
-                </div>
-                ${formData.companyLogo ? `
-                  <div style="width: 80px; height: 80px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
-                    <img src="${formData.companyLogo}" alt="Company Logo" style="width: 100%; height: 100%; object-fit: contain; background: white;" />
-                  </div>
-                ` : `
-                  <div style="width: 80px; height: 80px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-                    <svg style="width: 32px; height: 32px; color: #9ca3af;" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 2L2 7v10c0 5.55 3.84 9.74 9 11 5.16-1.26 9-5.45 9-11V7l-10-5zM12 22c-4.75-1.11-8-4.67-8-9V8l8-4v18z"/>
-                    </svg>
-                  </div>
-                `}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
-          <div style="display: flex; justify-content: space-between; gap: 48px;">
-            <div style="flex: 1;">
-              <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0; display: flex; align-items: center;">
-                <svg style="width: 20px; height: 20px; color: #6b7280; margin-right: 8px;" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 2L2 7v10c0 5.55 3.84 9.74 9 11 5.16-1.26 9-5.45 9-11V7l-10-5zM12 22c-4.75-1.11-8-4.67-8-9V8l8-4v18z"/>
-                </svg>
-                From
-              </h3>
-              <div style="font-weight: 500; margin-bottom: 8px;">
-                ${formData.companyName || 'Company Name'}
-              </div>
-              <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
-                <div>${formData.companyAddress.street || 'Street Address'}</div>
-                <div>${formData.companyAddress.city || 'City'}, ${formData.companyAddress.state || 'State'} ${formData.companyAddress.zipCode || 'ZIP'}</div>
-                <div>${formData.companyAddress.country ? countries.find(c => c.code === formData.companyAddress.country)?.name || formData.companyAddress.country : 'Country'}</div>
-                <div>Tax: ${formData.companyTaxNumber || 'Tax Number'}</div>
-                <div>${formData.companyEmail || 'Email'}</div>
-                <div>${formData.companyPhone || 'Phone'}</div>
-              </div>
-            </div>
-            <div style="flex: 1;">
-              <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0; display: flex; align-items: center;">
-                <svg style="width: 20px; height: 20px; color: #6b7280; margin-right: 8px;" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                </svg>
-                Bill To
-              </h3>
-              <div style="font-weight: 500; margin-bottom: 8px;">
-                ${formData.clientCompany ? formData.clientCompany : formData.clientName || 'Client Name'}
-              </div>
-              ${formData.clientCompany ? `
-              <div style="color: #6b7280; font-size: 14px; margin-bottom: 8px;">
-                Contact Person: ${formData.clientName || 'Client Name'}
-              </div>
-              ` : ''}
-              <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
-                ${formData.clientAddress.street ? `<div>${formData.clientAddress.street}</div>` : ''}
-                ${formData.clientAddress.city || formData.clientAddress.state || formData.clientAddress.zipCode ? `
-                  <div>
-                    ${formData.clientAddress.city || ''}${formData.clientAddress.city && (formData.clientAddress.state || formData.clientAddress.zipCode) ? ', ' : ''}
-                    ${formData.clientAddress.state || ''}${formData.clientAddress.state && formData.clientAddress.zipCode ? ' ' : ''}
-                    ${formData.clientAddress.zipCode || ''}
-                  </div>
-                ` : ''}
-                ${formData.clientAddress.country ? `<div>${countries.find(c => c.code === formData.clientAddress.country)?.name || formData.clientAddress.country}</div>` : ''}
-                <div>${formData.clientEmail || 'Email'}</div>
-                <div>${formData.clientPhone || 'Phone'}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
-          <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 24px 0;">Invoice Items</h3>
-          
-          <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
-            <thead style="background: #f9fafb;">
-              <tr>
-                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Description</th>
-                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Qty</th>
-                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Unit Price</th>
-                ${hasAnyDiscounts ? '<th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Discount</th>' : ''}
-                ${hasAnyTaxes ? '<th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Tax</th>' : ''}
-                <th style="padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb;">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${formData.items.map(item => `
-                <tr style="border-bottom: 1px solid #e5e7eb;">
-                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.description || 'Item description'}</td>
-                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.quantity}</td>
-                  <td style="padding: 12px 16px; font-size: 14px; color: #111827;">${getCurrencySymbol()}${item.unitPrice.toFixed(2)}</td>
-                  ${hasAnyDiscounts ? `<td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.discount > 0 ? `${item.discount}%` : ''}</td>` : ''}
-                  ${hasAnyTaxes ? `<td style="padding: 12px 16px; font-size: 14px; color: #111827;">${item.tax > 0 ? `${item.tax}%` : ''}</td>` : ''}
-                  <td style="padding: 12px 16px; font-size: 14px; font-weight: 500; color: #111827;">${getCurrencySymbol()}${item.amount.toFixed(2)}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-
-          <div style="display: flex; justify-content: flex-end;">
-            <div style="width: 256px;">
-              <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 14px; margin-bottom: 8px;">
-                <span>Amount without tax</span>
-                <span>${getCurrencySymbol()}${formData.subtotal.toFixed(2)}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 14px; margin-bottom: 8px;">
-                <span>Total Tax amount</span>
-                <span>${getCurrencySymbol()}${formData.totalTax.toFixed(2)}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 600; border-top: 1px solid #e5e7eb; padding-top: 8px; margin-bottom: 8px;">
-                <span>Total amount</span>
-                <span>${getCurrencySymbol()}${formData.total.toFixed(2)}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 600; color: #2563eb;">
-                <span>Due</span>
-                <span>${getCurrencySymbol()}${formData.total.toFixed(2)}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
-          <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0;">Payment Information</h3>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
-            <div>
-              <h4 style="font-weight: 500; color: #111827; margin: 0 0 8px 0;">Payment Method</h4>
-              <div style="font-size: 14px; color: #6b7280;">
-                ${formData.paymentMethod === 'crypto' ? 'Cryptocurrency' : 
-                  formData.fiatPaymentSubtype === 'phone' ? 'Phone Number' :
-                  formData.fiatPaymentSubtype === 'mpesa_paybill' ? 'M-Pesa Paybill' :
-                  formData.fiatPaymentSubtype === 'mpesa_till' ? 'M-Pesa Till' :
-                  'Bank Transfer'}
-              </div>
-              ${formData.paymentMethod === 'crypto' && formData.paymentNetwork ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Network: ${formData.paymentNetwork}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'crypto' && formData.paymentAddress ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Address: ${formData.paymentAddress}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.bankName ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Bank: ${formData.bankName}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.accountNumber ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Account: ${formData.accountNumber}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.swiftCode ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  SWIFT Code: ${formData.swiftCode}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.accountName ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Account Name: ${formData.accountName}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.branchAddress ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Branch Address: ${formData.branchAddress}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'phone' && formData.paymentPhoneNumber ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Phone Number: ${formData.paymentPhoneNumber}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'mpesa_paybill' && formData.paybillNumber ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Paybill Number: ${formData.paybillNumber}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'mpesa_paybill' && formData.mpesaAccountNumber ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Account Number: ${formData.mpesaAccountNumber}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && formData.fiatPaymentSubtype === 'mpesa_till' && formData.tillNumber ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Till Number: ${formData.tillNumber}
-                </div>
-              ` : ''}
-              ${formData.paymentMethod === 'fiat' && (formData.fiatPaymentSubtype === 'mpesa_paybill' || formData.fiatPaymentSubtype === 'mpesa_till' || formData.fiatPaymentSubtype === 'phone') && formData.businessName ? `
-                <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                  Business Name: ${formData.businessName}
-                </div>
-              ` : ''}
-            </div>
-            <div>
-              <h4 style="font-weight: 500; color: #111827; margin: 0 0 8px 0;">Currency</h4>
-              <div style="font-size: 14px; color: #6b7280;">
-                ${formData.currency} (${getCurrencySymbol()})
-              </div>
-            </div>
-          </div>
-        </div>
-
-        ${formData.memo ? `
-          <div style="padding: 32px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 32px;">
-            <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0;">Memo</h3>
-            <div style="font-size: 14px; color: #374151; white-space: pre-wrap;">
-              ${formData.memo}
-            </div>
-          </div>
-        ` : ''}
-
-        ${primaryInvoiceNumber ? `
-          <div style="padding: 32px 0; text-align: center;">
-            <div style="font-size: 14px; color: #6b7280;">
-              Invoice Number: ${primaryInvoiceNumber}
-            </div>
-          </div>
-        ` : ''}
-
-        <!-- Footer with watermark and security info -->
-        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center;">
-          <div style="font-size: 12px; color: #9ca3af; line-height: 1.5;">
-            <div style="margin-bottom: 8px; font-weight: 500;">
-              Generated by Chains-ERP for ${formData.companyName || 'Company'}
-            </div>
-            <div style="margin-bottom: 8px; font-size: 11px;">
-              Invoice Number: ${primaryInvoiceNumber || 'N/A'} | Date: ${formatDate(formData.issueDate)}
-            </div>
-            <div style="font-size: 10px; color: #d1d5db;">
-              Digital Invoice | Secure Payment Processing | Blockchain Verification
-            </div>
-          </div>
-        </div>
-      `;
-
-      // Append to body temporarily
-      document.body.appendChild(pdfContainer);
-
-      // Wait for images to load
-      const images = pdfContainer.querySelectorAll('img');
-      if (images.length > 0) {
-        await Promise.all(Array.from(images).map(img => {
-          return new Promise((resolve) => {
-            if (img.complete) {
-              resolve(null);
-            } else {
-              img.onload = () => resolve(null);
-              img.onerror = () => resolve(null);
-            }
-          });
-        }));
-      }
-
-            // Generate optimized PDF
-      const { pdf, base64: pdfBase64 } = await generateOptimizedPdf(pdfContainer, primaryInvoiceNumber);
-
-      // Remove the temporary element
-      document.body.removeChild(pdfContainer);
-
-      // Add watermark
-      addWatermark(pdf, primaryInvoiceNumber);
-      
+      // Generate professional vector PDF (react-pdf)
+      const pdfBase64 = await generateInvoicePdfBase64(formData, primaryInvoiceNumber);
       console.log('📄 [Smart Invoicing] Downloading PDF...', {
         invoiceNumber: primaryInvoiceNumber,
         pdfSize: pdfBase64.length
       });
-      
-      // Download the PDF directly
-      const blob = new Blob([pdf.output('blob')], { type: 'application/pdf' });
+      const byteChars = atob(pdfBase64);
+      const byteNumbers = new Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+      const blob = new Blob([new Uint8Array(byteNumbers)], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -2654,7 +2354,7 @@ export default function CreateInvoicePage() {
         total: formData.total
       });
       
-      alert(`PDF downloaded successfully! Invoice ${primaryInvoiceNumber} has been saved to your invoices.`);
+      toast.success(`PDF saved. Invoice ${primaryInvoiceNumber} added to your invoices.`);
       
       // Clear saved form data after successful download (same as send invoice)
       clearSavedData();
@@ -2662,7 +2362,7 @@ export default function CreateInvoicePage() {
       router.push('/dashboard/services/smart-invoicing/invoices');
     } catch (error) {
       console.error('❌ [Smart Invoicing] Failed to download PDF:', error);
-      alert('Failed to download PDF. Please try again.');
+      toast.error('Failed to download PDF. Please try again.');
     } finally {
       setSendingInvoice(false);
     }
@@ -2751,7 +2451,7 @@ export default function CreateInvoicePage() {
       
       // Create one row per invoice (combine all items into a single description)
       const itemsDescription = formData.items && formData.items.length > 0 
-        ? formData.items.map(item => `${item.description || 'Item'} (Qty: ${item.quantity}, Price: ${item.unitPrice.toFixed(2)})`).join('; ')
+        ? formData.items.map(item => `${item.description || 'Item'} (Qty: ${item.quantity}, Price: ${(item.unitPrice ?? 0).toFixed(2)})`).join('; ')
         : 'No items';
       
       const totalQuantity = formData.items ? formData.items.reduce((sum, item) => sum + item.quantity, 0) : 0;
@@ -2774,9 +2474,9 @@ export default function CreateInvoicePage() {
         `"${clientAddress}"`,
         `"${itemsDescription}"`,
         `"${totalQuantity}"`,
-        `"${formData.subtotal.toFixed(2)}"`,
-        `"${formData.totalTax.toFixed(2)}"`,
-        `"${formData.total.toFixed(2)}"`,
+        `"${(formData.subtotal ?? 0).toFixed(2)}"`,
+        `"${(formData.totalTax ?? 0).toFixed(2)}"`,
+        `"${(formData.total ?? 0).toFixed(2)}"`,
         `"${originalCurrency}"`,
         `"${paymentMethodText}"`,
         `"${bankName}"`,
@@ -2811,7 +2511,7 @@ export default function CreateInvoicePage() {
       
     } catch (error) {
       console.error('❌ [Smart Invoicing] Failed to download CSV:', error);
-      alert('Failed to download CSV. Please try again.');
+      toast.error('Failed to download CSV. Please try again.');
     }
   };
 
@@ -2819,41 +2519,6 @@ export default function CreateInvoicePage() {
 
   // Note: Invoice numbers are now generated by the backend API
   // No need to generate them on the frontend
-
-  // Add watermark to PDF
-  const addWatermark = (pdf: jsPDF, invoiceNumber?: string) => {
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    
-    // Add watermark text with better styling
-    pdf.setTextColor(240, 240, 240); // Very light gray
-    pdf.setFontSize(24);
-    pdf.setFont('helvetica', 'normal');
-    
-    // Add watermark in center
-    const text = 'DIGITAL INVOICE';
-    const textWidth = pdf.getTextWidth(text);
-    const x = (pageWidth - textWidth) / 2;
-    const y = pageHeight / 2;
-    
-    // Add watermark with transparency effect
-    pdf.text(text, x, y);
-    
-    // Add invoice number watermark if provided
-    if (invoiceNumber) {
-      pdf.setFontSize(16);
-      const invoiceText = `Invoice: ${invoiceNumber}`;
-      const invoiceTextWidth = pdf.getTextWidth(invoiceText);
-      const invoiceX = (pageWidth - invoiceTextWidth) / 2;
-      const invoiceY = y + 20; // Below the main watermark
-      
-      pdf.text(invoiceText, invoiceX, invoiceY);
-    }
-    
-    // Reset text color for normal content
-    pdf.setTextColor(0, 0, 0);
-  };
-
 
   // Handle payment method selection
   const handlePaymentMethodSelect = (methodId: string) => {
@@ -2938,6 +2603,24 @@ export default function CreateInvoicePage() {
   return (
     <div className="min-h-screen rounded-xl bg-gray-50 py-8">
       <div className="max-w-4xl mx-auto px-4">
+        {/* Sending overlay - rendered in body so it covers full viewport and prevents scroll */}
+        {sendingInvoice && typeof document !== 'undefined' && createPortal(
+          <div
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm overflow-hidden"
+            style={{ pointerEvents: 'auto', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
+            aria-live="polite"
+            aria-busy="true"
+            role="alert"
+          >
+            <div className="bg-white rounded-xl shadow-2xl border border-gray-200 p-8 max-w-sm mx-4 flex flex-col items-center gap-4">
+              <Loader2 className="h-12 w-12 animate-spin text-blue-600" aria-hidden />
+              <h3 className="text-lg font-semibold text-gray-900">Sending invoice</h3>
+              <p className="text-sm text-gray-600 text-center">Please wait. Do not close or refresh this page.</p>
+            </div>
+          </div>,
+          document.body
+        )}
+
         {/* Disabled Overlay - Show when limit is reached */}
         {subscription && !subscription.canCreateInvoice && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
@@ -2966,8 +2649,8 @@ export default function CreateInvoicePage() {
           </div>
         )}
 
-        {/* Original Form Content - Always rendered but disabled when limit reached */}
-        <div className={`${subscription && !subscription.canCreateInvoice ? 'pointer-events-none opacity-50' : ''}`}>
+        {/* Original Form Content - Disabled when limit reached or when sending invoice */}
+        <div className={`${subscription && !subscription.canCreateInvoice ? 'pointer-events-none opacity-50' : ''} ${sendingInvoice ? 'pointer-events-none select-none' : ''}`}>
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 space-y-4 sm:space-y-0">
           <button
@@ -3067,7 +2750,7 @@ export default function CreateInvoicePage() {
                 <div className="flex flex-col space-y-3 sm:hidden">
                   {/* Logo first on mobile */}
                   <div 
-                    onClick={() => setShowCompanyEditModal(true)}
+                    onClick={handleOpenCompanyModal}
                     className="w-20 h-20 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors cursor-pointer flex-shrink-0 group relative overflow-hidden self-end"
                   >
                     {formData.companyLogo ? (
@@ -3120,7 +2803,7 @@ export default function CreateInvoicePage() {
                     </div>
                   </div>
                   <div 
-                    onClick={() => setShowCompanyEditModal(true)}
+                    onClick={handleOpenCompanyModal}
                     className="w-20 h-20 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors cursor-pointer flex-shrink-0 group relative overflow-hidden"
                   >
                     {formData.companyLogo ? (
@@ -3161,7 +2844,7 @@ export default function CreateInvoicePage() {
                     From
                   </div>
                   <button
-                    onClick={() => setShowCompanyEditModal(true)}
+                    onClick={handleOpenCompanyModal}
                     className="text-gray-400 hover:text-gray-600 transition-colors"
                   >
                     <Edit3 className="h-4 w-4" />
@@ -3207,114 +2890,117 @@ export default function CreateInvoicePage() {
                     Bill To
                   </h3>
                   <div className="flex items-center space-x-2">
-                    {/* WhatsApp Toggle Button */}
-                    <button
-                      onClick={() => {
-                        const newWhatsAppMode = !formData.sendViaWhatsapp;
-                        setFormData(prev => {
-                          const updated = { ...prev, sendViaWhatsapp: newWhatsAppMode };
-                          
-                          // Auto-format phone number when switching to WhatsApp
-                          if (newWhatsAppMode && prev.clientPhone) {
-                            // Get country code from current country selection
-                            const countryCode = prev.clientAddress.country ? 
-                              (prev.clientAddress.country === 'US' ? '+1' : 
-                               prev.clientAddress.country === 'GB' ? '+44' :
-                               prev.clientAddress.country === 'DE' ? '+49' :
-                               prev.clientAddress.country === 'FR' ? '+33' :
-                               prev.clientAddress.country === 'IT' ? '+39' :
-                               prev.clientAddress.country === 'ES' ? '+34' :
-                               prev.clientAddress.country === 'CA' ? '+1' :
-                               prev.clientAddress.country === 'AU' ? '+61' :
-                               prev.clientAddress.country === 'JP' ? '+81' :
-                               prev.clientAddress.country === 'CN' ? '+86' :
-                               prev.clientAddress.country === 'IN' ? '+91' :
-                               prev.clientAddress.country === 'BR' ? '+55' :
-                               prev.clientAddress.country === 'MX' ? '+52' :
-                               prev.clientAddress.country === 'RU' ? '+7' :
-                               prev.clientAddress.country === 'KR' ? '+82' :
-                               prev.clientAddress.country === 'NL' ? '+31' :
-                               prev.clientAddress.country === 'SE' ? '+46' :
-                               prev.clientAddress.country === 'NO' ? '+47' :
-                               prev.clientAddress.country === 'DK' ? '+45' :
-                               prev.clientAddress.country === 'FI' ? '+358' :
-                               prev.clientAddress.country === 'PL' ? '+48' :
-                               prev.clientAddress.country === 'CZ' ? '+420' :
-                               prev.clientAddress.country === 'HU' ? '+36' :
-                               prev.clientAddress.country === 'RO' ? '+40' :
-                               prev.clientAddress.country === 'BG' ? '+359' :
-                               prev.clientAddress.country === 'HR' ? '+385' :
-                               prev.clientAddress.country === 'SI' ? '+386' :
-                               prev.clientAddress.country === 'SK' ? '+421' :
-                               prev.clientAddress.country === 'LT' ? '+370' :
-                               prev.clientAddress.country === 'LV' ? '+371' :
-                               prev.clientAddress.country === 'EE' ? '+372' :
-                               prev.clientAddress.country === 'IE' ? '+353' :
-                               prev.clientAddress.country === 'PT' ? '+351' :
-                               prev.clientAddress.country === 'GR' ? '+30' :
-                               prev.clientAddress.country === 'CY' ? '+357' :
-                               prev.clientAddress.country === 'MT' ? '+356' :
-                               prev.clientAddress.country === 'LU' ? '+352' :
-                               prev.clientAddress.country === 'BE' ? '+32' :
-                               prev.clientAddress.country === 'AT' ? '+43' :
-                               prev.clientAddress.country === 'CH' ? '+41' :
-                               prev.clientAddress.country === 'LI' ? '+423' :
-                               prev.clientAddress.country === 'MC' ? '+377' :
-                               prev.clientAddress.country === 'SM' ? '+378' :
-                               prev.clientAddress.country === 'VA' ? '+39' :
-                               prev.clientAddress.country === 'AD' ? '+376' :
-                               prev.clientAddress.country === 'IS' ? '+354' :
-                               prev.clientAddress.country === 'FO' ? '+298' :
-                               prev.clientAddress.country === 'GL' ? '+299' :
-                               prev.clientAddress.country === 'GI' ? '+350' :
-                               prev.clientAddress.country === 'AL' ? '+355' :
-                               prev.clientAddress.country === 'AM' ? '+374' :
-                               prev.clientAddress.country === 'AZ' ? '+994' :
-                               prev.clientAddress.country === 'BY' ? '+375' :
-                               prev.clientAddress.country === 'BA' ? '+387' :
-                               prev.clientAddress.country === 'GE' ? '+995' :
-                               prev.clientAddress.country === 'KG' ? '+996' :
-                               prev.clientAddress.country === 'KZ' ? '+7' :
-                               prev.clientAddress.country === 'MD' ? '+373' :
-                               prev.clientAddress.country === 'ME' ? '+382' :
-                               prev.clientAddress.country === 'MK' ? '+389' :
-                               prev.clientAddress.country === 'RS' ? '+381' :
-                               prev.clientAddress.country === 'TJ' ? '+992' :
-                               prev.clientAddress.country === 'TM' ? '+993' :
-                               prev.clientAddress.country === 'UA' ? '+380' :
-                               prev.clientAddress.country === 'UZ' ? '+998' :
-                               prev.clientAddress.country === 'XK' ? '+383' :
-                               '+1') : '+1';
+                    {/* WhatsApp Toggle Button - DISABLED FOR NOW */}
+                    {/* TODO: Re-enable WhatsApp functionality after configuration */}
+                    {false && (
+                      <button
+                        onClick={() => {
+                          const newWhatsAppMode = !formData.sendViaWhatsapp;
+                          setFormData(prev => {
+                            const updated = { ...prev, sendViaWhatsapp: newWhatsAppMode };
                             
-                            updated.clientPhone = formatPhoneForWhatsApp(prev.clientPhone, countryCode);
-                          }
-                          
-                          return updated;
-                        });
-                      }}
-                      className={`flex items-center space-x-2 px-3 py-1 rounded-lg border transition-colors ${
-                        formData.sendViaWhatsapp 
-                          ? 'bg-green-50 border-green-200 text-green-700' 
-                          : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
-                      }`}
-                      title={formData.sendViaWhatsapp ? 'Sending via WhatsApp' : 'Sending via Email (default)'}
-                    >
-                      <div className="w-4 h-4 flex items-center justify-center">
-                        {formData.sendViaWhatsapp ? (
-                          <CheckCircle className="w-4 h-4 text-green-600" />
-                        ) : (
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/>
-                          </svg>
-                        )}
-                      </div>
-                      <span className="text-xs font-medium">
-                        {formData.sendViaWhatsapp ? 'WhatsApp ✓' : 'WhatsApp'}
-                      </span>
-                    </button>
+                            // Auto-format phone number when switching to WhatsApp
+                            if (newWhatsAppMode && prev.clientPhone) {
+                              // Get country code from current country selection
+                              const countryCode = prev.clientAddress.country ? 
+                                (prev.clientAddress.country === 'US' ? '+1' : 
+                                 prev.clientAddress.country === 'GB' ? '+44' :
+                                 prev.clientAddress.country === 'DE' ? '+49' :
+                                 prev.clientAddress.country === 'FR' ? '+33' :
+                                 prev.clientAddress.country === 'IT' ? '+39' :
+                                 prev.clientAddress.country === 'ES' ? '+34' :
+                                 prev.clientAddress.country === 'CA' ? '+1' :
+                                 prev.clientAddress.country === 'AU' ? '+61' :
+                                 prev.clientAddress.country === 'JP' ? '+81' :
+                                 prev.clientAddress.country === 'CN' ? '+86' :
+                                 prev.clientAddress.country === 'IN' ? '+91' :
+                                 prev.clientAddress.country === 'BR' ? '+55' :
+                                 prev.clientAddress.country === 'MX' ? '+52' :
+                                 prev.clientAddress.country === 'RU' ? '+7' :
+                                 prev.clientAddress.country === 'KR' ? '+82' :
+                                 prev.clientAddress.country === 'NL' ? '+31' :
+                                 prev.clientAddress.country === 'SE' ? '+46' :
+                                 prev.clientAddress.country === 'NO' ? '+47' :
+                                 prev.clientAddress.country === 'DK' ? '+45' :
+                                 prev.clientAddress.country === 'FI' ? '+358' :
+                                 prev.clientAddress.country === 'PL' ? '+48' :
+                                 prev.clientAddress.country === 'CZ' ? '+420' :
+                                 prev.clientAddress.country === 'HU' ? '+36' :
+                                 prev.clientAddress.country === 'RO' ? '+40' :
+                                 prev.clientAddress.country === 'BG' ? '+359' :
+                                 prev.clientAddress.country === 'HR' ? '+385' :
+                                 prev.clientAddress.country === 'SI' ? '+386' :
+                                 prev.clientAddress.country === 'SK' ? '+421' :
+                                 prev.clientAddress.country === 'LT' ? '+370' :
+                                 prev.clientAddress.country === 'LV' ? '+371' :
+                                 prev.clientAddress.country === 'EE' ? '+372' :
+                                 prev.clientAddress.country === 'IE' ? '+353' :
+                                 prev.clientAddress.country === 'PT' ? '+351' :
+                                 prev.clientAddress.country === 'GR' ? '+30' :
+                                 prev.clientAddress.country === 'CY' ? '+357' :
+                                 prev.clientAddress.country === 'MT' ? '+356' :
+                                 prev.clientAddress.country === 'LU' ? '+352' :
+                                 prev.clientAddress.country === 'BE' ? '+32' :
+                                 prev.clientAddress.country === 'AT' ? '+43' :
+                                 prev.clientAddress.country === 'CH' ? '+41' :
+                                 prev.clientAddress.country === 'LI' ? '+423' :
+                                 prev.clientAddress.country === 'MC' ? '+377' :
+                                 prev.clientAddress.country === 'SM' ? '+378' :
+                                 prev.clientAddress.country === 'VA' ? '+39' :
+                                 prev.clientAddress.country === 'AD' ? '+376' :
+                                 prev.clientAddress.country === 'IS' ? '+354' :
+                                 prev.clientAddress.country === 'FO' ? '+298' :
+                                 prev.clientAddress.country === 'GL' ? '+299' :
+                                 prev.clientAddress.country === 'GI' ? '+350' :
+                                 prev.clientAddress.country === 'AL' ? '+355' :
+                                 prev.clientAddress.country === 'AM' ? '+374' :
+                                 prev.clientAddress.country === 'AZ' ? '+994' :
+                                 prev.clientAddress.country === 'BY' ? '+375' :
+                                 prev.clientAddress.country === 'BA' ? '+387' :
+                                 prev.clientAddress.country === 'GE' ? '+995' :
+                                 prev.clientAddress.country === 'KG' ? '+996' :
+                                 prev.clientAddress.country === 'KZ' ? '+7' :
+                                 prev.clientAddress.country === 'MD' ? '+373' :
+                                 prev.clientAddress.country === 'ME' ? '+382' :
+                                 prev.clientAddress.country === 'MK' ? '+389' :
+                                 prev.clientAddress.country === 'RS' ? '+381' :
+                                 prev.clientAddress.country === 'TJ' ? '+992' :
+                                 prev.clientAddress.country === 'TM' ? '+993' :
+                                 prev.clientAddress.country === 'UA' ? '+380' :
+                                 prev.clientAddress.country === 'UZ' ? '+998' :
+                                 prev.clientAddress.country === 'XK' ? '+383' :
+                                 '+1') : '+1';
+                              
+                              updated.clientPhone = formatPhoneForWhatsApp(prev.clientPhone, countryCode);
+                            }
+                            
+                            return updated;
+                          });
+                        }}
+                        className={`flex items-center space-x-2 px-3 py-1 rounded-lg border transition-colors ${
+                          formData.sendViaWhatsapp 
+                            ? 'bg-green-50 border-green-200 text-green-700' 
+                            : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                        }`}
+                        title={formData.sendViaWhatsapp ? 'Sending via WhatsApp' : 'Sending via Email (default)'}
+                      >
+                        <div className="w-4 h-4 flex items-center justify-center">
+                          {formData.sendViaWhatsapp ? (
+                            <CheckCircle className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/>
+                            </svg>
+                          )}
+                        </div>
+                        <span className="text-xs font-medium">
+                          {formData.sendViaWhatsapp ? 'WhatsApp ✓' : 'WhatsApp'}
+                        </span>
+                      </button>
+                    )}
                     
                     <button
-                      onClick={() => setShowClientEditModal(true)}
+                      onClick={handleOpenClientModal}
                       className="text-gray-400 hover:text-gray-600 transition-colors"
                     >
                       <Edit3 className="h-4 w-4" />
@@ -3907,7 +3593,7 @@ export default function CreateInvoicePage() {
                               <select
                                 value={formData.bankCountryCode || 'KE'}
                                 onChange={(e) => handleInputChange('bankCountryCode', e.target.value)}
-                                className="text-xs text-gray-600 bg-transparent border-none outline-none cursor-pointer pr-4 appearance-none"
+                                className="text-xs bg-white text-gray-900 border border-gray-300 rounded outline-none cursor-pointer pr-4 appearance-none focus:ring-2 focus:ring-blue-500"
                               >
                                 <option value="GH">Ghana</option>
                                 <option value="KE">Kenya</option>
@@ -4311,28 +3997,30 @@ export default function CreateInvoicePage() {
                           type="text"
                           value={item.description}
                           onChange={(e) => handleItemChange(index, 'description', e.target.value)}
-                          className="w-full px-2 py-1 border text-gray-600 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-2 py-1 border border-gray-300 rounded bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                           placeholder="Enter description"
                         />
                       </td>
                       <td className="py-3 px-4">
                         <input
                           type="number"
-                          value={item.quantity}
-                          onChange={(e) => handleItemChange(index, 'quantity', parseFloat(e.target.value) || 0)}
-                          className="w-20 px-2 py-1 text-gray-600 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          value={item.quantity === 0 ? '' : item.quantity}
+                          onChange={(e) => handleItemChange(index, 'quantity', e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)}
+                          className="w-20 px-2 py-1 bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                           min="0"
                           step="1"
+                          placeholder="0"
                         />
                       </td>
                       <td className="py-3 px-4">
                         <input
                           type="number"
-                          value={item.unitPrice}
-                          onChange={(e) => handleItemChange(index, 'unitPrice', parseFloat(e.target.value) || 0)}
-                          className="w-24 px-2 py-1 border text-gray-600 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          value={item.unitPrice === 0 ? '' : item.unitPrice}
+                          onChange={(e) => handleItemChange(index, 'unitPrice', e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)}
+                          className="w-24 px-2 py-1 bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                           min="0"
                           step="0.01"
+                          placeholder="0"
                         />
                       </td>
                       {hasAnyDiscounts && (
@@ -4341,12 +4029,13 @@ export default function CreateInvoicePage() {
                             <div className="relative">
                               <input
                                 type="number"
-                                value={item.discount}
-                                onChange={(e) => handleItemChange(index, 'discount', parseFloat(e.target.value) || 0)}
-                                className="w-20 px-2 pr-6 py-1 border text-gray-600 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                value={item.discount === 0 ? '' : item.discount}
+                                onChange={(e) => handleItemChange(index, 'discount', e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)}
+                                className="w-20 px-2 pr-6 py-1 bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 min="0"
                                 max="100"
                                 step="0.01"
+                                placeholder="0"
                               />
                               <span className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">%</span>
                             </div>
@@ -4366,12 +4055,13 @@ export default function CreateInvoicePage() {
                         <div className="relative">
                           <input
                             type="number"
-                            value={item.tax}
-                            onChange={(e) => handleItemChange(index, 'tax', parseFloat(e.target.value) || 0)}
-                            className="w-20 px-2 pr-6 py-1 border text-gray-600 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            value={item.tax === 0 ? '' : item.tax}
+                            onChange={(e) => handleItemChange(index, 'tax', e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)}
+                            className="w-20 px-2 pr-6 py-1 bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             min="0"
                             max="100"
                             step="0.01"
+                            placeholder="0"
                           />
                           <span className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">%</span>
                         </div>
@@ -4383,13 +4073,31 @@ export default function CreateInvoicePage() {
                               if (selectedTax) {
                                 const [, rate] = selectedTax.split(':');
                                 const taxRate = parseFloat(rate);
-                                if (taxRate > 0) {
+                                if (!Number.isNaN(taxRate) && taxRate >= 0) {
                                   handleItemChange(index, 'tax', taxRate);
                                 }
                               }
                             }}
-                            className="w-full text-xs px-1 py-0.5 border text-gray-600 border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                            value=""
+                            className="w-full text-xs px-1 py-0.5 bg-white border border-gray-200 rounded text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 [color-scheme:light]"
+                            value={(() => {
+                              const r = item.tax;
+                              if (r === 0) return 'custom:0';
+                              if (r === 5) return 'custom:5';
+                              if (r === 10) return 'custom:10';
+                              if (r === 16) return 'custom:16';
+                              if (r === 20) return 'custom:20';
+                              if (r === 25) return 'custom:25';
+                              if (r === 30) return 'custom:30';
+                              const countryTaxes = getTaxRatesByCountry(formData.companyAddress.country);
+                              if (countryTaxes) {
+                                if (countryTaxes.vat === r) return `vat:${r}`;
+                                if (countryTaxes.gst === r) return `gst:${r}`;
+                                if (countryTaxes.salesTax === r) return `salesTax:${r}`;
+                                if (countryTaxes.corporateTax === r) return `corporateTax:${r}`;
+                                if (countryTaxes.personalTax === r) return `personalTax:${r}`;
+                              }
+                              return '';
+                            })()}
                           >
                             <option value="">Select tax type</option>
                             <optgroup label="Common Rates">
@@ -4422,7 +4130,7 @@ export default function CreateInvoicePage() {
                         </div>
                       </td>
                       <td className="py-3 px-4 font-medium text-gray-700">
-                        {getCurrencySymbol()}{item.amount.toFixed(2)}
+                        {getCurrencySymbol()}{(item.amount ?? 0).toFixed(2)}
                       </td>
                       <td className="py-3 px-4">
                         {formData.items.length > 1 && (
@@ -4444,21 +4152,88 @@ export default function CreateInvoicePage() {
             {/* Totals */}
             <div className="mt-6 flex justify-end">
               <div className="w-full sm:w-64 space-y-2">
-                <div className="flex justify-between text-gray-600">
+                <div className="flex justify-between text-gray-800">
                   <span>Amount without tax</span>
-                  <span>{getCurrencySymbol()}{formData.subtotal.toFixed(2)}</span>
+                  <span>{getCurrencySymbol()}{(formData.subtotal ?? 0).toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-gray-600">
+                <div className="flex justify-between text-gray-800">
                   <span>Total Tax amount</span>
-                  <span>{getCurrencySymbol()}{formData.totalTax.toFixed(2)}</span>
+                  <span>{getCurrencySymbol()}{(formData.totalTax ?? 0).toFixed(2)}</span>
                 </div>
+                {!formData.withholdingTaxEnabled ? (
+                  <div className="flex justify-between text-gray-800 items-center gap-2">
+                    <span className="text-sm text-gray-700">Withholding tax</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const sub = formData.subtotal ?? 0;
+                        const tax = formData.totalTax ?? 0;
+                        const ratePercent = formData.withholdingTaxRatePercent ?? 5;
+                        const rate = ratePercent / 100;
+                        setFormData(prev => ({
+                          ...prev,
+                          withholdingTaxEnabled: true,
+                          withholdingTaxRatePercent: ratePercent,
+                          total: sub + tax - (sub + tax) * rate
+                        }));
+                      }}
+                      className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                    >
+                      Add withholding tax
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex justify-between text-gray-800 items-center gap-2 flex-wrap">
+                    <span className="flex items-center gap-2">
+                      <span className="text-gray-800">Withholding tax (</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.5"
+                        className="w-14 px-1 py-0.5 text-sm bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        value={formData.withholdingTaxRatePercent ?? 5}
+                        onChange={(e) => {
+                          const sub = formData.subtotal ?? 0;
+                          const tax = formData.totalTax ?? 0;
+                          const n = parseFloat(e.target.value);
+                          const ratePercent = Number.isNaN(n) ? 5 : Math.max(0, Math.min(100, n));
+                          const rate = ratePercent / 100;
+                          setFormData(prev => ({
+                            ...prev,
+                            withholdingTaxRatePercent: ratePercent,
+                            total: sub + tax - (sub + tax) * rate
+                          }));
+                        }}
+                      />
+                      <span className="text-gray-800">%)</span>
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="text-red-600">
+                        -{getCurrencySymbol()}{(((formData.subtotal ?? 0) + (formData.totalTax ?? 0)) * ((formData.withholdingTaxRatePercent ?? 5) / 100)).toFixed(2)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const sub = formData.subtotal ?? 0;
+                          const tax = formData.totalTax ?? 0;
+                          setFormData(prev => ({ ...prev, withholdingTaxEnabled: false, total: sub + tax }));
+                        }}
+                        className="p-0.5 rounded hover:bg-red-100 text-gray-500 hover:text-red-600 transition-colors"
+                        title="Remove withholding tax"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between text-gray-700 text-lg font-semibold border-t pt-2">
                   <span>Total amount</span>
-                  <span>{getCurrencySymbol()}{formData.total.toFixed(2)}</span>
+                  <span>{getCurrencySymbol()}{(formData.total ?? 0).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-lg font-semibold text-blue-600">
                   <span>Due</span>
-                  <span>{getCurrencySymbol()}{formData.total.toFixed(2)}</span>
+                  <span>{getCurrencySymbol()}{(formData.total ?? 0).toFixed(2)}</span>
                 </div>
               </div>
             </div>
@@ -4542,7 +4317,7 @@ export default function CreateInvoicePage() {
                   className="w-full flex items-center space-x-2 px-4 py-2 text-left hover:bg-gray-50 transition-colors"
                 >
                   <File className="h-4 w-4 text-red-500" />
-                  <span>Download as PDF</span>
+                  <span className="text-gray-900">Download as PDF</span>
                 </button>
                 <button
                   onClick={() => {
@@ -4552,7 +4327,7 @@ export default function CreateInvoicePage() {
                   className="w-full flex items-center space-x-2 px-4 py-2 text-left hover:bg-gray-50 transition-colors"
                 >
                   <File className="h-4 w-4 text-blue-500" />
-                  <span>Download as CSV</span>
+                  <span className="text-gray-900">Download as CSV</span>
                 </button>
               </div>
             )}
@@ -4619,7 +4394,21 @@ export default function CreateInvoicePage() {
 
         {/* Company Edit Modal */}
         {showCompanyEditModal && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 p-4 overflow-hidden">
+          <div 
+            className="bg-black/40 backdrop-blur-sm z-[9999] overflow-hidden" 
+            style={{ 
+              position: 'fixed', 
+              top: 0, 
+              left: 0, 
+              right: 0, 
+              bottom: 0,
+              width: '100vw',
+              height: '100vh',
+              margin: 0,
+              padding: '1rem',
+              zIndex: 9999
+            }}
+          >
             <div className="min-h-full flex items-center justify-center py-4">
               <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative shadow-xl touch-manipulation">
                 <div className="flex justify-between items-center mb-4">
@@ -4647,7 +4436,21 @@ export default function CreateInvoicePage() {
 
         {/* Client Edit Modal */}
         {showClientEditModal && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 p-4 overflow-hidden">
+          <div 
+            className="bg-black/40 backdrop-blur-sm z-[9999] overflow-hidden" 
+            style={{ 
+              position: 'fixed', 
+              top: 0, 
+              left: 0, 
+              right: 0, 
+              bottom: 0,
+              width: '100vw',
+              height: '100vh',
+              margin: 0,
+              padding: '1rem',
+              zIndex: 9999
+            }}
+          >
             <div className="min-h-full flex items-center justify-center py-4">
               <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto relative shadow-xl touch-manipulation">
                 <div className="flex justify-between items-center mb-4">
@@ -4669,18 +4472,10 @@ export default function CreateInvoicePage() {
                     setFormData(prev => ({ ...prev, ...updatedData }));
                     
                     // Auto-detect best sending method after client edit
+                    // WhatsApp is disabled, so always use email
                     setTimeout(() => {
-                      const hasEmail = updatedData.clientEmail && updatedData.clientEmail.trim() !== '';
-                      const hasPhone = updatedData.clientPhone && updatedData.clientPhone.trim() !== '';
-                      
-                      if (!hasEmail && hasPhone) {
-                        // Only phone available, auto-switch to WhatsApp
-                        setFormData(prev => ({ ...prev, sendViaWhatsapp: true }));
-                      } else if (hasEmail && !hasPhone) {
-                        // Only email available, auto-switch to email
-                        setFormData(prev => ({ ...prev, sendViaWhatsapp: false }));
-                      }
-                      // If both or neither, don't auto-switch
+                      // Force email mode since WhatsApp is disabled
+                      setFormData(prev => ({ ...prev, sendViaWhatsapp: false }));
                     }, 100);
                     
                     setShowClientEditModal(false);

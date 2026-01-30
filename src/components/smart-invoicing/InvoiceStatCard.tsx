@@ -125,17 +125,29 @@ export default function InvoiceStatCard({ type, className = '' }: InvoiceStatCar
   const config = getCardConfig();
   const Icon = config.icon;
 
+  const cardContent = (displayValue: React.ReactNode) => (
+    <div className="flex items-center justify-between gap-3 h-full min-h-0">
+      <div className="flex-1 min-w-0 flex flex-col justify-center">
+        <p className="text-blue-200 text-sm font-medium leading-tight truncate">{config.label}</p>
+        <p className="text-2xl font-bold text-white leading-tight mt-1 truncate">
+          {displayValue}
+        </p>
+      </div>
+      <div className={`w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-lg ${config.iconBg}`}>
+        <Icon className={`h-5 w-5 ${config.iconColor}`} />
+      </div>
+    </div>
+  );
+
   if (loading) {
     return (
-      <div className={`bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200 animate-pulse ${className}`}>
-        <div className="flex items-center justify-between">
-          <div>
+      <div className={`bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 hover:bg-white/15 transition-all duration-200 animate-pulse h-full flex flex-col justify-center ${className}`}>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex-1 min-w-0">
             <div className="h-4 w-24 bg-white/20 rounded mb-2"></div>
-            <div className="h-8 w-16 bg-white/20 rounded"></div>
+            <div className="h-7 w-16 bg-white/20 rounded"></div>
           </div>
-          <div className="p-3 bg-white/20 rounded-lg">
-            <div className="h-6 w-6"></div>
-          </div>
+          <div className="w-10 h-10 bg-white/20 rounded-lg flex-shrink-0"></div>
         </div>
       </div>
     );
@@ -143,37 +155,21 @@ export default function InvoiceStatCard({ type, className = '' }: InvoiceStatCar
 
   if (error) {
     return (
-      <div className={`bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 ${className}`}>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-blue-200 text-sm font-medium">{config.label}</p>
-            <p className="text-2xl font-bold text-white">--</p>
-          </div>
-          <div className={`p-3 ${config.iconBg} rounded-lg`}>
-            <Icon className={`h-6 w-6 ${config.iconColor}`} />
-          </div>
-        </div>
+      <div className={`bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 h-full flex flex-col justify-center ${className}`}>
+        {cardContent('--')}
       </div>
     );
   }
 
   return (
-    <div className={`bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200 ${className}`}>
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-blue-200 text-sm font-medium">{config.label}</p>
-          <p className="text-2xl font-bold text-white">
-            {type === 'revenue' ? (
-              <FormattedNumberDisplay value={value} usePreferredCurrency={true} />
-            ) : (
-              value
-            )}
-          </p>
-        </div>
-        <div className={`p-3 ${config.iconBg} rounded-lg`}>
-          <Icon className={`h-6 w-6 ${config.iconColor}`} />
-        </div>
-      </div>
+    <div className={`bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 hover:bg-white/15 transition-all duration-200 h-full flex flex-col justify-center ${className}`}>
+      {cardContent(
+        type === 'revenue' ? (
+          <FormattedNumberDisplay value={value} usePreferredCurrency={true} />
+        ) : (
+          value
+        )
+      )}
     </div>
   );
 }

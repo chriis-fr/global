@@ -236,7 +236,7 @@ export async function POST(request: NextRequest) {
       };
 
       await accessTokensCollection.insertOne(tokenData);
-      accessUrl = `${baseUrl}/invoice-access?token=${token}`;
+      accessUrl = `${baseUrl}/pay-invoice?token=${token}`;
       console.log('✅ [Send Invoice] Secure access token generated');
     } catch (tokenError) {
       console.error('❌ [Send Invoice] Failed to generate access token:', tokenError);
