@@ -16,6 +16,7 @@ interface AutoSendInvoiceData {
 
 /** API invoice shape (from GET /api/invoices/:id) - same fields as invoice details page uses for PDF. */
 interface ApiInvoice {
+  invoiceNumber?: string;
   invoiceName?: string;
   issueDate?: string;
   dueDate?: string;
