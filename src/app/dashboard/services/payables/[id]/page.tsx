@@ -20,9 +20,9 @@ import {
   Clock3,
   Wallet
 } from 'lucide-react';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 import { getCurrencyByCode } from '@/data/currencies';
+import { generatePdfBlob } from '@/lib/utils/pdfDocument';
+import type { InvoicePdfData } from '@/components/invoicing/InvoicePdfDocument';
 import PayablePaymentModal from '@/components/payer/PayablePaymentModal';
 import MarkPaidModal from '@/components/payables/MarkPaidModal';
 import { markPayableAsPaid } from '@/app/actions/mark-payable-paid';
@@ -259,163 +259,61 @@ export default function PayableViewPage() {
     }
   };
 
-  // Handle Receipt download
+  // Map payable to InvoicePdfData for receipt PDF (react-pdf)
+  const payableToPdfData = (p: Payable): InvoicePdfData => {
+    const addr = (r: Record<string, unknown> | undefined) => ({
+      street: (r?.street as string) ?? '',
+      city: (r?.city as string) ?? '',
+      state: (r?.state as string) ?? '',
+      zipCode: (r?.zipCode as string) ?? '',
+      country: (r?.country as string) ?? '',
+    });
+    return {
+      invoiceName: 'Payment Receipt',
+      issueDate: p.issueDate,
+      dueDate: p.dueDate,
+      companyName: p.companyName ?? '',
+      companyEmail: p.companyEmail ?? '',
+      companyPhone: p.companyPhone ?? '',
+      companyAddress: addr(p.companyAddress as Record<string, unknown> | undefined),
+      clientName: p.vendorName ?? '',
+      clientEmail: p.vendorEmail ?? '',
+      clientPhone: p.vendorPhone ?? '',
+      clientAddress: addr(p.vendorAddress as Record<string, unknown> | undefined),
+      currency: p.currency ?? 'USD',
+      paymentMethod: (p.paymentMethod === 'crypto' ? 'crypto' : 'fiat') as 'fiat' | 'crypto',
+      paymentNetwork: p.paymentNetwork,
+      paymentAddress: p.paymentAddress,
+      items: (p.items ?? []).map((item) => ({
+        id: item.id,
+        description: item.description ?? '',
+        quantity: item.quantity ?? 0,
+        unitPrice: item.unitPrice ?? 0,
+        discount: item.discount ?? 0,
+        tax: item.tax ?? 0,
+        amount: item.amount ?? 0,
+      })),
+      subtotal: p.subtotal ?? 0,
+      totalTax: p.totalTax ?? 0,
+      total: p.total ?? 0,
+      memo: p.memo,
+    };
+  };
+
+  // Handle Receipt download (react-pdf, no html2canvas/jsPDF)
   const handleDownloadReceipt = async () => {
     if (!payable) return;
 
     try {
       setDownloadingReceipt(true);
-
-      // Create a temporary container for receipt generation
-      const receiptContainer = document.createElement('div');
-      receiptContainer.style.position = 'absolute';
-      receiptContainer.style.left = '-9999px';
-      receiptContainer.style.top = '-9999px';
-      receiptContainer.style.width = '750px';
-      receiptContainer.style.backgroundColor = 'white';
-      receiptContainer.style.padding = '30px';
-      receiptContainer.style.fontFamily = 'Arial, sans-serif';
-      document.body.appendChild(receiptContainer);
-
-      // Generate receipt HTML
-      const receiptHTML = `
-        <div style="max-width: 600px; margin: 0 auto; background: white; padding: 20px; border: 1px solid #e5e7eb; box-sizing: border-box; width: 100%;">
-          <!-- Header -->
-          <div style="text-align: center; margin-bottom: 20px; border-bottom: 2px solid #3b82f6; padding-bottom: 15px;">
-            <h1 style="color: #1f2937; font-size: 24px; font-weight: bold; margin: 0; word-wrap: break-word;">PAYMENT RECEIPT</h1>
-            <p style="color: #6b7280; font-size: 12px; margin: 3px 0 0 0; word-wrap: break-word;">Receipt #${payable.payableNumber || 'N/A'}</p>
-          </div>
-
-          <!-- Payment Details -->
-          <div style="margin-bottom: 18px;">
-            <h2 style="color: #1f2937; font-size: 16px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px;">Payment Details</h2>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-              <div>
-                <p style="margin: 5px 0; color: #6b7280; font-size: 14px; word-wrap: break-word;"><strong>Payment Date:</strong> ${payable.paymentDate ? new Date(payable.paymentDate).toLocaleDateString() : 'N/A'}</p>
-                <p style="margin: 5px 0; color: #6b7280; font-size: 14px; word-wrap: break-word;"><strong>Bill Date:</strong> ${new Date(payable.issueDate).toLocaleDateString()}</p>
-                <p style="margin: 5px 0; color: #6b7280; font-size: 14px; word-wrap: break-word;"><strong>Due Date:</strong> ${new Date(payable.dueDate).toLocaleDateString()}</p>
-              </div>
-              <div>
-                <p style="margin: 5px 0; color: #6b7280; font-size: 14px; word-wrap: break-word;"><strong>Payment Method:</strong> ${payable.paymentMethod === 'crypto' ? 'Cryptocurrency' : 'Bank Transfer'}</p>
-                <p style="margin: 5px 0; color: #6b7280; font-size: 14px; word-wrap: break-word;"><strong>Status:</strong> <span style="color: #059669; font-weight: bold;">PAID</span></p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Company Information (Sender) -->
-          <div style="margin-bottom: 18px;">
-            <h2 style="color: #1f2937; font-size: 16px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px;">From</h2>
-            <div style="background: #f9fafb; padding: 12px; border-radius: 6px;">
-              <p style="margin: 0 0 3px 0; font-weight: bold; color: #1f2937; font-size: 14px; word-wrap: break-word;">${payable.companyName || 'Company Name'}</p>
-              <p style="margin: 0 0 3px 0; color: #6b7280; font-size: 12px; word-wrap: break-word;">${payable.companyEmail || ''}</p>
-              <p style="margin: 0 0 3px 0; color: #6b7280; font-size: 12px; word-wrap: break-word;">${payable.companyPhone || ''}</p>
-              ${payable.companyAddress ? `
-                <p style="margin: 0; color: #6b7280; font-size: 12px; word-wrap: break-word;">
-                  ${payable.companyAddress.street || ''}<br>
-                  ${payable.companyAddress.city || ''}, ${payable.companyAddress.state || ''} ${payable.companyAddress.zipCode || ''}<br>
-                  ${payable.companyAddress.country || ''}
-                </p>
-              ` : ''}
-            </div>
-          </div>
-
-          <!-- Vendor Information (Receiver) -->
-          <div style="margin-bottom: 18px;">
-            <h2 style="color: #1f2937; font-size: 16px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px;">To</h2>
-            <div style="background: #f9fafb; padding: 12px; border-radius: 6px;">
-              <p style="margin: 0 0 3px 0; font-weight: bold; color: #1f2937; font-size: 14px; word-wrap: break-word;">${payable.vendorName || 'Vendor Name'}</p>
-              <p style="margin: 0 0 3px 0; color: #6b7280; font-size: 12px; word-wrap: break-word;">${payable.vendorEmail || ''}</p>
-              <p style="margin: 0 0 3px 0; color: #6b7280; font-size: 12px; word-wrap: break-word;">${payable.vendorPhone || ''}</p>
-              ${payable.vendorAddress ? `
-                <p style="margin: 0; color: #6b7280; font-size: 12px; word-wrap: break-word;">
-                  ${payable.vendorAddress.street || ''}<br>
-                  ${payable.vendorAddress.city || ''}, ${payable.vendorAddress.state || ''} ${payable.vendorAddress.zipCode || ''}<br>
-                  ${payable.vendorAddress.country || ''}
-                </p>
-              ` : ''}
-            </div>
-          </div>
-
-          <!-- Items -->
-          <div style="margin-bottom: 18px;">
-            <h2 style="color: #1f2937; font-size: 16px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px;">Items Paid</h2>
-            <div style="border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; overflow-x: auto;">
-              <table style="width: 100%; border-collapse: collapse; min-width: 300px;">
-                <thead style="background: #f9fafb;">
-                  <tr>
-                    <th style="padding: 8px; text-align: left; font-weight: bold; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-size: 12px; white-space: nowrap;">Description</th>
-                    <th style="padding: 8px; text-align: center; font-weight: bold; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-size: 12px; white-space: nowrap;">Qty</th>
-                    <th style="padding: 8px; text-align: right; font-weight: bold; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-size: 12px; white-space: nowrap;">Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${payable.items?.map(item => `
-                    <tr>
-                      <td style="padding: 8px; border-bottom: 1px solid #f3f4f6; color: #1f2937; font-size: 12px; word-wrap: break-word; max-width: 200px;">${item.description || ''}</td>
-                      <td style="padding: 8px; text-align: center; border-bottom: 1px solid #f3f4f6; color: #6b7280; font-size: 12px; white-space: nowrap;">${item.quantity || 0}</td>
-                      <td style="padding: 8px; text-align: right; border-bottom: 1px solid #f3f4f6; color: #1f2937; font-weight: bold; font-size: 12px; white-space: nowrap;">${getCurrencyByCode(payable.currency || 'USD')?.symbol || '$'}${(item.amount || 0).toFixed(2)}</td>
-                    </tr>
-                  `).join('') || ''}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <!-- Total -->
-          <div style="margin-bottom: 15px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: #3b82f6; color: white; border-radius: 6px; flex-wrap: wrap; gap: 10px;">
-              <span style="font-size: 16px; font-weight: bold; word-wrap: break-word;">TOTAL PAID:</span>
-              <span style="font-size: 20px; font-weight: bold; word-wrap: break-word;">${getCurrencyByCode(payable.currency || 'USD')?.symbol || '$'}${(payable.total || 0).toFixed(2)}</span>
-            </div>
-          </div>
-
-          <!-- Footer -->
-          <div style="text-align: center; margin-top: 20px; padding-top: 15px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 11px;">
-            <p style="margin: 0; word-wrap: break-word;">Thank you for your payment!</p>
-            <p style="margin: 3px 0 0 0; word-wrap: break-word;">This receipt confirms that payment has been received and processed.</p>
-            <p style="margin: 8px 0 0 0; font-weight: bold; word-wrap: break-word;">Generated by <span style="color: #3b82f6;">Chains ERP</span> on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}</p>
-          </div>
-        </div>
-      `;
-
-      receiptContainer.innerHTML = receiptHTML;
-
-      // Generate PDF
-      const canvas = await html2canvas(receiptContainer, {
-        scale: 1.5,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        height: 1000, // Limit height to fit on one page
-        width: 750
-      });
-
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      
-      const imgWidth = 210;
-      const pageHeight = 295;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-      // Scale down if content is too tall for one page
-      const maxHeight = pageHeight - 20; // Leave 10mm margin on top and bottom
-      let finalWidth = imgWidth;
-      let finalHeight = imgHeight;
-      
-      if (imgHeight > maxHeight) {
-        const scale = maxHeight / imgHeight;
-        finalHeight = maxHeight;
-        finalWidth = imgWidth * scale;
-      }
-
-      pdf.addImage(imgData, 'PNG', (210 - finalWidth) / 2, 10, finalWidth, finalHeight);
-
-      // Clean up
-      document.body.removeChild(receiptContainer);
-
-      // Download the PDF
-      const filename = `Receipt_${payable.payableNumber || 'payable'}_${payable.paymentDate ? new Date(payable.paymentDate).toLocaleDateString().replace(/\//g, '-') : new Date().toLocaleDateString().replace(/\//g, '-')}.pdf`;
-      pdf.save(filename);
-
+      const pdfData = payableToPdfData(payable);
+      const blob = await generatePdfBlob(pdfData, payable.payableNumber ?? undefined, 'receipt');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Receipt_${payable.payableNumber || 'payable'}_${payable.paymentDate ? new Date(payable.paymentDate).toLocaleDateString().replace(/\//g, '-') : new Date().toLocaleDateString().replace(/\//g, '-')}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
     } catch {
       alert('Failed to download receipt. Please try again.');
     } finally {

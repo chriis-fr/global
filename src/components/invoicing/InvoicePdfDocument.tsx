@@ -267,6 +267,135 @@ headerMiddle: {
     fontSize: 14,
     color: '#6B7280',
   },
+  // Receipt variant: match previous HTML receipt layout (stacked sections, spacing, no squeeze)
+  receiptPage: {
+    fontFamily: 'Helvetica',
+    fontSize: 10,
+    padding: 24,
+    color: '#1f2937',
+  },
+  receiptHeader: {
+    textAlign: 'center',
+    marginBottom: 20,
+    borderBottomWidth: 2,
+    borderBottomColor: '#3b82f6',
+    paddingBottom: 15,
+  },
+  receiptTitle: {
+    fontSize: 20,
+    fontWeight: 700,
+    color: '#1f2937',
+    marginBottom: 4,
+  },
+  receiptNumber: {
+    fontSize: 11,
+    color: '#6b7280',
+    marginBottom: 2,
+  },
+  receiptSectionTitle: {
+    fontSize: 14,
+    fontWeight: 700,
+    color: '#1f2937',
+    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    paddingBottom: 5,
+  },
+  receiptPaymentDetailsRow: {
+    flexDirection: 'row',
+    marginBottom: 18,
+    gap: 24,
+  },
+  receiptPaymentDetailsCol: {
+    flex: 1,
+  },
+  receiptDetailLine: {
+    fontSize: 11,
+    color: '#6b7280',
+    marginBottom: 5,
+  },
+  receiptBox: {
+    backgroundColor: '#F9FAFB',
+    padding: 12,
+    marginBottom: 18,
+    borderRadius: 4,
+  },
+  receiptBoxTitle: {
+    fontSize: 14,
+    fontWeight: 700,
+    color: '#1f2937',
+    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    paddingBottom: 5,
+  },
+  receiptBoxText: {
+    fontSize: 12,
+    fontWeight: 700,
+    color: '#1f2937',
+    marginBottom: 3,
+  },
+  receiptBoxTextMuted: {
+    fontSize: 11,
+    color: '#6b7280',
+    marginBottom: 3,
+  },
+  receiptTableHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#F9FAFB',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    marginBottom: 0,
+  },
+  receiptTableRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+  },
+  receiptColDesc: { flex: 1, paddingRight: 8, fontSize: 11 },
+  receiptColQty: { width: 36, textAlign: 'center', fontSize: 11 },
+  receiptColAmount: { width: 64, textAlign: 'right', fontSize: 11 },
+  receiptTotalBox: {
+    backgroundColor: '#3b82f6',
+    color: '#ffffff',
+    padding: 15,
+    marginTop: 18,
+    marginBottom: 18,
+    borderRadius: 4,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  receiptTotalLabel: {
+    fontSize: 14,
+    fontWeight: 700,
+    color: '#ffffff',
+  },
+  receiptTotalAmount: {
+    fontSize: 18,
+    fontWeight: 700,
+    color: '#ffffff',
+  },
+  receiptFooter: {
+    textAlign: 'center',
+    marginTop: 20,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    fontSize: 10,
+    color: '#6b7280',
+  },
+  receiptFooterLine: {
+    marginBottom: 3,
+  },
+  receiptStatusPaid: {
+    color: '#059669',
+    fontWeight: 700,
+  },
 });
 
 function formatDate(dateString: string): string {
@@ -288,9 +417,14 @@ function getCountryName(code: string): string {
 export interface InvoicePdfDocumentProps {
   data: InvoicePdfData;
   invoiceNumber?: string;
+  /** When 'receipt', shows "Payment Receipt", "Receipt: X", "Items Paid", etc. */
+  variant?: 'invoice' | 'receipt';
 }
 
-export function InvoicePdfDocument({ data, invoiceNumber }: InvoicePdfDocumentProps) {
+export function InvoicePdfDocument({ data, invoiceNumber, variant = 'invoice' }: InvoicePdfDocumentProps) {
+  const isReceipt = variant === 'receipt';
+  const docLabel = isReceipt ? 'Receipt' : 'Invoice';
+  const watermarkMain = isReceipt ? 'DIGITAL RECEIPT' : 'DIGITAL INVOICE';
   const symbol = getCurrencyByCode(data.currency)?.symbol ?? data.currency;
   const hasDiscounts = data.items.some((i) => (i.discount ?? 0) > 0);
   const hasTaxes = data.items.some((i) => (i.tax ?? 0) > 0);
@@ -325,14 +459,130 @@ export function InvoicePdfDocument({ data, invoiceNumber }: InvoicePdfDocumentPr
             ? 'M-Pesa Till'
             : 'Bank Transfer';
 
+  // Receipt layout: same structure as previous HTML receipt (stacked sections, Payment Details, From/To full width, Items, Total, Footer)
+  if (isReceipt) {
+    return (
+      <Document>
+        <Page size={[300, 595]} style={styles.receiptPage}>
+          <View fixed style={styles.watermark}>
+            <Text style={styles.watermarkMain}>{watermarkMain}</Text>
+            {invoiceNumber && (
+              <Text style={styles.watermarkInvoice}>{docLabel}: {invoiceNumber}</Text>
+            )}
+          </View>
+
+          <View style={styles.receiptHeader}>
+            <Text style={styles.receiptTitle}>PAYMENT RECEIPT</Text>
+            {invoiceNumber && (
+              <Text style={styles.receiptNumber}>Receipt #{invoiceNumber}</Text>
+            )}
+          </View>
+
+          {/* Payment Details - same as previous receipt */}
+          <Text style={styles.receiptSectionTitle}>Payment Details</Text>
+          <View style={styles.receiptPaymentDetailsRow}>
+            <View style={styles.receiptPaymentDetailsCol}>
+              <Text style={styles.receiptDetailLine}>
+                <Text style={{ fontWeight: 700 }}>Payment Date:</Text> {formatDate(data.issueDate)}
+              </Text>
+              <Text style={styles.receiptDetailLine}>
+                <Text style={{ fontWeight: 700 }}>Invoice Date:</Text> {formatDate(data.issueDate)}
+              </Text>
+              <Text style={styles.receiptDetailLine}>
+                <Text style={{ fontWeight: 700 }}>Due Date:</Text> {formatDate(data.dueDate)}
+              </Text>
+            </View>
+            <View style={styles.receiptPaymentDetailsCol}>
+              <Text style={styles.receiptDetailLine}>
+                <Text style={{ fontWeight: 700 }}>Payment Method:</Text> {paymentMethodLabel}
+              </Text>
+              <Text style={styles.receiptDetailLine}>
+                <Text style={{ fontWeight: 700 }}>Status:</Text>{' '}
+                <Text style={styles.receiptStatusPaid}>PAID</Text>
+              </Text>
+            </View>
+          </View>
+
+          {/* From - full width, stacked */}
+          <Text style={styles.receiptSectionTitle}>From</Text>
+          <View style={styles.receiptBox}>
+            <Text style={styles.receiptBoxText}>{data.companyName || 'Company Name'}</Text>
+            {data.companyEmail ? (
+              <Text style={styles.receiptBoxTextMuted}>{data.companyEmail}</Text>
+            ) : null}
+            {data.companyPhone ? (
+              <Text style={styles.receiptBoxTextMuted}>{data.companyPhone}</Text>
+            ) : null}
+            {companyAddr.length > 0 ? (
+              <Text style={styles.receiptBoxTextMuted}>{companyAddr.join(', ')}</Text>
+            ) : null}
+          </View>
+
+          {/* To - full width, stacked */}
+          <Text style={styles.receiptSectionTitle}>To</Text>
+          <View style={styles.receiptBox}>
+            <Text style={styles.receiptBoxText}>
+              {data.clientCompany || data.clientName || 'Client Name'}
+            </Text>
+            {data.clientEmail ? (
+              <Text style={styles.receiptBoxTextMuted}>{data.clientEmail}</Text>
+            ) : null}
+            {data.clientPhone ? (
+              <Text style={styles.receiptBoxTextMuted}>{data.clientPhone}</Text>
+            ) : null}
+            {clientAddr.length > 0 ? (
+              <Text style={styles.receiptBoxTextMuted}>{clientAddr.join(', ')}</Text>
+            ) : null}
+          </View>
+
+          {/* Items Paid */}
+          <Text style={styles.receiptSectionTitle}>Items Paid</Text>
+          <View style={styles.receiptTableHeader}>
+            <Text style={[styles.receiptColDesc, { fontWeight: 700 }]}>Description</Text>
+            <Text style={[styles.receiptColQty, { fontWeight: 700 }]}>Qty</Text>
+            <Text style={[styles.receiptColAmount, { fontWeight: 700 }]}>Amount</Text>
+          </View>
+          {data.items.map((item, i) => (
+            <View key={item.id ?? i} style={styles.receiptTableRow}>
+              <Text style={styles.receiptColDesc}>{item.description || '—'}</Text>
+              <Text style={styles.receiptColQty}>{item.quantity}</Text>
+              <Text style={styles.receiptColAmount}>
+                {symbol}{(item.amount ?? 0).toFixed(2)}
+              </Text>
+            </View>
+          ))}
+
+          <View style={styles.receiptTotalBox}>
+            <Text style={styles.receiptTotalLabel}>TOTAL PAID:</Text>
+            <Text style={styles.receiptTotalAmount}>
+              {symbol}{(data.total ?? 0).toFixed(2)}
+            </Text>
+          </View>
+
+          <View style={styles.receiptFooter}>
+            <Text style={styles.receiptFooterLine}>Thank you for your payment!</Text>
+            <Text style={styles.receiptFooterLine}>
+              This receipt confirms that payment has been received and processed.
+            </Text>
+            <Text style={[styles.receiptFooterLine, { marginTop: 8, fontWeight: 700 }]}>
+              Generated by Chains ERP for {data.companyName || 'Company'}
+            </Text>
+            <Text style={[styles.receiptStatusPaid, { marginTop: 6 }]}>PAID</Text>
+          </View>
+        </Page>
+      </Document>
+    );
+  }
+
+  // Invoice layout: A4, full table and payment details
   return (
     <Document>
       <Page size="A4" style={styles.page}>
         {/* Watermark (fixed, behind content) */}
         <View fixed style={styles.watermark}>
-          <Text style={styles.watermarkMain}>DIGITAL INVOICE</Text>
+          <Text style={styles.watermarkMain}>{watermarkMain}</Text>
           {invoiceNumber && (
-            <Text style={styles.watermarkInvoice}>Invoice: {invoiceNumber}</Text>
+            <Text style={styles.watermarkInvoice}>{docLabel}: {invoiceNumber}</Text>
           )}
         </View>
 

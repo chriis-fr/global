@@ -176,10 +176,10 @@ export async function POST(request: NextRequest) {
     const itemsNormalized = Array.isArray(items)
       ? items.map((item: { unitPrice?: number; amount?: number; discount?: number; tax?: number; [k: string]: unknown }) => ({
           ...item,
-          unitPrice: round2(parseFloat(item?.unitPrice as number) || 0),
-          amount: round2(parseFloat(item?.amount as number) || 0),
-          discount: round2(parseFloat(item?.discount as number) || 0),
-          tax: round2(parseFloat(item?.tax as number) || 0)
+          unitPrice: round2(Number(item?.unitPrice) || 0),
+          amount: round2(Number(item?.amount) || 0),
+          discount: round2(Number(item?.discount) || 0),
+          tax: round2(Number(item?.tax) || 0)
         }))
       : [];
 
