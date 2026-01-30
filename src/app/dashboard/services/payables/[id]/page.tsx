@@ -300,7 +300,7 @@ export default function PayableViewPage() {
     };
   };
 
-  // Handle Receipt download (react-pdf, no html2canvas/jsPDF)
+  // Handle Receipt download (react-pdf)
   const handleDownloadReceipt = async () => {
     if (!payable) return;
 
