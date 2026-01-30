@@ -214,7 +214,7 @@ export const sendInvoiceNotification = async (
 
           ${invoiceUrl ? `
           <div style="text-align: center; margin: 28px 0;">
-            <a href="${invoiceUrl}" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-size: 16px; font-weight: 600; letter-spacing: 0.02em;">Pay Invoice online(optional)</a>
+            <a href="${invoiceUrl}" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-size: 16px; font-weight: 600; letter-spacing: 0.02em;">Pay Invoice online</a>
           </div>
           ` : ''}
 

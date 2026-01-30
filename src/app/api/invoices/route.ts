@@ -151,6 +151,8 @@ export async function POST(request: NextRequest) {
       bankName,
       accountNumber,
       routingNumber,
+      swiftCode,
+      bankCode,
       enableMultiCurrency,
       invoiceType,
       items,
@@ -168,6 +170,9 @@ export async function POST(request: NextRequest) {
       companyPhone,
       clientPhone
     } = body;
+
+    // Use routing number, or SWIFT/bank code (e.g. Kenya) when routingNumber not sent
+    const routingNumberResolved = routingNumber || swiftCode || bankCode || '';
 
     // Normalize amounts to 2 decimals so 500 stays 500 (no float drift)
     const subtotalRounded = round2(parseFloat(subtotal) || 0);
@@ -351,7 +356,7 @@ export async function POST(request: NextRequest) {
       receivingWalletType: receivingWalletType || null, // Wallet type if connected
       bankName: bankName,
       accountNumber: accountNumber,
-      routingNumber: routingNumber,
+      routingNumber: routingNumberResolved,
       enableMultiCurrency: enableMultiCurrency,
       
       // Invoice details (use normalized amounts so 500 stays 500)
@@ -448,7 +453,7 @@ export async function POST(request: NextRequest) {
         ...(tokenAddress && { tokenAddress }), // Only include if provided
         bankAccount: bankName ? {
           accountNumber: accountNumber || '',
-          routingNumber: routingNumber || '',
+          routingNumber: routingNumberResolved || '',
           bankName,
           accountType: 'checking'
         } : undefined

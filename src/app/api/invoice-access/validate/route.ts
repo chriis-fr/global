@@ -56,8 +56,16 @@ export async function POST(request: NextRequest) {
       // User not found, isRegistered remains false
     }
 
-    const paymentSettings = invoice.paymentSettings as { method?: string; currency?: string; chainId?: number; tokenAddress?: string; walletAddress?: string; cryptoNetwork?: string; bankAccount?: { bankName?: string; accountNumber?: string; routingNumber?: string } } | undefined;
+    const paymentSettings = invoice.paymentSettings as { method?: string; currency?: string; chainId?: number; tokenAddress?: string; walletAddress?: string; cryptoNetwork?: string; bankAccount?: { bankName?: string; accountNumber?: string; routingNumber?: string; swiftCode?: string; bankCode?: string } } | undefined;
+    const inv = invoice as { routingNumber?: string; swiftCode?: string; bankCode?: string };
+    const routingNumber = inv.routingNumber ?? paymentSettings?.bankAccount?.routingNumber ?? inv.swiftCode ?? inv.bankCode ?? paymentSettings?.bankAccount?.swiftCode ?? paymentSettings?.bankAccount?.bankCode;
     const totalAmount = invoice.total ?? invoice.totalAmount ?? 0;
+
+    const companyDetails = invoice.companyDetails as { address?: unknown; addressLine1?: string; city?: string; region?: string; postalCode?: string; country?: string; name?: string; email?: string; phone?: string; taxNumber?: string } | undefined;
+    const companyAddress = invoice.companyAddress as { street?: string; city?: string; state?: string; zipCode?: string; country?: string } | undefined;
+    const companyAddressResolved = companyDetails?.address ?? companyAddress ?? (companyDetails && (companyDetails.addressLine1 || companyDetails.city || companyDetails.country)
+      ? { street: companyDetails.addressLine1, city: companyDetails.city, state: companyDetails.region, zipCode: companyDetails.postalCode, country: companyDetails.country }
+      : undefined);
 
     return NextResponse.json({
       success: true,
@@ -70,10 +78,12 @@ export async function POST(request: NextRequest) {
           issueDate: invoice.issueDate,
           dueDate: invoice.dueDate,
           companyDetails: {
-            name: invoice.companyDetails?.name || invoice.companyName,
-            email: invoice.companyDetails?.email || invoice.companyEmail,
-            phone: invoice.companyDetails?.phone || invoice.companyPhone,
-            address: invoice.companyDetails?.address || invoice.companyAddress
+            name: companyDetails?.name || invoice.companyName,
+            email: companyDetails?.email || invoice.companyEmail,
+            phone: companyDetails?.phone || invoice.companyPhone,
+            address: companyAddressResolved,
+            logo: (invoice as { companyLogo?: string }).companyLogo,
+            taxNumber: companyDetails?.taxNumber || (invoice as { companyTaxNumber?: string }).companyTaxNumber
           },
           clientDetails: {
             name: invoice.clientDetails?.name || invoice.clientName,
@@ -89,8 +99,9 @@ export async function POST(request: NextRequest) {
           payeeAddress: invoice.payeeAddress ?? invoice.paymentAddress ?? paymentSettings?.walletAddress,
           bankName: invoice.bankName ?? paymentSettings?.bankAccount?.bankName,
           accountNumber: invoice.accountNumber ?? paymentSettings?.bankAccount?.accountNumber,
-          routingNumber: invoice.routingNumber ?? paymentSettings?.bankAccount?.routingNumber,
+          routingNumber,
           chainId: (invoice as { chainId?: number }).chainId ?? paymentSettings?.chainId,
+          txHash: (invoice as { txHash?: string }).txHash,
           tokenAddress: (invoice as { tokenAddress?: string }).tokenAddress ?? paymentSettings?.tokenAddress,
           paymentSettings: paymentSettings ?? undefined,
           items: invoice.items || [],
@@ -98,10 +109,13 @@ export async function POST(request: NextRequest) {
           totalTax: invoice.totalTax || 0,
           totalAmount,
           total: totalAmount,
+          withholdingTaxAmount: (invoice as { withholdingTaxAmount?: number }).withholdingTaxAmount,
+          withholdingTaxRatePercent: (invoice as { withholdingTaxRatePercent?: number }).withholdingTaxRatePercent,
           memo: invoice.memo,
           status: invoice.status,
           createdAt: invoice.createdAt,
-          updatedAt: invoice.updatedAt
+          updatedAt: invoice.updatedAt,
+          paidAt: (invoice as { paidAt?: string }).paidAt
         },
         recipientEmail: tokenData.recipientEmail,
         isRegistered,

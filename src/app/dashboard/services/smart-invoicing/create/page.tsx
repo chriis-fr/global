@@ -375,7 +375,7 @@ function round2(x: number): number {
 function normalizeInvoicePayload(
   data: InvoiceFormData,
   overrides: Partial<InvoiceFormData> & { withholdingTaxAmount?: number; withholdingTaxRatePercent?: number } = {}
-): InvoiceFormData & { withholdingTaxAmount?: number; withholdingTaxRatePercent?: number } {
+): InvoiceFormData & { withholdingTaxAmount?: number; withholdingTaxRatePercent?: number; routingNumber?: string } {
   const sub = round2(Number(data.subtotal) ?? 0);
   const tax = round2(Number(data.totalTax) ?? 0);
   const tot = round2(Number(data.total) ?? 0);
@@ -386,7 +386,9 @@ function normalizeInvoicePayload(
     discount: round2(Number(item.discount) ?? 0),
     tax: round2(Number(item.tax) ?? 0)
   }));
-  return { ...data, subtotal: sub, totalTax: tax, total: tot, items, ...overrides };
+  // API expects routingNumber; create form uses swiftCode/bankCode (e.g. Kenya) — send as routingNumber
+  const routingNumber = data.swiftCode || data.bankCode || '';
+  return { ...data, subtotal: sub, totalTax: tax, total: tot, items, routingNumber, ...overrides };
 }
 
 /** Generate professional vector PDF (react-pdf) and return base64. Used for send and download. */
