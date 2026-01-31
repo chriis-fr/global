@@ -110,6 +110,8 @@ export function CurrencyProvider({
       return;
     }
     fetchUserCurrencyPreference(true);
+  // Intentionally limited deps to avoid redundant fetches when initialCurrency/session refs change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id, initialCurrency?.preferredCurrency, fetchUserCurrencyPreference]);
 
   const setPreferredCurrency = (currency: string) => {

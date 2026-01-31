@@ -266,7 +266,7 @@ export function SubscriptionProvider({ children, initialSubscription: initialFro
         clearCache(); // Clear cache on logout
       }
     }
-  }, [session?.user?.id, status, fetchSubscription, clearCache, subscription]);
+  }, [session?.user?.id, status, fetchSubscription, clearCache, setCachedData, subscription]);
 
   // Refetch on window focus if cache is older than 30 minutes (less aggressive)
   useEffect(() => {
