@@ -1,8 +1,9 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { useSession } from 'next-auth/react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
+import { useSession } from '@/lib/auth-client';
 import { fiatCurrencies } from '@/data/currencies';
+import { getPreferredCurrency, type PreferredCurrencyResult } from '@/lib/actions/currency';
 
 interface CurrencyContextType {
   preferredCurrency: string;
@@ -14,28 +15,55 @@ interface CurrencyContextType {
 
 const CurrencyContext = createContext<CurrencyContextType | undefined>(undefined);
 
-export function CurrencyProvider({ children }: { children: ReactNode }) {
-  const { data: session } = useSession();
-  const [preferredCurrency, setPreferredCurrencyState] = useState<string>('USD');
-  const [isLoading, setIsLoading] = useState(true);
+const CURRENCY_CACHE_KEY = 'currency_pref';
+const CURRENCY_USER_KEY = 'currency_user_id';
+const CACHE_DURATION = 30 * 60 * 1000; // 30 min
 
-  // Fetch user's currency preference on mount and when session changes
-  useEffect(() => {
-    if (session?.user) {
-      fetchUserCurrencyPreference();
-    } else {
-      setPreferredCurrencyState('USD');
-      setIsLoading(false);
+function getCachedCurrency(userId?: string): string | null {
+  if (typeof window === 'undefined' || !userId) return null;
+  try {
+    const cached = localStorage.getItem(CURRENCY_CACHE_KEY);
+    const cachedUserId = localStorage.getItem(CURRENCY_USER_KEY);
+    if (cached && cachedUserId === userId) {
+      const { data, timestamp } = JSON.parse(cached);
+      if (Date.now() - timestamp < CACHE_DURATION) return data.preferredCurrency;
     }
-  }, [session?.user]);
+  } catch {
+    // ignore
+  }
+  return null;
+}
 
-  const fetchUserCurrencyPreference = async () => {
+function setCachedCurrency(data: PreferredCurrencyResult, userId?: string) {
+  if (typeof window === 'undefined' || !data || !userId) return;
+  try {
+    localStorage.setItem(CURRENCY_CACHE_KEY, JSON.stringify({ data, timestamp: Date.now() }));
+    localStorage.setItem(CURRENCY_USER_KEY, userId);
+  } catch {
+    // ignore
+  }
+}
+
+export function CurrencyProvider({
+  children,
+  initialCurrency,
+}: { children: ReactNode; initialCurrency?: PreferredCurrencyResult | null }) {
+  const { data: session } = useSession();
+  const [preferredCurrency, setPreferredCurrencyState] = useState<string>(() => {
+    if (initialCurrency?.preferredCurrency) return initialCurrency.preferredCurrency;
+    return 'USD';
+  });
+  const [isLoading, setIsLoading] = useState(() => !initialCurrency);
+  const hadInitial = useRef(!!initialCurrency);
+
+  const fetchUserCurrencyPreference = useCallback(async (showLoading = true) => {
+    if (!session?.user?.id) return;
+    if (showLoading) setIsLoading(true);
     try {
-      const response = await fetch('/api/currency/convert');
-      const data = await response.json();
-      
-      if (data.success && data.data.preferredCurrency) {
-        setPreferredCurrencyState(data.data.preferredCurrency);
+      const result = await getPreferredCurrency();
+      if (result?.preferredCurrency) {
+        setPreferredCurrencyState(result.preferredCurrency);
+        setCachedCurrency(result, session.user.id);
       } else {
         setPreferredCurrencyState('USD');
       }
@@ -45,7 +73,46 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (!session?.user) {
+      setPreferredCurrencyState('USD');
+      setIsLoading(false);
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.removeItem(CURRENCY_CACHE_KEY);
+          localStorage.removeItem(CURRENCY_USER_KEY);
+        } catch {
+          // ignore
+        }
+      }
+      return;
+    }
+    if (initialCurrency?.preferredCurrency && hadInitial.current) {
+      hadInitial.current = false;
+      setPreferredCurrencyState(initialCurrency.preferredCurrency);
+      setCachedCurrency(initialCurrency, session.user.id);
+      setIsLoading(false);
+      // Optional: refresh in background
+      getPreferredCurrency().then((result) => {
+        if (result?.preferredCurrency) {
+          setPreferredCurrencyState(result.preferredCurrency);
+          setCachedCurrency(result, session.user!.id);
+        }
+      });
+      return;
+    }
+    const cached = getCachedCurrency(session.user.id);
+    if (cached) {
+      setPreferredCurrencyState(cached);
+      setIsLoading(false);
+      return;
+    }
+    fetchUserCurrencyPreference(true);
+  // Intentionally limited deps to avoid redundant fetches when initialCurrency/session refs change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.id, initialCurrency?.preferredCurrency, fetchUserCurrencyPreference]);
 
   const setPreferredCurrency = (currency: string) => {
     setPreferredCurrencyState(currency);
@@ -59,7 +126,6 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
 
   const formatAmount = (amount: number, currencyCode?: string): string => {
     const code = currencyCode || preferredCurrency;
-    
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: code,
@@ -89,4 +155,4 @@ export function useCurrency() {
     throw new Error('useCurrency must be used within a CurrencyProvider');
   }
   return context;
-} 
+}

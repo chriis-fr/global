@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession } from '@/lib/auth-client';
 import { BlockchainBenefits } from "@/components/landing/blockchain-benefits";
 import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
@@ -39,12 +39,13 @@ export default function Home() {
   }, []); // Run ONCE on mount only - no resize listeners
 
 
-  // Track when session check is complete
+  // Track when session check is complete (used so Preloader doesn't call setComplete until session is ready)
   const sessionCheckComplete = status !== 'loading';
 
-  // Show preloader immediately on first render, then wait for both animation and session
-  // Default to true to ensure preloader shows immediately
-  const shouldShowPreloader = !preloaderComplete || !sessionCheckComplete;
+  // Show preloader only until it has completed once. Once preloaderComplete is true, never show again.
+  // This prevents scroll from breaking when devtools opens (session refetch sets status to 'loading' and
+  // would otherwise make content position:fixed again and remove scrollable height).
+  const shouldShowPreloader = !preloaderComplete;
 
   // Show preloader immediately, even before client-side hydration
   // Return preloader structure immediately to prevent any flash
@@ -69,55 +70,38 @@ export default function Home() {
     const body = document.body;
     const html = document.documentElement;
 
-    // If NOT on landing page, restore everything immediately
+    // If NOT on landing page, restore immediately (cursor handled by CSS via data-landing-page)
     if (pathname !== '/') {
-      body.style.cursor = '';
-      html.style.cursor = '';
       body.removeAttribute('data-landing-page');
       html.removeAttribute('data-landing-page');
       body.classList.remove('preloader-active');
       return;
     }
 
-      // On landing page - manage styles based on preloader state
-      if (shouldShowPreloader) {
-        // During preloader: show normal cursor, set background via class
-        body.style.cursor = '';
-        html.style.cursor = '';
-        body.removeAttribute('data-landing-page');
-        html.removeAttribute('data-landing-page');
-        body.classList.add('preloader-active');
-        html.classList.add('preloader-active');
-      } else {
-      // After preloader completes: set cursor and CSS variables in one batch
-      // Use requestAnimationFrame to batch DOM writes and prevent flicker
+    if (shouldShowPreloader) {
+      body.removeAttribute('data-landing-page');
+      html.removeAttribute('data-landing-page');
+      body.classList.add('preloader-active');
+      html.classList.add('preloader-active');
+    } else {
       requestAnimationFrame(() => {
-        if (pathname !== '/') return; // Double-check we're still on landing page
+        if (pathname !== '/') return;
 
-        // Set cursor CSS variables (only once after preloader)
         body.style.setProperty("--cursor-color", "rgb(59, 130, 246)");
         body.style.setProperty("--blur", "3px");
         body.style.setProperty("--innerBlur", "2px");
         body.style.setProperty("--outerColor", "rgba(59, 130, 246, 0.4)");
 
         if (isTouchDevice === false) {
-          // Desktop: hide default cursor, show animated cursor
-          body.style.cursor = 'none';
-          html.style.cursor = 'none';
           body.setAttribute('data-landing-page', 'true');
           html.setAttribute('data-landing-page', 'true');
-          // Set cursor ready flag AFTER all styles are applied
           setCursorReady(true);
         } else {
-          // Mobile: keep normal cursor
-          body.style.cursor = '';
-          html.style.cursor = '';
           body.removeAttribute('data-landing-page');
           html.removeAttribute('data-landing-page');
           setCursorReady(false);
         }
 
-        // Remove preloader background class after animation completes
         setTimeout(() => {
           body.classList.remove('preloader-active');
           html.classList.remove('preloader-active');
@@ -125,11 +109,8 @@ export default function Home() {
       });
     }
 
-    // Cleanup: restore cursor when navigating away
     return () => {
       if (typeof window !== 'undefined' && document.body) {
-        body.style.cursor = '';
-        html.style.cursor = '';
         body.removeAttribute('data-landing-page');
         html.removeAttribute('data-landing-page');
         body.classList.remove('preloader-active');
@@ -141,9 +122,13 @@ export default function Home() {
 
   return (
     <>
-      {/* Only mount AnimatedCursor on desktop AFTER cursor state is fully ready - prevents flicker */}
+      {/* Cursor wrapper: zero-size so it never covers the page — scroll and clicks pass through; cursor is positioned by the library */}
       {isHome && !isTouchDevice && cursorReady && (
-        <AnimatedCursor 
+        <div
+          aria-hidden
+          className="cursor-overlay fixed top-0 left-0 w-0 h-0 overflow-visible z-[99999]"
+        >
+          <AnimatedCursor
             innerSize={isHome ? 25 : 14}
             outerSize={isHome ? 40 : 46}
             outerAlpha={0.2}
@@ -160,6 +145,10 @@ export default function Home() {
             outerScale={5}
             clickables={[
               "a",
+              "button",
+              "[role=\"button\"]",
+              ".cursor-pointer",
+              ".link",
               'input[type="text"]',
               'input[type="email"]',
               'input[type="number"]',
@@ -168,44 +157,47 @@ export default function Home() {
               "label[for]",
               "select",
               "textarea",
-              "button",
-              ".link",
-              // "img",
             ]}
           />
+        </div>
       )}
       {/* Preloader - shows immediately, mounts once and stays until complete */}
       {shouldShowPreloader && (
-        <Preloader 
+        <Preloader
           key="landing-preloader"
-          setComplete={setPreloaderComplete} 
+          setComplete={setPreloaderComplete}
           canComplete={sessionCheckComplete}
           landingPageRef={landingPageRef}
         />
       )}
-      {/* Landing page content - always rendered but hidden, slides up with preloader layers */}
-      <div 
+      {/* Same scroll pattern as dashboard: outer overflow-hidden + inner overflow-y-auto so scroll works everywhere (navbar, content, touchscreen) */}
+      <div
         ref={landingPageRef}
-        className="crossBg"
-        style={{ 
+        className={shouldShowPreloader ? 'fixed inset-0 z-[9980] overflow-hidden' : 'min-h-screen flex flex-col overflow-hidden'}
+        style={{
           position: shouldShowPreloader ? 'fixed' : 'relative',
           top: shouldShowPreloader ? 0 : 'auto',
           left: shouldShowPreloader ? 0 : 'auto',
           right: shouldShowPreloader ? 0 : 'auto',
           width: '100%',
-          minHeight: '100vh',
           pointerEvents: shouldShowPreloader ? 'none' : 'auto',
-          zIndex: shouldShowPreloader ? 9980 : 1,
           opacity: shouldShowPreloader ? 0 : 1,
-          visibility: shouldShowPreloader ? 'hidden' : 'visible'
+          visibility: shouldShowPreloader ? 'hidden' : 'visible',
         }}
       >
-        {/* <div className='bg' /> */}
         <Header />
-        <div className="pt-15">
-          <BlockchainBenefits />
-        </div>
-        <Footer />
+        <main
+          className={`crossBg flex-1 min-h-0 overflow-y-auto overflow-x-hidden ${shouldShowPreloader ? 'pointer-events-none' : ''}`}
+          style={{
+            touchAction: 'pan-y',
+            WebkitOverflowScrolling: 'touch',
+          }}
+        >
+          <div className="pt-15">
+            <BlockchainBenefits />
+          </div>
+          <Footer />
+        </main>
       </div>
     </>
   );

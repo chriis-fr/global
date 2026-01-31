@@ -182,9 +182,11 @@ const Preloader = ({
       stagger: 0.1,
       onComplete: () => {
         animationCompleteRef.current = true;
-        // Only call setComplete if canComplete is true (check ref for latest value)
         if (canCompleteRef.current) {
           setComplete(true);
+        } else {
+          // Fallback: complete after 2.5s so user is never stuck (e.g. slow session on desktop)
+          window.setTimeout(() => setComplete(true), 2500);
         }
       },
     });

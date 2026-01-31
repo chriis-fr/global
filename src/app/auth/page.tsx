@@ -15,18 +15,19 @@ import {
   ChevronDown,
   Receipt,
   ArrowLeft,
-  Plus
+  Plus,
+  Check
 } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { signIn, useSession } from 'next-auth/react'
+import { signIn, useSession } from '@/lib/auth-client'
 import { useSearchParams } from 'next/navigation'
 import { countries, defaultCountry } from '@/data/countries'
 import { getIndustriesByCategory, getIndustryCategories } from '@/data/industries'
 import { useOnboardingStore } from '@/lib/stores/onboardingStore'
 
 function AuthContent() {
-  const { data: session, status } = useSession()
+  const { data: session, status, update: refreshSession } = useSession()
   const searchParams = useSearchParams()
   const { setOnboarding } = useOnboardingStore()
   const [isLogin, setIsLogin] = useState(true)
@@ -74,6 +75,8 @@ function AuthContent() {
   const [resetPasswordError, setResetPasswordError] = useState('')
   const [resetPasswordSuccess, setResetPasswordSuccess] = useState(false)
   
+  // User must click tick to confirm name (stops section from auto-closing while typing)
+  const [segment1Confirmed, setSegment1Confirmed] = useState(false)
   // Collapsible segment states
   const [expandedSegments, setExpandedSegments] = useState({
     segment1: true, // Start expanded
@@ -109,18 +112,7 @@ function AuthContent() {
         formData.address.postalCode.trim() !== ''
       );
 
-      // Auto-collapse when segment first becomes complete
-      if (isSegment1Complete && !prevCompletionRef.current.segment1) {
-        setTimeout(() => {
-          setExpandedSegments(prev => {
-            if (prev.segment1) {
-              return { ...prev, segment1: false }
-            }
-            return prev
-          })
-        }, 500)
-        prevCompletionRef.current.segment1 = true
-      }
+      // Segment 1 does NOT auto-collapse; user clicks the tick when done typing name
       if (isSegment2Complete && !prevCompletionRef.current.segment2) {
         setTimeout(() => {
           setExpandedSegments(prev => {
@@ -432,10 +424,8 @@ function AuthContent() {
           errorTimeoutRef.current = null
         }, 5000)
       } else if (result?.ok) {
-        console.log('✅ [Auth] Google sign-in successful, redirecting...')
-        // Session will be updated automatically, redirect will happen via useEffect
-        // The useEffect will check session data and redirect appropriately
-        // No need to manually redirect here - let useEffect handle it
+        console.log('✅ [Auth] Google sign-in successful, refreshing session...')
+        await refreshSession()
       }
     } catch (error) {
       console.error('❌ [Auth] Google sign-in error:', error)
@@ -593,10 +583,8 @@ function AuthContent() {
             errorTimeoutRef.current = null
           }, 5000)
         } else if (loginResult?.ok) {
-          console.log('✅ [Auth] Login successful, redirecting...')
-          // Session will be updated automatically, redirect will happen via useEffect
-          // The useEffect will check session data and redirect appropriately
-          // No need to manually redirect here - let useEffect handle it
+          console.log('✅ [Auth] Login successful, refreshing session...')
+          await refreshSession()
         }
       } else {
         // Handle signup
@@ -713,8 +701,8 @@ function AuthContent() {
                   window.location.href = '/onboarding'
                 }
               } else if (loginResult?.ok) {
-                console.log('✅ [Auth] Automatic login successful, checking for invoice token...')
-                
+                console.log('✅ [Auth] Automatic login successful, refreshing session...')
+                await refreshSession()
                 // Check if this signup was triggered by an invoice token
                 const invoiceToken = searchParams.get('invoiceToken')
                 if (invoiceToken) {
@@ -1168,8 +1156,8 @@ function AuthContent() {
                   <AnimatePresence mode="wait">
                     {!isLogin && (
                       <div className="space-y-2">
-                        {/* Collapsible Header */}
-                        {isSegment1Complete && (
+                        {/* Collapsible Header - only after user clicks tick (done typing name) */}
+                        {isSegment1Complete && segment1Confirmed && (
                           <button
                             type="button"
                             onClick={() => setExpandedSegments(prev => ({ ...prev, segment1: !prev.segment1 }))}
@@ -1184,9 +1172,9 @@ function AuthContent() {
                           </button>
                         )}
                         
-                        {/* Segment Content */}
+                        {/* Segment Content - visible until user clicks tick, then collapsible */}
                         <AnimatePresence>
-                          {(!isSegment1Complete || expandedSegments.segment1) && (
+                          {(!isSegment1Complete || !segment1Confirmed || expandedSegments.segment1) && (
                             <motion.div
                               key="segment1-content"
                               initial={{ opacity: 0, height: 0 }}
@@ -1247,12 +1235,28 @@ function AuthContent() {
                                     name="fullName"
                                     value={formData.fullName}
                                     onChange={handleInputChange}
-                                    className="w-full pl-10 pr-4 py-3 border rounded-lg text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white/10 border-white/20"
+                                    className="w-full pl-10 pr-12 py-3 border rounded-lg text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white/10 border-white/20"
                                     placeholder="Enter your full name"
                                     required
                                   />
                                   <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-blue-300" />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const complete = formData.fullName.trim() !== '' &&
+                                        (formData.userType === 'individual' || (formData.userType === 'business' && formData.companyName.trim() !== ''))
+                                      if (complete) {
+                                        setSegment1Confirmed(true)
+                                        setExpandedSegments(prev => ({ ...prev, segment1: false }))
+                                      }
+                                    }}
+                                    title="Done typing"
+                                    className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 rounded-md text-blue-300 hover:text-white hover:bg-white/20 transition-colors"
+                                  >
+                                    <Check className="h-5 w-5" />
+                                  </button>
                                 </div>
+                                <p className="text-xs text-blue-300/80">Click the tick when you&apos;re done typing your name</p>
                               </div>
 
                               {/* Company Name Field - Only for business users */}

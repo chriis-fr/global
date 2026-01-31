@@ -1,6 +1,6 @@
 'use client'
 
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/lib/auth-client'
 import { UserProfile } from '@/components/UserProfile'
 import { ProfileAvatar } from '@/components/ProfileAvatar'
 import { motion } from 'framer-motion'

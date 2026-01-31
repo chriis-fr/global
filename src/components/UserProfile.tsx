@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/lib/auth-client'
 import { ProfileAvatar } from './ProfileAvatar'
 import { Mail, Phone, MapPin, Building, Edit, Save, X } from 'lucide-react'
 import { motion } from 'framer-motion'

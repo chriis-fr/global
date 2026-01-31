@@ -1,8 +1,9 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useRef, useCallback } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession } from '@/lib/auth-client';
 import { OrganizationMember } from '@/models/Organization';
+import { getPermissions } from '@/lib/actions/permissions';
 
 interface PermissionContextType {
   permissions: {
@@ -80,22 +81,20 @@ export function PermissionProvider({ children }: PermissionProviderProps) {
       setLoading(true);
       setError(null);
 
-      const response = await fetch('/api/user/permissions');
-      const data = await response.json();
+      const data = await getPermissions();
 
-      if (data.success) {
-        setPermissions(data.data.permissions);
-        setMember(data.data.member);
-        
-        // Cache in localStorage
+      if (data) {
+        setPermissions(data.permissions);
+        setMember(data.member);
+
         const cacheData = {
-          permissions: data.data.permissions,
-          member: data.data.member,
-          timestamp: Date.now()
+          permissions: data.permissions,
+          member: data.member,
+          timestamp: Date.now(),
         };
         localStorage.setItem(cacheKey, JSON.stringify(cacheData));
       } else {
-        setError(data.message || 'Failed to fetch permissions');
+        setError('Failed to fetch permissions');
       }
     } catch (err) {
       console.error('Error fetching permissions:', err);

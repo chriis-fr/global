@@ -45,13 +45,20 @@ const SectionA = () => {
               the most flexible invoices. Quick onboarding, Easy to use, ensuring business continuity. Fast, Flexible, and Secure!`}
           </p>
 
-          {/* Buttons */}
+          {/* Buttons - use asChild + Link so the whole control is one link (instant nav, no double-click) */}
           <div className="flex flex-col md:flex-row items-center justify-center gap-4">
-            <Button className="w-5/6 md:w-auto md:px-6 font-bold group/arrow">
-              <Link href="/auth">
+            <Button
+              asChild
+              className="w-5/6 md:w-auto md:px-6 font-bold group/arrow"
+            >
+              <Link
+                href="/auth"
+                className="inline-flex items-center touch-manipulation"
+                style={{ touchAction: 'manipulation' }}
+              >
                 Get Started
+                <ArrowRight className="size-5 ml-2 group-hover/arrow:translate-x-1 transition-transform" />
               </Link>
-              <ArrowRight className="size-5 ml-2 group-hover/arrow:translate-x-1 transition-transform" />
             </Button>
 
             <Button
