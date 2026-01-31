@@ -16,7 +16,7 @@ import {
 import Image from 'next/image'
 import Link from 'next/link'
 import { AnimatePresence } from 'framer-motion'
-import { useSession, signOut } from 'next-auth/react'
+import { useSession, signOut } from '@/lib/auth-client'
 
 export function Header() {
   const { data: session } = useSession();

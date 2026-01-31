@@ -1,5 +1,6 @@
 'use client';
 
+import type { Session } from 'next-auth';
 import { ReactNode } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { SessionProvider } from "@/components/providers/SessionProvider";
@@ -9,20 +10,33 @@ import { PermissionProvider } from "@/lib/contexts/PermissionContext";
 import { PayablesProvider } from "@/lib/contexts/PayablesContext";
 import CursorManager from "@/components/CursorManager";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import type { SubscriptionData } from '@/lib/actions/subscription';
+import type { PreferredCurrencyResult } from '@/lib/actions/currency';
+
+export type InitialData = {
+  initialSession?: Session | null;
+  initialSubscription?: SubscriptionData | null;
+  initialCurrency?: PreferredCurrencyResult | null;
+};
 
 /**
- * Client-side providers wrapper
- * This component loads all context providers client-side only
- * to prevent blocking SSR and improving TTFB
+ * Client-side providers wrapper with optional preloaded data from server.
+ * When initialSession/subscription/currency are passed, first paint has data
+ * and we avoid client-side API waterfalls (session → subscription → currency).
  */
-export function ProvidersWrapper({ children }: { children: ReactNode }) {
+export function ProvidersWrapper({
+  children,
+  initialSession,
+  initialSubscription,
+  initialCurrency,
+}: { children: ReactNode } & InitialData) {
   return (
     <ErrorBoundary>
-      <SessionProvider>
+      <SessionProvider session={initialSession === undefined ? undefined : initialSession}>
         <ErrorBoundary>
-          <CurrencyProvider>
+          <CurrencyProvider initialCurrency={initialCurrency ?? undefined}>
             <ErrorBoundary>
-              <SubscriptionProvider>
+              <SubscriptionProvider initialSubscription={initialSubscription ?? undefined}>
                 <ErrorBoundary>
                   <PermissionProvider>
                     <ErrorBoundary>

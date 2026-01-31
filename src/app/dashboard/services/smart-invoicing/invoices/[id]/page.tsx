@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, startTransition } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { useSession } from 'next-auth/react';
+import { useSession } from '@/lib/auth-client';
 import { usePermissions } from '@/lib/contexts/PermissionContext';
 import Image from 'next/image';
 import { 

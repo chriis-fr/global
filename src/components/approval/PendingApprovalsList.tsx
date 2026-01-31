@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Clock, User, Calendar, Eye, CheckCircle, XCircle } from 'lucide-react';
 import { ApprovalWorkflow } from '@/types/approval';
 import { ApprovalWorkflow as ApprovalWorkflowComponent } from './ApprovalWorkflow';
-import { useSession } from 'next-auth/react';
+import { useSession } from '@/lib/auth-client';
 
 interface PendingApprovalsListProps {
   onApprovalDecision?: (workflowId: string, decision: 'approved' | 'rejected', comments?: string) => void;

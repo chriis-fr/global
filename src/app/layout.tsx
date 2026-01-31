@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
+import { getServerSession } from "next-auth";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ProvidersWrapper } from "@/components/providers/ProvidersWrapper";
 import { PWARefresh } from "@/components/pwa/PWARefresh";
+import { authOptions } from "@/lib/auth";
 
-// DO NOT import database initialization here - it blocks SSR
-// Database connections should be lazy-loaded only when needed in API routes
-// ProvidersWrapper is a client component, so it won't execute server-side code
+// Only session is preloaded (fast cookie read). Subscription/currency/permissions load on client.
+// Passing initialSession avoids GET /api/auth/session on the client.
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -101,11 +102,18 @@ export const viewport = {
   themeColor: "#1c398e", // Matches the blue theme - controls status bar color on mobile
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  let session = null;
+  try {
+    session = await getServerSession(authOptions);
+  } catch {
+    // Don't block first paint; client will fetch session if needed
+  }
+
   return (
     <html lang="en" suppressHydrationWarning>
       <meta name="safe-apps" content="true" />
@@ -113,18 +121,14 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         style={{
-          // background: 'linear-gradient(to bottom right, #1c398e, #172554)',
           margin: 0,
           padding: 0,
         }}
         suppressHydrationWarning
       >
-        {/* Cursor CSS variables are set in globals.css - no script injection needed to prevent hydration flicker */}
-        {/* Providers are lazy-loaded client-side only to prevent blocking SSR */}
-        <ProvidersWrapper>
+        <ProvidersWrapper initialSession={session}>
           {children}
         </ProvidersWrapper>
-        {/* PWA Refresh Button - Only shows when app is installed */}
         <PWARefresh />
       </body>
     </html>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSession } from '@/lib/auth-client';
 import { Mail, Shield, CheckCircle, XCircle, Clock } from 'lucide-react';
 import Image from 'next/image';
 import { validateInvitationToken, acceptInvitationForNewUser, completeInvitationAcceptance, declineInvitation } from '@/lib/actions/invitation';
@@ -27,22 +28,10 @@ export default function InvitationPage({ params }: { params: Promise<{ token: st
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showPermissions, setShowPermissions] = useState(false);
   const [token, setToken] = useState<string>('');
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-  
-  const isInitialized = useRef(false);
+  const { data: session, status } = useSession();
+  const isAuthenticated = status === 'authenticated' && !!session?.user;
 
-  const checkAuthentication = useCallback(async () => {
-    try {
-      const response = await fetch('/api/auth/session');
-      const session = await response.json();
-      const isAuth = !!session?.user;
-      setIsAuthenticated(isAuth);
-      console.log('🔐 [Auth Check] Authentication status:', isAuth);
-    } catch (error) {
-      console.error('Error checking authentication:', error);
-      setIsAuthenticated(false);
-    }
-  }, []);
+  const isInitialized = useRef(false);
 
   const validateInvitation = useCallback(async () => {
     try {
@@ -80,9 +69,8 @@ export default function InvitationPage({ params }: { params: Promise<{ token: st
       isInitialized.current = true;
       console.log('🚀 [Invitation Page] Initializing with token:', token);
       validateInvitation();
-      checkAuthentication();
     }
-  }, [token, validateInvitation, checkAuthentication]);
+  }, [token, validateInvitation]);
 
 
   const handleAcceptInvitation = async () => {

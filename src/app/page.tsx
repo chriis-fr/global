@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession } from '@/lib/auth-client';
 import { BlockchainBenefits } from "@/components/landing/blockchain-benefits";
 import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";

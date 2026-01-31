@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession } from '@/lib/auth-client';
 import { getPayablesStats, getOnboardingStatus } from '@/app/actions/payable-actions';
 
 interface PayableStats {

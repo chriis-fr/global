@@ -20,14 +20,14 @@ import {
 } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { signIn, useSession } from 'next-auth/react'
+import { signIn, useSession } from '@/lib/auth-client'
 import { useSearchParams } from 'next/navigation'
 import { countries, defaultCountry } from '@/data/countries'
 import { getIndustriesByCategory, getIndustryCategories } from '@/data/industries'
 import { useOnboardingStore } from '@/lib/stores/onboardingStore'
 
 function AuthContent() {
-  const { data: session, status } = useSession()
+  const { data: session, status, update: refreshSession } = useSession()
   const searchParams = useSearchParams()
   const { setOnboarding } = useOnboardingStore()
   const [isLogin, setIsLogin] = useState(true)
@@ -424,10 +424,8 @@ function AuthContent() {
           errorTimeoutRef.current = null
         }, 5000)
       } else if (result?.ok) {
-        console.log('✅ [Auth] Google sign-in successful, redirecting...')
-        // Session will be updated automatically, redirect will happen via useEffect
-        // The useEffect will check session data and redirect appropriately
-        // No need to manually redirect here - let useEffect handle it
+        console.log('✅ [Auth] Google sign-in successful, refreshing session...')
+        await refreshSession()
       }
     } catch (error) {
       console.error('❌ [Auth] Google sign-in error:', error)
@@ -585,10 +583,8 @@ function AuthContent() {
             errorTimeoutRef.current = null
           }, 5000)
         } else if (loginResult?.ok) {
-          console.log('✅ [Auth] Login successful, redirecting...')
-          // Session will be updated automatically, redirect will happen via useEffect
-          // The useEffect will check session data and redirect appropriately
-          // No need to manually redirect here - let useEffect handle it
+          console.log('✅ [Auth] Login successful, refreshing session...')
+          await refreshSession()
         }
       } else {
         // Handle signup
@@ -705,8 +701,8 @@ function AuthContent() {
                   window.location.href = '/onboarding'
                 }
               } else if (loginResult?.ok) {
-                console.log('✅ [Auth] Automatic login successful, checking for invoice token...')
-                
+                console.log('✅ [Auth] Automatic login successful, refreshing session...')
+                await refreshSession()
                 // Check if this signup was triggered by an invoice token
                 const invoiceToken = searchParams.get('invoiceToken')
                 if (invoiceToken) {

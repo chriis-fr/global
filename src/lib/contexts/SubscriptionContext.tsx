@@ -1,7 +1,7 @@
 'use client'
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession } from '@/lib/auth-client';
 import { getUserSubscription, SubscriptionData } from '@/lib/actions/subscription';
 
 interface SubscriptionContextType {
@@ -42,23 +42,26 @@ const getCachedSubscription = (userId?: string): SubscriptionData | null => {
   return null;
 };
 
-export function SubscriptionProvider({ children }: { children: React.ReactNode }) {
+type SubscriptionProviderProps = {
+  children: React.ReactNode;
+  /** Preloaded subscription from server – avoids client fetch on first paint */
+  initialSubscription?: SubscriptionData | null;
+};
+
+export function SubscriptionProvider({ children, initialSubscription: initialFromServer }: SubscriptionProviderProps) {
   const { data: session, status } = useSession();
   
-  // Pre-load subscription from cache immediately on mount (before session loads)
-  // This allows dashboard to render with cached data instantly
+  // Pre-load: server initial data > localStorage cache > null
   const [subscription, setSubscription] = useState<SubscriptionData | null>(() => {
+    if (initialFromServer) return initialFromServer;
     if (typeof window === 'undefined') return null;
-    // Try to get cached subscription immediately, even without session
     try {
       const cached = localStorage.getItem(CACHE_KEY);
       const cachedUserId = localStorage.getItem(USER_CACHE_KEY);
       if (cached && cachedUserId) {
         const { data, timestamp } = JSON.parse(cached);
         const now = Date.now();
-        if (now - timestamp < CACHE_DURATION) {
-          return data; // Return cached data immediately
-        }
+        if (now - timestamp < CACHE_DURATION) return data;
       }
     } catch {
       // Ignore errors
@@ -66,10 +69,11 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     return null;
   });
   
-  const [loading, setLoading] = useState(false); // Start with false - we have cache
+  const [loading, setLoading] = useState(false); // Start with false - we have cache or server initial
   const [error, setError] = useState<string | null>(null);
   const hasInitialized = useRef(false);
   const lastUserIdRef = useRef<string | null>(null);
+  const hadInitialFromServer = useRef(!!initialFromServer);
 
   // Check if we're on the landing page - don't show loader there
 
@@ -229,27 +233,26 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     const userId = session?.user?.id;
     
-    // Start fetching subscription as soon as we have a session (even if status is still 'loading')
-    // This ensures subscription is ready by the time dashboard loads
-    // Fetch during authentication phase so dashboard has data immediately
     if (userId) {
-      // Check if we need to initialize for this user
+      // If we had preloaded data from server, seed cache and refresh in background (no loading)
+      if (hadInitialFromServer.current) {
+        hadInitialFromServer.current = false;
+        if (subscription) setCachedData(subscription, userId);
+        fetchSubscription(false, false); // Background refresh only
+        return;
+      }
       if (!hasInitialized.current || lastUserIdRef.current !== userId) {
         hasInitialized.current = true;
         lastUserIdRef.current = userId;
         
-        // Check cache first (might already be set from mount effect)
         const cached = getCachedSubscription(userId);
         if (cached && !subscription) {
-          // We have cache but subscription state wasn't set, use it immediately
           setSubscription(cached);
           setLoading(false);
         }
         
-        // Fetch subscription immediately and show loading if no cache
-        // This happens during authentication phase, so dashboard will have data ready
         const hasCache = !!getCachedSubscription(userId);
-        fetchSubscription(false, !hasCache); // Show loading only if no cache
+        fetchSubscription(false, !hasCache);
       }
     } else if (status === 'unauthenticated') {
       // Only clear if we're definitely unauthenticated (not just loading)
