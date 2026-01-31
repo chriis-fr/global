@@ -1,3 +1,6 @@
+# globals.css (full file — 300 lines)
+
+```css
 @import "tailwindcss";
 
 :root {
@@ -51,30 +54,16 @@
   backface-visibility: hidden;
 }
 
-/* Ensure animated cursor is above bg layer and never blocks clicks */
+/* Ensure animated cursor is above bg layer */
 [data-react-animated-cursor],
 [data-react-animated-cursor] * {
   z-index: 99999 !important;
   pointer-events: none !important;
 }
 
-html, body {
-  overscroll-behavior: auto;
-}
-
-/* Cursor overlay: full-screen layer must never block hover or clicks — events pass through to buttons/links below */
-/* .cursor-overlay,
+/* Cursor overlay: full-screen layer must never block scroll/touch (navbar works because it sits above this) */
+.cursor-overlay,
 .cursor-overlay * {
-  pointer-events: none !important;
-} */
-
-.cursor-overlay {
-  pointer-events: auto;
-}
-
-/* Disable pointer events ONLY on the animated cursor elements */
-.react-animated-cursor,
-.react-animated-cursor * {
   pointer-events: none !important;
 }
 
@@ -144,10 +133,11 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
   overflow-x: hidden;
-  /* Ensure default cursor is visible by default */
+  overflow-y: auto;
+  min-height: 100%;
+  /* Cursor: use attribute-based rule (data-landing-page), no inline cursor in JS */
   cursor: auto !important;
-  /* Background handled by CSS class to prevent flicker */
-  background: transparent;
+  background: var(--background);
   transition: background 0.3s ease;
 }
 
@@ -157,14 +147,14 @@ html.preloader-active {
   background: linear-gradient(to bottom right, #1c398e, #172554) !important;
 }
 
+/* Single html block: background, cursor, scroll — no inline cursor in JS */
 html {
-  background: transparent;
+  background: var(--background);
   transition: background 0.3s ease;
-}
-
-html {
-  /* Ensure default cursor is visible by default */
   cursor: auto !important;
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-height: 100%;
 }
 
 /* Only hide cursor on landing page - override with !important */
@@ -211,16 +201,14 @@ body:not([data-landing-page="true"]) * {
   cursor: inherit;
 }
 
-html {
-  overflow-x: hidden;
-}
+/* Removed: hiding root until data-preloader-ready - that attribute was never set. */
 
 * {
   box-sizing: border-box;
 }
 
-/* Mobile touch optimizations - CRITICAL for button performance */
-button, a, [role="button"], input[type="button"], input[type="submit"] {
+/* Mobile touch optimizations - only on actual controls so two-finger scroll works on trackpad */
+button, a, [role="button"], input[type="button"], input[type="submit"], input[type="image"] {
   touch-action: manipulation !important;
   -webkit-tap-highlight-color: transparent !important;
   -webkit-touch-callout: none !important;
@@ -230,11 +218,7 @@ button, a, [role="button"], input[type="button"], input[type="submit"] {
   /* Removed will-change to prevent scroll jitter - only use when actually animating */
 }
 
-/* Optimize all interactive elements for mobile */
-[onclick], [onClick] {
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-}
+/* Removed broad [onclick]/[onClick] touch-action - it was blocking two-finger scroll on desktop trackpad */
 
 /* Optimize images for LCP - critical for performance */
 /* Removed content-visibility: auto as it can cause layout recalculations during scroll on mobile */
@@ -255,10 +239,10 @@ button:active {
   transition: transform 0.1s ease-out;
 }
 
-/* Improve scrolling performance on mobile */
+/* Improve scrolling performance on mobile — do not set touch-action/overflow on body/html here (breaks native scroll) */
 body, html {
   -webkit-overflow-scrolling: touch;
-  /* overscroll-behavior-y: contain; */
+  overscroll-behavior-y: contain;
 }
 
 /* Prevent scroll jitter on mobile - REMOVED aggressive GPU acceleration
@@ -317,3 +301,4 @@ font-face {
 .hide-scrollbar::-webkit-scrollbar {
   display: none; /* Chrome, Safari, Opera */
 }
+```

@@ -17,15 +17,12 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { AnimatePresence } from 'framer-motion'
 import { useSession, signOut } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
 
 export function Header() {
   const { data: session } = useSession();
-  const router = useRouter();
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isProductsOpen, setIsProductsOpen] = useState(false)
   const [isSolutionsOpen, setIsSolutionsOpen] = useState(false)
-  const [navLoading, setNavLoading] = useState<string | null>(null)
   const [isSigningOut, setIsSigningOut] = useState(false)
 
   // Optimized handlers for mobile performance
@@ -33,12 +30,6 @@ export function Header() {
   const closeMenu = useCallback(() => {
     setIsMenuOpen(false);
   }, []);
-
-  const handleNav = useCallback(async (path: string, id: string) => {
-    if (navLoading) return;
-    setNavLoading(id);
-    router.push(path);
-  }, [navLoading, router]);
 
   const navigation = [
     { name: 'Home', href: '/' },
@@ -225,31 +216,26 @@ export function Header() {
                 <span>{isSigningOut ? 'Signing Out...' : 'Sign Out'}</span>
               </button>
             ) : (
-              <button
-                type="button"
-                onClick={() => handleNav('/auth', 'signin')}
-                disabled={navLoading === 'signin'}
-                className="text-gray-700 hover:text-blue-600 transition-colors font-medium flex items-center space-x-2 disabled:opacity-60 disabled:cursor-not-allowed"
+              <Link
+                href="/auth"
+                className="text-gray-700 hover:text-blue-600 transition-colors font-medium flex items-center space-x-2"
               >
                 <span>Sign In</span>
-                {navLoading === 'signin' && <Loader2 className="h-4 w-4 animate-spin" />}
-              </button>
+              </Link>
             )}
-            {!session && <motion.div
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-
-              <button
-                type="button"
-                onClick={() => handleNav('/auth', 'getstarted')}
-                disabled={navLoading === 'getstarted'}
-                className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2 disabled:opacity-60 disabled:cursor-not-allowed"
+            {!session && (
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
               >
-                <span>Get Started</span>
-                {navLoading === 'getstarted' && <Loader2 className="h-4 w-4 animate-spin" />}
-              </button>
-            </motion.div>}
+                <Link
+                  href="/auth"
+                  className="inline-flex items-center justify-center space-x-2 bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                >
+                  <span>Get Started</span>
+                </Link>
+              </motion.div>
+            )}
           </div>
 
           {/* Mobile menu button */}
