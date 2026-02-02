@@ -116,7 +116,7 @@ export const countries: Country[] = [
   { code: 'IR', name: 'Iran', phoneCode: '+98', taxes: { vat: 9, corporateTax: 25, personalTax: 35 } },
   { code: 'KW', name: 'Kuwait', phoneCode: '+965', taxes: { vat: 0, corporateTax: 15, personalTax: 0 } },
   { code: 'SA', name: 'Saudi Arabia', phoneCode: '+966', taxes: { vat: 15, corporateTax: 20, personalTax: 0 } },
-  { code: 'AE', name: 'United Arab Emirates', phoneCode: '+971', taxes: { vat: 5, corporateTax: 9, personalTax: 0 } },
+  { code: 'AE', name: 'United Arab Emirates', phoneCode: '+971', hasBanks: true, taxes: { vat: 5, corporateTax: 9, personalTax: 0 } },
   { code: 'QA', name: 'Qatar', phoneCode: '+974', taxes: { vat: 0, corporateTax: 10, personalTax: 0 } },
   { code: 'BH', name: 'Bahrain', phoneCode: '+973', taxes: { vat: 5, corporateTax: 0, personalTax: 0 } },
   { code: 'OM', name: 'Oman', phoneCode: '+968', taxes: { vat: 5, corporateTax: 15, personalTax: 0 } },

@@ -1,0 +1,10 @@
+[
+  { "name": "Emirates NBD", "swift_code": "EBILAEAD", "bank_code": null },
+  { "name": "National Bank of Ras Al Khaimah", "swift_code": "NRAKAEAK", "bank_code": null },
+  { "name": "Mashreq Bank", "swift_code": "BOMLAEAD", "bank_code": null },
+  { "name": "Ruya Bank", "swift_code": "E132AEXX", "bank_code": null },
+  { "name": "HSBC Middle East", "swift_code": "BBMEAEAD", "bank_code": null },
+  { "name": "ADCB", "swift_code": "ADCBAEAA", "bank_code": null },
+  { "name": "ADIB", "swift_code": "ABDIAEAD", "bank_code": null },
+  { "name": "Dubai Islamic Bank", "swift_code": "DUIBAEAD", "bank_code": null }
+]
