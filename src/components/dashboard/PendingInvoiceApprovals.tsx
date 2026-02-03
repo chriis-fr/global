@@ -175,10 +175,18 @@ export default function PendingInvoiceApprovals() {
          };
 
   const formatCurrency = (amount: number, currency: string) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency || 'USD'
-    }).format(amount);
+    const code = (currency || 'USD').trim().toUpperCase();
+    try {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: code,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(amount);
+    } catch {
+      // Crypto or other non-ISO codes (e.g. USDT) — Intl doesn't support them
+      return `${code} ${Number(amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
   };
 
   // Use consistent date formatting utility to avoid hydration mismatches

@@ -718,7 +718,7 @@ export const sendOrganizationInvitation = async (
     return { success: false, error: 'No recipient email provided' };
   }
   const mailOptions = {
-    from: `"${organizationName} via Chains ERP-Global" <${emailConfig.auth.user}>`,
+    from: `"${organizationName} via Chains ERP-Global Finance" <${emailConfig.auth.user}>`,
     to: toEmail,
     subject: `You're invited to join ${organizationName} on Chains ERP-Global!`,
     headers: getEmailHeaders(),

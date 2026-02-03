@@ -547,20 +547,24 @@ export async function POST(request: NextRequest) {
 
                // Send notification to each approver
                for (const approver of approvers) {
+                 const approverId = approver.userId instanceof ObjectId
+                   ? approver.userId
+                   : new ObjectId(String(approver.userId));
                  const approverUser = await db.collection('users').findOne({
-                   _id: new ObjectId(approver.userId)
+                   _id: approverId
                  });
 
-                 if (approverUser?.email) {
+                 const approverEmail = typeof approverUser?.email === 'string' ? approverUser.email.trim() : '';
+                 if (approverEmail) {
                    console.log('📧 [Approval Notifications] Sending notification to:', {
-                     email: approverUser.email,
-                     name: approverUser.name || approverUser.email,
+                     email: approverEmail,
+                     name: approverUser?.name || approverEmail,
                      role: approver.role
                    });
                    
                    await NotificationService.sendInvoiceApprovalRequest(
-                     approverUser.email,
-                     approverUser.name || approverUser.email,
+                     approverEmail,
+                     approverUser?.name || approverEmail,
                      {
                        invoiceNumber: finalInvoiceNumber,
                        invoiceName: invoiceName || 'Invoice',

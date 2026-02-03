@@ -435,14 +435,19 @@ export class CurrencyService {
     return currency?.symbol || currencyCode;
   }
 
-  // Format amount with currency
+  // Format amount with currency (handles crypto/non-ISO codes like USDT)
   static formatAmount(amount: number, currency: string, locale: string = 'en-US'): string {
-    return new Intl.NumberFormat(locale, {
-      style: 'currency',
-      currency: currency,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(amount);
+    const code = (currency || 'USD').trim().toUpperCase();
+    try {
+      return new Intl.NumberFormat(locale, {
+        style: 'currency',
+        currency: code,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(amount);
+    } catch {
+      return `${code} ${Number(amount).toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
   }
 
   // Calculate total revenue in preferred currency
