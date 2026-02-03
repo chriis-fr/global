@@ -10,6 +10,8 @@ import {
   PermissionSet 
 } from '@/models/Organization';
 import { UserService } from '@/lib/services/userService';
+import { OrganizationService } from '@/lib/services/organizationService';
+import { createDefaultServices } from '@/lib/services/serviceManager';
 import { getRolePermissions, type RoleKey } from '@/lib/utils/roles';
 import { randomBytes } from 'crypto';
 import { sendOrganizationInvitation } from '@/lib/services/emailService';
@@ -299,6 +301,26 @@ export async function acceptInvitation(token: string): Promise<{
 
     console.log('✅ [Accept Invitation] Organization found:', organization.name);
 
+    // Ensure org has services (sync from owner if org has none) so member inherits owner's onboarding choices
+    let effectiveOrgServices = (organization.services as Record<string, boolean> | undefined) || {};
+    const orgHasAnyEnabled = Object.values(effectiveOrgServices).some(Boolean);
+    if (!orgHasAnyEnabled && organization.members?.length) {
+      const ownerMember = (organization.members as Array<{ userId: { toString: () => string }; role: string }>).find(
+        (m) => m.role === 'owner'
+      );
+      if (ownerMember) {
+        const ownerUser = await UserService.getUserById(ownerMember.userId.toString());
+        const ownerServices = ownerUser?.services as Record<string, boolean> | undefined;
+        const ownerHasAny = ownerServices && Object.values(ownerServices).some(Boolean);
+        if (ownerHasAny && ownerServices) {
+          effectiveOrgServices = { ...createDefaultServices(), ...ownerServices };
+          await OrganizationService.updateOrganization(invitation.organizationId.toString(), {
+            services: effectiveOrgServices
+          });
+        }
+      }
+    }
+
     // Add user to organization members
     const newMember: OrganizationMember = {
       userId: user._id!,
@@ -323,10 +345,19 @@ export async function acceptInvitation(token: string): Promise<{
       } as unknown as import('mongodb').UpdateFilter<import('mongodb').Document>)
     );
 
-    // Update user to link to organization
+    // Update user to link to organization and mark onboarding complete (org already exists)
+    // Inherit organization's enabled services (after sync-from-owner) so members see same as owner
     await UserService.updateUser(user._id!.toString(), {
       organizationId: invitation.organizationId,
-      userType: 'business'
+      userType: 'business',
+      services: Object.keys(effectiveOrgServices).length ? effectiveOrgServices : (organization.services || user.services),
+      onboarding: {
+        ...user.onboarding,
+        isCompleted: true,
+        currentStep: 4,
+        completedSteps: ['1', '2', '3', '4'],
+        data: { ...(user.onboarding?.data as Record<string, unknown> || {}), completed: true }
+      }
     });
 
     // Mark invitation as used
@@ -511,6 +542,26 @@ export async function completeInvitationAcceptance(token: string): Promise<{
 
     console.log('✅ [Complete Invitation] Organization found:', organization.name);
 
+    // Ensure org has services (sync from owner if org has none) so new member inherits owner's onboarding choices
+    let effectiveOrgServices = (organization.services as Record<string, boolean> | undefined) || {};
+    const orgHasAnyEnabled = Object.values(effectiveOrgServices).some(Boolean);
+    if (!orgHasAnyEnabled && organization.members?.length) {
+      const ownerMember = (organization.members as Array<{ userId: { toString: () => string }; role: string }>).find(
+        (m) => m.role === 'owner'
+      );
+      if (ownerMember) {
+        const ownerUser = await UserService.getUserById(ownerMember.userId.toString());
+        const ownerServices = ownerUser?.services as Record<string, boolean> | undefined;
+        const ownerHasAny = ownerServices && Object.values(ownerServices).some(Boolean);
+        if (ownerHasAny && ownerServices) {
+          effectiveOrgServices = { ...createDefaultServices(), ...ownerServices };
+          await OrganizationService.updateOrganization(invitation.organizationId.toString(), {
+            services: effectiveOrgServices
+          });
+        }
+      }
+    }
+
     // Add user to organization members
     const newMember: OrganizationMember = {
       userId: user._id!,
@@ -536,11 +587,20 @@ export async function completeInvitationAcceptance(token: string): Promise<{
     );
 
     // Update user to link to organization and set status to active
-    // Only remove individual subscription if user is NOT the owner
+    // Mark onboarding as completed – they joined an existing org, so no org setup needed
+    // Inherit organization's enabled services (after sync-from-owner) so members see same as owner
     const updates: Record<string, unknown> = {
       organizationId: invitation.organizationId,
       userType: 'business',
-      status: 'active'
+      status: 'active',
+      services: Object.keys(effectiveOrgServices).length ? effectiveOrgServices : (organization.services || user.services),
+      onboarding: {
+        ...user.onboarding,
+        isCompleted: true,
+        currentStep: 4,
+        completedSteps: ['1', '2', '3', '4'],
+        data: { ...(user.onboarding?.data as Record<string, unknown> || {}), completed: true }
+      }
     };
 
     // Only remove individual subscription for non-owners

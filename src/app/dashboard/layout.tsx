@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useSession } from '@/lib/auth-client';
+import { useSession as useNextAuthSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Breadcrumb from '@/components/dashboard/Breadcrumb';
@@ -8,7 +9,8 @@ import FloatingActionButton from '@/components/dashboard/FloatingActionButton';
 import { useOnboardingStore } from '@/lib/stores/onboardingStore';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { data: session, status } = useSession();
+  const { data: session, status, update: refreshSession } = useSession();
+  const { update: nextAuthUpdate } = useNextAuthSession();
   const router = useRouter();
   const [sidebarState, setSidebarState] = useState<'expanded' | 'collapsed' | 'auto-hidden'>('expanded');
   const mainContentRef = useRef<HTMLDivElement>(null);
@@ -16,10 +18,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { fetchOnboarding, setOnboarding } = useOnboardingStore();
 
   // Initialize onboarding store from session on mount and check completion.
-  // Guarded with a ref to prevent repeated state updates that can cause update-depth errors.
   const onboardingInitRef = useRef(false);
+  const refreshAttemptedRef = useRef(false);
   const fetchOnboardingRef = useRef(fetchOnboarding);
-  
+
   // Keep ref in sync with fetchOnboarding function
   useEffect(() => {
     fetchOnboardingRef.current = fetchOnboarding;
@@ -28,19 +30,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     if (status === 'loading') return;
     if (onboardingInitRef.current) return;
-    
+
     if (!session) {
       router.push('/auth');
       return;
     }
 
-    onboardingInitRef.current = true;
+    // Check session: onboarding completed OR org member (invited users skip onboarding)
+    const hasOrganization = !!(session.user as { organizationId?: string }).organizationId;
+    const sessionOnboardingCompleted =
+      session.user?.onboarding?.completed ||
+      session.user?.onboarding?.currentStep === 4 ||
+      hasOrganization;
 
-    // Check session data FIRST (fastest check, no API call needed)
-    const sessionOnboardingCompleted = session.user?.onboarding?.completed || session.user?.onboarding?.currentStep === 4;
-    
-    // If session shows onboarding is completed, allow dashboard immediately
+    // If session shows onboarding is completed (or user is org member), allow dashboard immediately
     if (sessionOnboardingCompleted) {
+      onboardingInitRef.current = true;
       if (session.user?.onboarding && session.user?.services) {
         setOnboarding(
           {
@@ -55,14 +60,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       return;
     }
 
-    // If session shows onboarding is NOT completed, redirect immediately
+    // Session says not completed: try one JWT refresh (e.g. invited user with stale cookie) before redirecting
+    if (!refreshAttemptedRef.current) {
+      refreshAttemptedRef.current = true;
+      nextAuthUpdate?.()
+        .then(() => refreshSession())
+        .catch(() => {})
+        .finally(() => {
+          // Effect will re-run when session updates; if still not completed we'll redirect then
+        });
+      return;
+    }
+
+    // Already tried refresh; session still not completed — redirect to onboarding
+    onboardingInitRef.current = true;
     const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
     if (currentPath !== '/onboarding' && !currentPath.startsWith('/onboarding')) {
       window.location.href = '/onboarding';
       return;
     }
 
-    // If session doesn't have onboarding data, initialize store (will fetch if needed)
+    // On onboarding path: initialize store
     if (session.user?.onboarding && session.user?.services) {
       setOnboarding(
         {
@@ -74,10 +92,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         session.user.services as Record<string, boolean>
       );
     } else {
-      // Use ref to avoid dependency issues
       fetchOnboardingRef.current();
     }
-  }, [session, status, setOnboarding, router]); // Removed fetchOnboarding from deps to prevent infinite loop
+  }, [session, status, setOnboarding, router, refreshSession, nextAuthUpdate]);
 
   // Listen for sidebar state changes
   useEffect(() => {
@@ -165,9 +182,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return null;
   }
 
-  // Check onboarding completion from session (fastest check)
-  // Consider completed if: completed === true OR currentStep === 4
-  const isOnboardingCompleted = session.user?.onboarding?.completed || session.user?.onboarding?.currentStep === 4;
+  // Check onboarding completion: completed in session OR org member (invited users skip onboarding)
+  const hasOrganization = !!(session.user as { organizationId?: string }).organizationId;
+  const isOnboardingCompleted =
+    session.user?.onboarding?.completed ||
+    session.user?.onboarding?.currentStep === 4 ||
+    hasOrganization;
   if (!isOnboardingCompleted) {
     return null; // Will redirect via useEffect
   }

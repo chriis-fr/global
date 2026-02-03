@@ -3,6 +3,7 @@
 import type { Session } from 'next-auth';
 import { ReactNode } from 'react';
 import { Toaster } from 'react-hot-toast';
+import { SessionProvider as NextAuthSessionProvider } from 'next-auth/react';
 import { SessionProvider } from "@/components/providers/SessionProvider";
 import { CurrencyProvider } from "@/lib/contexts/CurrencyContext";
 import { SubscriptionProvider } from "@/lib/contexts/SubscriptionContext";
@@ -32,6 +33,7 @@ export function ProvidersWrapper({
 }: { children: ReactNode } & InitialData) {
   return (
     <ErrorBoundary>
+      <NextAuthSessionProvider refetchInterval={0} session={initialSession === undefined ? undefined : initialSession ?? null}>
       <SessionProvider session={initialSession === undefined ? undefined : initialSession}>
         <ErrorBoundary>
           <CurrencyProvider initialCurrency={initialCurrency ?? undefined}>
@@ -78,6 +80,7 @@ export function ProvidersWrapper({
           </CurrencyProvider>
         </ErrorBoundary>
       </SessionProvider>
+      </NextAuthSessionProvider>
     </ErrorBoundary>
   );
 }

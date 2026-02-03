@@ -128,16 +128,12 @@ export default function OnboardingPage() {
           const statusResponse = await fetch('/api/onboarding/status');
           const statusData = await statusResponse.json();
           
-          if (statusData.success && statusData.data?.completed) {
-            console.log('✅ [Onboarding] API shows onboarding completed, redirecting to dashboard');
-            // Force session refresh
+          if (statusData.success && statusData.data?.onboarding?.completed) {
+            console.log('✅ [Onboarding] API shows onboarding already completed (e.g. invited member) – redirecting to dashboard');
             await updateSession();
-            
-            // Redirect to dashboard
-            setTimeout(() => {
-              window.location.href = '/dashboard';
-            }, 500);
             isCheckingStatusRef.current = false;
+            setLoading(false);
+            window.location.href = '/dashboard';
             return;
           }
         } catch (error) {

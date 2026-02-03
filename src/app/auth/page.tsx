@@ -21,6 +21,7 @@ import {
 import Image from 'next/image'
 import Link from 'next/link'
 import { signIn, useSession } from '@/lib/auth-client'
+import { useSession as useNextAuthSession } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { countries, defaultCountry } from '@/data/countries'
 import { getIndustriesByCategory, getIndustryCategories } from '@/data/industries'
@@ -28,6 +29,7 @@ import { useOnboardingStore } from '@/lib/stores/onboardingStore'
 
 function AuthContent() {
   const { data: session, status, update: refreshSession } = useSession()
+  const { update: nextAuthUpdate } = useNextAuthSession()
   const searchParams = useSearchParams()
   const { setOnboarding } = useOnboardingStore()
   const [isLogin, setIsLogin] = useState(true)
@@ -758,9 +760,14 @@ function AuthContent() {
                       const invitationResult = await invitationResponse.json()
                       if (invitationResult.success) {
                         console.log('✅ [Auth] Organization invitation completed successfully')
-                        // Clean up invitation data
                         localStorage.removeItem('invitationData')
-                        // Redirect to dashboard
+                        // Force JWT refresh from DB (NextAuth update) then sync our session context
+                        try {
+                          await nextAuthUpdate?.()
+                          await refreshSession()
+                        } catch {
+                          // Continue to redirect even if refresh fails
+                        }
                         window.location.href = '/dashboard'
                       } else {
                         console.log('⚠️ [Auth] Failed to complete organization invitation:', invitationResult.message)

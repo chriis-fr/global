@@ -228,8 +228,8 @@ export default function DashboardPage() {
         <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
           <h3 className="text-lg font-semibold text-white mb-4">Quick Actions</h3>
           <div className="flex flex-col space-y-3">
-            {/* Show Create Invoice only if service is enabled AND user has subscription access */}
-            {canShowCreateInvoice && (
+            {/* Defer until mounted to avoid hydration mismatch (session.services / subscription differ on server vs client) */}
+            {mounted && canShowCreateInvoice && (
               <button
                 onClick={() => router.push('/dashboard/services/smart-invoicing/create')}
                 disabled={!subscription?.canCreateInvoice}
@@ -250,8 +250,7 @@ export default function DashboardPage() {
               </button>
             )}
             
-            {/* Show Create Payable only if service is enabled AND user has subscription access */}
-            {canShowCreatePayable && (
+            {mounted && canShowCreatePayable && (
               <button
                 onClick={() => router.push('/dashboard/services/payables/create')}
                 className="flex items-center space-x-3 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"

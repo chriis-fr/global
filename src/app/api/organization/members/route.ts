@@ -458,11 +458,12 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Update user's organizationId and userType
-    await UserService.updateUser(userId, {
-      organizationId: undefined,
-      userType: 'individual'
-    });
+    // Delete the user from user records (removes their account entirely)
+    const deleted = await UserService.deleteUser(userId);
+    if (!deleted) {
+      console.warn('[Members API] Member removed from org but user record not found or delete failed:', userId);
+      // Still return success – member was removed from organization
+    }
 
     return NextResponse.json({
       success: true,

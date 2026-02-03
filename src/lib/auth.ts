@@ -3,6 +3,7 @@ import GoogleProvider from 'next-auth/providers/google'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { UserService } from './services/userService'
 import { createDefaultServices } from './services/serviceManager'
+import { getDatabase } from './database'
 import { defaultCountry } from '@/data/countries'
 import bcrypt from 'bcryptjs'
 
@@ -279,7 +280,48 @@ export const authOptions: NextAuthOptions = {
               completedSteps: dbUser.onboarding?.completedSteps || [],
               serviceOnboarding: dbUser.onboarding?.data || {}
             }
-            token.services = { ...(dbUser.services || createDefaultServices()) } as Record<string, boolean>
+            // Org members: use organization's enabled services so sidebar and services match the org.
+            // When org has none enabled (e.g. owner onboarded before we synced to org), sync from owner's user.services
+            // so the whole organisation inherits the owner's services and all members see the same.
+            if (dbUser.organizationId) {
+              try {
+                const db = await getDatabase()
+                const org = await db.collection('organizations').findOne({ _id: dbUser.organizationId })
+                const orgServices = org?.services as Record<string, boolean> | undefined
+                let hasAnyEnabled = orgServices && Object.values(orgServices).some(Boolean)
+                let effectiveServices = hasAnyEnabled && orgServices
+                  ? { ...createDefaultServices(), ...orgServices } as Record<string, boolean>
+                  : (dbUser.services ? { ...createDefaultServices(), ...dbUser.services } : createDefaultServices()) as Record<string, boolean>
+
+                // Sync from owner when org has no enabled services so members inherit owner's onboarding choices
+                if (!hasAnyEnabled && org?.members?.length) {
+                  const ownerMember = (org.members as Array<{ userId: { toString: () => string }; role: string }>).find(
+                    (m) => m.role === 'owner'
+                  )
+                  if (ownerMember) {
+                    const ownerUser = await UserService.getUserById(ownerMember.userId.toString())
+                    const ownerServices = ownerUser?.services as Record<string, boolean> | undefined
+                    const ownerHasAny = ownerServices && Object.values(ownerServices).some(Boolean)
+                    if (ownerHasAny && ownerServices) {
+                      effectiveServices = { ...createDefaultServices(), ...ownerServices } as Record<string, boolean>
+                      try {
+                        const { OrganizationService } = await import('./services/organizationService')
+                        await OrganizationService.updateOrganization(dbUser.organizationId.toString(), {
+                          services: effectiveServices
+                        })
+                      } catch {
+                        // token already has effectiveServices; org sync best-effort
+                      }
+                    }
+                  }
+                }
+                token.services = effectiveServices
+              } catch {
+                token.services = { ...(dbUser.services || createDefaultServices()) } as Record<string, boolean>
+              }
+            } else {
+              token.services = { ...(dbUser.services || createDefaultServices()) } as Record<string, boolean>
+            }
             token.mongoId = dbUser._id?.toString()
             token.adminTag = dbUser.adminTag || false
             token.lastRefresh = Date.now() // Track when we last refreshed
