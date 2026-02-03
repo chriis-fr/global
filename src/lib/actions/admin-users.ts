@@ -357,9 +357,15 @@ export async function deleteAdminUser(
       };
     }
 
-    await db.collection('users').deleteOne({
-      _id: new ObjectId(userId)
-    });
+    // Delete user and all related data (invoices, drafts, payables, bills, etc.) via UserService
+    const { UserService } = await import('@/lib/services/userService');
+    const deleted = await UserService.deleteUser(userId);
+    if (!deleted) {
+      return {
+        success: false,
+        error: 'User not found or delete failed'
+      };
+    }
 
     return {
       success: true

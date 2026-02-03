@@ -727,6 +727,13 @@ async function sendPayableApprovalNotifications(
       console.error('❌ [Payable Approval] Organization not found');
       return;
     }
+
+    // Respect org setting: only send approval emails when approval notifications are enabled
+    const approvalEmailsEnabled = (organization.approvalSettings as { emailSettings?: { approvalNotifications?: boolean } } | undefined)?.emailSettings?.approvalNotifications !== false;
+    if (!approvalEmailsEnabled) {
+      console.log('⏭️ [Payable Approval] Approval notifications disabled for org, skipping emails');
+      return;
+    }
     
     // Get ALL approvers in the organization (not just current step)
     const organizationMembers = organization.members || [];

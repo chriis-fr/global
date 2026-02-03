@@ -2,7 +2,6 @@
 import { useState, useEffect } from 'react';
 import { Building2, Users, Edit, User, Plus, Image, Crown, Settings } from 'lucide-react';
 import { LogoManager } from '@/components/LogoManager';
-import DashboardFloatingButton from '@/components/DashboardFloatingButton';
 import { LogoDisplay } from '@/components/LogoDisplay';
 import { ApprovalSettingsComponent } from '@/components/settings/ApprovalSettings';
 import { useSubscription } from '@/lib/contexts/SubscriptionContext';
@@ -13,6 +12,11 @@ interface OrganizationAddress {
   city: string;
   country: string;
   postalCode: string;
+}
+
+interface OrganizationServices {
+  smartInvoicing?: boolean;
+  accountsPayable?: boolean;
 }
 
 interface Organization {
@@ -29,6 +33,7 @@ interface Organization {
   verified: boolean;
   createdAt: string;
   updatedAt: string;
+  services?: OrganizationServices;
 }
 
 interface OrganizationInfo {
@@ -180,7 +185,6 @@ export default function OrganizationSettingsPage() {
             <div className="h-10 bg-white/20 rounded mb-6"></div>
           </div>
         </div>
-        <DashboardFloatingButton />
       </div>
     );
   }
@@ -247,7 +251,6 @@ export default function OrganizationSettingsPage() {
           </button>
         </div>
 
-        <DashboardFloatingButton />
       </div>
     );
   }
@@ -631,21 +634,41 @@ export default function OrganizationSettingsPage() {
         </div>
       )}
 
-      {/* Approval Settings Section */}
-      {orgInfo?.hasOrganization && (
-        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
-          <div className="flex items-center space-x-3 mb-6">
-            <Settings className="h-6 w-6 text-blue-400" />
-            <h2 className="text-xl font-semibold text-white">Approval Settings</h2>
+      {/* Approval Settings Section - only when org has Smart Invoicing and/or Accounts Payable */}
+      {orgInfo?.hasOrganization && (() => {
+        const orgServices = orgInfo.organization?.services;
+        const hasApprovalRelevantService = orgServices && (orgServices.smartInvoicing === true || orgServices.accountsPayable === true);
+        if (!hasApprovalRelevantService) {
+          return (
+            <div className="bg-white/5 backdrop-blur-sm rounded-xl p-6 border border-white/10">
+              <h2 className="text-lg font-semibold text-white mb-2">Approval Settings</h2>
+              <p className="text-blue-200 text-sm">
+                Approval workflows are available when your organization has <strong>Smart Invoicing</strong> or <strong>Accounts Payable</strong> enabled. Enable these in <a href="/dashboard/services" className="text-blue-400 hover:underline">Services</a> to configure approval for invoices and bills.
+              </p>
+            </div>
+          );
+        }
+        const forInvoices = orgServices?.smartInvoicing === true;
+        const forBills = orgServices?.accountsPayable === true;
+        const scopeLabel = forInvoices && forBills
+          ? 'invoices and bills'
+          : forInvoices
+            ? 'invoices'
+            : 'bills';
+        return (
+          <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
+            <div className="flex items-center space-x-3 mb-6">
+              <Settings className="h-6 w-6 text-blue-400" />
+              <h2 className="text-xl font-semibold text-white">Approval Settings</h2>
+            </div>
+            <p className="text-blue-200 text-sm mb-6">
+              Configure approval workflows and rules for your organization&apos;s {scopeLabel}. These settings apply only to the services you have enabled (Smart Invoicing for invoices, Accounts Payable for bills).
+            </p>
+            <ApprovalSettingsComponent />
           </div>
-          <p className="text-blue-200 text-sm mb-6">
-            Configure approval workflows and rules for your organization&apos;s bills and payments.
-          </p>
-          <ApprovalSettingsComponent />
-        </div>
-      )}
+        );
+      })()}
 
-      <DashboardFloatingButton />
     </div>
   );
 } 

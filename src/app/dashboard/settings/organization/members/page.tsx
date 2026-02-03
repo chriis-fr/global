@@ -410,7 +410,7 @@ export default function OrganizationMembersPage() {
                        <Mail className="h-5 w-5 text-white" />
                      </div>
                      <div>
-                      <h3 className="text-white font-medium">{inv.email}</h3>
+                      <h3 className="text-white font-medium">{inv.email || '(no email)'}</h3>
                       <p className="text-blue-200 text-sm">Invited as {inv.role}</p>
                        <div className="flex items-center space-x-1 text-gray-400 text-xs mt-1">
                          <Clock className="h-3 w-3" />

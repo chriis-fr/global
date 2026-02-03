@@ -138,14 +138,21 @@ export async function POST(request: NextRequest) {
     const ownerId = isOrganization ? session.user.organizationId : session.user.email;
     const ownerType = isOrganization ? 'organization' : 'individual';
 
-    // Check if approval is required
+    // Check if approval is required (only when org has Accounts Payable - sync with organization settings)
     let requiresApproval = false;
     let initialStatus = status || 'draft';
 
     if (isOrganization && ownerId) {
-      // Non-admin users need approval for payables
-      requiresApproval = true;
-      initialStatus = 'pending_approval';
+      const organization = await db.collection('organizations').findOne({
+        _id: new ObjectId(ownerId)
+      });
+      const orgServices = organization?.services as { accountsPayable?: boolean } | undefined;
+      const hasAccountsPayable = orgServices?.accountsPayable === true;
+      const requireApprovalSetting = organization?.approvalSettings?.requireApproval === true;
+      if (hasAccountsPayable && requireApprovalSetting) {
+        requiresApproval = true;
+        initialStatus = 'pending_approval';
+      }
     }
 
     // Generate secure payable number if not provided

@@ -231,8 +231,9 @@ export async function POST(request: NextRequest) {
           }
         );
 
-        // Send approval notifications if workflow is pending
-        if (activeWorkflow.status === 'pending') {
+        // Send approval notifications only when org has approval emails enabled
+        const approvalEmailsEnabled = approvalSettings?.emailSettings?.approvalNotifications !== false;
+        if (activeWorkflow.status === 'pending' && approvalEmailsEnabled) {
           const currentStepNumber = activeWorkflow.currentStep;
           const currentStep = activeWorkflow.approvals.find(step => step.stepNumber === currentStepNumber);
           if (currentStep) {

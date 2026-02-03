@@ -91,6 +91,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Send payment confirmation email when org has payment notifications enabled
+    if (payable.organizationId) {
+      try {
+        const organization = await db.collection('organizations').findOne({
+          _id: new ObjectId(payable.organizationId)
+        });
+        const paymentEmailsEnabled = (organization?.approvalSettings as { emailSettings?: { paymentNotifications?: boolean } } | undefined)?.emailSettings?.paymentNotifications !== false;
+        if (paymentEmailsEnabled && organization?.name) {
+          const { NotificationService } = await import('@/lib/services/notificationService');
+          const payeeUser = await db.collection('users').findOne({
+            _id: new ObjectId(payable.issuerId)
+          });
+          const recipientEmail = payeeUser?.email || payable.userId;
+          const recipientName = payeeUser?.name || recipientEmail;
+          if (recipientEmail) {
+            await NotificationService.sendPaymentConfirmation(
+              recipientEmail,
+              recipientName,
+              {
+                vendor: String(payable.vendorName || payable.companyName || 'Vendor'),
+                amount: typeof payable.total === 'number' ? payable.total : parseFloat(String(payable.total || 0)),
+                currency: String(payable.currency || 'USD'),
+                paymentMethod: String(paymentMethod || 'manual'),
+                transactionId: String(payableId)
+              },
+              organization.name
+            );
+          }
+        }
+      } catch (notifErr) {
+        console.error('⚠️ [Pay Invoice] Payment confirmation email failed:', notifErr);
+      }
+    }
+
     // Update related invoice status if it exists
     if (payable.relatedInvoiceId) {
       try {

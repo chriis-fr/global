@@ -75,9 +75,15 @@ export async function sendInvitation(email: string, role: RoleKey): Promise<{
 
     console.log('✅ [Invitation] User has permission to invite members');
 
+    const trimmedEmail = (email || '').trim();
+    if (!trimmedEmail) {
+      console.log('❌ [Invitation] Email is empty');
+      return { success: false, error: 'Please enter an email address' };
+    }
+
     // Check if email is already a member
     const existingMember = organization.members.find((m: { email: string }) => 
-      m.email.toLowerCase() === email.toLowerCase()
+      (m.email || '').toLowerCase() === trimmedEmail.toLowerCase()
     );
 
     if (existingMember) {
@@ -100,7 +106,7 @@ export async function sendInvitation(email: string, role: RoleKey): Promise<{
     const invitationToken: InvitationToken = {
       token,
       organizationId: new ObjectId(user.organizationId.toString()),
-      email: email.toLowerCase(),
+      email: trimmedEmail.toLowerCase(),
       role: tokenRole,
       permissions: getRolePermissions(role),
       invitedBy: user._id!,
@@ -131,7 +137,7 @@ export async function sendInvitation(email: string, role: RoleKey): Promise<{
 
     try {
       const emailResult = await sendOrganizationInvitation(
-        email,
+        trimmedEmail,
         organization.name,
         user.name || user.email,
         role,
@@ -798,6 +804,12 @@ export async function resendInvitation(invitationId: string): Promise<{
       return { success: false, error: 'Organization not found' };
     }
 
+    const recipientEmail = (invitation.email || '').trim();
+    if (!recipientEmail) {
+      console.log('❌ [Resend Invitation] Invitation has no email address');
+      return { success: false, error: 'This invitation has no email address and cannot be resent.' };
+    }
+
     // Get inviter details
     const inviter = await UserService.getUserById(invitation.invitedBy.toString());
 
@@ -807,7 +819,7 @@ export async function resendInvitation(invitationId: string): Promise<{
 
     console.log('📧 [Resend Invitation] Resending invitation email...');
     console.log('📧 [Resend Invitation] Email details:', {
-      to: invitation.email,
+      to: recipientEmail,
       organization: organization.name,
       inviter: inviter?.name || inviter?.email || 'Unknown',
       role: invitation.role,
@@ -817,7 +829,7 @@ export async function resendInvitation(invitationId: string): Promise<{
 
     // Send email
     const emailResult = await sendOrganizationInvitation(
-      invitation.email,
+      recipientEmail,
       organization.name,
       inviter?.name || inviter?.email || 'Unknown',
       invitation.role,

@@ -1845,8 +1845,7 @@ export default function CreateInvoicePage() {
 
       // If this is a draft invoice (has _id), update it instead of creating new
       if (formData._id) {
-        // Updating draft invoice...
-
+        // Updating draft invoice (do not set status to 'sent' if invoice is pending_approval – API will reject)
         const updateResponse = await fetch(`/api/invoices/${formData._id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -1856,25 +1855,22 @@ export default function CreateInvoicePage() {
           }))
         });
 
-        // Update invoice response status received
+        const updateData = await updateResponse.json();
 
-        if (!updateResponse.ok) {
+        if (updateResponse.ok && updateData.success) {
+          primaryInvoiceId = updateData.invoice._id;
+          primaryInvoiceNumber = updateData.invoice.invoiceNumber;
+        } else if (updateResponse.status === 403 && updateData.message && String(updateData.message).toLowerCase().includes('pending approval')) {
+          // Invoice is pending approval – API rejected setting status to 'sent'; use existing id and continue to send (send will return requiresApproval)
+          primaryInvoiceId = formData._id;
+          primaryInvoiceNumber = formData.invoiceNumber || '';
+        } else if (!updateResponse.ok) {
           const errorText = await updateResponse.text();
           console.error('❌ [Smart Invoicing] Update invoice response error:', errorText);
-          throw new Error(`Failed to update invoice: ${updateResponse.status} ${errorText}`);
+          throw new Error(updateData.message || `Failed to update invoice: ${updateResponse.status}`);
+        } else {
+          throw new Error(updateData.message || 'Failed to update invoice');
         }
-
-        const updateData = await updateResponse.json();
-        // Update invoice response received
-
-        if (!updateData.success) {
-          throw new Error(`Failed to update invoice: ${updateData.message}`);
-        }
-
-        primaryInvoiceId = updateData.invoice._id;
-        primaryInvoiceNumber = updateData.invoice.invoiceNumber;
-
-        // Draft invoice updated successfully
       } else {
         // Create new invoice
         // Creating new invoice...
@@ -1966,7 +1962,7 @@ export default function CreateInvoicePage() {
       const filesEndTime = Date.now();
       console.log('📄 [PDF Generation] File attachments conversion completed in', filesEndTime - filesStartTime, 'ms');
 
-      let result: { success: boolean; messageId?: string; error?: string };
+      let result: { success: boolean; messageId?: string; error?: string; message?: string; requiresApproval?: boolean; status?: string };
 
       // WhatsApp is disabled - force email mode
       // TODO: Remove this check when re-enabling WhatsApp
@@ -2094,15 +2090,27 @@ export default function CreateInvoicePage() {
         clearSavedData();
         // Redirect to invoices page
         router.push('/dashboard/services/smart-invoicing/invoices');
+      } else if (result.requiresApproval === true || result.status === 'pending_approval') {
+        // Invoice is pending approval – not a failure; tell the user clearly
+        console.log('⏳ [Smart Invoicing] Invoice pending approval:', {
+          invoiceNumber: formData.invoiceNumber,
+          status: 'pending_approval'
+        });
+        toast.success(
+          'This invoice is pending approval. It will be sent to the recipient once an approver approves it.'
+        );
+        clearSavedData();
+        router.push('/dashboard/services/smart-invoicing/invoices');
       } else {
         console.error('❌ [Smart Invoicing] Failed to send invoice:', {
           error: result.error,
+          message: result.message,
           invoiceNumber: formData.invoiceNumber,
           recipient: formData.sendViaWhatsapp ? formData.clientPhone : formData.clientEmail,
           method: formData.sendViaWhatsapp ? 'WhatsApp' : 'Email',
           fullResult: result
         });
-        toast.error(`Failed to send invoice: ${result.error || 'Unknown error occurred'}`);
+        toast.error(`Failed to send invoice: ${result.message || result.error || 'Unknown error occurred'}`);
       }
     } catch (error) {
       console.error('❌ [Smart Invoicing] ========== EXCEPTION IN SEND INVOICE ==========');
@@ -2278,7 +2286,7 @@ export default function CreateInvoicePage() {
 
       // If this is a draft invoice (has _id), update it instead of creating new
       if (formData._id) {
-        // Updating draft invoice...
+        // Updating draft invoice (API will reject status 'sent' when invoice is pending_approval)
         const updateResponse = await fetch(`/api/invoices/${formData._id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -2288,22 +2296,21 @@ export default function CreateInvoicePage() {
           }))
         });
 
-        if (!updateResponse.ok) {
-          const errorText = await updateResponse.text();
-          console.error('❌ [Smart Invoicing] Update invoice response error:', errorText);
-          throw new Error(`Failed to update invoice: ${updateResponse.status} ${errorText}`);
-        }
-
         const updateData = await updateResponse.json();
 
-        if (!updateData.success) {
-          throw new Error(`Failed to update invoice: ${updateData.message}`);
+        if (updateResponse.ok && updateData.success) {
+          primaryInvoiceId = updateData.invoice._id;
+          primaryInvoiceNumber = updateData.invoice.invoiceNumber;
+        } else if (updateResponse.status === 403 && updateData.message && String(updateData.message).toLowerCase().includes('pending approval')) {
+          primaryInvoiceId = formData._id;
+          primaryInvoiceNumber = formData.invoiceNumber || '';
+        } else if (!updateResponse.ok) {
+          const errorText = await updateResponse.text();
+          console.error('❌ [Smart Invoicing] Update invoice response error:', errorText);
+          throw new Error(updateData.message || `Failed to update invoice: ${updateResponse.status}`);
+        } else {
+          throw new Error(updateData.message || 'Failed to update invoice');
         }
-
-        primaryInvoiceId = updateData.invoice._id;
-        primaryInvoiceNumber = updateData.invoice.invoiceNumber;
-
-        // Draft invoice updated successfully
       } else {
         // Create new invoice
         const primaryInvoiceResponse = await fetch('/api/invoices', {
