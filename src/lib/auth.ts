@@ -4,6 +4,7 @@ import CredentialsProvider from 'next-auth/providers/credentials'
 import { UserService } from './services/userService'
 import { createDefaultServices } from './services/serviceManager'
 import { getDatabase } from './database'
+import { ObjectId } from 'mongodb'
 import { defaultCountry } from '@/data/countries'
 import bcrypt from 'bcryptjs'
 
@@ -286,7 +287,10 @@ export const authOptions: NextAuthOptions = {
             if (dbUser.organizationId) {
               try {
                 const db = await getDatabase()
-                const org = await db.collection('organizations').findOne({ _id: dbUser.organizationId })
+                const orgId = typeof dbUser.organizationId === 'string'
+                  ? new ObjectId(dbUser.organizationId)
+                  : dbUser.organizationId
+                const org = await db.collection('organizations').findOne({ _id: orgId })
                 const orgServices = org?.services as Record<string, boolean> | undefined
                 let hasAnyEnabled = orgServices && Object.values(orgServices).some(Boolean)
                 let effectiveServices = hasAnyEnabled && orgServices
@@ -316,11 +320,25 @@ export const authOptions: NextAuthOptions = {
                   }
                 }
                 token.services = effectiveServices
-              } catch {
+                // [Services→Dashboard] Step 2: JWT callback set token.services (org member path)
+                console.log('[Services→Dashboard] JWT callback: org member', {
+                  trigger,
+                  organizationId: dbUser.organizationId?.toString(),
+                  orgFound: !!org,
+                  orgServices: orgServices ? Object.entries(orgServices).filter(([, v]) => v).map(([k]) => k) : [],
+                  tokenServices: Object.entries(token.services as Record<string, boolean>).filter(([, v]) => v).map(([k]) => k),
+                })
+              } catch (err) {
+                console.error('[Services→Dashboard] JWT callback: org lookup failed, using user.services', { organizationId: dbUser.organizationId?.toString(), error: err })
                 token.services = { ...(dbUser.services || createDefaultServices()) } as Record<string, boolean>
               }
             } else {
               token.services = { ...(dbUser.services || createDefaultServices()) } as Record<string, boolean>
+              // [Services→Dashboard] Step 2: JWT callback set token.services (individual path)
+              console.log('[Services→Dashboard] JWT callback: individual', {
+                trigger,
+                tokenServices: Object.entries(token.services as Record<string, boolean>).filter(([, v]) => v).map(([k]) => k),
+              })
             }
             token.mongoId = dbUser._id?.toString()
             token.adminTag = dbUser.adminTag || false
@@ -328,6 +346,37 @@ export const authOptions: NextAuthOptions = {
           }
         } catch {
           // Error fetching latest user data for JWT
+        }
+      }
+
+      // Org members: when not doing full refresh, still refresh token.services and token.onboarding from DB
+      // so dashboard sees completed onboarding and doesn't redirect back to onboarding (avoids flash loop).
+      if (token.email && token.organizationId && !shouldRefresh) {
+        try {
+          const dbUser = await UserService.getUserByEmail(token.email as string)
+          if (dbUser) {
+            const isCompletedFlag = dbUser.onboarding?.isCompleted === true
+            const dataCompleted = (dbUser.onboarding?.data as { completed?: boolean })?.completed
+            const isCompleted = isCompletedFlag || dataCompleted === true || dbUser.onboarding?.currentStep === 4
+            token.onboarding = {
+              completed: isCompleted,
+              currentStep: dbUser.onboarding?.currentStep || 0,
+              completedSteps: dbUser.onboarding?.completedSteps || [],
+              serviceOnboarding: dbUser.onboarding?.data || {}
+            }
+          }
+          const db = await getDatabase()
+          const orgId = typeof token.organizationId === 'string'
+            ? new ObjectId(token.organizationId)
+            : token.organizationId
+          const org = await db.collection('organizations').findOne({ _id: orgId })
+          const orgServices = org?.services as Record<string, boolean> | undefined
+          const hasAnyEnabled = orgServices && Object.values(orgServices).some(Boolean)
+          if (hasAnyEnabled && orgServices) {
+            token.services = { ...createDefaultServices(), ...orgServices } as Record<string, boolean>
+          }
+        } catch {
+          // non-blocking; keep existing token
         }
       }
       

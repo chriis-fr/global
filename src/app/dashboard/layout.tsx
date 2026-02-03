@@ -20,6 +20,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Initialize onboarding store from session on mount and check completion.
   const onboardingInitRef = useRef(false);
   const refreshAttemptedRef = useRef(false);
+  const delayedRetryRef = useRef(false);
   const fetchOnboardingRef = useRef(fetchOnboarding);
 
   // Keep ref in sync with fetchOnboarding function
@@ -36,14 +37,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       return;
     }
 
-    // Check session: onboarding completed OR org member (invited users skip onboarding)
-    const hasOrganization = !!(session.user as { organizationId?: string }).organizationId;
+    // Onboarding is completed only when explicitly completed or step 4 done (invited users get onboarding.completed set on accept)
     const sessionOnboardingCompleted =
-      session.user?.onboarding?.completed ||
-      session.user?.onboarding?.currentStep === 4 ||
-      hasOrganization;
+      session.user?.onboarding?.completed === true ||
+      session.user?.onboarding?.currentStep === 4;
 
-    // If session shows onboarding is completed (or user is org member), allow dashboard immediately
+    // If session shows onboarding is completed, allow dashboard
     if (sessionOnboardingCompleted) {
       onboardingInitRef.current = true;
       if (session.user?.onboarding && session.user?.services) {
@@ -60,19 +59,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       return;
     }
 
-    // Session says not completed: try one JWT refresh (e.g. invited user with stale cookie) before redirecting
+    // Session says not completed: try JWT refresh (e.g. after full-page load from onboarding completion)
     if (!refreshAttemptedRef.current) {
       refreshAttemptedRef.current = true;
       nextAuthUpdate?.()
         .then(() => refreshSession())
         .catch(() => {})
         .finally(() => {
-          // Effect will re-run when session updates; if still not completed we'll redirect then
+          // Effect will re-run when session updates
         });
       return;
     }
 
-    // Already tried refresh; session still not completed — redirect to onboarding
+    // One delayed retry before redirecting (handles slow cookie/session update after onboarding completion)
+    if (!delayedRetryRef.current) {
+      delayedRetryRef.current = true;
+      setTimeout(() => {
+        nextAuthUpdate?.()
+          .then(() => refreshSession())
+          .catch(() => {});
+      }, 1200);
+      return;
+    }
+
+    // Already tried refresh and delayed retry; session still not completed — redirect to onboarding
     onboardingInitRef.current = true;
     const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
     if (currentPath !== '/onboarding' && !currentPath.startsWith('/onboarding')) {
@@ -182,14 +192,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return null;
   }
 
-  // Check onboarding completion: completed in session OR org member (invited users skip onboarding)
-  const hasOrganization = !!(session.user as { organizationId?: string }).organizationId;
+  // Only allow dashboard when onboarding is explicitly completed or step 4 done
   const isOnboardingCompleted =
-    session.user?.onboarding?.completed ||
-    session.user?.onboarding?.currentStep === 4 ||
-    hasOrganization;
+    session.user?.onboarding?.completed === true ||
+    session.user?.onboarding?.currentStep === 4;
   if (!isOnboardingCompleted) {
-    return null; // Will redirect via useEffect
+    return null; // useEffect will redirect to /onboarding
   }
 
   // If we don't know yet, allow dashboard to render (session check will handle redirect)

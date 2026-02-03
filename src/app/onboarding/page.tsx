@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useSession } from '@/lib/auth-client';
 import { 
@@ -86,6 +87,7 @@ const ONBOARDING_STEPS = [
 ];
 
 export default function OnboardingPage() {
+  const router = useRouter();
   const { data: session, status, update: updateSession } = useSession();
   const { onboarding, services: storeServices, setOnboarding, updateOnboarding } = useOnboardingStore();
   const [user, setUser] = useState<User | null>(null);
@@ -307,23 +309,18 @@ export default function OnboardingPage() {
         setUser(prev => prev ? { ...prev, onboarding: updatedOnboarding } : null);
         setCurrentStep(step);
         
-        // If step 4 is completed, refresh session and redirect to dashboard
+        // If step 4 is completed, refresh session then client-navigate to dashboard (keeps updated session in React tree)
         if (isStep4Completed || isCompleted) {
           console.log('🔄 [Onboarding] Step 4 completed, refreshing session and redirecting...');
-          
-          // Force session refresh to update JWT token with new onboarding status
           try {
             await updateSession();
             console.log('✅ [Onboarding] Session refreshed successfully');
+            // Client-side navigation so dashboard layout sees the updated session (avoids full-page load with stale cookie)
+            router.push('/dashboard');
           } catch (error) {
             console.error('❌ [Onboarding] Error refreshing session:', error);
+            router.push('/dashboard');
           }
-          
-          // Redirect to dashboard after a short delay to ensure session is updated
-          setTimeout(() => {
-            console.log('🚀 [Onboarding] Redirecting to dashboard...');
-            window.location.href = '/dashboard';
-          }, 1000);
         }
       }
     } catch (error) {
@@ -357,6 +354,12 @@ export default function OnboardingPage() {
         // Update store with new services
         if (onboarding) {
           setOnboarding(onboarding, updatedServices);
+        }
+        // Refresh session so JWT gets new org/user services; otherwise dashboard shows stale services
+        try {
+          await updateSession();
+        } catch {
+          // non-blocking; local state is already updated
         }
       } else {
         console.error('Failed to toggle service:', data.message);

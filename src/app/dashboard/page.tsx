@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, Suspense, startTransition } from 'react';
+import { useState, useEffect, useRef, Suspense, startTransition } from 'react';
 import { useSession } from '@/lib/auth-client';
 import { useRouter } from 'next/navigation';
 import { 
@@ -18,17 +18,37 @@ import RecentPayables from '@/components/dashboard/RecentPayables';
 import { getUserSettings } from '@/app/actions/user-actions';
 
 export default function DashboardPage() {
-  const { data: session } = useSession();
+  const { data: session, update: updateSession } = useSession();
   const { subscription, refetch } = useSubscription(); // Don't block on loading
   const router = useRouter();
   const [userName, setUserName] = useState<string>('');
   const [organizationName, setOrganizationName] = useState<string>('');
   const [mounted, setMounted] = useState(false);
+  const sessionRefreshDoneRef = useRef(false);
 
   // Avoid hydration mismatch: isPaidUser depends on client-loaded subscription
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // After onboarding redirect, session can have stale services; refresh once so services show (both individual and org users)
+  useEffect(() => {
+    if (!session?.user?.id || sessionRefreshDoneRef.current) return;
+    sessionRefreshDoneRef.current = true;
+    updateSession?.().catch(() => {});
+  }, [session?.user?.id, session?.user, updateSession]);
+
+  // [Services→Dashboard] Step 3: Log what the dashboard sees (browser DevTools Console). Check after onboarding that enabled services appear here.
+  useEffect(() => {
+    if (!session?.user || !mounted) return;
+    const services = (session.user as { services?: Record<string, boolean> }).services;
+    const enabled = services ? Object.entries(services).filter(([, v]) => v).map(([k]) => k) : [];
+    console.log('[Services→Dashboard] Dashboard session.user.services', {
+      enabled,
+      smartInvoicing: services?.smartInvoicing ?? false,
+      accountsPayable: services?.accountsPayable ?? false,
+    });
+  }, [session?.user, mounted]);
 
   // Refresh subscription on mount to ensure we have the latest data
   useEffect(() => {
@@ -296,39 +316,51 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Recent Activity - Independent Loading with Suspense */}
+      {/* Recent Activity - Independent Loading with Suspense (gated by mounted to avoid hydration mismatch) */}
       <div className={`grid gap-6 ${
-        canShowCreateInvoice && canShowCreatePayable 
-          ? 'grid-cols-1 lg:grid-cols-2' 
-          : 'grid-cols-1'
+        !mounted ? 'grid-cols-1' : (canShowCreateInvoice && canShowCreatePayable ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1')
       }`}>
-        {canShowCreateInvoice && (
-          <Suspense fallback={
-            <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6">
-              <div className="h-6 w-32 bg-white/20 rounded mb-4 animate-pulse"></div>
-              <div className="space-y-4">
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="h-16 bg-white/10 rounded-lg animate-pulse"></div>
-                ))}
-              </div>
+        {!mounted ? (
+          /* Placeholder so server and client first paint match */
+          <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6">
+            <div className="h-6 w-32 bg-white/20 rounded mb-4 animate-pulse" />
+            <div className="space-y-4">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-16 bg-white/10 rounded-lg animate-pulse" />
+              ))}
             </div>
-          }>
-            <RecentInvoices />
-          </Suspense>
-        )}
-        {canShowCreatePayable && (
-          <Suspense fallback={
-            <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6">
-              <div className="h-6 w-32 bg-white/20 rounded mb-4 animate-pulse"></div>
-              <div className="space-y-4">
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="h-16 bg-white/10 rounded-lg animate-pulse"></div>
-                ))}
-              </div>
-            </div>
-          }>
-            <RecentPayables />
-          </Suspense>
+          </div>
+        ) : (
+          <>
+            {canShowCreateInvoice && (
+              <Suspense fallback={
+                <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6">
+                  <div className="h-6 w-32 bg-white/20 rounded mb-4 animate-pulse"></div>
+                  <div className="space-y-4">
+                    {[...Array(3)].map((_, i) => (
+                      <div key={i} className="h-16 bg-white/10 rounded-lg animate-pulse"></div>
+                    ))}
+                  </div>
+                </div>
+              }>
+                <RecentInvoices />
+              </Suspense>
+            )}
+            {canShowCreatePayable && (
+              <Suspense fallback={
+                <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6">
+                  <div className="h-6 w-32 bg-white/20 rounded mb-4 animate-pulse"></div>
+                  <div className="space-y-4">
+                    {[...Array(3)].map((_, i) => (
+                      <div key={i} className="h-16 bg-white/10 rounded-lg animate-pulse"></div>
+                    ))}
+                  </div>
+                </div>
+              }>
+                <RecentPayables />
+              </Suspense>
+            )}
+          </>
         )}
       </div>
     </div>

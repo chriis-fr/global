@@ -104,7 +104,7 @@ export default function PermissionMatrix({
 
     return (
       <div className="text-sm text-gray-400">
-        {grantedPermissions}/{totalPermissions} permissions granted
+        {grantedPermissions} of {totalPermissions} permissions for this role
       </div>
     );
   }

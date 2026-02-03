@@ -5,8 +5,12 @@ import { User, Crown, Shield, DollarSign, Calculator, CheckCircle, Edit, Trash2,
 import Image from 'next/image';
 import { OrganizationMember } from '@/models/Organization';
 import { type RoleKey } from '@/lib/utils/roles';
-import PermissionMatrix from './PermissionMatrix';
 import { formatDateReadable } from '@/lib/utils/dateFormat';
+
+interface OrgServices {
+  smartInvoicing?: boolean;
+  accountsPayable?: boolean;
+}
 
 interface MemberCardProps {
   member: OrganizationMember;
@@ -15,6 +19,7 @@ interface MemberCardProps {
   onRemoveMember?: (memberId: string) => void;
   isEditing?: boolean;
   isUpdating?: boolean;
+  orgServices?: OrgServices;
 }
 
 export default function MemberCard({
@@ -23,7 +28,8 @@ export default function MemberCard({
   onEditRole,
   onRemoveMember,
   isEditing = false,
-  isUpdating = false
+  isUpdating = false,
+  orgServices
 }: MemberCardProps) {
   const [showPermissions, setShowPermissions] = useState(false);
 
@@ -137,11 +143,18 @@ export default function MemberCard({
 
       {showPermissions && (
         <div className="mt-4 pt-4 border-t border-white/10">
-          <PermissionMatrix 
-            role={member.role as RoleKey} 
-            permissions={member.permissions}
-            compact={true}
-          />
+          <p className="text-blue-200 text-sm font-medium mb-1">
+            Permissions for {member.name || member.email}
+          </p>
+          <p className="text-gray-400 text-xs">
+            {orgServices?.smartInvoicing && orgServices?.accountsPayable
+              ? 'They can create invoices and bills.'
+              : orgServices?.smartInvoicing
+                ? 'They can create invoices.'
+                : orgServices?.accountsPayable
+                  ? 'They can create bills.'
+                  : 'They can create invoices or bills depending on which services your organization has enabled.'}
+          </p>
         </div>
       )}
 
