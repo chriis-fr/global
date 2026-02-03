@@ -171,8 +171,8 @@ export default function DashboardPage() {
         </div> */}
       </div>
 
-      {/* Plan Status Banner - Only show for receivables free users */}
-      {subscription && subscription.plan?.planId === 'receivables-free' && hasReceivablesAccess && (
+      {/* Plan Status Banner - Only show for receivables free users (defer until mounted to avoid hydration mismatch) */}
+      {mounted && subscription && subscription.plan?.planId === 'receivables-free' && hasReceivablesAccess && (
         <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-3 md:p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2 md:space-x-3">
@@ -228,38 +228,45 @@ export default function DashboardPage() {
         <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
           <h3 className="text-lg font-semibold text-white mb-4">Quick Actions</h3>
           <div className="flex flex-col space-y-3">
-            {/* Defer until mounted to avoid hydration mismatch (session.services / subscription differ on server vs client) */}
-            {mounted && canShowCreateInvoice && (
-              <button
-                onClick={() => router.push('/dashboard/services/smart-invoicing/create')}
-                disabled={!subscription?.canCreateInvoice}
-                className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
-                  subscription?.canCreateInvoice
-                    ? 'bg-blue-600 text-white hover:bg-blue-700'
-                    : 'bg-gray-500 text-gray-300 cursor-not-allowed'
-                }`}
-              >
-                <FileText className="h-5 w-5" />
-                <span>Create Invoice</span>
-                {!subscription?.canCreateInvoice && (
-                  <>
-                    <span className="text-xs ml-auto">Limit Reached</span>
-                    <Lock className="h-4 w-4" />
-                  </>
+            {!mounted ? (
+              /* Placeholder when not mounted so server and client first paint match (avoids hydration mismatch) */
+              <>
+                <div className="flex items-center space-x-3 px-4 py-3 rounded-lg bg-white/5 animate-pulse h-12 w-full max-w-xs" aria-hidden />
+                <div className="flex items-center space-x-3 px-4 py-3 rounded-lg bg-white/5 animate-pulse h-12 w-full max-w-xs" aria-hidden />
+              </>
+            ) : (
+              <>
+                {canShowCreateInvoice && (
+                  <button
+                    onClick={() => router.push('/dashboard/services/smart-invoicing/create')}
+                    disabled={!subscription?.canCreateInvoice}
+                    className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+                      subscription?.canCreateInvoice
+                        ? 'bg-blue-600 text-white hover:bg-blue-700'
+                        : 'bg-gray-500 text-gray-300 cursor-not-allowed'
+                    }`}
+                  >
+                    <FileText className="h-5 w-5" />
+                    <span>Create Invoice</span>
+                    {!subscription?.canCreateInvoice && (
+                      <>
+                        <span className="text-xs ml-auto">Limit Reached</span>
+                        <Lock className="h-4 w-4" />
+                      </>
+                    )}
+                  </button>
                 )}
-              </button>
+                {canShowCreatePayable && (
+                  <button
+                    onClick={() => router.push('/dashboard/services/payables/create')}
+                    className="flex items-center space-x-3 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    <Receipt className="h-5 w-5" />
+                    <span>Create Payable</span>
+                  </button>
+                )}
+              </>
             )}
-            
-            {mounted && canShowCreatePayable && (
-              <button
-                onClick={() => router.push('/dashboard/services/payables/create')}
-                className="flex items-center space-x-3 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <Receipt className="h-5 w-5" />
-                <span>Create Payable</span>
-              </button>
-            )}
-
           </div>
         </div>
 

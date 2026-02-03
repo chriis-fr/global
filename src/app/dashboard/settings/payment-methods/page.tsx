@@ -99,7 +99,7 @@ export default function PaymentMethodsPage() {
     branchAddress: '',
     accountType: 'checking' as 'checking' | 'savings' | 'business',
     // Custom bank fields
-    bankCountryCode: 'KE' as 'GH' | 'KE',
+    bankCountryCode: 'KE' as 'GH' | 'KE' | 'AE',
     customFields: {} as Record<string, string>,
     // M-Pesa fields
     paybillNumber: '',
@@ -527,7 +527,7 @@ export default function PaymentMethodsPage() {
                     accountNumber: '',
                     branchAddress: '',
                     accountType: 'checking' as 'checking' | 'savings' | 'business',
-                    bankCountryCode: 'KE' as 'GH' | 'KE',
+                    bankCountryCode: 'KE' as 'GH' | 'KE' | 'AE',
                     customFields: {} as Record<string, string>,
                     paybillNumber: '',
                     mpesaAccountNumber: '',
@@ -644,11 +644,12 @@ export default function PaymentMethodsPage() {
                             <div className="relative">
                               <select
                                 value={newPaymentMethod.bankCountryCode || 'KE'}
-                                onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, bankCountryCode: e.target.value as 'GH' | 'KE' }))}
+                                onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, bankCountryCode: e.target.value as 'GH' | 'KE' | 'AE' }))}
                                 className="text-xs text-gray-600 bg-transparent border-none outline-none cursor-pointer pr-4 appearance-none"
                               >
                                 <option value="GH">Ghana</option>
                                 <option value="KE">Kenya</option>
+                                <option value="AE">UAE</option>
                               </select>
                               <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-600 pointer-events-none" />
                             </div>
