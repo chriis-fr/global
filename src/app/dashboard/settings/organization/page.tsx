@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Building2, Users, Edit, User, Plus, Image, Crown, Settings } from 'lucide-react';
+import { Building2, Users, Edit, User, Plus, Image, Crown, Settings, ChevronDown, Search } from 'lucide-react';
+import { countries } from '@/data/countries';
 import { LogoManager } from '@/components/LogoManager';
 import { LogoDisplay } from '@/components/LogoDisplay';
 import { ApprovalSettingsComponent } from '@/components/settings/ApprovalSettings';
@@ -29,6 +30,8 @@ interface Organization {
   phone: string;
   billingEmail: string;
   address: OrganizationAddress;
+  taxId?: string;
+  registrationNumber?: string;
   status: 'pending' | 'active' | 'suspended';
   verified: boolean;
   createdAt: string;
@@ -50,6 +53,7 @@ interface CreateOrganizationForm {
   businessType: 'LLC' | 'Corporation' | 'Partnership' | 'Sole Proprietorship';
   phone: string;
   billingEmail: string;
+  taxId: string;
   address: {
     street: string;
     city: string;
@@ -74,6 +78,10 @@ export default function OrganizationSettingsPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [isEditingOrg, setIsEditingOrg] = useState(false);
+  const [savingOrg, setSavingOrg] = useState(false);
+  const [showCountryDropdown, setShowCountryDropdown] = useState(false);
+  const [countrySearch, setCountrySearch] = useState('');
   const [selectedLogo, setSelectedLogo] = useState<Logo | null>(null);
   const [formData, setFormData] = useState<CreateOrganizationForm>({
     name: '',
@@ -82,6 +90,7 @@ export default function OrganizationSettingsPage() {
     businessType: 'LLC',
     phone: '',
     billingEmail: '',
+    taxId: '',
     address: {
       street: '',
       city: '',
@@ -113,8 +122,8 @@ export default function OrganizationSettingsPage() {
   };
 
   const handleCreateOrganization = async () => {
-    if (!formData.name || !formData.industry || !formData.billingEmail) {
-      setMessage({ type: 'error', text: 'Please fill in all required fields (Name, Industry, and Billing Email)' });
+    if (!formData.name?.trim() || !formData.billingEmail?.trim()) {
+      setMessage({ type: 'error', text: 'Please fill in Organization Name and Billing Email.' });
       return;
     }
 
@@ -133,6 +142,7 @@ export default function OrganizationSettingsPage() {
       if (data.success) {
         setMessage({ type: 'success', text: 'Organization created successfully! You can now collaborate with team members.' });
         setShowCreateForm(false);
+        setShowCountryDropdown(false);
         // Refresh organization data
         await fetchOrganizationData();
       } else {
@@ -166,6 +176,67 @@ export default function OrganizationSettingsPage() {
 
   const handleUpgradeToPro = () => {
     router.push('/pricing');
+  };
+
+  const startEditingOrg = () => {
+    if (!orgInfo?.organization) return;
+    const org = orgInfo.organization;
+    const addr = org.address || { street: '', city: '', country: '', postalCode: '' };
+    setFormData({
+      name: org.name || '',
+      industry: org.industry || '',
+      companySize: org.companySize || '1-10',
+      businessType: org.businessType || 'LLC',
+      phone: org.phone || '',
+      billingEmail: org.billingEmail || '',
+      taxId: org.taxId || '',
+      address: {
+        street: addr.street || '',
+        city: addr.city || '',
+        country: addr.country || '',
+        postalCode: addr.postalCode || ''
+      }
+    });
+    setIsEditingOrg(true);
+  };
+
+  const handleUpdateOrganization = async () => {
+    if (!orgInfo?.organization) return;
+    if (!formData.name?.trim()) {
+      setMessage({ type: 'error', text: 'Organization name is required.' });
+      return;
+    }
+    setSavingOrg(true);
+    setMessage(null);
+    try {
+      const response = await fetch('/api/organization', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.name.trim(),
+          industry: formData.industry || undefined,
+          companySize: formData.companySize,
+          businessType: formData.businessType,
+          phone: formData.phone || undefined,
+          taxId: formData.taxId?.trim() || undefined,
+          address: formData.address
+        })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setMessage({ type: 'success', text: 'Organization updated.' });
+        setIsEditingOrg(false);
+        setShowCountryDropdown(false);
+        await fetchOrganizationData();
+      } else {
+        setMessage({ type: 'error', text: data.message || 'Failed to update organization' });
+      }
+    } catch (error) {
+      console.error('Error updating organization:', error);
+      setMessage({ type: 'error', text: 'Failed to update organization.' });
+    } finally {
+      setSavingOrg(false);
+    }
   };
 
   // Check if user has organization access (Pro plans for individuals, or organization membership)
@@ -326,7 +397,7 @@ export default function OrganizationSettingsPage() {
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-semibold text-white">Create Organization</h3>
                 <button
-                  onClick={() => setShowCreateForm(false)}
+                  onClick={() => { setShowCreateForm(false); setShowCountryDropdown(false); }}
                   className="text-blue-300 hover:text-white transition-colors"
                 >
                   Cancel
@@ -349,55 +420,47 @@ export default function OrganizationSettingsPage() {
                 
                 <div>
                   <label className="block text-blue-300 text-sm font-medium mb-2">
-                    Industry *
+                    Industry
                   </label>
-                  <select
+                  <input
+                    type="text"
                     value={formData.industry}
                     onChange={(e) => handleInputChange('industry', e.target.value)}
-                    className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Select Industry</option>
-                    <option value="technology">Technology</option>
-                    <option value="healthcare">Healthcare</option>
-                    <option value="finance">Finance</option>
-                    <option value="education">Education</option>
-                    <option value="retail">Retail</option>
-                    <option value="manufacturing">Manufacturing</option>
-                    <option value="consulting">Consulting</option>
-                    <option value="other">Other</option>
-                  </select>
+                    className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g. Technology, Healthcare"
+                  />
                 </div>
 
                 <div>
                   <label className="block text-blue-300 text-sm font-medium mb-2">
                     Company Size
                   </label>
-                                     <select
-                     value={formData.companySize}
-                     onChange={(e) => handleInputChange('companySize', e.target.value as '1-10' | '11-50' | '51-200' | '200+')}
-                     className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                   >
-                     <option value="1-10">1-10 employees</option>
-                     <option value="11-50">11-50 employees</option>
-                     <option value="51-200">51-200 employees</option>
-                     <option value="200+">200+ employees</option>
-                   </select>
+                  <select
+                    value={formData.companySize}
+                    onChange={(e) => handleInputChange('companySize', e.target.value as '1-10' | '11-50' | '51-200' | '200+')}
+                    className="w-full px-3 py-2 bg-gray-800 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="1-10" className="bg-gray-800 text-white">1-10 employees</option>
+                    <option value="11-50" className="bg-gray-800 text-white">11-50 employees</option>
+                    <option value="51-200" className="bg-gray-800 text-white">51-200 employees</option>
+                    <option value="200+" className="bg-gray-800 text-white">200+ employees</option>
+                  </select>
                 </div>
 
                 <div>
                   <label className="block text-blue-300 text-sm font-medium mb-2">
                     Business Type
                   </label>
-                                     <select
-                     value={formData.businessType}
-                     onChange={(e) => handleInputChange('businessType', e.target.value as 'LLC' | 'Corporation' | 'Partnership' | 'Sole Proprietorship')}
-                     className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                   >
-                     <option value="LLC">LLC</option>
-                     <option value="Corporation">Corporation</option>
-                     <option value="Partnership">Partnership</option>
-                     <option value="Sole Proprietorship">Sole Proprietorship</option>
-                   </select>
+                  <select
+                    value={formData.businessType}
+                    onChange={(e) => handleInputChange('businessType', e.target.value as 'LLC' | 'Corporation' | 'Partnership' | 'Sole Proprietorship')}
+                    className="w-full px-3 py-2 bg-gray-800 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="LLC" className="bg-gray-800 text-white">LLC</option>
+                    <option value="Corporation" className="bg-gray-800 text-white">Corporation</option>
+                    <option value="Partnership" className="bg-gray-800 text-white">Partnership</option>
+                    <option value="Sole Proprietorship" className="bg-gray-800 text-white">Sole Proprietorship</option>
+                  </select>
                 </div>
 
                 <div>
@@ -410,6 +473,19 @@ export default function OrganizationSettingsPage() {
                     onChange={(e) => handleInputChange('phone', e.target.value)}
                     className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Enter phone number"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-blue-300 text-sm font-medium mb-2">
+                    Tax ID
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.taxId}
+                    onChange={(e) => handleInputChange('taxId', e.target.value)}
+                    className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter tax ID"
                   />
                 </div>
 
@@ -460,13 +536,59 @@ export default function OrganizationSettingsPage() {
                     <label className="block text-blue-300 text-sm font-medium mb-2">
                       Country
                     </label>
-                    <input
-                      type="text"
-                      value={formData.address.country}
-                      onChange={(e) => handleInputChange('address.country', e.target.value)}
-                      className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Enter country"
-                    />
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setShowCountryDropdown(!showCountryDropdown)}
+                        className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-left flex items-center justify-between"
+                      >
+                        <span className={formData.address.country ? 'text-white' : 'text-gray-400'}>
+                          {formData.address.country
+                            ? `${countries.find(c => c.code === formData.address.country)?.name ?? formData.address.country} (${formData.address.country})`
+                            : 'Search and select country'}
+                        </span>
+                        <ChevronDown className={`h-4 w-4 text-blue-300 transition-transform ${showCountryDropdown ? 'rotate-180' : ''}`} />
+                      </button>
+                      {showCountryDropdown && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-gray-800 border border-white/20 rounded-lg max-h-60 overflow-hidden z-20 shadow-xl">
+                          <div className="p-2 border-b border-white/10">
+                            <div className="relative">
+                              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-300" />
+                              <input
+                                type="text"
+                                value={countrySearch}
+                                onChange={(e) => setCountrySearch(e.target.value)}
+                                placeholder="Search countries..."
+                                className="w-full pl-9 pr-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                          </div>
+                          <div className="max-h-48 overflow-y-auto">
+                            {countries
+                              .filter(c =>
+                                c.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                                c.code.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                                c.phoneCode.includes(countrySearch)
+                              )
+                              .map(c => (
+                                <button
+                                  key={c.code}
+                                  type="button"
+                                  onClick={() => {
+                                    handleInputChange('address.country', c.code);
+                                    setShowCountryDropdown(false);
+                                    setCountrySearch('');
+                                  }}
+                                  className="w-full px-3 py-2 text-left text-white hover:bg-white/10 transition-colors flex items-center justify-between border-b border-white/5 last:border-b-0"
+                                >
+                                  <span className="text-sm">{c.name}</span>
+                                  <span className="text-blue-300 text-xs font-medium">{c.code}</span>
+                                </button>
+                              ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div>
@@ -539,9 +661,7 @@ export default function OrganizationSettingsPage() {
               <div className="flex space-x-2">
                 {(orgInfo.userRole === 'owner' || orgInfo.userRole === 'admin') && (
                   <button
-                    onClick={() => {
-                      setMessage({ type: 'success', text: 'Organization editing coming soon!' });
-                    }}
+                    onClick={startEditingOrg}
                     className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-1"
                   >
                     <Edit className="h-4 w-4" />
@@ -558,6 +678,215 @@ export default function OrganizationSettingsPage() {
               </div>
             </div>
             
+            {isEditingOrg ? (
+              <>
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-lg font-semibold text-white">Edit Organization</h3>
+                  <button
+                    onClick={() => setIsEditingOrg(false)}
+                    className="text-blue-300 hover:text-white transition-colors"
+                    disabled={savingOrg}
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-blue-300 text-sm font-medium mb-2">Organization Name *</label>
+                    <input
+                      type="text"
+                      value={formData.name}
+                      onChange={(e) => handleInputChange('name', e.target.value)}
+                      className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Enter organization name"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-blue-300 text-sm font-medium mb-2">Industry</label>
+                    <input
+                      type="text"
+                      value={formData.industry}
+                      onChange={(e) => handleInputChange('industry', e.target.value)}
+                      className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="e.g. Technology, Healthcare"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-blue-300 text-sm font-medium mb-2">Company Size</label>
+                    <select
+                      value={formData.companySize}
+                      onChange={(e) => handleInputChange('companySize', e.target.value as '1-10' | '11-50' | '51-200' | '200+')}
+                      className="w-full px-3 py-2 bg-gray-800 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="1-10" className="bg-gray-800 text-white">1-10 employees</option>
+                      <option value="11-50" className="bg-gray-800 text-white">11-50 employees</option>
+                      <option value="51-200" className="bg-gray-800 text-white">51-200 employees</option>
+                      <option value="200+" className="bg-gray-800 text-white">200+ employees</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-blue-300 text-sm font-medium mb-2">Business Type</label>
+                    <select
+                      value={formData.businessType}
+                      onChange={(e) => handleInputChange('businessType', e.target.value as 'LLC' | 'Corporation' | 'Partnership' | 'Sole Proprietorship')}
+                      className="w-full px-3 py-2 bg-gray-800 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="LLC" className="bg-gray-800 text-white">LLC</option>
+                      <option value="Corporation" className="bg-gray-800 text-white">Corporation</option>
+                      <option value="Partnership" className="bg-gray-800 text-white">Partnership</option>
+                      <option value="Sole Proprietorship" className="bg-gray-800 text-white">Sole Proprietorship</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-blue-300 text-sm font-medium mb-2">Phone</label>
+                    <input
+                      type="tel"
+                      value={formData.phone}
+                      onChange={(e) => handleInputChange('phone', e.target.value)}
+                      className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Enter phone number"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-blue-300 text-sm font-medium mb-2">Tax ID</label>
+                    <input
+                      type="text"
+                      value={formData.taxId}
+                      onChange={(e) => handleInputChange('taxId', e.target.value)}
+                      className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Enter tax ID"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-blue-300 text-sm font-medium mb-2">Billing Email</label>
+                    <input
+                      type="email"
+                      value={formData.billingEmail}
+                      readOnly
+                      className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white cursor-not-allowed text-sm"
+                    />
+                    <p className="text-blue-200/80 text-xs mt-1">Billing email cannot be changed here.</p>
+                  </div>
+                </div>
+                <div className="mt-6">
+                  <h4 className="text-blue-300 font-medium mb-3">Address</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                      <label className="block text-blue-300 text-sm font-medium mb-2">Street</label>
+                      <input
+                        type="text"
+                        value={formData.address.street}
+                        onChange={(e) => handleInputChange('address.street', e.target.value)}
+                        className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Enter street address"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-blue-300 text-sm font-medium mb-2">City</label>
+                      <input
+                        type="text"
+                        value={formData.address.city}
+                        onChange={(e) => handleInputChange('address.city', e.target.value)}
+                        className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Enter city"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-blue-300 text-sm font-medium mb-2">Country</label>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setShowCountryDropdown(!showCountryDropdown)}
+                          className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-left flex items-center justify-between"
+                        >
+                          <span className={formData.address.country ? 'text-white' : 'text-gray-400'}>
+                            {formData.address.country
+                              ? `${countries.find(c => c.code === formData.address.country)?.name ?? formData.address.country} (${formData.address.country})`
+                              : 'Search and select country'}
+                          </span>
+                          <ChevronDown className={`h-4 w-4 text-blue-300 transition-transform ${showCountryDropdown ? 'rotate-180' : ''}`} />
+                        </button>
+                        {showCountryDropdown && (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-gray-800 border border-white/20 rounded-lg max-h-60 overflow-hidden z-20 shadow-xl">
+                            <div className="p-2 border-b border-white/10">
+                              <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-300" />
+                                <input
+                                  type="text"
+                                  value={countrySearch}
+                                  onChange={(e) => setCountrySearch(e.target.value)}
+                                  placeholder="Search countries..."
+                                  className="w-full pl-9 pr-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                              </div>
+                            </div>
+                            <div className="max-h-48 overflow-y-auto">
+                              {countries
+                                .filter(c =>
+                                  c.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                                  c.code.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                                  c.phoneCode.includes(countrySearch)
+                                )
+                                .map(c => (
+                                  <button
+                                    key={c.code}
+                                    type="button"
+                                    onClick={() => {
+                                      handleInputChange('address.country', c.code);
+                                      setShowCountryDropdown(false);
+                                      setCountrySearch('');
+                                    }}
+                                    className="w-full px-3 py-2 text-left text-white hover:bg-white/10 transition-colors flex items-center justify-between border-b border-white/5 last:border-b-0"
+                                  >
+                                    <span className="text-sm">{c.name}</span>
+                                    <span className="text-blue-300 text-xs font-medium">{c.code}</span>
+                                  </button>
+                                ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-blue-300 text-sm font-medium mb-2">Postal Code</label>
+                      <input
+                        type="text"
+                        value={formData.address.postalCode}
+                        onChange={(e) => handleInputChange('address.postalCode', e.target.value)}
+                        className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Enter postal code"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-6 flex justify-end space-x-3">
+                  <button
+                    onClick={() => { setIsEditingOrg(false); setShowCountryDropdown(false); }}
+                    className="px-4 py-2 text-blue-300 hover:text-white transition-colors"
+                    disabled={savingOrg}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleUpdateOrganization}
+                    disabled={savingOrg}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 disabled:opacity-50"
+                  >
+                    {savingOrg ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Edit className="h-4 w-4" />
+                        <span>Save</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </>
+            ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm w-full">
               <div>
                 <span className="text-blue-300">Industry:</span>
@@ -586,13 +915,20 @@ export default function OrganizationSettingsPage() {
                 <span className="text-blue-300">Billing Email:</span>
                 <span className="text-white ml-2">{orgInfo.organization.billingEmail}</span>
               </div>
+              {(orgInfo.organization.taxId != null && orgInfo.organization.taxId !== '') && (
+                <div>
+                  <span className="text-blue-300">Tax ID:</span>
+                  <span className="text-white ml-2">{orgInfo.organization.taxId}</span>
+                </div>
+              )}
               <div className="md:col-span-2">
                 <span className="text-blue-300">Address:</span>
                 <span className="text-white ml-2 break-words">
-                  {orgInfo.organization.address.street}, {orgInfo.organization.address.city}, {orgInfo.organization.address.country} {orgInfo.organization.address.postalCode}
+                  {orgInfo.organization.address?.street}, {orgInfo.organization.address?.city}, {orgInfo.organization.address?.country} {orgInfo.organization.address?.postalCode}
                 </span>
               </div>
             </div>
+            )}
           </div>
 
           {/* Logo Management Section */}

@@ -294,7 +294,11 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
                   <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-white pointer-events-none" />
                 </div>
                  {getAvailableFallbackApprovers().length === 0 && (
-                   <div className="text-sm text-yellow-400 mt-1">No admins/owners available.</div>
+                   <div className="text-sm text-blue-200 mt-1">
+                     {settings.approvalRules.fallbackApprovers.length > 0
+                       ? "You've already added all admins and owners."
+                       : "No admins or owners in your organization yet."}
+                   </div>
                  )}
               </div>
               <p className="text-blue-200 text-xs mb-3">Admins/owners who can approve when there aren’t enough approvers.</p>
