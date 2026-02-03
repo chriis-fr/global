@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { UserService } from '@/lib/services/userService';
+import { OrganizationService } from '@/lib/services/organizationService';
 import { SERVICE_DEFINITIONS, ServiceKey, enableService, disableService, getEnabledServices, createDefaultServices } from '@/lib/services/serviceManager';
 
 // GET /api/services - Get all available services
@@ -106,15 +107,28 @@ export async function POST(request: NextRequest) {
     }
 
     const updatedUser = await UserService.updateUser(user._id.toString(), { services: updatedServices });
-    
+
     if (!updatedUser) {
       return NextResponse.json(
-        { 
-          success: false, 
-          message: 'Failed to update user services' 
+        {
+          success: false,
+          message: 'Failed to update user services'
         },
         { status: 500 }
       );
+    }
+
+    // When user belongs to an organization, also update the organization's services so
+    // session/JWT (which reads org.services for org members) and all members see the same.
+    if (user.organizationId) {
+      try {
+        await OrganizationService.updateOrganization(user.organizationId.toString(), {
+          services: updatedServices
+        });
+      } catch (err) {
+        console.error('[Services→Dashboard] POST /api/services: org sync failed', { organizationId: user.organizationId?.toString(), error: err });
+        // Continue; user services were updated; org sync is best-effort
+      }
     }
 
     const enabledServices = getEnabledServices(updatedUser.services ? { ...createDefaultServices(), ...updatedUser.services } : createDefaultServices());

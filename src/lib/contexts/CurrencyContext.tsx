@@ -125,13 +125,18 @@ export function CurrencyProvider({
   };
 
   const formatAmount = (amount: number, currencyCode?: string): string => {
-    const code = currencyCode || preferredCurrency;
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: code,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(amount);
+    const code = (currencyCode || preferredCurrency).trim().toUpperCase();
+    try {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: code,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(amount);
+    } catch {
+      // Crypto or other non-ISO codes (e.g. USDT) — Intl doesn't support them
+      return `${code} ${Number(amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
   };
 
   const value: CurrencyContextType = {

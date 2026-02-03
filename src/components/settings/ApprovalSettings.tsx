@@ -1,18 +1,18 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Settings, DollarSign, Users, Mail, Save, AlertCircle, ChevronDown, X } from 'lucide-react';
+import { Settings, Save, AlertCircle, ChevronDown, X, Loader2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { ApprovalSettings } from '@/types/approval';
 import { SettingsGuard } from '@/components/PermissionGuard';
 import { OrganizationMember } from '@/models/Organization';
-
 interface ApprovalSettingsProps {
   onSave?: (settings: ApprovalSettings) => void;
 }
 
 export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
   const [settings, setSettings] = useState<ApprovalSettings>({
-    requireApproval: true,
+    requireApproval: false,
     approvalRules: {
       amountThresholds: {
         low: 100,      // Under $100 - auto approve
@@ -109,6 +109,7 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
   };
 
   const saveSettings = async () => {
+    const toastId = toast.loading('Saving settings...');
     try {
       setSaving(true);
       setError(null);
@@ -129,12 +130,15 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
         if (onSave) {
           onSave(settings);
         }
+        toast.success('Settings saved.', { id: toastId });
       } else {
         setError(data.message || 'Failed to save approval settings');
+        toast.error(data.message || 'Failed to save approval settings', { id: toastId });
       }
     } catch (err) {
       console.error('Error saving approval settings:', err);
       setError('Failed to save approval settings');
+      toast.error('Failed to save approval settings', { id: toastId });
     } finally {
       setSaving(false);
     }
@@ -184,38 +188,6 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
     return organizationMembers.find(member => member.email === email);
   };
 
-  const addVendorToWhitelist = () => {
-    const vendor = prompt('Enter vendor name:');
-    if (vendor && !settings.approvalRules.autoApprove.conditions.vendorWhitelist.includes(vendor)) {
-      handleInputChange('approvalRules.autoApprove.conditions.vendorWhitelist', [
-        ...settings.approvalRules.autoApprove.conditions.vendorWhitelist,
-        vendor
-      ]);
-    }
-  };
-
-  const removeVendorFromWhitelist = (vendor: string) => {
-    handleInputChange('approvalRules.autoApprove.conditions.vendorWhitelist',
-      settings.approvalRules.autoApprove.conditions.vendorWhitelist.filter(v => v !== vendor)
-    );
-  };
-
-  const addCategoryToWhitelist = () => {
-    const category = prompt('Enter category:');
-    if (category && !settings.approvalRules.autoApprove.conditions.categoryWhitelist.includes(category)) {
-      handleInputChange('approvalRules.autoApprove.conditions.categoryWhitelist', [
-        ...settings.approvalRules.autoApprove.conditions.categoryWhitelist,
-        category
-      ]);
-    }
-  };
-
-  const removeCategoryFromWhitelist = (category: string) => {
-    handleInputChange('approvalRules.autoApprove.conditions.categoryWhitelist',
-      settings.approvalRules.autoApprove.conditions.categoryWhitelist.filter(c => c !== category)
-    );
-  };
-
   useEffect(() => {
     fetchSettings();
   }, []);
@@ -253,20 +225,10 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
           <h2 className="text-xl font-semibold text-white">Approval Settings</h2>
         </div>
         
-               <div className="p-4 bg-blue-500/20 border border-blue-400/30 rounded-lg">
-                 <div className="flex items-start space-x-2">
-                   <AlertCircle className="h-5 w-5 text-blue-300 mt-0.5 flex-shrink-0" />
-                   <div>
-                     <p className="text-blue-100 text-sm font-medium mb-1">Important: When approval is enabled</p>
-                     <p className="text-blue-200 text-xs">
-                       ALL invoices (including those created by owners) will require approval before being sent to recipients. 
-                       <strong>Owners cannot approve their own invoices</strong> unless there are insufficient approvers in the organization.
-                       If you have fewer admins/approvers than required approvals, owners can approve their own invoices to prevent deadlocks.
-                       <strong>Once all required approvals are received, the invoice will be automatically sent to the recipient.</strong>
-                       Approvers will receive email notifications when invoices need their approval.
-                     </p>
-                   </div>
-                 </div>
+               <div className="p-3 bg-blue-500/20 border border-blue-400/30 rounded-lg">
+                 <p className="text-blue-200 text-xs">
+                   When on: invoices/bills need approval before send. After all required approvals, they send automatically. Approvers get email alerts.
+                 </p>
                </div>
 
         {error && (
@@ -289,12 +251,10 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
 
         {/* Main Approval Toggle */}
         <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between">
             <div>
               <h3 className="text-lg font-medium text-white">Require Approval</h3>
-              <p className="text-blue-200 text-sm">
-                Enable approval workflow for bills and payments
-              </p>
+              <p className="text-blue-200 text-xs mt-0.5">Invoices and bills need approval before they can be sent or paid.</p>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
               <input
@@ -310,110 +270,9 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
 
         {settings.requireApproval && (
           <>
-            {/* Amount Thresholds */}
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
-              <div className="flex items-center space-x-3 mb-6">
-                <DollarSign className="h-5 w-5 text-blue-400" />
-                <h3 className="text-lg font-medium text-white">Amount Thresholds</h3>
-              </div>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-white mb-2">
-                    Low Threshold
-                  </label>
-                  <input
-                    type="number"
-                    value={settings.approvalRules.amountThresholds.low}
-                    onChange={(e) => handleInputChange('approvalRules.amountThresholds.low', parseFloat(e.target.value))}
-                    className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                    placeholder="1000"
-                  />
-                  <p className="text-blue-200 text-xs mt-1">Auto-approve below this amount (when approval is disabled)</p>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-white mb-2">
-                    Medium Threshold
-                  </label>
-                  <input
-                    type="number"
-                    value={settings.approvalRules.amountThresholds.medium}
-                    onChange={(e) => handleInputChange('approvalRules.amountThresholds.medium', parseFloat(e.target.value))}
-                    className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                    placeholder="10000"
-                  />
-                  <p className="text-blue-200 text-xs mt-1">Single approval required</p>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-white mb-2">
-                    High Threshold
-                  </label>
-                  <input
-                    type="number"
-                    value={settings.approvalRules.amountThresholds.high}
-                    onChange={(e) => handleInputChange('approvalRules.amountThresholds.high', parseFloat(e.target.value))}
-                    className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                    placeholder="50000"
-                  />
-                  <p className="text-blue-200 text-xs mt-1">Dual approval required</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Required Approvers */}
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
-              <div className="flex items-center space-x-3 mb-6">
-                <Users className="h-5 w-5 text-blue-400" />
-                <h3 className="text-lg font-medium text-white">Required Approvers</h3>
-              </div>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-white mb-2">
-                    Low Amount
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={settings.approvalRules.requiredApprovers.low}
-                    onChange={(e) => handleInputChange('approvalRules.requiredApprovers.low', parseInt(e.target.value))}
-                    className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-white mb-2">
-                    Medium Amount
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={settings.approvalRules.requiredApprovers.medium}
-                    onChange={(e) => handleInputChange('approvalRules.requiredApprovers.medium', parseInt(e.target.value))}
-                    className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-white mb-2">
-                    High Amount
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={settings.approvalRules.requiredApprovers.high}
-                    onChange={(e) => handleInputChange('approvalRules.requiredApprovers.high', parseInt(e.target.value))}
-                    className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-              </div>
-            </div>
-
             {/* Fallback Approvers */}
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-1">
                 <h3 className="text-lg font-medium text-white">Fallback Approvers</h3>
                 <div className="relative">
                   <select
@@ -425,7 +284,7 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
                     }}
                     className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm appearance-none pr-8"
                   >
-                    <option value="">Add Approver</option>
+                    <option value="">Add</option>
                     {getAvailableFallbackApprovers().map((member) => (
                       <option key={member.email} value={member.email}>
                         {member.name || member.email} ({member.role})
@@ -435,14 +294,14 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
                   <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-white pointer-events-none" />
                 </div>
                  {getAvailableFallbackApprovers().length === 0 && (
-                   <div className="text-sm text-yellow-400 mt-2">
-                     No available admins or owners found.
+                   <div className="text-sm text-blue-200 mt-1">
+                     {settings.approvalRules.fallbackApprovers.length > 0
+                       ? "You've already added all admins and owners."
+                       : "No admins or owners in your organization yet."}
                    </div>
                  )}
               </div>
-               <p className="text-blue-200 text-sm mb-4">
-                 Admins and Owners who can approve when no dedicated approvers are available
-               </p>
+              <p className="text-blue-200 text-xs mb-3">Admins/owners who can approve when there aren’t enough approvers.</p>
               
               <div className="space-y-2">
                 {settings.approvalRules.fallbackApprovers.map((email, index) => {
@@ -474,137 +333,29 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
                   );
                 })}
                 {settings.approvalRules.fallbackApprovers.length === 0 && (
-                  <div className="text-center py-6">
-                    <Users className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                    <p className="text-gray-400 text-sm">No fallback approvers configured</p>
-                    <p className="text-gray-500 text-xs mt-1">
-                      Add Admins or Owners from your organization
-                    </p>
+                  <div className="text-center py-4">
+                    <p className="text-gray-400 text-sm">None. Add admins/owners above if needed.</p>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Auto-Approval Rules */}
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium text-white">Auto-Approval Rules</h3>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={settings.approvalRules.autoApprove.enabled}
-                    onChange={(e) => handleInputChange('approvalRules.autoApprove.enabled', e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                </label>
-              </div>
-              
-              {settings.approvalRules.autoApprove.enabled && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-white mb-2">
-                      Amount Limit
-                    </label>
-                    <input
-                      type="number"
-                      value={settings.approvalRules.autoApprove.conditions.amountLimit}
-                      onChange={(e) => handleInputChange('approvalRules.autoApprove.conditions.amountLimit', parseFloat(e.target.value))}
-                      className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                      placeholder="100"
-                    />
-                    <p className="text-blue-200 text-xs mt-1">Auto-approve bills under this amount</p>
-                  </div>
-                  
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-sm font-medium text-white">Vendor Whitelist</label>
-                      <button
-                        onClick={addVendorToWhitelist}
-                        className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors"
-                      >
-                        Add Vendor
-                      </button>
-                    </div>
-                    <div className="space-y-1">
-                      {settings.approvalRules.autoApprove.conditions.vendorWhitelist.map((vendor, index) => (
-                        <div key={index} className="flex items-center justify-between p-2 bg-white/5 rounded">
-                          <span className="text-white text-sm">{vendor}</span>
-                          <button
-                            onClick={() => removeVendorFromWhitelist(vendor)}
-                            className="text-red-400 hover:text-red-300 transition-colors text-xs"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-sm font-medium text-white">Category Whitelist</label>
-                      <button
-                        onClick={addCategoryToWhitelist}
-                        className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors"
-                      >
-                        Add Category
-                      </button>
-                    </div>
-                    <div className="space-y-1">
-                      {settings.approvalRules.autoApprove.conditions.categoryWhitelist.map((category, index) => (
-                        <div key={index} className="flex items-center justify-between p-2 bg-white/5 rounded">
-                          <span className="text-white text-sm">{category}</span>
-                          <button
-                            onClick={() => removeCategoryFromWhitelist(category)}
-                            className="text-red-400 hover:text-red-300 transition-colors text-xs"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
             {/* Email Settings */}
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
-              <div className="flex items-center space-x-3 mb-6">
-                <Mail className="h-5 w-5 text-blue-400" />
-                <h3 className="text-lg font-medium text-white">Email Settings</h3>
-              </div>
-              
+              <h3 className="text-lg font-medium text-white mb-3">Email</h3>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-white mb-2">
-                    Primary Email
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="email"
-                      value={settings.emailSettings.primaryEmail || String(organizationData?.billingEmail || '')}
-                      readOnly
-                      className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white cursor-not-allowed"
-                      placeholder={String(organizationData?.billingEmail || "Loading organization email...")}
-                    />
-                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                      <span className="text-blue-400 text-xs bg-blue-600/20 px-2 py-1 rounded">
-                        Organization Email
-                      </span>
-                    </div>
-                  </div>
-                  <p className="text-blue-200 text-xs mt-1">
-                    This email is set from your organization&apos;s billing email and cannot be changed here
-                  </p>
+                  <label className="block text-sm font-medium text-white mb-1">From (org billing)</label>
+                  <input
+                    type="email"
+                    value={settings.emailSettings.primaryEmail || String(organizationData?.billingEmail || '')}
+                    readOnly
+                    className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white cursor-not-allowed text-sm"
+                    placeholder={String(organizationData?.billingEmail || "Loading...")}
+                  />
                 </div>
-                
                 <div className="flex items-center justify-between">
-                  <div>
-                    <label className="text-sm font-medium text-white">Approval Notifications</label>
-                    <p className="text-blue-200 text-xs">Send email notifications for approval requests</p>
-                  </div>
+                  <label className="text-sm font-medium text-white">Email approvers when something needs approval</label>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input
                       type="checkbox"
@@ -615,12 +366,8 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
                     <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                   </label>
                 </div>
-                
                 <div className="flex items-center justify-between">
-                  <div>
-                    <label className="text-sm font-medium text-white">Payment Notifications</label>
-                    <p className="text-blue-200 text-xs">Send email notifications for payment confirmations</p>
-                  </div>
+                  <label className="text-sm font-medium text-white">Email when payment is confirmed</label>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input
                       type="checkbox"
@@ -643,7 +390,11 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
             disabled={saving}
             className="flex items-center space-x-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            <Save className="h-4 w-4" />
+            {saving ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
             <span>{saving ? 'Saving...' : 'Save Settings'}</span>
           </button>
         </div>

@@ -56,18 +56,21 @@ export async function approveInvoice(invoiceId: string): Promise<{
         return { success: false, message: 'You do not have permission to approve invoices' };
       }
 
-      // Check if owner can approve their own invoice based on organization size
-      if (userMember.role === 'owner' && invoice.issuerId === session.user.id) {
-        // Count total approvers (admins + approvers)
-        const totalApprovers = organization.members.filter((member: { role: string }) => 
-          member.role === 'admin' || member.role === 'approver'
-        ).length;
-        
-        // If there are fewer approvers than required approvals, allow owner to approve
-        if (totalApprovers < invoice.requiredApprovals) {
-          console.log('⚠️ [Approval] Owner can approve own invoice due to insufficient approvers');
+      // Only designated approvers can approve; the creator cannot approve their own invoice (except owner fallback below)
+      const issuerIdStr = typeof invoice.issuerId === 'string' ? invoice.issuerId : invoice.issuerId?.toString?.();
+      if (issuerIdStr === session.user.id) {
+        // Owner may approve own invoice only when there are too few other approvers (fallback)
+        if (userMember.role === 'owner') {
+          const totalApprovers = organization.members.filter((member: { role: string }) =>
+            member.role === 'admin' || member.role === 'approver'
+          ).length;
+          if (totalApprovers < (invoice.requiredApprovals ?? 1)) {
+            console.log('⚠️ [Approval] Owner can approve own invoice due to insufficient approvers');
+          } else {
+            return { success: false, message: 'You cannot approve your own invoices. Please ask another admin or approver to review and approve this invoice.' };
+          }
         } else {
-          return { success: false, message: 'You cannot approve your own invoices. Please ask another admin or approver to review and approve this invoice.' };
+          return { success: false, message: 'Only designated approvers can approve this invoice. You created it.' };
         }
       }
 
@@ -261,18 +264,20 @@ export async function rejectInvoice(invoiceId: string, reason?: string): Promise
         return { success: false, message: 'You do not have permission to reject invoices' };
       }
 
-      // Check if owner can reject their own invoice based on organization size
-      if (userMember.role === 'owner' && invoice.issuerId === session.user.id) {
-        // Count total approvers (admins + approvers)
-        const totalApprovers = organization.members.filter((member: { role: string }) => 
-          member.role === 'admin' || member.role === 'approver'
-        ).length;
-        
-        // If there are fewer approvers than required approvals, allow owner to reject
-        if (totalApprovers < invoice.requiredApprovals) {
-          console.log('⚠️ [Approval] Owner can reject own invoice due to insufficient approvers');
+      // Only designated approvers can reject; the creator cannot reject their own invoice (except owner fallback)
+      const issuerIdStrReject = typeof invoice.issuerId === 'string' ? invoice.issuerId : invoice.issuerId?.toString?.();
+      if (issuerIdStrReject === session.user.id) {
+        if (userMember.role === 'owner') {
+          const totalApprovers = organization.members.filter((member: { role: string }) => 
+            member.role === 'admin' || member.role === 'approver'
+          ).length;
+          if (totalApprovers < (invoice.requiredApprovals ?? 1)) {
+            console.log('⚠️ [Approval] Owner can reject own invoice due to insufficient approvers');
+          } else {
+            return { success: false, message: 'You cannot reject your own invoices. Please ask another admin or approver to review this invoice.' };
+          }
         } else {
-          return { success: false, message: 'You cannot reject your own invoices. Please ask another admin or approver to review this invoice.' };
+          return { success: false, message: 'Only designated approvers can reject this invoice. You created it.' };
         }
       }
     } else {
@@ -336,62 +341,72 @@ export async function getPendingApprovals(): Promise<{
       status: 'pending_approval'
     }).sort({ createdAt: -1 }).toArray();
 
-    // Also try with string comparison to debug
     const pendingInvoicesString = await db.collection('invoices').find({
       organizationId: user.organizationId.toString(),
       status: 'pending_approval'
     }).sort({ createdAt: -1 }).toArray();
 
-    // Get all invoices to see what we have
-    const allInvoices = await db.collection('invoices').find({
-      organizationId: new ObjectId(user.organizationId.toString())
-    }).toArray();
+    const rawPending = pendingInvoices.length > 0 ? pendingInvoices : pendingInvoicesString;
 
-    console.log('🔍 [Pending Approvals] Query details:', {
-      organizationId: user.organizationId,
-      organizationIdObjectId: new ObjectId(user.organizationId.toString()),
-      pendingInvoicesCount: pendingInvoices.length,
-      pendingInvoicesStringCount: pendingInvoicesString.length,
-      allInvoicesCount: allInvoices.length,
-      userEmail: session.user.email,
-      allInvoiceStatuses: allInvoices.map(inv => ({ 
-        id: inv._id?.toString(), 
-        status: inv.status, 
-        orgId: inv.organizationId?.toString() 
-      }))
+    // Get org to know current user's role; only show invoices this user is allowed to approve
+    const organization = await db.collection('organizations').findOne({
+      _id: new ObjectId(user.organizationId.toString())
+    });
+    const currentMember = organization?.members?.find((m: { userId: { toString: () => string } }) =>
+      m.userId.toString() === session.user?.id
+    );
+    const canApproveRole = currentMember && ['owner', 'admin', 'approver'].includes(currentMember.role);
+    const currentUserId = session.user?.id;
+
+    // Only include invoices that the current user is allowed to approve: must be approver role and must not be the creator
+    const finalPendingInvoices = rawPending.filter((inv) => {
+      if (!canApproveRole || !currentUserId) return false;
+      const issuerId = (inv as Record<string, unknown>).issuerId;
+      const creatorId = typeof issuerId === 'string' ? issuerId : (issuerId as { toString?: () => string })?.toString?.();
+      return creatorId !== currentUserId;
     });
 
-    // Use whichever query found results
-    const finalPendingInvoices = pendingInvoices.length > 0 ? pendingInvoices : pendingInvoicesString;
+    // Get creator information for each invoice
+    const enrichedInvoices = await Promise.all(
+      finalPendingInvoices.map(async (doc) => {
+        const invoice = doc as Record<string, unknown> & {
+          issuerId?: string | ObjectId;
+          _id?: { toString: () => string };
+          invoiceNumber?: string;
+          invoiceName?: string;
+          total?: number;
+          currency?: string;
+          clientDetails?: { firstName?: string; lastName?: string; companyName?: string; email?: string };
+          createdAt?: string;
+          approvalCount?: number;
+          requiredApprovals?: number;
+          approvals?: unknown[];
+        };
+        const issuerIdForLookup = typeof invoice.issuerId === 'string' ? invoice.issuerId : (invoice.issuerId as ObjectId)?.toString?.();
+        const creator = issuerIdForLookup
+          ? await db.collection('users').findOne({ _id: new ObjectId(issuerIdForLookup) })
+          : null;
 
-           // Get creator information for each invoice
-           const enrichedInvoices = await Promise.all(
-             finalPendingInvoices.map(async (invoice) => {
-               // Get creator details
-               const creator = await db.collection('users').findOne({
-                 _id: new ObjectId(invoice.issuerId)
-               });
-
-               return {
-                 _id: invoice._id?.toString(),
-                 invoiceNumber: invoice.invoiceNumber,
-                 invoiceName: invoice.invoiceName,
-                 total: invoice.total,
-                 currency: invoice.currency,
-                 clientName: invoice.clientDetails?.firstName && invoice.clientDetails?.lastName 
-                   ? `${invoice.clientDetails.firstName} ${invoice.clientDetails.lastName}`.trim()
-                   : invoice.clientDetails?.companyName || 'Unknown Client',
-                 clientEmail: invoice.clientDetails?.email || '',
-                 createdAt: invoice.createdAt,
-                 createdBy: invoice.issuerId,
-                 createdByName: creator?.name || creator?.email || 'Unknown User',
-                 createdByEmail: creator?.email || '',
-                 approvalCount: invoice.approvalCount || 0,
-                 requiredApprovals: invoice.requiredApprovals || 1,
-                 approvals: invoice.approvals || []
-               };
-             })
-           );
+        return {
+          _id: invoice._id?.toString(),
+          invoiceNumber: invoice.invoiceNumber ?? '',
+          invoiceName: invoice.invoiceName ?? '',
+          total: invoice.total ?? 0,
+          currency: invoice.currency ?? 'USD',
+          clientName: invoice.clientDetails?.firstName && invoice.clientDetails?.lastName
+            ? `${invoice.clientDetails.firstName} ${invoice.clientDetails.lastName}`.trim()
+            : invoice.clientDetails?.companyName || 'Unknown Client',
+          clientEmail: invoice.clientDetails?.email || '',
+          createdAt: invoice.createdAt ?? '',
+          createdBy: issuerIdForLookup ?? (invoice.issuerId as { toString?: () => string })?.toString?.() ?? '',
+          createdByName: (creator as { name?: string; email?: string })?.name || (creator as { email?: string })?.email || 'Unknown User',
+          createdByEmail: (creator as { email?: string })?.email || '',
+          approvalCount: invoice.approvalCount || 0,
+          requiredApprovals: invoice.requiredApprovals || 1,
+          approvals: invoice.approvals || []
+        };
+      })
+    );
 
     return {
       success: true,

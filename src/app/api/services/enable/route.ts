@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { UserService } from '@/lib/services/userService';
+import { OrganizationService } from '@/lib/services/organizationService';
 import { enableService, createDefaultServices } from '@/lib/services/serviceManager';
 
 export async function POST(request: NextRequest) {
@@ -31,8 +32,17 @@ export async function POST(request: NextRequest) {
       services: updatedServices
     });
 
-    return NextResponse.json({ 
-      success: true, 
+    // Sync to organization when user belongs to one
+    if (user.organizationId) {
+      try {
+        await OrganizationService.updateOrganization(user.organizationId.toString(), { services: updatedServices });
+      } catch {
+        // best-effort
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
       services: updatedServices,
       message: `Service ${serviceKey} enabled successfully`
     });

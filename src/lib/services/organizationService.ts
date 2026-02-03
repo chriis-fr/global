@@ -63,6 +63,12 @@ export class OrganizationService {
     return collection.findOne({ name });
   }
 
+  // Get organization by billing email (used to avoid duplicate org signups)
+  static async getOrganizationByBillingEmail(billingEmail: string): Promise<Organization | null> {
+    const collection = await this.getCollection();
+    return collection.findOne({ billingEmail });
+  }
+
   // Get all organizations
   static async getAllOrganizations(): Promise<Organization[]> {
     const collection = await this.getCollection();
@@ -94,10 +100,46 @@ export class OrganizationService {
     return result;
   }
 
-  // Delete organization
+  // Delete organization and all related data (invoices, clients, payables, bills, payment methods, invitation tokens); unlink members
   static async deleteOrganization(id: string): Promise<boolean> {
+    const db = await getDatabase();
+    const orgId = new ObjectId(id);
+
+    // 1. Invoice access tokens for this org's invoices (find invoice ids first)
+    const invoiceIds = await db.collection('invoices').find({ organizationId: orgId }).project({ _id: 1 }).toArray();
+    const ids = invoiceIds.map((doc) => doc._id);
+    if (ids.length > 0) {
+      await db.collection('invoice_access_tokens').deleteMany({ invoiceId: { $in: ids } });
+    }
+
+    // 2. Invoices belonging to this organization
+    await db.collection('invoices').deleteMany({ organizationId: orgId });
+
+    // 3. Clients belonging to this organization
+    await db.collection('clients').deleteMany({ organizationId: orgId });
+
+    // 4. Payables (organizationId may be ObjectId or string)
+    await db.collection('payables').deleteMany({ organizationId: orgId });
+    await db.collection('payables').deleteMany({ organizationId: id });
+
+    // 5. Bills belonging to this organization (organizationId stored as string)
+    await db.collection('bills').deleteMany({ organizationId: id });
+
+    // 6. Invitation tokens for this organization
+    await db.collection('invitation_tokens').deleteMany({ organizationId: orgId });
+
+    // 7. Payment methods for this organization
+    await db.collection('paymentMethods').deleteMany({ organizationId: orgId });
+
+    // 8. Unlink users from this organization (so they are not left with broken reference)
+    await db.collection('users').updateMany(
+      { organizationId: orgId },
+      { $set: { organizationId: null, updatedAt: new Date() } }
+    );
+
+    // 9. Delete the organization
     const collection = await this.getCollection();
-    const result = await collection.deleteOne({ _id: new ObjectId(id) });
+    const result = await collection.deleteOne({ _id: orgId });
     return result.deletedCount > 0;
   }
 

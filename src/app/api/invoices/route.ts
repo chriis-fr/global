@@ -218,14 +218,17 @@ export async function POST(request: NextRequest) {
         _id: new ObjectId(ownerId)
       });
 
+      // Only enforce invoice approval when org has Smart Invoicing enabled (sync with organization settings page)
+      const orgServices = organization?.services as { smartInvoicing?: boolean } | undefined;
+      const hasSmartInvoicing = orgServices?.smartInvoicing === true;
+
       console.log('🔍 [Approval Check] Organization approval settings:', {
         hasApprovalSettings: !!organization?.approvalSettings,
         requireApproval: organization?.approvalSettings?.requireApproval,
-        amountThresholds: organization?.approvalSettings?.approvalRules?.amountThresholds,
-        invoiceAmount: totalRounded
+        hasSmartInvoicing
       });
 
-      if (organization?.approvalSettings?.requireApproval) {
+      if (hasSmartInvoicing && organization?.approvalSettings?.requireApproval) {
         // Check if user is owner/admin (can bypass approval)
         const userMember = organization.members.find((member: { userId: ObjectId; role: string }) => 
           member.userId.toString() === session.user.id && 
@@ -244,7 +247,7 @@ export async function POST(request: NextRequest) {
         initialStatus = 'pending_approval';
         console.log('⏳ [Approval Check] Approval required for all users (including owners) when approval is enabled');
       } else {
-        console.log('ℹ️ [Approval Check] Approval not required for this organization');
+        console.log('ℹ️ [Approval Check] Approval not required for this organization (Smart Invoicing disabled or approval off)');
       }
     }
 
@@ -523,8 +526,9 @@ export async function POST(request: NextRequest) {
              new ObjectId(session.user.id)
            );
 
-           // Send approval notifications if invoice requires approval
-           if (requiresApproval && organization) {
+           // Send approval notifications only if org has approval emails enabled
+           const approvalEmailsEnabled = organization?.approvalSettings?.emailSettings?.approvalNotifications !== false;
+           if (requiresApproval && organization && approvalEmailsEnabled) {
              try {
                const { NotificationService } = await import('@/lib/services/notificationService');
                
@@ -543,20 +547,24 @@ export async function POST(request: NextRequest) {
 
                // Send notification to each approver
                for (const approver of approvers) {
+                 const approverId = approver.userId instanceof ObjectId
+                   ? approver.userId
+                   : new ObjectId(String(approver.userId));
                  const approverUser = await db.collection('users').findOne({
-                   _id: new ObjectId(approver.userId)
+                   _id: approverId
                  });
 
-                 if (approverUser?.email) {
+                 const approverEmail = typeof approverUser?.email === 'string' ? approverUser.email.trim() : '';
+                 if (approverEmail) {
                    console.log('📧 [Approval Notifications] Sending notification to:', {
-                     email: approverUser.email,
-                     name: approverUser.name || approverUser.email,
+                     email: approverEmail,
+                     name: approverUser?.name || approverEmail,
                      role: approver.role
                    });
                    
                    await NotificationService.sendInvoiceApprovalRequest(
-                     approverUser.email,
-                     approverUser.name || approverUser.email,
+                     approverEmail,
+                     approverUser?.name || approverEmail,
                      {
                        invoiceNumber: finalInvoiceNumber,
                        invoiceName: invoiceName || 'Invoice',

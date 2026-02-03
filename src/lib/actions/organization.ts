@@ -161,9 +161,9 @@ export async function createOrganization(orgData: CreateOrganizationInput): Prom
       return { success: false, error: 'User already belongs to an organization' };
     }
 
-    // Validate required fields
-    if (!orgData.name || !orgData.billingEmail || !orgData.industry) {
-      return { success: false, error: 'Name, billing email, and industry are required' };
+    // Validate required fields (industry is optional)
+    if (!orgData.name?.trim() || !orgData.billingEmail?.trim()) {
+      return { success: false, error: 'Name and billing email are required' };
     }
 
     // Check if organization name already exists

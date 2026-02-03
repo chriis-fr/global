@@ -58,6 +58,7 @@ function Sidebar() {
   const [isAutoHidden, setIsAutoHidden] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
 
   const sidebarRef = useRef<HTMLDivElement>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -96,6 +97,38 @@ function Sidebar() {
     window.addEventListener('openMobileSidebar', open);
     return () => window.removeEventListener('openMobileSidebar', open);
   }, []);
+
+  // Fetch pending approvals count for green-dot indicator (only when user can approve)
+  useEffect(() => {
+    if (!session?.user?.organizationId || !permissions.canApproveBills) {
+      setPendingApprovalsCount(0);
+      return;
+    }
+    let cancelled = false;
+    const fetchCount = async () => {
+      try {
+        const [orgRes, invRes] = await Promise.all([
+          fetch('/api/organization/approvals', { credentials: 'include' }),
+          fetch('/api/invoices/pending-approvals', { credentials: 'include' })
+        ]);
+        if (cancelled) return;
+        let count = 0;
+        const orgData = await orgRes.json();
+        if (orgData.success && Array.isArray(orgData.data)) count += orgData.data.length;
+        const invData = await invRes.json();
+        if (invData.success && invData.data != null && typeof invData.data.count === 'number') count += invData.data.count;
+        if (!cancelled) setPendingApprovalsCount(count);
+      } catch {
+        if (!cancelled) setPendingApprovalsCount(0);
+      }
+    };
+    fetchCount();
+    const interval = setInterval(fetchCount, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [session?.user?.organizationId, permissions.canApproveBills]);
 
   const toggleMobileMenu = useCallback(() => {
     setIsMobileMenuOpen(v => !v);
@@ -286,6 +319,16 @@ function Sidebar() {
               {ADMIN_LINKS.map(link => {
                 const active = pathname.startsWith(link.href);
 
+                const isApprovalsLink = link.key === 'approvals';
+                const hasPending = pendingApprovalsCount > 0;
+                const dotEl = isApprovalsLink && hasPending ? (
+                  <span
+                    className="ml-auto min-w-[10px] min-h-[10px] w-2.5 h-2.5 rounded-full bg-green-500 ring-2 ring-blue-950 flex-shrink-0"
+                    aria-label={`${pendingApprovalsCount} pending`}
+                    title={`${pendingApprovalsCount} pending approval${pendingApprovalsCount !== 1 ? 's' : ''}`}
+                  />
+                ) : null;
+
                 if (isMobile) {
                   return (
                     <div
@@ -306,6 +349,10 @@ function Sidebar() {
                     >
                       <link.icon className="h-4 w-4 mr-3" />
                       {(!isCollapsed || isAutoHidden) && link.label}
+                      {isApprovalsLink && hasPending && (!isCollapsed || isAutoHidden) && (
+                        <span className="text-xs font-semibold text-green-400 tabular-nums">{pendingApprovalsCount}</span>
+                      )}
+                      {dotEl}
                     </div>
                   );
                 }
@@ -320,6 +367,10 @@ function Sidebar() {
                   >
                     <link.icon className="h-4 w-4 mr-3" />
                     {(!isCollapsed || isAutoHidden) && link.label}
+                    {isApprovalsLink && hasPending && (!isCollapsed || isAutoHidden) && (
+                      <span className="text-xs font-semibold text-green-400 tabular-nums">{pendingApprovalsCount}</span>
+                    )}
+                    {dotEl}
                   </Link>
                 );
               })}

@@ -712,16 +712,21 @@ export const sendOrganizationInvitation = async (
   invitationLink: string,
   expiresAt: Date
 ) => {
+  const toEmail = typeof inviteeEmail === 'string' ? inviteeEmail.trim() : '';
+  if (!toEmail) {
+    console.error('❌ [Invitation Email] No recipient email provided');
+    return { success: false, error: 'No recipient email provided' };
+  }
   const mailOptions = {
-    from: `"${organizationName} via Chains ERP-Global" <${emailConfig.auth.user}>`,
-    to: inviteeEmail,
+    from: `"${organizationName} via Chains ERP-Global Finance" <${emailConfig.auth.user}>`,
+    to: toEmail,
     subject: `You're invited to join ${organizationName} on Chains ERP-Global!`,
     headers: getEmailHeaders(),
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
           <div style="margin-bottom: 20px;">
-            <img src="https://chains-erp.com/chainsnobg.png" 
+            <img src="https://global.chains-erp.com/chainsnobg.png" 
               alt="Chains ERP-Global Logo" 
               style="max-width: 150px; height: auto; border-radius: 8px;">
           </div>
@@ -822,7 +827,7 @@ The Chains ERP-Global Team
     console.log('✅ Organization invitation email sent successfully (took', duration, 'ms)');
     console.log('📧 Invitation email details:', {
       messageId: info.messageId,
-      to: inviteeEmail,
+      to: toEmail,
       subject: mailOptions.subject,
       organization: organizationName,
       role,

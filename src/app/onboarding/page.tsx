@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useSession } from '@/lib/auth-client';
 import { 
@@ -86,6 +87,7 @@ const ONBOARDING_STEPS = [
 ];
 
 export default function OnboardingPage() {
+  const router = useRouter();
   const { data: session, status, update: updateSession } = useSession();
   const { onboarding, services: storeServices, setOnboarding, updateOnboarding } = useOnboardingStore();
   const [user, setUser] = useState<User | null>(null);
@@ -128,16 +130,11 @@ export default function OnboardingPage() {
           const statusResponse = await fetch('/api/onboarding/status');
           const statusData = await statusResponse.json();
           
-          if (statusData.success && statusData.data?.completed) {
-            console.log('✅ [Onboarding] API shows onboarding completed, redirecting to dashboard');
-            // Force session refresh
+          if (statusData.success && statusData.data?.onboarding?.completed) {
             await updateSession();
-            
-            // Redirect to dashboard
-            setTimeout(() => {
-              window.location.href = '/dashboard';
-            }, 500);
             isCheckingStatusRef.current = false;
+            setLoading(false);
+            window.location.href = '/dashboard';
             return;
           }
         } catch (error) {
@@ -148,12 +145,15 @@ export default function OnboardingPage() {
         }
       }
 
-      // Create user object from session
+      // Create user object from session (infer business if they have an organization, so UI matches reality)
+      const hasOrganization = !!(session.user as { organizationId?: string }).organizationId;
+      const displayUserType: 'individual' | 'business' =
+        session.user.userType === 'business' || hasOrganization ? 'business' : (session.user.userType || 'individual');
       const userObj: User = {
         _id: session.user.id,
         email: session.user.email,
         name: session.user.name,
-        userType: session.user.userType || 'individual',
+        userType: displayUserType,
         address: session.user.address || {
           street: '',
           city: '',
@@ -233,7 +233,6 @@ export default function OnboardingPage() {
       // If session shows onboarding is completed, redirect immediately
       if (sessionCompleted && !redirectingRef.current) {
         redirectingRef.current = true;
-        console.log('✅ [Onboarding] Session shows onboarding completed, redirecting to dashboard');
         // Initialize store from session before redirect (only if not already set)
         // Use onboardingRef to check current state without causing re-render
         if (session.user.onboarding && session.user.services && !onboardingRef.current?.completed) {
@@ -293,14 +292,6 @@ export default function OnboardingPage() {
           serviceOnboarding: data.data.onboarding.serviceOnboarding || {}
         };
         
-        console.log('✅ [Onboarding] Step updated:', {
-          step,
-          isCompleted,
-          isCompletedFromDB,
-          dataCompleted,
-          updatedOnboarding
-        });
-        
         // Update store
         updateOnboarding(updatedOnboarding);
         
@@ -308,23 +299,16 @@ export default function OnboardingPage() {
         setUser(prev => prev ? { ...prev, onboarding: updatedOnboarding } : null);
         setCurrentStep(step);
         
-        // If step 4 is completed, refresh session and redirect to dashboard
+        // If step 4 is completed, refresh session then client-navigate to dashboard (keeps updated session in React tree)
         if (isStep4Completed || isCompleted) {
-          console.log('🔄 [Onboarding] Step 4 completed, refreshing session and redirecting...');
-          
-          // Force session refresh to update JWT token with new onboarding status
           try {
             await updateSession();
-            console.log('✅ [Onboarding] Session refreshed successfully');
+            // Client-side navigation so dashboard layout sees the updated session (avoids full-page load with stale cookie)
+            router.push('/dashboard');
           } catch (error) {
             console.error('❌ [Onboarding] Error refreshing session:', error);
+            router.push('/dashboard');
           }
-          
-          // Redirect to dashboard after a short delay to ensure session is updated
-          setTimeout(() => {
-            console.log('🚀 [Onboarding] Redirecting to dashboard...');
-            window.location.href = '/dashboard';
-          }, 1000);
         }
       }
     } catch (error) {
@@ -358,6 +342,12 @@ export default function OnboardingPage() {
         // Update store with new services
         if (onboarding) {
           setOnboarding(onboarding, updatedServices);
+        }
+        // Refresh session so JWT gets new org/user services; otherwise dashboard shows stale services
+        try {
+          await updateSession();
+        } catch {
+          // non-blocking; local state is already updated
         }
       } else {
         console.error('Failed to toggle service:', data.message);
@@ -567,16 +557,18 @@ export default function OnboardingPage() {
                 <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 lg:p-6 mb-8 mx-4">
                   <h3 className="text-lg font-semibold text-white mb-4">
                     {user.userType === 'business' ? 'Business Tax ID (KRA PIN)' : 'Tax ID (KRA PIN)'}
+                    <span className="text-blue-300 font-normal"> *</span>
                   </h3>
                   <p className="text-blue-200 text-sm mb-2">
                     {user.userType === 'business' 
                       ? 'Please enter your business KRA PIN (Personal Identification Number) to verify your business identity.'
                       : 'Please enter your KRA PIN (Personal Identification Number) to verify your identity.'
                     }
+                    <span className="block mt-1 text-blue-300/90">* Optional – you can add this later in settings.</span>
                   </p>
                   <input
                     type="text"
-                    placeholder={user.userType === 'business' ? 'Enter your business KRA PIN' : 'Enter your KRA PIN'}
+                    placeholder={user.userType === 'business' ? 'Enter your business KRA PIN (optional)' : 'Enter your KRA PIN (optional)'}
                     value={taxID}
                     onChange={(e) => setTaxID(e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500"

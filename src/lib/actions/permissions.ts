@@ -79,12 +79,24 @@ export async function getPermissions(): Promise<PermissionsResult> {
 
     const approvalLimits = RBACService.getApprovalLimits(member);
 
+    // Serialize member for client (ObjectId/Buffer/Date must be plain values)
+    const serializedMember = {
+      _id: (member as { _id?: { toString: () => string } })._id?.toString(),
+      userId: (member as { userId: { toString: () => string } }).userId.toString(),
+      email: (member as { email: string }).email,
+      name: (member as { name: string }).name,
+      role: (member as { role: string }).role,
+      permissions: (member as { permissions: Record<string, unknown> }).permissions,
+      status: (member as { status: string }).status,
+      invitedBy: (member as { invitedBy?: { toString: () => string } }).invitedBy?.toString(),
+      joinedAt: (member as { joinedAt?: Date }).joinedAt instanceof Date ? (member as { joinedAt: Date }).joinedAt.toISOString() : undefined,
+      lastActiveAt: (member as { lastActiveAt?: Date }).lastActiveAt instanceof Date ? (member as { lastActiveAt: Date }).lastActiveAt.toISOString() : undefined,
+      approvalLimits,
+    };
+
     return {
       permissions,
-      member: {
-        ...member,
-        approvalLimits,
-      } as OrganizationMember & { approvalLimits: { maxAmount: number; requiresDualApproval: boolean } },
+      member: serializedMember as unknown as OrganizationMember & { approvalLimits: { maxAmount: number; requiresDualApproval: boolean } },
     };
   } catch {
     return null;

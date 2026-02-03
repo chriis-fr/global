@@ -58,6 +58,16 @@ export async function GET() {
       );
     }
 
+    // Approval settings only apply when org has Smart Invoicing and/or Accounts Payable
+    const orgServices = organization.services as { smartInvoicing?: boolean; accountsPayable?: boolean } | undefined;
+    const hasApprovalRelevantService = orgServices && (orgServices.smartInvoicing === true || orgServices.accountsPayable === true);
+    if (!hasApprovalRelevantService) {
+      return NextResponse.json(
+        { success: false, message: 'Approval settings are only available for organizations with Smart Invoicing or Accounts Payable enabled. Enable these in Services first.' },
+        { status: 403 }
+      );
+    }
+
     // Get approval settings
     const settings = await ApprovalService.getApprovalSettings(user.organizationId.toString());
 
@@ -138,6 +148,16 @@ export async function PUT(request: NextRequest) {
     if (!RBACService.canManageSettings(member)) {
       return NextResponse.json(
         { success: false, message: 'Insufficient permissions' },
+        { status: 403 }
+      );
+    }
+
+    // Approval settings only apply when org has Smart Invoicing and/or Accounts Payable
+    const orgServicesPut = organization.services as { smartInvoicing?: boolean; accountsPayable?: boolean } | undefined;
+    const hasApprovalRelevantServicePut = orgServicesPut && (orgServicesPut.smartInvoicing === true || orgServicesPut.accountsPayable === true);
+    if (!hasApprovalRelevantServicePut) {
+      return NextResponse.json(
+        { success: false, message: 'Approval settings are only available for organizations with Smart Invoicing or Accounts Payable enabled. Enable these in Services first.' },
         { status: 403 }
       );
     }

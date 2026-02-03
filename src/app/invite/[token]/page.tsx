@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from '@/lib/auth-client';
+import { useSession as useNextAuthSession } from 'next-auth/react';
 import { Mail, Shield, CheckCircle, XCircle, Clock } from 'lucide-react';
 import Image from 'next/image';
 import { validateInvitationToken, acceptInvitationForNewUser, completeInvitationAcceptance, declineInvitation } from '@/lib/actions/invitation';
@@ -28,7 +29,8 @@ export default function InvitationPage({ params }: { params: Promise<{ token: st
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showPermissions, setShowPermissions] = useState(false);
   const [token, setToken] = useState<string>('');
-  const { data: session, status } = useSession();
+  const { data: session, status, update: refreshSession } = useSession();
+  const { update: nextAuthUpdate } = useNextAuthSession();
   const isAuthenticated = status === 'authenticated' && !!session?.user;
 
   const isInitialized = useRef(false);
@@ -96,9 +98,15 @@ export default function InvitationPage({ params }: { params: Promise<{ token: st
             const result = await completeInvitationAcceptance(token);
             if (result.success) {
               setMessage({ type: 'success', text: 'Welcome to the organization! Redirecting to dashboard...' });
+              try {
+                await nextAuthUpdate?.();
+                await refreshSession();
+              } catch {
+                // Continue to redirect
+              }
               setTimeout(() => {
                 router.push('/dashboard');
-              }, 2000);
+              }, 1500);
             } else {
               setMessage({ type: 'error', text: result.error || 'Failed to accept invitation' });
             }
@@ -330,7 +338,7 @@ export default function InvitationPage({ params }: { params: Promise<{ token: st
               ) : (
                 <>
                   <CheckCircle className="h-4 w-4" />
-                  <span>{!isAuthenticated ? 'Sign Up & Accept' : 'Accept Invitation'}</span>
+                  <span>{!isAuthenticated ? 'Accept &  Sign Up' : 'Accept Invitation'}</span>
                 </>
               )}
             </button>

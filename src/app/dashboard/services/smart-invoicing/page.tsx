@@ -1,7 +1,6 @@
 'use client';
 
 import { Suspense, useRef, useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from '@/lib/auth-client';
 import { motion } from 'framer-motion';
@@ -17,9 +16,10 @@ import {
   Upload,
   Settings,
   ChevronRight,
-  Mail
+  ChevronDown
 } from 'lucide-react';
 import { useSubscription } from '@/lib/contexts/SubscriptionContext';
+import { getOrganizationData } from '@/lib/actions/organization';
 import InvoiceStatCard from '@/components/smart-invoicing/InvoiceStatCard';
 import RecentInvoicesList from '@/components/smart-invoicing/RecentInvoicesList';
 import OnboardingStatus from '@/components/smart-invoicing/OnboardingStatus';
@@ -29,6 +29,13 @@ export default function SmartInvoicingPage() {
   const actionsScrollRef = useRef<HTMLDivElement>(null);
   const [showStatsScrollIndicator, setShowStatsScrollIndicator] = useState(false);
   const [showActionsScrollIndicator, setShowActionsScrollIndicator] = useState(false);
+  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
+  const [orgUserRole, setOrgUserRole] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const checkScrollable = (ref: React.RefObject<HTMLDivElement | null>, setShow: (v: boolean) => void) => {
     if (!ref.current) return;
@@ -70,9 +77,31 @@ export default function SmartInvoicingPage() {
   const { data: session } = useSession();
   const { subscription } = useSubscription();
 
+  // Fetch org role so only admins/owners see Team Settings (members cannot manage permissions)
+  useEffect(() => {
+    if (session?.user?.userType === 'business' && session?.user?.organizationId) {
+      getOrganizationData().then((result) => {
+        if (result.success && result.data?.userRole) {
+          setOrgUserRole(result.data.userRole as string);
+        }
+      }).catch(() => setOrgUserRole(null));
+    } else {
+      setOrgUserRole(null);
+    }
+  }, [session?.user?.userType, session?.user?.organizationId]);
+
+  const canSeeTeamSettings = !!(
+    session?.user?.userType === 'business' &&
+    session?.user?.organizationId &&
+    (orgUserRole === 'owner' || orgUserRole === 'admin')
+  );
+
+  // Use subscription only after mount to avoid hydration mismatch (server has no subscription/cache)
+  const canCreateInvoice = mounted && !!subscription?.canCreateInvoice;
+
   const handleCreateInvoice = () => {
     // Check if user can create invoice (limit reached)
-    if (!subscription?.canCreateInvoice) {
+    if (!canCreateInvoice) {
       // Don't navigate if limit is reached
       return;
     }
@@ -124,7 +153,7 @@ export default function SmartInvoicingPage() {
               <div className="min-w-0 flex-1">
                 <h1 className="text-lg sm:text-xl font-semibold text-white truncate">Smart Invoicing</h1>
                 <p className="text-xs sm:text-sm text-blue-200 hidden sm:block">
-                  Create, manage, and get paid with local currency, stables coins or crypto payments seamlessly
+                 Create and manage invoices seamlessly
                 </p>
               </div>
             </div>
@@ -158,24 +187,24 @@ export default function SmartInvoicingPage() {
                 <span className="sm:hidden">View</span>
               </motion.button>
               <motion.button
-                whileHover={{ scale: subscription?.canCreateInvoice ? 1.05 : 1 }}
-                whileTap={{ scale: subscription?.canCreateInvoice ? 0.95 : 1 }}
+                whileHover={{ scale: canCreateInvoice ? 1.05 : 1 }}
+                whileTap={{ scale: canCreateInvoice ? 0.95 : 1 }}
                 onClick={handleCreateInvoice}
-                disabled={!subscription?.canCreateInvoice}
+                disabled={!canCreateInvoice}
                 className={`flex items-center space-x-1 sm:space-x-2 px-2 sm:px-4 py-2 rounded-lg transition-colors text-sm ${
-                  subscription?.canCreateInvoice
+                  canCreateInvoice
                     ? 'bg-blue-600 text-white hover:bg-blue-700'
                     : 'bg-gray-500 text-gray-300 cursor-not-allowed'
                 }`}
               >
                 <Plus className="h-4 w-4" />
                 <span className="hidden sm:inline">
-                  {!subscription?.canCreateInvoice ? 'Limit Reached' : 'Create Invoice'}
+                  {!canCreateInvoice ? 'Limit Reached' : 'Create Invoice'}
                 </span>
                 <span className="sm:hidden">
-                  {!subscription?.canCreateInvoice ? 'Limit' : 'Create'}
+                  {!canCreateInvoice ? 'Limit' : 'Create'}
                 </span>
-                {!subscription?.canCreateInvoice && (
+                {!canCreateInvoice && (
                   <Lock className="h-4 w-4" />
                 )}
               </motion.button>
@@ -269,26 +298,38 @@ export default function SmartInvoicingPage() {
         )}
       </div>
 
-      {/* Quick Actions - Horizontal scroll on mobile (same as dashboard) */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
-        <div
-          ref={actionsScrollRef}
-          className="flex md:grid gap-4 overflow-x-auto md:overflow-x-visible pb-2 md:pb-0 hide-scrollbar md:grid-cols-2 lg:grid-cols-4 snap-x snap-mandatory md:snap-none"
+      {/* Quick Actions - Collapsible, hidden by default */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <button
+          type="button"
+          onClick={() => setQuickActionsOpen((v) => !v)}
+          className="w-full flex items-center justify-between gap-3 py-3 px-4 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 hover:bg-white/15 transition-colors text-left"
         >
-          <motion.div
+          <span className="text-white font-medium">Quick actions</span>
+          <ChevronDown
+            className={`h-5 w-5 text-blue-400 flex-shrink-0 transition-transform duration-200 ${quickActionsOpen ? 'rotate-180' : ''}`}
+          />
+        </button>
+        {quickActionsOpen && (
+          <div className="relative mt-4">
+            <div
+              ref={actionsScrollRef}
+              className="flex md:grid gap-4 overflow-x-auto md:overflow-x-visible pb-2 md:pb-0 hide-scrollbar md:grid-cols-2 lg:grid-cols-4 snap-x snap-mandatory md:snap-none"
+            >
+              <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
             className={`flex-shrink-0 w-[calc(50%-8px)] min-w-[160px] md:w-auto md:min-w-0 h-[116px] md:h-auto md:min-h-0 snap-start overflow-hidden bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-3 md:p-4 hover:bg-white/15 transition-all duration-200 cursor-pointer flex flex-col justify-between ${
-              !subscription?.canCreateInvoice ? 'opacity-50 cursor-not-allowed' : ''
+              !canCreateInvoice ? 'opacity-50 cursor-not-allowed' : ''
             }`}
-            onClick={subscription?.canCreateInvoice ? handleCreateInvoice : undefined}
+            onClick={canCreateInvoice ? handleCreateInvoice : undefined}
           >
             <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1 min-h-0">
               <div className={`w-9 h-9 md:w-10 md:h-10 flex-shrink-0 flex items-center justify-center rounded-lg ${
-                subscription?.canCreateInvoice ? 'bg-blue-500/20' : 'bg-gray-500/20'
+                canCreateInvoice ? 'bg-blue-500/20' : 'bg-gray-500/20'
               }`}>
-                {subscription?.canCreateInvoice ? (
+                {canCreateInvoice ? (
                   <Plus className="h-5 w-5 text-blue-400" />
                 ) : (
                   <Lock className="h-5 w-5 text-gray-400" />
@@ -296,13 +337,13 @@ export default function SmartInvoicingPage() {
               </div>
               <div className="flex-1 min-w-0 overflow-hidden">
                 <h3 className="text-base font-semibold text-white line-clamp-2 break-words leading-tight">
-                  {subscription?.canCreateInvoice ? 'Create Invoice' : 'Limit Reached'}
+                  {canCreateInvoice ? 'Create Invoice' : 'Limit Reached'}
                 </h3>
                 <p className="text-blue-200/90 text-xs line-clamp-2 break-words leading-snug mt-0.5">
-                  {subscription?.canCreateInvoice ? 'Guided walkthrough' : 'Upgrade for more'}
+                  {canCreateInvoice ? 'Guided walkthrough' : 'Upgrade for more'}
                 </p>
               </div>
-              {subscription?.canCreateInvoice && (
+              {canCreateInvoice && (
                 <ArrowRight className="h-4 w-4 text-blue-400 shrink-0 hidden md:block" />
               )}
             </div>
@@ -385,8 +426,8 @@ export default function SmartInvoicingPage() {
             </div>
           </motion.div>
 
-          {/* Team Settings - only for business with org */}
-          {session?.user?.userType === 'business' && session?.user?.organizationId && (
+          {/* Team Settings - only for admins/owners; members cannot manage permissions */}
+          {canSeeTeamSettings && (
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
@@ -407,24 +448,17 @@ export default function SmartInvoicingPage() {
               <div className="h-9 flex-shrink-0" aria-hidden />
             </motion.div>
           )}
-        </div>
-
-        {showActionsScrollIndicator && (
-          <div className="absolute right-0 top-1/2 -translate-y-1/2 md:hidden pointer-events-none flex items-center justify-end pr-2 z-10">
-            <div className="bg-gradient-to-l from-blue-950 via-blue-950/90 to-transparent w-7 h-14 flex items-center justify-end rounded-l-lg">
-              <ChevronRight className="h-5 w-5 text-blue-400/80 animate-pulse" />
             </div>
+
+            {showActionsScrollIndicator && (
+              <div className="absolute right-0 top-1/2 -translate-y-1/2 md:hidden pointer-events-none flex items-center justify-end pr-2 z-10">
+                <div className="bg-gradient-to-l from-blue-950 via-blue-950/90 to-transparent w-7 h-14 flex items-center justify-end rounded-l-lg">
+                  <ChevronRight className="h-5 w-5 text-blue-400/80 animate-pulse" />
+                </div>
+              </div>
+            )}
           </div>
         )}
-
-        {/* Invoice email preview (temporary – edit wording then delete this page) */}
-        <Link
-          href="/dashboard/services/smart-invoicing/invoice-email-preview"
-          className="flex-shrink-0 w-[calc(50%-8px)] min-w-[160px] md:w-auto md:min-w-0 snap-start overflow-hidden bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 p-3 md:p-4 hover:bg-white/10 hover:border-white/20 transition-colors flex flex-col justify-center items-center gap-2 min-h-[80px]"
-        >
-          <Mail className="h-5 w-5 text-blue-300/80" />
-          <span className="text-xs font-medium text-blue-200/90 text-center">Preview invoice email</span>
-        </Link>
       </div>
 
       {/* Recent Activity - Independent Loading with Suspense */}

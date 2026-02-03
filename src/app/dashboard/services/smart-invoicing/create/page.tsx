@@ -437,6 +437,15 @@ export default function CreateInvoicePage() {
   const [sendingInvoice, setSendingInvoice] = useState(false);
   const [creatingClient, setCreatingClient] = useState(false);
 
+  // Scroll to validation errors when they appear (e.g. after clicking Send Invoice / Download PDF)
+  useEffect(() => {
+    if (validationErrors.length > 0 && validationErrorsRef.current) {
+      const el = validationErrorsRef.current;
+      // Center the error block in the viewport so it’s clearly visible; scroll-margin-top on the element adds top spacing
+      el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+    }
+  }, [validationErrors]);
+
   // Lock body scroll when send overlay is visible so page cannot scroll
   useEffect(() => {
     if (!sendingInvoice) return;
@@ -672,6 +681,7 @@ export default function CreateInvoicePage() {
   const printRef = useRef<HTMLDivElement>(null);
   const pdfRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const validationErrorsRef = useRef<HTMLDivElement>(null);
 
   // Helper function to check if currency is local/fiat (not crypto)
   const isLocalCurrency = () => {
@@ -1835,8 +1845,7 @@ export default function CreateInvoicePage() {
 
       // If this is a draft invoice (has _id), update it instead of creating new
       if (formData._id) {
-        // Updating draft invoice...
-
+        // Updating draft invoice (do not set status to 'sent' if invoice is pending_approval – API will reject)
         const updateResponse = await fetch(`/api/invoices/${formData._id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -1846,25 +1855,22 @@ export default function CreateInvoicePage() {
           }))
         });
 
-        // Update invoice response status received
+        const updateData = await updateResponse.json();
 
-        if (!updateResponse.ok) {
+        if (updateResponse.ok && updateData.success) {
+          primaryInvoiceId = updateData.invoice._id;
+          primaryInvoiceNumber = updateData.invoice.invoiceNumber;
+        } else if (updateResponse.status === 403 && updateData.message && String(updateData.message).toLowerCase().includes('pending approval')) {
+          // Invoice is pending approval – API rejected setting status to 'sent'; use existing id and continue to send (send will return requiresApproval)
+          primaryInvoiceId = formData._id;
+          primaryInvoiceNumber = formData.invoiceNumber || '';
+        } else if (!updateResponse.ok) {
           const errorText = await updateResponse.text();
           console.error('❌ [Smart Invoicing] Update invoice response error:', errorText);
-          throw new Error(`Failed to update invoice: ${updateResponse.status} ${errorText}`);
+          throw new Error(updateData.message || `Failed to update invoice: ${updateResponse.status}`);
+        } else {
+          throw new Error(updateData.message || 'Failed to update invoice');
         }
-
-        const updateData = await updateResponse.json();
-        // Update invoice response received
-
-        if (!updateData.success) {
-          throw new Error(`Failed to update invoice: ${updateData.message}`);
-        }
-
-        primaryInvoiceId = updateData.invoice._id;
-        primaryInvoiceNumber = updateData.invoice.invoiceNumber;
-
-        // Draft invoice updated successfully
       } else {
         // Create new invoice
         // Creating new invoice...
@@ -1956,7 +1962,7 @@ export default function CreateInvoicePage() {
       const filesEndTime = Date.now();
       console.log('📄 [PDF Generation] File attachments conversion completed in', filesEndTime - filesStartTime, 'ms');
 
-      let result: { success: boolean; messageId?: string; error?: string };
+      let result: { success: boolean; messageId?: string; error?: string; message?: string; requiresApproval?: boolean; status?: string };
 
       // WhatsApp is disabled - force email mode
       // TODO: Remove this check when re-enabling WhatsApp
@@ -2084,15 +2090,27 @@ export default function CreateInvoicePage() {
         clearSavedData();
         // Redirect to invoices page
         router.push('/dashboard/services/smart-invoicing/invoices');
+      } else if (result.requiresApproval === true || result.status === 'pending_approval') {
+        // Invoice is pending approval – not a failure; tell the user clearly
+        console.log('⏳ [Smart Invoicing] Invoice pending approval:', {
+          invoiceNumber: formData.invoiceNumber,
+          status: 'pending_approval'
+        });
+        toast.success(
+          'This invoice is pending approval. It will be sent to the recipient once an approver approves it.'
+        );
+        clearSavedData();
+        router.push('/dashboard/services/smart-invoicing/invoices');
       } else {
         console.error('❌ [Smart Invoicing] Failed to send invoice:', {
           error: result.error,
+          message: result.message,
           invoiceNumber: formData.invoiceNumber,
           recipient: formData.sendViaWhatsapp ? formData.clientPhone : formData.clientEmail,
           method: formData.sendViaWhatsapp ? 'WhatsApp' : 'Email',
           fullResult: result
         });
-        toast.error(`Failed to send invoice: ${result.error || 'Unknown error occurred'}`);
+        toast.error(`Failed to send invoice: ${result.message || result.error || 'Unknown error occurred'}`);
       }
     } catch (error) {
       console.error('❌ [Smart Invoicing] ========== EXCEPTION IN SEND INVOICE ==========');
@@ -2268,7 +2286,7 @@ export default function CreateInvoicePage() {
 
       // If this is a draft invoice (has _id), update it instead of creating new
       if (formData._id) {
-        // Updating draft invoice...
+        // Updating draft invoice (API will reject status 'sent' when invoice is pending_approval)
         const updateResponse = await fetch(`/api/invoices/${formData._id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -2278,22 +2296,21 @@ export default function CreateInvoicePage() {
           }))
         });
 
-        if (!updateResponse.ok) {
-          const errorText = await updateResponse.text();
-          console.error('❌ [Smart Invoicing] Update invoice response error:', errorText);
-          throw new Error(`Failed to update invoice: ${updateResponse.status} ${errorText}`);
-        }
-
         const updateData = await updateResponse.json();
 
-        if (!updateData.success) {
-          throw new Error(`Failed to update invoice: ${updateData.message}`);
+        if (updateResponse.ok && updateData.success) {
+          primaryInvoiceId = updateData.invoice._id;
+          primaryInvoiceNumber = updateData.invoice.invoiceNumber;
+        } else if (updateResponse.status === 403 && updateData.message && String(updateData.message).toLowerCase().includes('pending approval')) {
+          primaryInvoiceId = formData._id;
+          primaryInvoiceNumber = formData.invoiceNumber || '';
+        } else if (!updateResponse.ok) {
+          const errorText = await updateResponse.text();
+          console.error('❌ [Smart Invoicing] Update invoice response error:', errorText);
+          throw new Error(updateData.message || `Failed to update invoice: ${updateResponse.status}`);
+        } else {
+          throw new Error(updateData.message || 'Failed to update invoice');
         }
-
-        primaryInvoiceId = updateData.invoice._id;
-        primaryInvoiceNumber = updateData.invoice.invoiceNumber;
-
-        // Draft invoice updated successfully
       } else {
         // Create new invoice
         const primaryInvoiceResponse = await fetch('/api/invoices', {
@@ -2591,10 +2608,62 @@ export default function CreateInvoicePage() {
 
   if (loading && invoiceId) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="flex items-center space-x-2">
-          <Loader2 className="h-6 w-6 animate-spin" />
-          <span>Loading invoice...</span>
+      <div className="min-h-screen rounded-xl bg-gray-50 py-8">
+        <div className="max-w-4xl mx-auto px-4">
+          {/* Header skeleton - matches Back + Save Draft / Send Invoice */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 space-y-4 sm:space-y-0">
+            <div className="h-12 w-40 bg-gray-200 rounded-lg animate-pulse" />
+            <div className="flex gap-4">
+              <div className="h-10 w-24 bg-gray-200 rounded-lg animate-pulse" />
+              <div className="h-10 w-28 bg-gray-200 rounded-lg animate-pulse" />
+            </div>
+          </div>
+          {/* Invoice document skeleton - white card with header + content */}
+          <div className="bg-white rounded-lg shadow-lg border w-full max-w-4xl mx-auto overflow-hidden">
+            <div className="p-4 sm:p-8 border-b border-gray-200">
+              <div className="flex flex-col sm:flex-row justify-between items-start space-y-4 sm:space-y-0 gap-4">
+                <div className="h-8 w-32 bg-gray-200 rounded animate-pulse" />
+                <div className="flex flex-col items-end gap-2">
+                  <div className="h-4 w-24 bg-gray-200 rounded animate-pulse" />
+                  <div className="h-4 w-20 bg-gray-200 rounded animate-pulse" />
+                  <div className="h-16 w-16 bg-gray-200 rounded-lg animate-pulse" />
+                </div>
+              </div>
+            </div>
+            <div className="p-4 sm:p-8 space-y-6">
+              <div className="flex flex-wrap gap-4">
+                <div className="h-5 w-28 bg-gray-200 rounded animate-pulse" />
+                <div className="h-5 w-36 bg-gray-200 rounded animate-pulse" />
+                <div className="h-5 w-24 bg-gray-200 rounded animate-pulse" />
+              </div>
+              <div className="border-t border-gray-200 pt-4">
+                <div className="h-4 w-full max-w-md bg-gray-200 rounded animate-pulse mb-3" />
+                <div className="h-4 w-full max-w-sm bg-gray-200 rounded animate-pulse mb-3" />
+                <div className="h-4 w-48 bg-gray-200 rounded animate-pulse" />
+              </div>
+              <div className="border-t border-gray-200 pt-4">
+                <div className="h-6 w-24 bg-gray-200 rounded animate-pulse mb-4" />
+                <div className="space-y-2">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex gap-4">
+                      <div className="h-8 flex-1 bg-gray-200 rounded animate-pulse" />
+                      <div className="h-8 w-20 bg-gray-200 rounded animate-pulse" />
+                      <div className="h-8 w-20 bg-gray-200 rounded animate-pulse" />
+                      <div className="h-8 w-16 bg-gray-200 rounded animate-pulse" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="flex justify-end gap-4 pt-4">
+                <div className="h-6 w-20 bg-gray-200 rounded animate-pulse" />
+                <div className="h-6 w-16 bg-gray-200 rounded animate-pulse" />
+              </div>
+            </div>
+          </div>
+          <div className="mt-6 flex items-center justify-center gap-2 text-gray-500">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span className="text-sm">Loading invoice...</span>
+          </div>
         </div>
       </div>
     );
@@ -2687,7 +2756,7 @@ export default function CreateInvoicePage() {
 
         {/* Validation Errors */}
         {validationErrors.length > 0 && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <div ref={validationErrorsRef} className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg scroll-mt-24" style={{ scrollMarginTop: '2rem' }}>
             <div className="flex items-center space-x-2 mb-2">
               <AlertCircle className="h-5 w-5 text-red-600" />
               <h3 className="text-sm font-medium text-red-800">Please fix the following errors before generating PDF:</h3>
@@ -3597,6 +3666,7 @@ export default function CreateInvoicePage() {
                               >
                                 <option value="GH">Ghana</option>
                                 <option value="KE">Kenya</option>
+                                <option value="AE">UAE</option>
                               </select>
                               <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-600 pointer-events-none" />
                             </div>

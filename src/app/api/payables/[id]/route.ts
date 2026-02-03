@@ -262,6 +262,39 @@ export async function PUT(
         } catch {
         }
 
+      // Send payment confirmation email when org has payment notifications enabled
+      if (existingPayable.organizationId) {
+        try {
+          const organization = await db.collection('organizations').findOne({
+            _id: new ObjectId(existingPayable.organizationId)
+          });
+          const paymentEmailsEnabled = (organization?.approvalSettings as { emailSettings?: { paymentNotifications?: boolean } } | undefined)?.emailSettings?.paymentNotifications !== false;
+          if (paymentEmailsEnabled && organization?.name) {
+            const payeeUser = await db.collection('users').findOne({
+              _id: new ObjectId(existingPayable.issuerId)
+            });
+            const recipientEmail = payeeUser?.email || existingPayable.userId;
+            const recipientName = payeeUser?.name || recipientEmail;
+            if (recipientEmail) {
+              await NotificationService.sendPaymentConfirmation(
+                recipientEmail,
+                recipientName,
+                {
+                  vendor: String(existingPayable.vendorName || existingPayable.companyName || 'Vendor'),
+                  amount: typeof existingPayable.total === 'number' ? existingPayable.total : parseFloat(String(existingPayable.total || 0)),
+                  currency: String(existingPayable.currency || 'USD'),
+                  paymentMethod: 'manual',
+                  transactionId: id
+                },
+                organization.name
+              );
+            }
+          }
+        } catch (emailErr) {
+          console.error('⚠️ [Payable] Payment confirmation email failed:', emailErr);
+        }
+      }
+
         // Update financial ledger for net balance calculation
         try {
           const ledgerCollection = db.collection('financial_ledger');

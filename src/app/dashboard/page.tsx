@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, Suspense, startTransition } from 'react';
+import { useState, useEffect, useRef, Suspense, startTransition } from 'react';
 import { useSession } from '@/lib/auth-client';
 import { useRouter } from 'next/navigation';
 import { 
@@ -18,11 +18,25 @@ import RecentPayables from '@/components/dashboard/RecentPayables';
 import { getUserSettings } from '@/app/actions/user-actions';
 
 export default function DashboardPage() {
-  const { data: session } = useSession();
+  const { data: session, update: updateSession } = useSession();
   const { subscription, refetch } = useSubscription(); // Don't block on loading
   const router = useRouter();
   const [userName, setUserName] = useState<string>('');
   const [organizationName, setOrganizationName] = useState<string>('');
+  const [mounted, setMounted] = useState(false);
+  const sessionRefreshDoneRef = useRef(false);
+
+  // Avoid hydration mismatch: isPaidUser depends on client-loaded subscription
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // After onboarding redirect, session can have stale services; refresh once so services show (both individual and org users)
+  useEffect(() => {
+    if (!session?.user?.id || sessionRefreshDoneRef.current) return;
+    sessionRefreshDoneRef.current = true;
+    updateSession?.().catch(() => {});
+  }, [session?.user?.id, session?.user, updateSession]);
 
   // Refresh subscription on mount to ensure we have the latest data
   useEffect(() => {
@@ -134,7 +148,7 @@ export default function DashboardPage() {
                   </span>
                 )}
                 Overview
-                {isPaidUser && (
+                {mounted && isPaidUser && (
                   <span className="w-2 h-2 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full"></span>
                 )}
               </h1>
@@ -152,7 +166,7 @@ export default function DashboardPage() {
                   </span>
                 )}
                 Overview
-                {isPaidUser && (
+                {mounted && isPaidUser && (
                   <span className="w-2 h-2 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full"></span>
                 )}
               </h1>
@@ -165,8 +179,8 @@ export default function DashboardPage() {
         </div> */}
       </div>
 
-      {/* Plan Status Banner - Only show for receivables free users */}
-      {subscription && subscription.plan?.planId === 'receivables-free' && hasReceivablesAccess && (
+      {/* Plan Status Banner - Only show for receivables free users (defer until mounted to avoid hydration mismatch) */}
+      {mounted && subscription && subscription.plan?.planId === 'receivables-free' && hasReceivablesAccess && (
         <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-3 md:p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2 md:space-x-3">
@@ -222,39 +236,45 @@ export default function DashboardPage() {
         <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
           <h3 className="text-lg font-semibold text-white mb-4">Quick Actions</h3>
           <div className="flex flex-col space-y-3">
-            {/* Show Create Invoice only if service is enabled AND user has subscription access */}
-            {canShowCreateInvoice && (
-              <button
-                onClick={() => router.push('/dashboard/services/smart-invoicing/create')}
-                disabled={!subscription?.canCreateInvoice}
-                className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
-                  subscription?.canCreateInvoice
-                    ? 'bg-blue-600 text-white hover:bg-blue-700'
-                    : 'bg-gray-500 text-gray-300 cursor-not-allowed'
-                }`}
-              >
-                <FileText className="h-5 w-5" />
-                <span>Create Invoice</span>
-                {!subscription?.canCreateInvoice && (
-                  <>
-                    <span className="text-xs ml-auto">Limit Reached</span>
-                    <Lock className="h-4 w-4" />
-                  </>
+            {!mounted ? (
+              /* Placeholder when not mounted so server and client first paint match (avoids hydration mismatch) */
+              <>
+                <div className="flex items-center space-x-3 px-4 py-3 rounded-lg bg-white/5 animate-pulse h-12 w-full max-w-xs" aria-hidden />
+                <div className="flex items-center space-x-3 px-4 py-3 rounded-lg bg-white/5 animate-pulse h-12 w-full max-w-xs" aria-hidden />
+              </>
+            ) : (
+              <>
+                {canShowCreateInvoice && (
+                  <button
+                    onClick={() => router.push('/dashboard/services/smart-invoicing/create')}
+                    disabled={!subscription?.canCreateInvoice}
+                    className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+                      subscription?.canCreateInvoice
+                        ? 'bg-blue-600 text-white hover:bg-blue-700'
+                        : 'bg-gray-500 text-gray-300 cursor-not-allowed'
+                    }`}
+                  >
+                    <FileText className="h-5 w-5" />
+                    <span>Create Invoice</span>
+                    {!subscription?.canCreateInvoice && (
+                      <>
+                        <span className="text-xs ml-auto">Limit Reached</span>
+                        <Lock className="h-4 w-4" />
+                      </>
+                    )}
+                  </button>
                 )}
-              </button>
+                {canShowCreatePayable && (
+                  <button
+                    onClick={() => router.push('/dashboard/services/payables/create')}
+                    className="flex items-center space-x-3 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    <Receipt className="h-5 w-5" />
+                    <span>Create Payable</span>
+                  </button>
+                )}
+              </>
             )}
-            
-            {/* Show Create Payable only if service is enabled AND user has subscription access */}
-            {canShowCreatePayable && (
-              <button
-                onClick={() => router.push('/dashboard/services/payables/create')}
-                className="flex items-center space-x-3 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <Receipt className="h-5 w-5" />
-                <span>Create Payable</span>
-              </button>
-            )}
-
           </div>
         </div>
 
@@ -284,39 +304,51 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Recent Activity - Independent Loading with Suspense */}
+      {/* Recent Activity - Independent Loading with Suspense (gated by mounted to avoid hydration mismatch) */}
       <div className={`grid gap-6 ${
-        canShowCreateInvoice && canShowCreatePayable 
-          ? 'grid-cols-1 lg:grid-cols-2' 
-          : 'grid-cols-1'
+        !mounted ? 'grid-cols-1' : (canShowCreateInvoice && canShowCreatePayable ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1')
       }`}>
-        {canShowCreateInvoice && (
-          <Suspense fallback={
-            <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6">
-              <div className="h-6 w-32 bg-white/20 rounded mb-4 animate-pulse"></div>
-              <div className="space-y-4">
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="h-16 bg-white/10 rounded-lg animate-pulse"></div>
-                ))}
-              </div>
+        {!mounted ? (
+          /* Placeholder so server and client first paint match */
+          <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6">
+            <div className="h-6 w-32 bg-white/20 rounded mb-4 animate-pulse" />
+            <div className="space-y-4">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-16 bg-white/10 rounded-lg animate-pulse" />
+              ))}
             </div>
-          }>
-            <RecentInvoices />
-          </Suspense>
-        )}
-        {canShowCreatePayable && (
-          <Suspense fallback={
-            <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6">
-              <div className="h-6 w-32 bg-white/20 rounded mb-4 animate-pulse"></div>
-              <div className="space-y-4">
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="h-16 bg-white/10 rounded-lg animate-pulse"></div>
-                ))}
-              </div>
-            </div>
-          }>
-            <RecentPayables />
-          </Suspense>
+          </div>
+        ) : (
+          <>
+            {canShowCreateInvoice && (
+              <Suspense fallback={
+                <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6">
+                  <div className="h-6 w-32 bg-white/20 rounded mb-4 animate-pulse"></div>
+                  <div className="space-y-4">
+                    {[...Array(3)].map((_, i) => (
+                      <div key={i} className="h-16 bg-white/10 rounded-lg animate-pulse"></div>
+                    ))}
+                  </div>
+                </div>
+              }>
+                <RecentInvoices />
+              </Suspense>
+            )}
+            {canShowCreatePayable && (
+              <Suspense fallback={
+                <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6">
+                  <div className="h-6 w-32 bg-white/20 rounded mb-4 animate-pulse"></div>
+                  <div className="space-y-4">
+                    {[...Array(3)].map((_, i) => (
+                      <div key={i} className="h-16 bg-white/10 rounded-lg animate-pulse"></div>
+                    ))}
+                  </div>
+                </div>
+              }>
+                <RecentPayables />
+              </Suspense>
+            )}
+          </>
         )}
       </div>
     </div>

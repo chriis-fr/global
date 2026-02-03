@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import { Users, Plus, Mail, Clock, Shield } from 'lucide-react';
 import DashboardFloatingButton from '@/components/DashboardFloatingButton';
 import RoleSelector from '@/components/organization/RoleSelector';
@@ -410,7 +410,7 @@ export default function OrganizationMembersPage() {
                        <Mail className="h-5 w-5 text-white" />
                      </div>
                      <div>
-                      <h3 className="text-white font-medium">{inv.email}</h3>
+                      <h3 className="text-white font-medium">{inv.email || '(no email)'}</h3>
                       <p className="text-blue-200 text-sm">Invited as {inv.role}</p>
                        <div className="flex items-center space-x-1 text-gray-400 text-xs mt-1">
                          <Clock className="h-3 w-3" />
@@ -481,18 +481,32 @@ export default function OrganizationMembersPage() {
               {(members as Array<Record<string, unknown>>).map((m) => {
                 const member = m as { userId: string } & Record<string, unknown>;
                 return (
+                <Fragment key={member.userId}>
                 <MemberCard
-                  key={member.userId}
                   member={member as unknown as OrganizationMember}
                   currentUserRole={orgInfo?.userRole || 'member'}
-                  onEditRole={(userId, newRole) => {
-                    setEditingMember({ userId, role: newRole });
-                    handleUpdateMemberRole(userId, newRole);
-                  }}
+                  onEditRole={(memberId, newRole) => setEditingMember({ userId: memberId, role: newRole })}
                   onRemoveMember={handleRemoveMember}
                   isEditing={editingMember?.userId === member.userId}
                   isUpdating={updating}
+                  orgServices={orgInfo?.organization?.services as { smartInvoicing?: boolean; accountsPayable?: boolean } | undefined}
                 />
+                {editingMember?.userId === member.userId && (
+                  <div className="mt-2 pl-4 border-l-2 border-blue-500/50">
+                    <RoleSelector
+                      selectedRole={((member as Record<string, unknown>).role ?? 'accountant') as RoleKey}
+                      onRoleChange={(newRole) => {
+                        const currentRole = (member as Record<string, unknown>).role as string;
+                        if (newRole !== currentRole) {
+                          handleUpdateMemberRole(member.userId as string, newRole);
+                        }
+                        setEditingMember(null);
+                      }}
+                      showPermissions={true}
+                    />
+                  </div>
+                )}
+                </Fragment>
                 );
               })}
             </div>

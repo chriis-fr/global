@@ -3,6 +3,8 @@ import GoogleProvider from 'next-auth/providers/google'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { UserService } from './services/userService'
 import { createDefaultServices } from './services/serviceManager'
+import { getDatabase } from './database'
+import { ObjectId } from 'mongodb'
 import { defaultCountry } from '@/data/countries'
 import bcrypt from 'bcryptjs'
 
@@ -83,13 +85,12 @@ export const authOptions: NextAuthOptions = {
             name: user.name,
             image: user.avatar,
             role: user.role,
-            userType: 'individual', // Default value since property doesn't exist on User model
-            address: {
-              street: '',
-              city: '',
-              country: '',
-              postalCode: ''
-            }, // Default empty address object since property doesn't exist on User model
+            userType: ((user as unknown as Record<string, unknown>).userType as 'individual' | 'business') || 'individual',
+            address: (() => {
+              const a = (user as unknown as Record<string, unknown>).address as { street?: string; city?: string; country?: string; postalCode?: string } | undefined;
+              return a && typeof a === 'object' ? { street: a.street ?? '', city: a.city ?? '', country: a.country ?? '', postalCode: a.postalCode ?? '' } : { street: '', city: '', country: '', postalCode: '' };
+            })(),
+            organizationId: user.organizationId?.toString(),
             onboarding: {
               completed: user.onboarding?.isCompleted || false,
               currentStep: user.onboarding?.currentStep || 0,
@@ -264,6 +265,10 @@ export const authOptions: NextAuthOptions = {
           if (dbUser) {
             token.organizationId = dbUser.organizationId?.toString()
             token.role = dbUser.role
+            token.userType = ((dbUser as unknown as Record<string, unknown>).userType as 'individual' | 'business') || 'individual'
+            const dbAddress = (dbUser as unknown as Record<string, unknown>).address as { street?: string; city?: string; country?: string; postalCode?: string } | undefined;
+            token.address = dbAddress && typeof dbAddress === 'object' ? { street: dbAddress.street ?? '', city: dbAddress.city ?? '', country: dbAddress.country ?? '', postalCode: dbAddress.postalCode ?? '' } : token.address
+            token.taxId = ((dbUser as unknown as Record<string, unknown>).taxId as string | undefined) ?? token.taxId
             // Mark as completed if isCompleted is true, data.completed is true, OR currentStep is 4 (final step)
             const isCompletedFlag = dbUser.onboarding?.isCompleted === true
             const dataCompleted = (dbUser.onboarding?.data as { completed?: boolean })?.completed
@@ -275,13 +280,89 @@ export const authOptions: NextAuthOptions = {
               completedSteps: dbUser.onboarding?.completedSteps || [],
               serviceOnboarding: dbUser.onboarding?.data || {}
             }
-            token.services = { ...(dbUser.services || createDefaultServices()) } as Record<string, boolean>
+            // Org members: use organization's enabled services so sidebar and services match the org.
+            // When org has none enabled (e.g. owner onboarded before we synced to org), sync from owner's user.services
+            // so the whole organisation inherits the owner's services and all members see the same.
+            if (dbUser.organizationId) {
+              try {
+                const db = await getDatabase()
+                const orgId = typeof dbUser.organizationId === 'string'
+                  ? new ObjectId(dbUser.organizationId)
+                  : dbUser.organizationId
+                const org = await db.collection('organizations').findOne({ _id: orgId })
+                const orgServices = org?.services as Record<string, boolean> | undefined
+                const hasAnyEnabled = orgServices && Object.values(orgServices).some(Boolean)
+                let effectiveServices = hasAnyEnabled && orgServices
+                  ? { ...createDefaultServices(), ...orgServices } as Record<string, boolean>
+                  : (dbUser.services ? { ...createDefaultServices(), ...dbUser.services } : createDefaultServices()) as unknown as Record<string, boolean>
+
+                // Sync from owner when org has no enabled services so members inherit owner's onboarding choices
+                if (!hasAnyEnabled && org?.members?.length) {
+                  const ownerMember = (org.members as Array<{ userId: { toString: () => string }; role: string }>).find(
+                    (m) => m.role === 'owner'
+                  )
+                  if (ownerMember) {
+                    const ownerUser = await UserService.getUserById(ownerMember.userId.toString())
+                    const ownerServices = ownerUser?.services as Record<string, boolean> | undefined
+                    const ownerHasAny = ownerServices && Object.values(ownerServices).some(Boolean)
+                    if (ownerHasAny && ownerServices) {
+                      effectiveServices = { ...createDefaultServices(), ...ownerServices } as Record<string, boolean>
+                      try {
+                        const { OrganizationService } = await import('./services/organizationService')
+                        await OrganizationService.updateOrganization(dbUser.organizationId.toString(), {
+                          services: effectiveServices
+                        })
+                      } catch {
+                        // token already has effectiveServices; org sync best-effort
+                      }
+                    }
+                  }
+                }
+                token.services = effectiveServices
+              } catch (err) {
+                console.error('[Services→Dashboard] JWT callback: org lookup failed, using user.services', { organizationId: dbUser.organizationId?.toString(), error: err })
+                token.services = { ...(dbUser.services || createDefaultServices()) } as Record<string, boolean>
+              }
+            } else {
+              token.services = { ...(dbUser.services || createDefaultServices()) } as Record<string, boolean>
+            }
             token.mongoId = dbUser._id?.toString()
             token.adminTag = dbUser.adminTag || false
             token.lastRefresh = Date.now() // Track when we last refreshed
           }
         } catch {
           // Error fetching latest user data for JWT
+        }
+      }
+
+      // Org members: when not doing full refresh, still refresh token.services and token.onboarding from DB
+      // so dashboard sees completed onboarding and doesn't redirect back to onboarding (avoids flash loop).
+      if (token.email && token.organizationId && !shouldRefresh) {
+        try {
+          const dbUser = await UserService.getUserByEmail(token.email as string)
+          if (dbUser) {
+            const isCompletedFlag = dbUser.onboarding?.isCompleted === true
+            const dataCompleted = (dbUser.onboarding?.data as { completed?: boolean })?.completed
+            const isCompleted = isCompletedFlag || dataCompleted === true || dbUser.onboarding?.currentStep === 4
+            token.onboarding = {
+              completed: isCompleted,
+              currentStep: dbUser.onboarding?.currentStep || 0,
+              completedSteps: dbUser.onboarding?.completedSteps || [],
+              serviceOnboarding: dbUser.onboarding?.data || {}
+            }
+          }
+          const db = await getDatabase()
+          const orgId = typeof token.organizationId === 'string'
+            ? new ObjectId(token.organizationId)
+            : token.organizationId
+          const org = await db.collection('organizations').findOne({ _id: orgId })
+          const orgServices = org?.services as Record<string, boolean> | undefined
+          const hasAnyEnabled = orgServices && Object.values(orgServices).some(Boolean)
+          if (hasAnyEnabled && orgServices) {
+            token.services = { ...createDefaultServices(), ...orgServices } as Record<string, boolean>
+          }
+        } catch {
+          // non-blocking; keep existing token
         }
       }
       

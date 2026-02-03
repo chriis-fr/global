@@ -21,6 +21,7 @@ import {
 import Image from 'next/image'
 import Link from 'next/link'
 import { signIn, useSession } from '@/lib/auth-client'
+import { useSession as useNextAuthSession } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { countries, defaultCountry } from '@/data/countries'
 import { getIndustriesByCategory, getIndustryCategories } from '@/data/industries'
@@ -28,6 +29,7 @@ import { useOnboardingStore } from '@/lib/stores/onboardingStore'
 
 function AuthContent() {
   const { data: session, status, update: refreshSession } = useSession()
+  const { update: nextAuthUpdate } = useNextAuthSession()
   const searchParams = useSearchParams()
   const { setOnboarding } = useOnboardingStore()
   const [isLogin, setIsLogin] = useState(true)
@@ -75,8 +77,12 @@ function AuthContent() {
   const [resetPasswordError, setResetPasswordError] = useState('')
   const [resetPasswordSuccess, setResetPasswordSuccess] = useState(false)
   
-  // User must click tick to confirm name (stops section from auto-closing while typing)
-  const [segment1Confirmed, setSegment1Confirmed] = useState(false)
+  // User clicks tick per field: name and company (business) are independent
+  const [segment1NameConfirmed, setSegment1NameConfirmed] = useState(false)
+  const [segment1CompanyConfirmed, setSegment1CompanyConfirmed] = useState(false)
+  // Message when a tick is clicked but that field is empty (name vs company)
+  const [segment1TickMessage, setSegment1TickMessage] = useState<string | null>(null)
+  const [segment1CompanyTickMessage, setSegment1CompanyTickMessage] = useState<string | null>(null)
   // Collapsible segment states
   const [expandedSegments, setExpandedSegments] = useState({
     segment1: true, // Start expanded
@@ -95,6 +101,12 @@ function AuthContent() {
     segment5: false
   })
   const countryDetectedRef = useRef(false)
+
+  // Clear tick messages when user types in name or company field
+  useEffect(() => {
+    setSegment1TickMessage(null)
+    setSegment1CompanyTickMessage(null)
+  }, [formData.fullName, formData.companyName])
 
   // Auto-collapse segments when they become complete (only when they first become complete)
   useEffect(() => {
@@ -758,9 +770,14 @@ function AuthContent() {
                       const invitationResult = await invitationResponse.json()
                       if (invitationResult.success) {
                         console.log('✅ [Auth] Organization invitation completed successfully')
-                        // Clean up invitation data
                         localStorage.removeItem('invitationData')
-                        // Redirect to dashboard
+                        // Force JWT refresh from DB (NextAuth update) then sync our session context
+                        try {
+                          await nextAuthUpdate?.()
+                          await refreshSession()
+                        } catch {
+                          // Continue to redirect even if refresh fails
+                        }
                         window.location.href = '/dashboard'
                       } else {
                         console.log('⚠️ [Auth] Failed to complete organization invitation:', invitationResult.message)
@@ -1093,10 +1110,6 @@ function AuthContent() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Helper functions to check segment completion */}
             {(() => {
-              // Segment 1: Account Type, Full Name, Company Name (if business)
-              const isSegment1Complete = formData.fullName.trim() !== '' && 
-                (formData.userType === 'individual' || (formData.userType === 'business' && formData.companyName.trim() !== ''));
-              
               // Segment 2: Email, Password, Confirm Password (passwords must match)
               const isSegment2Complete = formData.email.trim() !== '' && 
                 formData.password.trim() !== '' && 
@@ -1113,10 +1126,9 @@ function AuthContent() {
                 formData.address.postalCode.trim() !== ''
               );
               
-              // Track which segments have been shown (to prevent showing multiple at once)
-              // Each segment only appears after the previous one is complete AND visible
-              // This ensures sequential appearance without layout shifts
-              const segment2Shown = isSegment1Complete; // Show after Segment 1 complete
+              // Segment 1 fully confirmed = name tick (individual) or company tick only (business; no tick on name)
+              const isSegment1FullyConfirmed = formData.userType === 'individual' ? segment1NameConfirmed : segment1CompanyConfirmed;
+              const segment2Shown = isSegment1FullyConfirmed;
               const segment3Shown = segment2Shown && isSegment2Complete; // Show after Segment 2 (password) is complete
               const segment4Shown = segment3Shown && isSegment3Complete; // Show after Segment 3 (country) is complete
               const segment5Shown = segment4Shown; // Show after Segment 4 (phone) is shown (phone is optional, so always show if segment4 is shown)
@@ -1156,8 +1168,8 @@ function AuthContent() {
                   <AnimatePresence mode="wait">
                     {!isLogin && (
                       <div className="space-y-2">
-                        {/* Collapsible Header - only after user clicks tick (done typing name) */}
-                        {isSegment1Complete && segment1Confirmed && (
+                        {/* Collapsible Header - only after both ticks (name + company for business) are clicked */}
+                        {isSegment1FullyConfirmed && (
                           <button
                             type="button"
                             onClick={() => setExpandedSegments(prev => ({ ...prev, segment1: !prev.segment1 }))}
@@ -1172,9 +1184,9 @@ function AuthContent() {
                           </button>
                         )}
                         
-                        {/* Segment Content - visible until user clicks tick, then collapsible */}
+                        {/* Segment Content - visible until both ticks clicked, then collapsible */}
                         <AnimatePresence>
-                          {(!isSegment1Complete || !segment1Confirmed || expandedSegments.segment1) && (
+                          {(!isSegment1FullyConfirmed || expandedSegments.segment1) && (
                             <motion.div
                               key="segment1-content"
                               initial={{ opacity: 0, height: 0 }}
@@ -1224,7 +1236,7 @@ function AuthContent() {
                                 </div>
                               </div>
 
-                              {/* Full Name Field */}
+                              {/* Full Name Field (tick only for individual; business has no tick here) */}
                               <div className="space-y-2">
                                 <label className="text-sm font-medium text-blue-100">
                                   Full Name
@@ -1235,31 +1247,45 @@ function AuthContent() {
                                     name="fullName"
                                     value={formData.fullName}
                                     onChange={handleInputChange}
-                                    className="w-full pl-10 pr-12 py-3 border rounded-lg text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white/10 border-white/20"
+                                    className={`w-full pl-10 py-3 border rounded-lg text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white/10 border-white/20 ${formData.userType === 'individual' ? 'pr-12' : 'pr-4'}`}
                                     placeholder="Enter your full name"
                                     required
                                   />
                                   <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-blue-300" />
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const complete = formData.fullName.trim() !== '' &&
-                                        (formData.userType === 'individual' || (formData.userType === 'business' && formData.companyName.trim() !== ''))
-                                      if (complete) {
-                                        setSegment1Confirmed(true)
-                                        setExpandedSegments(prev => ({ ...prev, segment1: false }))
-                                      }
-                                    }}
-                                    title="Done typing"
-                                    className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 rounded-md text-blue-300 hover:text-white hover:bg-white/20 transition-colors"
-                                  >
-                                    <Check className="h-5 w-5" />
-                                  </button>
+                                  {formData.userType === 'individual' && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.preventDefault()
+                                        e.stopPropagation()
+                                        const hasName = formData.fullName.trim() !== ''
+                                        if (hasName) {
+                                          setSegment1TickMessage(null)
+                                          setSegment1NameConfirmed(true)
+                                          setExpandedSegments(prev => ({ ...prev, segment1: false }))
+                                        } else {
+                                          setSegment1TickMessage('Please enter your full name first')
+                                          setTimeout(() => setSegment1TickMessage(null), 4000)
+                                        }
+                                      }}
+                                      title="Done typing your name"
+                                      className="absolute right-3 top-1/2 -translate-y-1/2 z-10 min-w-[2.5rem] min-h-[2.5rem] flex items-center justify-center rounded-md text-blue-300 hover:text-white hover:bg-white/20 transition-colors cursor-pointer"
+                                    >
+                                      <Check className="h-5 w-5 pointer-events-none" />
+                                    </button>
+                                  )}
                                 </div>
-                                <p className="text-xs text-blue-300/80">Click the tick when you&apos;re done typing your name</p>
+                                {formData.userType === 'individual' && (
+                                  <>
+                                    <p className="text-xs text-blue-300/80">Click the tick when you&apos;re done typing your name</p>
+                                    {segment1TickMessage && (
+                                      <p className="text-xs text-amber-400 mt-1" role="alert">{segment1TickMessage}</p>
+                                    )}
+                                  </>
+                                )}
                               </div>
 
-                              {/* Company Name Field - Only for business users */}
+                              {/* Company Name Field - Only for business users; has its own tick */}
                               {formData.userType === 'business' && (
                                 <div className="space-y-2">
                                   <label className="text-sm font-medium text-blue-100">
@@ -1272,7 +1298,7 @@ function AuthContent() {
                                       value={formData.companyName}
                                       onChange={handleInputChange}
                                       disabled={isEmailLocked && !!localStorage.getItem('invitationData')}
-                                      className={`w-full pl-10 pr-4 py-3 border rounded-lg text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                      className={`w-full pl-10 pr-12 py-3 border rounded-lg text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                                         isEmailLocked && !!localStorage.getItem('invitationData')
                                           ? 'bg-white/5 border-white/10 text-blue-200 cursor-not-allowed' 
                                           : 'bg-white/10 border-white/20'
@@ -1281,7 +1307,31 @@ function AuthContent() {
                                       required
                                     />
                                     <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-blue-300" />
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.preventDefault()
+                                        e.stopPropagation()
+                                        const hasCompany = formData.companyName.trim() !== ''
+                                        if (hasCompany) {
+                                          setSegment1CompanyTickMessage(null)
+                                          setSegment1CompanyConfirmed(true)
+                                          setExpandedSegments(prev => ({ ...prev, segment1: false }))
+                                        } else {
+                                          setSegment1CompanyTickMessage('Please enter your company name first')
+                                          setTimeout(() => setSegment1CompanyTickMessage(null), 4000)
+                                        }
+                                      }}
+                                      title="Done typing your company name"
+                                      className="absolute right-3 top-1/2 -translate-y-1/2 z-10 min-w-[2.5rem] min-h-[2.5rem] flex items-center justify-center rounded-md text-blue-300 hover:text-white hover:bg-white/20 transition-colors cursor-pointer"
+                                    >
+                                      <Check className="h-5 w-5 pointer-events-none" />
+                                    </button>
                                   </div>
+                                  <p className="text-xs text-blue-300/80">Click the tick when you&apos;re done typing</p>
+                                  {segment1CompanyTickMessage && (
+                                    <p className="text-xs text-amber-400 mt-1" role="alert">{segment1CompanyTickMessage}</p>
+                                  )}
                                 </div>
                               )}
                             </motion.div>

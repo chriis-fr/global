@@ -417,7 +417,7 @@ export class ApprovalService {
   // Helper methods
   private static getDefaultApprovalSettings(billingEmail?: string): ApprovalSettings {
     return {
-      requireApproval: true,
+      requireApproval: false,
       approvalRules: {
         amountThresholds: {
           low: 100,      // Under $100 - auto approve

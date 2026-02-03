@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { UserService } from '@/lib/services/userService';
+import { OrganizationService } from '@/lib/services/organizationService';
+import { getDatabase } from '@/lib/database';
+import { createDefaultServices } from '@/lib/services/serviceManager';
 
 export async function GET() {
   try {
@@ -26,6 +29,38 @@ export async function GET() {
         },
         { status: 404 }
       );
+    }
+
+    // Org members: use organization's enabled services so response matches what sidebar/services use.
+    // When org has none enabled, sync from owner's user.services so members inherit owner's onboarding choices.
+    let effectiveServices = user.services;
+    if (user.organizationId) {
+      try {
+        const db = await getDatabase();
+        const org = await db.collection('organizations').findOne({ _id: user.organizationId });
+        const orgServices = org?.services as Record<string, boolean> | undefined;
+        const hasAnyEnabled = orgServices && Object.values(orgServices).some(Boolean);
+        if (hasAnyEnabled && orgServices) {
+          effectiveServices = { ...createDefaultServices(), ...orgServices } as typeof user.services;
+        } else if (org?.members?.length) {
+          const ownerMember = (org.members as Array<{ userId: { toString: () => string }; role: string }>).find(
+            (m) => m.role === 'owner'
+          );
+          if (ownerMember) {
+            const ownerUser = await UserService.getUserById(ownerMember.userId.toString());
+            const ownerServices = ownerUser?.services as Record<string, boolean> | undefined;
+            const ownerHasAny = ownerServices && Object.values(ownerServices).some(Boolean);
+            if (ownerHasAny && ownerServices) {
+              effectiveServices = { ...createDefaultServices(), ...ownerServices } as typeof user.services;
+              await OrganizationService.updateOrganization(user.organizationId.toString(), {
+                services: effectiveServices
+              });
+            }
+          }
+        }
+      } catch {
+        // Keep user.services on error
+      }
     }
 
     // Convert User model structure to API response structure
@@ -56,7 +91,7 @@ export async function GET() {
       success: true,
       data: {
         onboarding: onboardingData,
-        services: user.services
+        services: effectiveServices
       },
       timestamp: new Date().toISOString()
     });

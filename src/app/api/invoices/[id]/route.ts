@@ -153,6 +153,17 @@ export async function PUT(
       );
     }
 
+    // Block bypassing approval: do not allow changing status from pending_approval to sent or approved via PUT
+    if (existingInvoice.status === 'pending_approval' && (body.status === 'sent' || body.status === 'approved')) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'This invoice is pending approval. Only an approver can approve it; status cannot be set to sent or approved here.'
+        },
+        { status: 403 }
+      );
+    }
+
     // Check permissions for status updates
     if (body.status === 'paid') {
       // Individual users can always mark their own invoices as paid

@@ -37,6 +37,11 @@ export class NotificationService {
     organizationName: string,
     createdByName: string
   ): Promise<boolean> {
+    const toEmail = typeof approverEmail === 'string' ? approverEmail.trim() : '';
+    if (!toEmail) {
+      console.warn('[NotificationService] sendInvoiceApprovalRequest: no recipient email, skipping send');
+      return false;
+    }
     try {
       const transporter = await this.getTransporter();
       
@@ -46,7 +51,7 @@ export class NotificationService {
       
       const mailOptions = {
         from: `"${organizationName}" <${process.env.SMTP_USER}>`,
-        to: approverEmail,
+        to: toEmail,
         subject: `Invoice Approval Required: ${invoiceDetails.invoiceName} by ${createdByName} - ${invoiceDetails.currency} ${invoiceDetails.amount}`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
