@@ -124,7 +124,7 @@ export default function SmartInvoicingPage() {
               <div className="min-w-0 flex-1">
                 <h1 className="text-lg sm:text-xl font-semibold text-white truncate">Smart Invoicing</h1>
                 <p className="text-xs sm:text-sm text-blue-200 hidden sm:block">
-                  Create, manage, and get paid with local currency, stables coins or crypto payments seamlessly
+                 Create and manage invoices seamlessly
                 </p>
               </div>
             </div>

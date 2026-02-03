@@ -83,13 +83,14 @@ export const authOptions: NextAuthOptions = {
             name: user.name,
             image: user.avatar,
             role: user.role,
-            userType: 'individual', // Default value since property doesn't exist on User model
-            address: {
+            userType: (user.userType as 'individual' | 'business') || 'individual',
+            address: user.address ?? {
               street: '',
               city: '',
               country: '',
               postalCode: ''
-            }, // Default empty address object since property doesn't exist on User model
+            },
+            organizationId: user.organizationId?.toString(),
             onboarding: {
               completed: user.onboarding?.isCompleted || false,
               currentStep: user.onboarding?.currentStep || 0,
@@ -264,6 +265,9 @@ export const authOptions: NextAuthOptions = {
           if (dbUser) {
             token.organizationId = dbUser.organizationId?.toString()
             token.role = dbUser.role
+            token.userType = (dbUser.userType as 'individual' | 'business') || 'individual'
+            token.address = dbUser.address ?? token.address
+            token.taxId = dbUser.taxId ?? token.taxId
             // Mark as completed if isCompleted is true, data.completed is true, OR currentStep is 4 (final step)
             const isCompletedFlag = dbUser.onboarding?.isCompleted === true
             const dataCompleted = (dbUser.onboarding?.data as { completed?: boolean })?.completed

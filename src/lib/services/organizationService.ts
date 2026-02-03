@@ -63,6 +63,12 @@ export class OrganizationService {
     return collection.findOne({ name });
   }
 
+  // Get organization by billing email (used to avoid duplicate org signups)
+  static async getOrganizationByBillingEmail(billingEmail: string): Promise<Organization | null> {
+    const collection = await this.getCollection();
+    return collection.findOne({ billingEmail });
+  }
+
   // Get all organizations
   static async getAllOrganizations(): Promise<Organization[]> {
     const collection = await this.getCollection();

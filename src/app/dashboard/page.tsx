@@ -23,6 +23,12 @@ export default function DashboardPage() {
   const router = useRouter();
   const [userName, setUserName] = useState<string>('');
   const [organizationName, setOrganizationName] = useState<string>('');
+  const [mounted, setMounted] = useState(false);
+
+  // Avoid hydration mismatch: isPaidUser depends on client-loaded subscription
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Refresh subscription on mount to ensure we have the latest data
   useEffect(() => {
@@ -134,7 +140,7 @@ export default function DashboardPage() {
                   </span>
                 )}
                 Overview
-                {isPaidUser && (
+                {mounted && isPaidUser && (
                   <span className="w-2 h-2 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full"></span>
                 )}
               </h1>
@@ -152,7 +158,7 @@ export default function DashboardPage() {
                   </span>
                 )}
                 Overview
-                {isPaidUser && (
+                {mounted && isPaidUser && (
                   <span className="w-2 h-2 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full"></span>
                 )}
               </h1>

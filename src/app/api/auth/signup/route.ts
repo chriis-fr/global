@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
     }
     console.log('✅ [SIGNUP] Basic validation passed');
 
-    // Check if user already exists
+    // Check both: user and (for business) organization must not already exist
     console.log('🔍 [SIGNUP] Checking for existing user with email:', email);
     const existingUser = await UserService.getUserByEmail(email);
     if (existingUser) {
@@ -84,6 +84,23 @@ export async function POST(request: NextRequest) {
       );
     }
     console.log('✅ [SIGNUP] No existing user found - email available');
+
+    // For business users, billing email = user email; ensure no org already has it
+    if (userType === 'business') {
+      console.log('🔍 [SIGNUP] Checking for existing organization with billing email:', email);
+      const existingOrg = await OrganizationService.getOrganizationByBillingEmail(email);
+      if (existingOrg) {
+        console.log('❌ [SIGNUP] Organization already exists with billing email:', email);
+        return NextResponse.json(
+          { 
+            success: false, 
+            message: 'An organization with this billing email already exists' 
+          },
+          { status: 409 }
+        );
+      }
+      console.log('✅ [SIGNUP] No existing organization found for billing email');
+    }
 
     // Hash password
     console.log('🔐 [SIGNUP] Hashing password...');

@@ -148,12 +148,15 @@ export default function OnboardingPage() {
         }
       }
 
-      // Create user object from session
+      // Create user object from session (infer business if they have an organization, so UI matches reality)
+      const hasOrganization = !!(session.user as { organizationId?: string }).organizationId;
+      const displayUserType: 'individual' | 'business' =
+        session.user.userType === 'business' || hasOrganization ? 'business' : (session.user.userType || 'individual');
       const userObj: User = {
         _id: session.user.id,
         email: session.user.email,
         name: session.user.name,
-        userType: session.user.userType || 'individual',
+        userType: displayUserType,
         address: session.user.address || {
           street: '',
           city: '',
@@ -567,16 +570,18 @@ export default function OnboardingPage() {
                 <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 lg:p-6 mb-8 mx-4">
                   <h3 className="text-lg font-semibold text-white mb-4">
                     {user.userType === 'business' ? 'Business Tax ID (KRA PIN)' : 'Tax ID (KRA PIN)'}
+                    <span className="text-blue-300 font-normal"> *</span>
                   </h3>
                   <p className="text-blue-200 text-sm mb-2">
                     {user.userType === 'business' 
                       ? 'Please enter your business KRA PIN (Personal Identification Number) to verify your business identity.'
                       : 'Please enter your KRA PIN (Personal Identification Number) to verify your identity.'
                     }
+                    <span className="block mt-1 text-blue-300/90">* Optional – you can add this later in settings.</span>
                   </p>
                   <input
                     type="text"
-                    placeholder={user.userType === 'business' ? 'Enter your business KRA PIN' : 'Enter your KRA PIN'}
+                    placeholder={user.userType === 'business' ? 'Enter your business KRA PIN (optional)' : 'Enter your KRA PIN (optional)'}
                     value={taxID}
                     onChange={(e) => setTaxID(e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500"
