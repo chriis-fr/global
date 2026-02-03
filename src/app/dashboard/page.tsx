@@ -38,18 +38,6 @@ export default function DashboardPage() {
     updateSession?.().catch(() => {});
   }, [session?.user?.id, session?.user, updateSession]);
 
-  // [Services→Dashboard] Step 3: Log what the dashboard sees (browser DevTools Console). Check after onboarding that enabled services appear here.
-  useEffect(() => {
-    if (!session?.user || !mounted) return;
-    const services = (session.user as { services?: Record<string, boolean> }).services;
-    const enabled = services ? Object.entries(services).filter(([, v]) => v).map(([k]) => k) : [];
-    console.log('[Services→Dashboard] Dashboard session.user.services', {
-      enabled,
-      smartInvoicing: services?.smartInvoicing ?? false,
-      accountsPayable: services?.accountsPayable ?? false,
-    });
-  }, [session?.user, mounted]);
-
   // Refresh subscription on mount to ensure we have the latest data
   useEffect(() => {
     if (session?.user?.id) {

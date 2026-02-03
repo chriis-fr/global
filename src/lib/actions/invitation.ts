@@ -118,9 +118,8 @@ export async function sendInvitation(email: string, role: RoleKey): Promise<{
     await db.collection<InvitationToken>('invitation_tokens').insertOne(invitationToken);
     console.log('✅ [Invitation] Invitation token created successfully');
 
-    // Generate invitation link
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-    const invitationLink = `${baseUrl}/invite/${token}`;
+    // Generate invitation link (always production URL so emails work in production)
+    const invitationLink = `https://global.chains-erp.com/invite/${token}`;
     
     console.log('🔗 [Invitation] Invitation link generated:', invitationLink);
 
@@ -813,9 +812,8 @@ export async function resendInvitation(invitationId: string): Promise<{
     // Get inviter details
     const inviter = await UserService.getUserById(invitation.invitedBy.toString());
 
-    // Generate new invitation link
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-    const invitationLink = `${baseUrl}/invite/${invitation.token}`;
+    // Generate new invitation link (always production URL so emails work in production)
+    const invitationLink = `https://global.chains-erp.com/invite/${invitation.token}`;
 
     console.log('📧 [Resend Invitation] Resending invitation email...');
     console.log('📧 [Resend Invitation] Email details:', {

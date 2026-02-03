@@ -131,7 +131,6 @@ export default function OnboardingPage() {
           const statusData = await statusResponse.json();
           
           if (statusData.success && statusData.data?.onboarding?.completed) {
-            console.log('✅ [Onboarding] API shows onboarding already completed (e.g. invited member) – redirecting to dashboard');
             await updateSession();
             isCheckingStatusRef.current = false;
             setLoading(false);
@@ -234,7 +233,6 @@ export default function OnboardingPage() {
       // If session shows onboarding is completed, redirect immediately
       if (sessionCompleted && !redirectingRef.current) {
         redirectingRef.current = true;
-        console.log('✅ [Onboarding] Session shows onboarding completed, redirecting to dashboard');
         // Initialize store from session before redirect (only if not already set)
         // Use onboardingRef to check current state without causing re-render
         if (session.user.onboarding && session.user.services && !onboardingRef.current?.completed) {
@@ -294,14 +292,6 @@ export default function OnboardingPage() {
           serviceOnboarding: data.data.onboarding.serviceOnboarding || {}
         };
         
-        console.log('✅ [Onboarding] Step updated:', {
-          step,
-          isCompleted,
-          isCompletedFromDB,
-          dataCompleted,
-          updatedOnboarding
-        });
-        
         // Update store
         updateOnboarding(updatedOnboarding);
         
@@ -311,10 +301,8 @@ export default function OnboardingPage() {
         
         // If step 4 is completed, refresh session then client-navigate to dashboard (keeps updated session in React tree)
         if (isStep4Completed || isCompleted) {
-          console.log('🔄 [Onboarding] Step 4 completed, refreshing session and redirecting...');
           try {
             await updateSession();
-            console.log('✅ [Onboarding] Session refreshed successfully');
             // Client-side navigation so dashboard layout sees the updated session (avoids full-page load with stale cookie)
             router.push('/dashboard');
           } catch (error) {

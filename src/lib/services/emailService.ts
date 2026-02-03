@@ -726,7 +726,7 @@ export const sendOrganizationInvitation = async (
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
           <div style="margin-bottom: 20px;">
-            <img src="https://chains-erp.com/chainsnobg.png" 
+            <img src="https://global.chains-erp.com/chainsnobg.png" 
               alt="Chains ERP-Global Logo" 
               style="max-width: 150px; height: auto; border-radius: 8px;">
           </div>

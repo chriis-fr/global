@@ -119,7 +119,6 @@ export class NotificationService {
         `
       };
 
-      console.log('[NotificationService] sendInvoiceApprovalRequest: sending approval email to recipient:', toEmail);
       await transporter.sendMail(mailOptions);
       return true;
     } catch {
@@ -212,7 +211,6 @@ export class NotificationService {
         `
       };
 
-      console.log('[NotificationService] sendApprovalRequest: sending approval email to recipient:', approverEmail);
       await transporter.sendMail(mailOptions);
       return true;
     } catch {

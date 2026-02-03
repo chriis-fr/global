@@ -118,16 +118,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // [Services→Dashboard] Step 1: User document updated with services (dashboard reads from session, which gets this via JWT refresh)
-    console.log('[Services→Dashboard] POST /api/services: user updated', {
-      userId: user._id?.toString(),
-      organizationId: user.organizationId?.toString() ?? null,
-      serviceKey,
-      action,
-      updatedServices: updatedUser.services,
-      enabled: Object.entries(updatedUser.services || {}).filter(([, v]) => v).map(([k]) => k),
-    });
-
     // When user belongs to an organization, also update the organization's services so
     // session/JWT (which reads org.services for org members) and all members see the same.
     if (user.organizationId) {
@@ -135,16 +125,10 @@ export async function POST(request: NextRequest) {
         await OrganizationService.updateOrganization(user.organizationId.toString(), {
           services: updatedServices
         });
-        console.log('[Services→Dashboard] POST /api/services: organization updated', {
-          organizationId: user.organizationId.toString(),
-          services: updatedServices,
-        });
       } catch (err) {
         console.error('[Services→Dashboard] POST /api/services: org sync failed', { organizationId: user.organizationId?.toString(), error: err });
         // Continue; user services were updated; org sync is best-effort
       }
-    } else {
-      console.log('[Services→Dashboard] POST /api/services: no organizationId (individual user); session will use user.services on next refresh');
     }
 
     const enabledServices = getEnabledServices(updatedUser.services ? { ...createDefaultServices(), ...updatedUser.services } : createDefaultServices());

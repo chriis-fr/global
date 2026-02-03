@@ -320,25 +320,12 @@ export const authOptions: NextAuthOptions = {
                   }
                 }
                 token.services = effectiveServices
-                // [Services→Dashboard] Step 2: JWT callback set token.services (org member path)
-                console.log('[Services→Dashboard] JWT callback: org member', {
-                  trigger,
-                  organizationId: dbUser.organizationId?.toString(),
-                  orgFound: !!org,
-                  orgServices: orgServices ? Object.entries(orgServices).filter(([, v]) => v).map(([k]) => k) : [],
-                  tokenServices: Object.entries(token.services as Record<string, boolean>).filter(([, v]) => v).map(([k]) => k),
-                })
               } catch (err) {
                 console.error('[Services→Dashboard] JWT callback: org lookup failed, using user.services', { organizationId: dbUser.organizationId?.toString(), error: err })
                 token.services = { ...(dbUser.services || createDefaultServices()) } as Record<string, boolean>
               }
             } else {
               token.services = { ...(dbUser.services || createDefaultServices()) } as Record<string, boolean>
-              // [Services→Dashboard] Step 2: JWT callback set token.services (individual path)
-              console.log('[Services→Dashboard] JWT callback: individual', {
-                trigger,
-                tokenServices: Object.entries(token.services as Record<string, boolean>).filter(([, v]) => v).map(([k]) => k),
-              })
             }
             token.mongoId = dbUser._id?.toString()
             token.adminTag = dbUser.adminTag || false
