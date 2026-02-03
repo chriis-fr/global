@@ -1328,7 +1328,7 @@ function AuthContent() {
                                       <Check className="h-5 w-5 pointer-events-none" />
                                     </button>
                                   </div>
-                                  <p className="text-xs text-blue-300/80">Click the tick when you&apos;re done typing your company name</p>
+                                  <p className="text-xs text-blue-300/80">Click the tick when you&apos;re done typing</p>
                                   {segment1CompanyTickMessage && (
                                     <p className="text-xs text-amber-400 mt-1" role="alert">{segment1CompanyTickMessage}</p>
                                   )}
