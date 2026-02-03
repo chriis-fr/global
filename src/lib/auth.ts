@@ -85,13 +85,11 @@ export const authOptions: NextAuthOptions = {
             name: user.name,
             image: user.avatar,
             role: user.role,
-            userType: (user.userType as 'individual' | 'business') || 'individual',
-            address: user.address ?? {
-              street: '',
-              city: '',
-              country: '',
-              postalCode: ''
-            },
+            userType: ((user as unknown as Record<string, unknown>).userType as 'individual' | 'business') || 'individual',
+            address: (() => {
+              const a = (user as unknown as Record<string, unknown>).address as { street?: string; city?: string; country?: string; postalCode?: string } | undefined;
+              return a && typeof a === 'object' ? { street: a.street ?? '', city: a.city ?? '', country: a.country ?? '', postalCode: a.postalCode ?? '' } : { street: '', city: '', country: '', postalCode: '' };
+            })(),
             organizationId: user.organizationId?.toString(),
             onboarding: {
               completed: user.onboarding?.isCompleted || false,
@@ -267,9 +265,10 @@ export const authOptions: NextAuthOptions = {
           if (dbUser) {
             token.organizationId = dbUser.organizationId?.toString()
             token.role = dbUser.role
-            token.userType = (dbUser.userType as 'individual' | 'business') || 'individual'
-            token.address = dbUser.address ?? token.address
-            token.taxId = dbUser.taxId ?? token.taxId
+            token.userType = ((dbUser as unknown as Record<string, unknown>).userType as 'individual' | 'business') || 'individual'
+            const dbAddress = (dbUser as unknown as Record<string, unknown>).address as { street?: string; city?: string; country?: string; postalCode?: string } | undefined;
+            token.address = dbAddress && typeof dbAddress === 'object' ? { street: dbAddress.street ?? '', city: dbAddress.city ?? '', country: dbAddress.country ?? '', postalCode: dbAddress.postalCode ?? '' } : token.address
+            token.taxId = ((dbUser as unknown as Record<string, unknown>).taxId as string | undefined) ?? token.taxId
             // Mark as completed if isCompleted is true, data.completed is true, OR currentStep is 4 (final step)
             const isCompletedFlag = dbUser.onboarding?.isCompleted === true
             const dataCompleted = (dbUser.onboarding?.data as { completed?: boolean })?.completed
@@ -292,10 +291,10 @@ export const authOptions: NextAuthOptions = {
                   : dbUser.organizationId
                 const org = await db.collection('organizations').findOne({ _id: orgId })
                 const orgServices = org?.services as Record<string, boolean> | undefined
-                let hasAnyEnabled = orgServices && Object.values(orgServices).some(Boolean)
+                const hasAnyEnabled = orgServices && Object.values(orgServices).some(Boolean)
                 let effectiveServices = hasAnyEnabled && orgServices
                   ? { ...createDefaultServices(), ...orgServices } as Record<string, boolean>
-                  : (dbUser.services ? { ...createDefaultServices(), ...dbUser.services } : createDefaultServices()) as Record<string, boolean>
+                  : (dbUser.services ? { ...createDefaultServices(), ...dbUser.services } : createDefaultServices()) as unknown as Record<string, boolean>
 
                 // Sync from owner when org has no enabled services so members inherit owner's onboarding choices
                 if (!hasAnyEnabled && org?.members?.length) {

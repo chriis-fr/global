@@ -321,14 +321,11 @@ function Sidebar() {
 
                 const isApprovalsLink = link.key === 'approvals';
                 const hasPending = pendingApprovalsCount > 0;
-                const showDot = isApprovalsLink;
-                const dotEl = showDot ? (
+                const dotEl = isApprovalsLink && hasPending ? (
                   <span
-                    className={`ml-auto min-w-[10px] min-h-[10px] w-2.5 h-2.5 rounded-full ring-2 ring-blue-950 flex-shrink-0 ${
-                      hasPending ? 'bg-green-500' : 'bg-green-500/40'
-                    }`}
-                    aria-label={hasPending ? `${pendingApprovalsCount} pending` : 'Pending Approvals'}
-                    title={hasPending ? `${pendingApprovalsCount} pending approval${pendingApprovalsCount !== 1 ? 's' : ''}` : 'Pending Approvals'}
+                    className="ml-auto min-w-[10px] min-h-[10px] w-2.5 h-2.5 rounded-full bg-green-500 ring-2 ring-blue-950 flex-shrink-0"
+                    aria-label={`${pendingApprovalsCount} pending`}
+                    title={`${pendingApprovalsCount} pending approval${pendingApprovalsCount !== 1 ? 's' : ''}`}
                   />
                 ) : null;
 

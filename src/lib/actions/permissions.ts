@@ -96,7 +96,7 @@ export async function getPermissions(): Promise<PermissionsResult> {
 
     return {
       permissions,
-      member: serializedMember as OrganizationMember & { approvalLimits: { maxAmount: number; requiresDualApproval: boolean } },
+      member: serializedMember as unknown as OrganizationMember & { approvalLimits: { maxAmount: number; requiresDualApproval: boolean } },
     };
   } catch {
     return null;

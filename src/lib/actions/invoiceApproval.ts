@@ -359,40 +359,54 @@ export async function getPendingApprovals(): Promise<{
     const currentUserId = session.user?.id;
 
     // Only include invoices that the current user is allowed to approve: must be approver role and must not be the creator
-    const finalPendingInvoices = rawPending.filter((inv: { issuerId: string }) => {
+    const finalPendingInvoices = rawPending.filter((inv) => {
       if (!canApproveRole || !currentUserId) return false;
-      const creatorId = typeof inv.issuerId === 'string' ? inv.issuerId : inv.issuerId?.toString?.();
+      const issuerId = (inv as Record<string, unknown>).issuerId;
+      const creatorId = typeof issuerId === 'string' ? issuerId : (issuerId as { toString?: () => string })?.toString?.();
       return creatorId !== currentUserId;
     });
 
     // Get creator information for each invoice
     const enrichedInvoices = await Promise.all(
-      finalPendingInvoices.map(async (invoice: { issuerId: string | ObjectId; _id?: { toString: () => string }; invoiceNumber: string; invoiceName: string; total: number; currency: string; clientDetails?: { firstName?: string; lastName?: string; companyName?: string; email?: string }; createdAt: string; approvalCount?: number; requiredApprovals?: number; approvals?: unknown[] }) => {
-               const issuerIdForLookup = typeof invoice.issuerId === 'string' ? invoice.issuerId : (invoice.issuerId as ObjectId)?.toString?.();
-               const creator = issuerIdForLookup
-                 ? await db.collection('users').findOne({ _id: new ObjectId(issuerIdForLookup) })
-                 : null;
+      finalPendingInvoices.map(async (doc) => {
+        const invoice = doc as Record<string, unknown> & {
+          issuerId?: string | ObjectId;
+          _id?: { toString: () => string };
+          invoiceNumber?: string;
+          invoiceName?: string;
+          total?: number;
+          currency?: string;
+          clientDetails?: { firstName?: string; lastName?: string; companyName?: string; email?: string };
+          createdAt?: string;
+          approvalCount?: number;
+          requiredApprovals?: number;
+          approvals?: unknown[];
+        };
+        const issuerIdForLookup = typeof invoice.issuerId === 'string' ? invoice.issuerId : (invoice.issuerId as ObjectId)?.toString?.();
+        const creator = issuerIdForLookup
+          ? await db.collection('users').findOne({ _id: new ObjectId(issuerIdForLookup) })
+          : null;
 
-               return {
-                 _id: invoice._id?.toString(),
-                 invoiceNumber: invoice.invoiceNumber,
-                 invoiceName: invoice.invoiceName,
-                 total: invoice.total,
-                 currency: invoice.currency,
-                 clientName: invoice.clientDetails?.firstName && invoice.clientDetails?.lastName 
-                   ? `${invoice.clientDetails.firstName} ${invoice.clientDetails.lastName}`.trim()
-                   : invoice.clientDetails?.companyName || 'Unknown Client',
-                 clientEmail: invoice.clientDetails?.email || '',
-                 createdAt: invoice.createdAt,
-                 createdBy: issuerIdForLookup ?? invoice.issuerId?.toString?.() ?? '',
-                 createdByName: creator?.name || creator?.email || 'Unknown User',
-                 createdByEmail: creator?.email || '',
-                 approvalCount: invoice.approvalCount || 0,
-                 requiredApprovals: invoice.requiredApprovals || 1,
-                 approvals: invoice.approvals || []
-               };
-             })
-           );
+        return {
+          _id: invoice._id?.toString(),
+          invoiceNumber: invoice.invoiceNumber ?? '',
+          invoiceName: invoice.invoiceName ?? '',
+          total: invoice.total ?? 0,
+          currency: invoice.currency ?? 'USD',
+          clientName: invoice.clientDetails?.firstName && invoice.clientDetails?.lastName
+            ? `${invoice.clientDetails.firstName} ${invoice.clientDetails.lastName}`.trim()
+            : invoice.clientDetails?.companyName || 'Unknown Client',
+          clientEmail: invoice.clientDetails?.email || '',
+          createdAt: invoice.createdAt ?? '',
+          createdBy: issuerIdForLookup ?? (invoice.issuerId as { toString?: () => string })?.toString?.() ?? '',
+          createdByName: (creator as { name?: string; email?: string })?.name || (creator as { email?: string })?.email || 'Unknown User',
+          createdByEmail: (creator as { email?: string })?.email || '',
+          approvalCount: invoice.approvalCount || 0,
+          requiredApprovals: invoice.requiredApprovals || 1,
+          approvals: invoice.approvals || []
+        };
+      })
+    );
 
     return {
       success: true,

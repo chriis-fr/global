@@ -39,7 +39,7 @@ export async function GET() {
         const db = await getDatabase();
         const org = await db.collection('organizations').findOne({ _id: user.organizationId });
         const orgServices = org?.services as Record<string, boolean> | undefined;
-        let hasAnyEnabled = orgServices && Object.values(orgServices).some(Boolean);
+        const hasAnyEnabled = orgServices && Object.values(orgServices).some(Boolean);
         if (hasAnyEnabled && orgServices) {
           effectiveServices = { ...createDefaultServices(), ...orgServices } as typeof user.services;
         } else if (org?.members?.length) {

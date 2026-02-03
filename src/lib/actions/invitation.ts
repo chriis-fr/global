@@ -358,10 +358,9 @@ export async function acceptInvitation(token: string): Promise<{
       services: Object.keys(effectiveOrgServices).length ? effectiveOrgServices : (organization.services || user.services),
       onboarding: {
         ...user.onboarding,
-        isCompleted: true,
+        completed: true,
         currentStep: 4,
-        completedSteps: ['1', '2', '3', '4'],
-        data: { ...(user.onboarding?.data as Record<string, unknown> || {}), completed: true }
+        completedSteps: ['1', '2', '3', '4']
       }
     });
 
@@ -601,10 +600,9 @@ export async function completeInvitationAcceptance(token: string): Promise<{
       services: Object.keys(effectiveOrgServices).length ? effectiveOrgServices : (organization.services || user.services),
       onboarding: {
         ...user.onboarding,
-        isCompleted: true,
+        completed: true,
         currentStep: 4,
-        completedSteps: ['1', '2', '3', '4'],
-        data: { ...(user.onboarding?.data as Record<string, unknown> || {}), completed: true }
+        completedSteps: ['1', '2', '3', '4']
       }
     };
 

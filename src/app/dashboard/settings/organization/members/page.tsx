@@ -485,7 +485,7 @@ export default function OrganizationMembersPage() {
                 <MemberCard
                   member={member as unknown as OrganizationMember}
                   currentUserRole={orgInfo?.userRole || 'member'}
-                  onEditRole={() => setEditingMember({ userId: member.userId as string, role: (member as { role: string }).role })}
+                  onEditRole={(memberId, newRole) => setEditingMember({ userId: memberId, role: newRole })}
                   onRemoveMember={handleRemoveMember}
                   isEditing={editingMember?.userId === member.userId}
                   isUpdating={updating}
@@ -494,9 +494,9 @@ export default function OrganizationMembersPage() {
                 {editingMember?.userId === member.userId && (
                   <div className="mt-2 pl-4 border-l-2 border-blue-500/50">
                     <RoleSelector
-                      selectedRole={(member as { role: RoleKey }).role as RoleKey}
+                      selectedRole={((member as Record<string, unknown>).role ?? 'accountant') as RoleKey}
                       onRoleChange={(newRole) => {
-                        const currentRole = (member as { role: string }).role;
+                        const currentRole = (member as Record<string, unknown>).role as string;
                         if (newRole !== currentRole) {
                           handleUpdateMemberRole(member.userId as string, newRole);
                         }
