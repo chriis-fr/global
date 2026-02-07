@@ -19,7 +19,8 @@ import {
   CheckCircle,
   Receipt,
   Plus,
-  Loader2
+  Loader2,
+  Plug
 } from 'lucide-react';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import Image from 'next/image';
@@ -41,7 +42,8 @@ const SETTINGS_LINKS = [
   { key: 'organization', label: 'Organization', icon: Building2, href: '/dashboard/settings/organization' },
   { key: 'logos', label: 'Logo Management', icon: ImageIcon, href: '/dashboard/settings/logos' },
   { key: 'payment-methods', label: 'Payment Methods', icon: CreditCard, href: '/dashboard/settings/payment-methods' },
-  { key: 'notifications', label: 'Notifications', icon: Bell, href: '/dashboard/settings/notifications' },
+  { key: 'integrations', label: 'Integrations', icon: Plug, href: '/dashboard/settings/integrations' },
+  // { key: 'notifications', label: 'Notifications', icon: Bell, href: '/dashboard/settings/notifications' },
   { key: 'help', label: 'Help & Support', icon: HelpCircle, href: '/dashboard/settings/help' },
 ];
 
