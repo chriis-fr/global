@@ -99,7 +99,7 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
     }
 
     const loadStats = async () => {
-      const { data: cachedData, valid: cacheValid } = readCache();
+      const { data: cachedData } = readCache();
 
       // If we have cache (valid or stale), show it and don't show loading; revalidate in background
       if (cachedData) {
