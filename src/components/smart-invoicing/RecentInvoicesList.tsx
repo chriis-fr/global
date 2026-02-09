@@ -11,67 +11,62 @@ interface RecentInvoicesListProps {
   className?: string;
 }
 
-const CACHE_DURATION = 2 * 60 * 1000; // 2 minutes cache
+const CACHE_KEY = 'smart_invoicing_recent_invoices';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes – use cache when navigating back
+
+function readCache(): { data: Array<Record<string, unknown>>; valid: boolean } {
+  if (typeof window === 'undefined') return { data: [], valid: false };
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return { data: [], valid: false };
+    const parsed = JSON.parse(raw);
+    const data = Array.isArray(parsed?.data) ? (parsed.data as Array<Record<string, unknown>>) : [];
+    const valid = (Date.now() - (parsed?.timestamp ?? 0)) < CACHE_DURATION;
+    return { data, valid };
+  } catch {
+    return { data: [], valid: false };
+  }
+}
 
 export default function RecentInvoicesList({ className = '' }: RecentInvoicesListProps) {
   const router = useRouter();
-  const [invoices, setInvoices] = useState<Array<Record<string, unknown>>>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [state, setState] = useState<{ invoices: Array<Record<string, unknown>>; loading: boolean; error: string | null }>(() => {
+    const { data, valid } = readCache();
+    return { invoices: data, loading: !valid, error: null };
+  });
+  const { invoices, loading, error } = state;
   const [searchTerm, setSearchTerm] = useState('');
-  const hasInitialized = useRef(false);
+  const hasFetchedRef = useRef(false);
 
   useEffect(() => {
-    const loadInvoices = async () => {
-      // Check localStorage cache first
-      const cacheKey = 'smart_invoicing_recent_invoices';
-      const cachedData = localStorage.getItem(cacheKey);
-      
-      if (cachedData) {
-        try {
-          const parsed = JSON.parse(cachedData);
-          const now = Date.now();
-          
-          // Use cached data if it's less than 2 minutes old
-          if ((now - parsed.timestamp) < CACHE_DURATION) {
-            setInvoices(parsed.data);
-            setLoading(false);
-            return;
-          }
-        } catch {
-          // If cache is corrupted, remove it and fetch fresh
-          localStorage.removeItem(cacheKey);
-        }
-      }
-
+    const loadInvoices = async (backgroundRevalidate: boolean) => {
       try {
-        setLoading(true);
-        setError(null);
-        
+        if (!backgroundRevalidate) setState(prev => ({ ...prev, loading: true, error: null }));
         const result = await getInvoicesListMinimal(1, 5);
-        
         if (result.success && result.data) {
-          setInvoices((result.data.invoices || []) as unknown as Array<Record<string, unknown>>);
-          
-          // Cache in localStorage
-          const cacheData = {
-            data: result.data.invoices || [],
-            timestamp: Date.now()
-          };
-          localStorage.setItem(cacheKey, JSON.stringify(cacheData));
-        } else {
-          setError(result.error || 'Failed to load invoices');
+          const list = (result.data.invoices || []) as unknown as Array<Record<string, unknown>>;
+          setState(prev => ({ ...prev, invoices: list, loading: false, error: null }));
+          try {
+            localStorage.setItem(CACHE_KEY, JSON.stringify({ data: list, timestamp: Date.now() }));
+          } catch {}
+        } else if (!backgroundRevalidate) {
+          setState(prev => ({ ...prev, error: result.error || 'Failed to load invoices', loading: false }));
         }
       } catch {
-        setError('Failed to load invoices');
+        if (!backgroundRevalidate) setState(prev => ({ ...prev, error: 'Failed to load invoices', loading: false }));
       } finally {
-        setLoading(false);
+        if (!backgroundRevalidate) setState(prev => ({ ...prev, loading: false }));
       }
     };
 
-    if (!hasInitialized.current) {
-      hasInitialized.current = true;
-      loadInvoices();
+    if (!hasFetchedRef.current) {
+      hasFetchedRef.current = true;
+      const { valid } = readCache();
+      if (valid) {
+        loadInvoices(true);
+      } else {
+        loadInvoices(false);
+      }
     }
   }, []);
 

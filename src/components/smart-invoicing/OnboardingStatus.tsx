@@ -10,67 +10,55 @@ interface OnboardingStatusProps {
   className?: string;
 }
 
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
+const CACHE_KEY = 'smart_invoicing_onboarding_status';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+function readOnboardingCache(): { isCompleted: boolean | null; valid: boolean } {
+  if (typeof window === 'undefined') return { isCompleted: null, valid: false };
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return { isCompleted: null, valid: false };
+    const parsed = JSON.parse(raw);
+    const valid = (Date.now() - (parsed?.timestamp ?? 0)) < CACHE_DURATION;
+    return { isCompleted: parsed?.data ?? null, valid };
+  } catch {
+    return { isCompleted: null, valid: false };
+  }
+}
 
 export default function OnboardingStatus({ className = '' }: OnboardingStatusProps) {
   const router = useRouter();
-  const [isCompleted, setIsCompleted] = useState<boolean | null>(null);
-  const [loading, setLoading] = useState(true);
-  const hasInitialized = useRef(false);
+  const [state, setState] = useState<{ isCompleted: boolean | null; loading: boolean }>(() => {
+    const { isCompleted, valid } = readOnboardingCache();
+    return { isCompleted, loading: !valid };
+  });
+  const hasFetchedRef = useRef(false);
 
   useEffect(() => {
-    const loadOnboardingStatus = async () => {
-      // Check localStorage cache first
-      const cacheKey = 'smart_invoicing_onboarding_status';
-      const cachedData = localStorage.getItem(cacheKey);
-      
-      if (cachedData) {
-        try {
-          const parsed = JSON.parse(cachedData);
-          const now = Date.now();
-          
-          // Use cached data if it's less than 5 minutes old
-          if ((now - parsed.timestamp) < CACHE_DURATION) {
-            setIsCompleted(parsed.data);
-            setLoading(false);
-            return;
-          }
-        } catch {
-          // If cache is corrupted, remove it and fetch fresh
-          localStorage.removeItem(cacheKey);
-        }
-      }
-
+    const load = async (background: boolean) => {
+      if (!background) setState(prev => ({ ...prev, loading: true }));
       try {
-        setLoading(true);
-        
         const result = await getOnboardingStatus('smartInvoicing');
-        
         if (result.success && result.data) {
-          setIsCompleted(result.data.isCompleted);
-          
-          // Cache in localStorage
-          const cacheData = {
-            data: result.data.isCompleted,
-            timestamp: Date.now()
-          };
-          localStorage.setItem(cacheKey, JSON.stringify(cacheData));
-        } else {
-          // Default to null if error
-          setIsCompleted(null);
+          setState(prev => ({ ...prev, isCompleted: result.data.isCompleted, loading: false }));
+          try {
+            localStorage.setItem(CACHE_KEY, JSON.stringify({ data: result.data.isCompleted, timestamp: Date.now() }));
+          } catch {}
+        } else if (!background) {
+          setState(prev => ({ ...prev, isCompleted: null, loading: false }));
         }
       } catch {
-        setIsCompleted(null);
-      } finally {
-        setLoading(false);
+        if (!background) setState(prev => ({ ...prev, isCompleted: null, loading: false }));
       }
     };
-
-    if (!hasInitialized.current) {
-      hasInitialized.current = true;
-      loadOnboardingStatus();
+    if (!hasFetchedRef.current) {
+      hasFetchedRef.current = true;
+      const { valid } = readOnboardingCache();
+      load(valid);
     }
   }, []);
+
+  const { isCompleted, loading } = state;
 
   // Don't render anything if loading or if onboarding is completed
   if (loading || isCompleted !== false) {

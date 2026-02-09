@@ -8,83 +8,91 @@ import FormattedNumberDisplay from '@/components/FormattedNumber';
 interface InvoiceStatCardProps {
   type: 'total' | 'revenue' | 'pending' | 'paid';
   className?: string;
+  /** When provided, use this value and skip internal fetch (page-level cache) */
+  cachedValue?: number;
+  /** When true/false, controls loading state when using cached data */
+  cachedLoading?: boolean;
 }
 
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
+const CACHE_KEY = 'smart_invoicing_stats';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
-export default function InvoiceStatCard({ type, className = '' }: InvoiceStatCardProps) {
-  const [value, setValue] = useState<number>(0);
-  const [loading, setLoading] = useState(true);
+function getValueFromStats(type: InvoiceStatCardProps['type'], data: { totalInvoices?: number; totalRevenue?: number; statusCounts?: { sent?: number; pending?: number; paid?: number } }): number {
+  switch (type) {
+    case 'total': return data.totalInvoices ?? 0;
+    case 'revenue': return data.totalRevenue ?? 0;
+    case 'pending': return (data.statusCounts?.sent ?? 0) + (data.statusCounts?.pending ?? 0);
+    case 'paid': return data.statusCounts?.paid ?? 0;
+    default: return 0;
+  }
+}
+
+export default function InvoiceStatCard({ type, className = '', cachedValue, cachedLoading }: InvoiceStatCardProps) {
+  const [value, setValue] = useState<number>(() => {
+    if (typeof cachedValue === 'number') return cachedValue;
+    if (typeof window === 'undefined') return 0;
+    try {
+      const raw = localStorage.getItem(CACHE_KEY);
+      if (!raw) return 0;
+      const parsed = JSON.parse(raw);
+      if ((Date.now() - (parsed?.timestamp ?? 0)) >= CACHE_DURATION) return 0;
+      return getValueFromStats(type, parsed?.data ?? {});
+    } catch { return 0; }
+  });
+  const [loading, setLoading] = useState(() => {
+    if (typeof cachedLoading === 'boolean') return cachedLoading;
+    if (typeof window === 'undefined') return true;
+    try {
+      const raw = localStorage.getItem(CACHE_KEY);
+      if (!raw) return true;
+      const parsed = JSON.parse(raw);
+      return (Date.now() - (parsed?.timestamp ?? 0)) >= CACHE_DURATION;
+    } catch { return true; }
+  });
   const [error, setError] = useState<string | null>(null);
-  const hasInitialized = useRef(false);
+  const hasFetchedRef = useRef(false);
+
+  // When parent provides cached data, use it and don't fetch
+  useEffect(() => {
+    if (typeof cachedValue === 'number' && cachedLoading === false) {
+      setValue(cachedValue);
+      setLoading(false);
+      return;
+    }
+    if (cachedLoading === true) setLoading(true);
+  }, [cachedValue, cachedLoading]);
 
   useEffect(() => {
+    if (cachedLoading !== undefined) return;
     const loadStat = async () => {
-      // Check localStorage cache first
-      const cacheKey = `invoice_stat_${type}`;
-      const cachedData = localStorage.getItem(cacheKey);
-      
-      if (cachedData) {
-        try {
-          const parsed = JSON.parse(cachedData);
-          const now = Date.now();
-          
-          // Use cached data if it's less than 5 minutes old
-          if ((now - parsed.timestamp) < CACHE_DURATION) {
-            setValue(parsed.data);
-            setLoading(false);
-            return;
-          }
-        } catch {
-          // If cache is corrupted, remove it and fetch fresh
-          localStorage.removeItem(cacheKey);
-        }
-      }
-
       try {
-        setLoading(true);
-        setError(null);
-        
-        const result = await getInvoiceStats();
-        
-        if (result.success && result.data) {
-          let statValue = 0;
-          
-          switch (type) {
-            case 'total':
-              statValue = result.data.totalInvoices || 0;
-              break;
-            case 'revenue':
-              statValue = result.data.totalRevenue || 0;
-              break;
-            case 'pending':
-              statValue = (result.data.statusCounts?.sent || 0) + (result.data.statusCounts?.pending || 0);
-              break;
-            case 'paid':
-              statValue = result.data.statusCounts?.paid || 0;
-              break;
-          }
-          
-          setValue(statValue);
-          
-          // Cache in localStorage
-          const cacheData = {
-            data: statValue,
-            timestamp: Date.now()
-          };
-          localStorage.setItem(cacheKey, JSON.stringify(cacheData));
-        } else {
-          setError(result.error || 'Failed to load stat');
+        const cachedData = localStorage.getItem(CACHE_KEY);
+        let validCache = false;
+        if (cachedData) {
+          try {
+            const parsed = JSON.parse(cachedData);
+            if ((Date.now() - (parsed?.timestamp ?? 0)) < CACHE_DURATION) {
+              setValue(getValueFromStats(type, parsed?.data ?? {}));
+              setLoading(false);
+              validCache = true;
+            }
+          } catch { localStorage.removeItem(CACHE_KEY); }
         }
-      } catch {
-        setError('Failed to load stat');
-      } finally {
-        setLoading(false);
-      }
+        if (!validCache) setLoading(true);
+        setError(null);
+        const result = await getInvoiceStats();
+        if (result.success && result.data) {
+          const v = getValueFromStats(type, result.data);
+          setValue(v);
+          try {
+            localStorage.setItem(CACHE_KEY, JSON.stringify({ data: result.data, timestamp: Date.now() }));
+          } catch {}
+        } else if (!validCache) setError(result.error || 'Failed to load stat');
+      } catch { if (!hasFetchedRef.current) setError('Failed to load stat'); }
+      finally { setLoading(false); }
     };
-
-    if (!hasInitialized.current) {
-      hasInitialized.current = true;
+    if (!hasFetchedRef.current) {
+      hasFetchedRef.current = true;
       loadStat();
     }
   }, [type]);
