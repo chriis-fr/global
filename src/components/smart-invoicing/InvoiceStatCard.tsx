@@ -95,7 +95,7 @@ export default function InvoiceStatCard({ type, className = '', cachedValue, cac
       hasFetchedRef.current = true;
       loadStat();
     }
-  }, [type]);
+  }, [type, cachedLoading]);
 
   const getCardConfig = () => {
     switch (type) {
