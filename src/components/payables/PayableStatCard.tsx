@@ -10,82 +10,64 @@ interface PayableStatCardProps {
   className?: string;
 }
 
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+function getValueFromData(type: PayableStatCardProps['type'], data: { totalPayables?: number; totalAmount?: number; statusCounts?: { pending?: number; approved?: number; paid?: number } }): number {
+  switch (type) {
+    case 'total': return data.totalPayables ?? 0;
+    case 'amount': return data.totalAmount ?? 0;
+    case 'pending': return (data.statusCounts?.pending ?? 0) + (data.statusCounts?.approved ?? 0);
+    case 'paid': return data.statusCounts?.paid ?? 0;
+    default: return 0;
+  }
+}
+
+function readCache(type: PayableStatCardProps['type']): { value: number; valid: boolean } {
+  if (typeof window === 'undefined') return { value: 0, valid: false };
+  try {
+    const cacheKey = `payable_stat_${type}`;
+    const raw = localStorage.getItem(cacheKey);
+    if (!raw) return { value: 0, valid: false };
+    const parsed = JSON.parse(raw);
+    const valid = (Date.now() - (parsed?.timestamp ?? 0)) < CACHE_DURATION;
+    return { value: typeof parsed?.data === 'number' ? parsed.data : 0, valid };
+  } catch {
+    return { value: 0, valid: false };
+  }
+}
 
 export default function PayableStatCard({ type, className = '' }: PayableStatCardProps) {
-  const [value, setValue] = useState<number>(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const hasInitialized = useRef(false);
+  const [state, setState] = useState<{ value: number; loading: boolean; error: string | null }>(() => {
+    const { value, valid } = readCache(type);
+    return { value, loading: !valid, error: null };
+  });
+  const { value, loading, error } = state;
+  const hasFetchedRef = useRef(false);
 
   useEffect(() => {
-    const loadStat = async () => {
-      // Check localStorage cache first
-      const cacheKey = `payable_stat_${type}`;
-      const cachedData = localStorage.getItem(cacheKey);
-      
-      if (cachedData) {
-        try {
-          const parsed = JSON.parse(cachedData);
-          const now = Date.now();
-          
-          // Use cached data if it's less than 5 minutes old
-          if ((now - parsed.timestamp) < CACHE_DURATION) {
-            setValue(parsed.data);
-            setLoading(false);
-            return;
-          }
-        } catch {
-          // If cache is corrupted, remove it and fetch fresh
-          localStorage.removeItem(cacheKey);
-        }
-      }
-
+    const load = async (background: boolean) => {
       try {
-        setLoading(true);
-        setError(null);
-        
+        if (!background) setState(prev => ({ ...prev, loading: true, error: null }));
         const result = await getPayablesStats();
-        
         if (result.success && result.data) {
-          let statValue = 0;
-          
-          switch (type) {
-            case 'total':
-              statValue = result.data.totalPayables || 0;
-              break;
-            case 'amount':
-              statValue = result.data.totalAmount || 0;
-              break;
-            case 'pending':
-              statValue = (result.data.statusCounts?.pending || 0) + (result.data.statusCounts?.approved || 0);
-              break;
-            case 'paid':
-              statValue = result.data.statusCounts?.paid || 0;
-              break;
-          }
-          
-          setValue(statValue);
-          
-          // Cache in localStorage
-          const cacheData = {
-            data: statValue,
-            timestamp: Date.now()
-          };
-          localStorage.setItem(cacheKey, JSON.stringify(cacheData));
-        } else {
-          setError(result.error || 'Failed to load stat');
+          const v = getValueFromData(type, result.data);
+          setState(prev => ({ ...prev, value: v, loading: false }));
+          try {
+            localStorage.setItem(`payable_stat_${type}`, JSON.stringify({ data: v, timestamp: Date.now() }));
+          } catch {}
+        } else if (!background) {
+          setState(prev => ({ ...prev, error: result.error || 'Failed to load stat', loading: false }));
         }
       } catch {
-        setError('Failed to load stat');
+        if (!background) setState(prev => ({ ...prev, error: 'Failed to load stat', loading: false }));
       } finally {
-        setLoading(false);
+        if (!background) setState(prev => ({ ...prev, loading: false }));
       }
     };
-
-    if (!hasInitialized.current) {
-      hasInitialized.current = true;
-      loadStat();
+    if (!hasFetchedRef.current) {
+      hasFetchedRef.current = true;
+      const { valid } = readCache(type);
+      load(valid);
     }
   }, [type]);
 

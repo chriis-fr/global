@@ -10,79 +10,64 @@ interface RecentInvoicesProps {
   className?: string;
 }
 
+const CACHE_KEY = 'recent_invoices';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes – show cached data immediately when navigating back
+
+function readCache(): { data: RecentInvoice[]; valid: boolean } {
+  if (typeof window === 'undefined') return { data: [], valid: false };
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return { data: [], valid: false };
+    const parsed = JSON.parse(raw);
+    const data = Array.isArray(parsed?.data) ? (parsed.data as RecentInvoice[]) : [];
+    const valid = (Date.now() - (parsed?.timestamp ?? 0)) < CACHE_DURATION;
+    return { data, valid };
+  } catch {
+    return { data: [], valid: false };
+  }
+}
+
 export default function RecentInvoices({ className = '' }: RecentInvoicesProps) {
-  const [invoices, setInvoices] = useState<RecentInvoice[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [state, setState] = useState<{ invoices: RecentInvoice[]; loading: boolean; error: string | null }>(() => {
+    const { data, valid } = readCache();
+    return { invoices: data, loading: !valid, error: null };
+  });
+  const { invoices, loading, error } = state;
   const [isExpanded, setIsExpanded] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const pathname = usePathname();
-  const hasInitialized = useRef(false);
-  const CACHE_DURATION = 2 * 60 * 1000; // 2 minutes cache for recent data
-
-  // Only fetch data when on the dashboard page
+  const hasFetchedRef = useRef(false);
   const isOnDashboardPage = pathname === '/dashboard';
 
   useEffect(() => {
-    // Only fetch data when on the dashboard page
-    if (!isOnDashboardPage) {
-      return;
-    }
+    if (!isOnDashboardPage) return;
 
-    const loadRecentInvoices = async () => {
-      // Check localStorage cache first
-      const cacheKey = 'recent_invoices';
-      const cachedData = localStorage.getItem(cacheKey);
-      
-      if (cachedData) {
-        try {
-          const parsed = JSON.parse(cachedData);
-          const now = Date.now();
-          
-          // Use cached data if it's less than 2 minutes old
-          if ((now - parsed.timestamp) < CACHE_DURATION) {
-            setInvoices(parsed.data);
-            setLoading(false);
-            return;
-          }
-        } catch {
-          // If cache is corrupted, remove it and fetch fresh
-          localStorage.removeItem(cacheKey);
-        }
-      }
-
+    const load = async (background: boolean) => {
       try {
-        setLoading(true);
-        setError(null);
-        
+        if (!background) setState(prev => ({ ...prev, loading: true, error: null }));
         const result = await getRecentInvoices(5);
-        
         if (result.success && result.data) {
-          setInvoices(result.data);
-          
-          // Cache in localStorage
-          const cacheData = {
-            data: result.data,
-            timestamp: Date.now()
-          };
-          localStorage.setItem(cacheKey, JSON.stringify(cacheData));
-        } else {
-          setError(result.error || 'Failed to load recent invoices');
+          setState(prev => ({ ...prev, invoices: result.data ?? [], loading: false, error: null }));
+          try {
+            localStorage.setItem(CACHE_KEY, JSON.stringify({ data: result.data ?? [], timestamp: Date.now() }));
+          } catch {}
+        } else if (!background) {
+          setState(prev => ({ ...prev, error: result.error || 'Failed to load recent invoices', loading: false }));
         }
       } catch {
-        console.error('Error loading recent invoices');
-        setError('Failed to load recent invoices');
+        if (!background) setState(prev => ({ ...prev, error: 'Failed to load recent invoices', loading: false }));
       } finally {
-        setLoading(false);
+        if (!background) setState(prev => ({ ...prev, loading: false }));
       }
     };
 
-    if (!hasInitialized.current) {
-      hasInitialized.current = true;
-      loadRecentInvoices();
+    if (!hasFetchedRef.current) {
+      hasFetchedRef.current = true;
+      const { valid } = readCache();
+      load(valid);
     }
-  }, [isOnDashboardPage, CACHE_DURATION]);
+  }, [isOnDashboardPage]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
