@@ -27,7 +27,12 @@ export async function GET(request: NextRequest) {
   const state = request.nextUrl.searchParams.get('state');
   console.log('[ClickUp Callback] Query params – has code:', !!code, 'error:', errorParam ?? 'none', 'state:', state ?? 'none');
 
-  const baseUrl = ensureAbsoluteUrl(process.env.NEXT_PUBLIC_BASE_URL || process.env.FRONTEND_URL || '') || ensureAbsoluteUrl(request.nextUrl.origin) || request.nextUrl.origin;
+  // When callback is hit on localhost, redirect back to localhost; otherwise use env base URL (e.g. production).
+  const origin = request.nextUrl.origin;
+  const isLocalhost = /^https?:\/\/localhost(:\d+)?$/i.test(origin) || origin.includes('127.0.0.1');
+  const baseUrl = isLocalhost
+    ? origin
+    : (ensureAbsoluteUrl(process.env.NEXT_PUBLIC_BASE_URL || process.env.FRONTEND_URL || '') || ensureAbsoluteUrl(origin) || origin);
   const successRedirect = `${baseUrl.replace(/\/$/, '')}/dashboard/settings/integrations/clickup?connected=1`;
   const failRedirect = `${baseUrl.replace(/\/$/, '')}/dashboard/settings/integrations/clickup?error=1`;
 
@@ -75,8 +80,11 @@ export async function GET(request: NextRequest) {
     console.log('[ClickUp Callback] Token received, storing for org...');
 
     const user = await UserService.getUserByEmail(session.user.email);
-    if (!user?.organizationId) {
-      console.warn('[ClickUp Callback] User has no organizationId – connect from an organization account or create/join an org');
+    const isAdmin = (session.user as { adminTag?: boolean }).adminTag === true;
+    const hasOrg = !!user?.organizationId;
+
+    if (!hasOrg && !isAdmin) {
+      console.warn('[ClickUp Callback] User has no organizationId and is not admin – connect from an organization account or create/join an org');
       const noOrgRedirect = failRedirect.includes('?') ? failRedirect.replace(/\berror=[^&]+/, 'error=no_org') : `${failRedirect}?error=no_org`;
       return NextResponse.redirect(new URL(noOrgRedirect));
     }
@@ -84,21 +92,46 @@ export async function GET(request: NextRequest) {
     const db = await getDatabase();
     const collection = db.collection('integration_connections');
 
-    await collection.updateOne(
-      { organizationId: user.organizationId, provider: 'clickup' },
-      {
-        $set: {
-          organizationId: user.organizationId,
-          provider: 'clickup',
-          accessToken,
-          refreshToken: tokenData?.refresh_token || null,
-          connectedBy: user._id?.toString(),
-          connectedAt: new Date(),
-          updatedAt: new Date(),
+    if (hasOrg) {
+      await collection.updateOne(
+        { organizationId: user!.organizationId, provider: 'clickup' },
+        {
+          $set: {
+            organizationId: user!.organizationId,
+            provider: 'clickup',
+            accessToken,
+            refreshToken: tokenData?.refresh_token || null,
+            connectedBy: user!._id?.toString(),
+            connectedAt: new Date(),
+            updatedAt: new Date(),
+          },
         },
-      },
-      { upsert: true }
-    );
+        { upsert: true }
+      );
+    } else {
+      // Admin without org: store by userId so only this admin sees the connection
+      const userIdStr = user!._id?.toString();
+      if (!userIdStr) {
+        const noOrgRedirect = failRedirect.includes('?') ? failRedirect.replace(/\berror=[^&]+/, 'error=no_org') : `${failRedirect}?error=no_org`;
+        return NextResponse.redirect(new URL(noOrgRedirect));
+      }
+      await collection.updateOne(
+        { userId: userIdStr, provider: 'clickup' },
+        {
+          $set: {
+            userId: userIdStr,
+            organizationId: null,
+            provider: 'clickup',
+            accessToken,
+            refreshToken: tokenData?.refresh_token || null,
+            connectedBy: userIdStr,
+            connectedAt: new Date(),
+            updatedAt: new Date(),
+          },
+        },
+        { upsert: true }
+      );
+    }
 
     console.log('[ClickUp Callback] Connection saved, redirecting to success');
     return NextResponse.redirect(new URL(successRedirect));

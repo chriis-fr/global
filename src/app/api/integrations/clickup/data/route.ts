@@ -16,15 +16,25 @@ export async function GET() {
   }
 
   const user = await UserService.getUserByEmail(session.user.email);
-  if (!user?.organizationId) {
-    return NextResponse.json({ success: false, data: [] });
-  }
+  const isAdmin = (session.user as { adminTag?: boolean }).adminTag === true;
 
   const db = await getDatabase();
-  const connection = await db.collection('integration_connections').findOne({
-    organizationId: user.organizationId,
-    provider: 'clickup',
-  });
+  let connection = null;
+  if (user?.organizationId) {
+    connection = await db.collection('integration_connections').findOne({
+      organizationId: user.organizationId,
+      provider: 'clickup',
+    });
+  } else if (isAdmin && user?._id) {
+    connection = await db.collection('integration_connections').findOne({
+      userId: user._id.toString(),
+      provider: 'clickup',
+    });
+  }
+
+  if (!user?.organizationId && !isAdmin) {
+    return NextResponse.json({ success: false, data: [] });
+  }
 
   const accessToken = connection?.accessToken as string | undefined;
   if (!accessToken) {

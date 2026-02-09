@@ -2,8 +2,9 @@
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useState, useEffect } from 'react';
-import { ArrowLeft, LayoutList, Link2, FileText, Loader2 } from 'lucide-react';
+import { ArrowLeft, Link2, FileText, Loader2 } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import DashboardFloatingButton from '@/components/DashboardFloatingButton';
 
 // ClickUp-specific types (dummy / placeholder for when we fetch real data)
@@ -103,8 +104,8 @@ export default function IntegrationAppPage() {
       </Link>
 
       <div className="mb-8 flex items-center gap-3">
-        <div className="w-12 h-12 rounded-lg bg-white/10 flex items-center justify-center">
-          <LayoutList className="h-6 w-6 text-white" />
+        <div className="w-12 h-12 rounded-lg overflow-hidden relative shrink-0">
+          <Image src="/clickup-logo.png" alt="" fill className="object-cover" sizes="48px" />
         </div>
         <div>
           <h1 className="text-2xl font-bold text-white">ClickUp</h1>

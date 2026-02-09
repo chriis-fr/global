@@ -11,17 +11,23 @@ export async function GET() {
   }
 
   const user = await UserService.getUserByEmail(session.user.email);
-  if (!user?.organizationId) {
-    return NextResponse.json({ connected: false });
-  }
+  const isAdmin = (session.user as { adminTag?: boolean }).adminTag === true;
 
   const db = await getDatabase();
-  const doc = await db.collection('integration_connections').findOne({
-    organizationId: user.organizationId,
-    provider: 'clickup',
-  });
+  let doc = null;
+  if (user?.organizationId) {
+    doc = await db.collection('integration_connections').findOne({
+      organizationId: user.organizationId,
+      provider: 'clickup',
+    });
+  } else if (isAdmin && user?._id) {
+    doc = await db.collection('integration_connections').findOne({
+      userId: user._id.toString(),
+      provider: 'clickup',
+    });
+  }
 
   const connected = !!doc?.accessToken;
-  console.log('[ClickUp Status] org:', user.organizationId?.toString(), 'connected:', connected);
+  console.log('[ClickUp Status] org:', user?.organizationId?.toString(), 'userId:', user?._id?.toString(), 'connected:', connected);
   return NextResponse.json({ connected });
 }

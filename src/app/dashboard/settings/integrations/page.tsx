@@ -1,7 +1,8 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { Plug, ChevronRight, LayoutList } from 'lucide-react';
+import Image from 'next/image';
+import { ChevronRight, LayoutList } from 'lucide-react';
 import DashboardFloatingButton from '@/components/DashboardFloatingButton';
 
 const INTEGRATIONS = [
@@ -10,6 +11,7 @@ const INTEGRATIONS = [
     name: 'ClickUp',
     description: 'Import tasks and projects from ClickUp, then turn them into invoices.',
     icon: LayoutList,
+    logo: '/clickup-logo.png',
     href: '/dashboard/settings/integrations/clickup',
     available: true,
   },
@@ -32,6 +34,7 @@ export default function IntegrationsSettingsPage() {
       <div className="space-y-4">
         {INTEGRATIONS.map((integration) => {
           const Icon = integration.icon;
+          const logo = 'logo' in integration ? (integration as { logo?: string }).logo : undefined;
           return (
             <button
               key={integration.id}
@@ -40,8 +43,12 @@ export default function IntegrationsSettingsPage() {
               className="w-full flex items-center justify-between p-6 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-left transition-colors"
             >
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-lg bg-white/10 flex items-center justify-center">
-                  <Icon className="h-6 w-6 text-white" />
+                <div className={`w-12 h-12 rounded-lg overflow-hidden relative shrink-0 ${logo ? '' : 'bg-white/10 flex items-center justify-center'}`}>
+                  {logo ? (
+                    <Image src={logo} alt="" fill className="object-cover" sizes="48px" />
+                  ) : (
+                    <Icon className="h-6 w-6 text-white" />
+                  )}
                 </div>
                 <div>
                   <h2 className="text-lg font-semibold text-white">{integration.name}</h2>
