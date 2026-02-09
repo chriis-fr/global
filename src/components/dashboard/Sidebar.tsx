@@ -59,9 +59,22 @@ function Sidebar() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
+  const [sidebarReady, setSidebarReady] = useState(false);
 
   const sidebarRef = useRef<HTMLDivElement>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    setSidebarReady(true);
+  }, []);
+
+  useEffect(() => {
+    const update = () => setIsMobile(typeof window !== 'undefined' && window.innerWidth < 1024);
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -154,8 +167,6 @@ function Sidebar() {
   }, [router]);
 
   const SidebarContent = () => {
-    const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
-
     return (
       <>
         {/* Header */}
@@ -256,17 +267,20 @@ function Sidebar() {
               </div>
             )}
 
-            {SERVICE_LINKS.filter(link => {
-              const isServiceEnabled = session?.user?.services?.[link.key] || false;
-              if (link.key === 'accountsPayable') {
-                return (subscription?.canAccessPayables || false) && isServiceEnabled;
-              }
-              if (link.key === 'smartInvoicing') {
-                const isPayablesOnly = subscription?.plan?.type === 'payables';
-                return !isPayablesOnly && isServiceEnabled;
-              }
-              return isServiceEnabled;
-            }).map(link => {
+            {(sidebarReady
+              ? SERVICE_LINKS.filter(link => {
+                  const isServiceEnabled = session?.user?.services?.[link.key] || false;
+                  if (link.key === 'accountsPayable') {
+                    return (subscription?.canAccessPayables || false) && isServiceEnabled;
+                  }
+                  if (link.key === 'smartInvoicing') {
+                    const isPayablesOnly = subscription?.plan?.type === 'payables';
+                    return !isPayablesOnly && isServiceEnabled;
+                  }
+                  return isServiceEnabled;
+                })
+              : []
+            ).map(link => {
               const active = pathname.startsWith(link.href);
 
               const collapsed = isCollapsed && !isAutoHidden;

@@ -38,7 +38,16 @@ export default function RecentInvoices({ className = '' }: RecentInvoicesProps) 
   const router = useRouter();
   const pathname = usePathname();
   const hasFetchedRef = useRef(false);
+  const [retryTrigger, setRetryTrigger] = useState(0);
   const isOnDashboardPage = pathname === '/dashboard';
+
+  const retry = () => {
+    try {
+      localStorage.removeItem(CACHE_KEY);
+    } catch {}
+    setState(prev => ({ ...prev, error: null, loading: true }));
+    setRetryTrigger(t => t + 1);
+  };
 
   useEffect(() => {
     if (!isOnDashboardPage) return;
@@ -52,22 +61,29 @@ export default function RecentInvoices({ className = '' }: RecentInvoicesProps) 
           try {
             localStorage.setItem(CACHE_KEY, JSON.stringify({ data: result.data ?? [], timestamp: Date.now() }));
           } catch {}
-        } else if (!background) {
-          setState(prev => ({ ...prev, error: result.error || 'Failed to load recent invoices', loading: false }));
+        } else {
+          try {
+            localStorage.removeItem(CACHE_KEY);
+          } catch {}
+          if (!background) setState(prev => ({ ...prev, error: result.error || 'Failed to load recent invoices', loading: false }));
         }
       } catch {
+        try {
+          localStorage.removeItem(CACHE_KEY);
+        } catch {}
         if (!background) setState(prev => ({ ...prev, error: 'Failed to load recent invoices', loading: false }));
       } finally {
         if (!background) setState(prev => ({ ...prev, loading: false }));
       }
     };
 
-    if (!hasFetchedRef.current) {
-      hasFetchedRef.current = true;
+    const isRetry = retryTrigger > 0;
+    if (!hasFetchedRef.current || isRetry) {
+      if (!isRetry) hasFetchedRef.current = true;
       const { valid } = readCache();
-      load(valid);
+      load(isRetry ? false : valid);
     }
-  }, [isOnDashboardPage]);
+  }, [isOnDashboardPage, retryTrigger]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -161,6 +177,13 @@ export default function RecentInvoices({ className = '' }: RecentInvoicesProps) 
               <span className="font-medium">Failed to load invoices</span>
             </div>
             <p className="text-red-300 text-sm mt-2">{error}</p>
+            <button
+              type="button"
+              onClick={retry}
+              className="mt-3 px-3 py-1.5 text-sm font-medium rounded-lg bg-red-500/20 text-red-300 hover:bg-red-500/30"
+            >
+              Retry
+            </button>
           </div>
         </div>
       </div>

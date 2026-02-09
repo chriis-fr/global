@@ -409,16 +409,27 @@ export async function getRecentInvoices(limit: number = 5): Promise<{ success: b
     const db = await connectToDatabase();
     const invoicesCollection = db.collection('invoices');
 
-    // Build query - Organization members should always see organization's invoices
+    // Build query - Organization members see org invoices (match string or ObjectId); individuals by issuerId/userId
     const isOrganization = !!session.user.organizationId;
-    const query = isOrganization 
-      ? { organizationId: session.user.organizationId }
-      : { 
-          $or: [
-            { issuerId: session.user.id },
-            { userId: session.user.email }
-          ]
-        };
+    const orgId = session.user.organizationId;
+    const issuerId = session.user.id;
+    const userEmail = session.user.email ?? '';
+    let query: Record<string, unknown>;
+
+    if (isOrganization && orgId) {
+      const isOrgObjectId = /^[0-9a-fA-F]{24}$/.test(orgId);
+      query = isOrgObjectId
+        ? { $or: [{ organizationId: orgId }, { organizationId: new ObjectId(orgId) }] }
+        : { organizationId: orgId };
+    } else {
+      const orClauses: Record<string, unknown>[] = [];
+      if (issuerId != null) orClauses.push({ issuerId });
+      if (userEmail) orClauses.push({ userId: userEmail });
+      if (orClauses.length === 0) {
+        return { success: false, error: 'Unable to determine invoice scope' };
+      }
+      query = { $or: orClauses };
+    }
 
     // Get only essential fields for list view
     const invoices = await invoicesCollection

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { FileText, MessageCircle, CheckCircle } from 'lucide-react';
-import { getInvoicesListMinimal } from '@/lib/actions/invoices';
+import { getRecentInvoicesOnly } from '@/lib/actions/invoices';
 import FormattedNumberDisplay from '@/components/FormattedNumber';
 
 interface RecentInvoicesListProps {
@@ -37,38 +37,50 @@ export default function RecentInvoicesList({ className = '' }: RecentInvoicesLis
   const { invoices, loading, error } = state;
   const [searchTerm, setSearchTerm] = useState('');
   const hasFetchedRef = useRef(false);
+  const [retryTrigger, setRetryTrigger] = useState(0);
+
+  const retry = () => {
+    try {
+      localStorage.removeItem(CACHE_KEY);
+    } catch {}
+    setState(prev => ({ ...prev, error: null, loading: true }));
+    setRetryTrigger(t => t + 1);
+  };
 
   useEffect(() => {
     const loadInvoices = async (backgroundRevalidate: boolean) => {
       try {
         if (!backgroundRevalidate) setState(prev => ({ ...prev, loading: true, error: null }));
-        const result = await getInvoicesListMinimal(1, 5);
+        const result = await getRecentInvoicesOnly(5);
         if (result.success && result.data) {
           const list = (result.data.invoices || []) as unknown as Array<Record<string, unknown>>;
           setState(prev => ({ ...prev, invoices: list, loading: false, error: null }));
           try {
             localStorage.setItem(CACHE_KEY, JSON.stringify({ data: list, timestamp: Date.now() }));
           } catch {}
-        } else if (!backgroundRevalidate) {
-          setState(prev => ({ ...prev, error: result.error || 'Failed to load invoices', loading: false }));
+        } else {
+          try {
+            localStorage.removeItem(CACHE_KEY);
+          } catch {}
+          if (!backgroundRevalidate) setState(prev => ({ ...prev, error: result.error || 'Failed to load invoices', loading: false }));
         }
       } catch {
+        try {
+          localStorage.removeItem(CACHE_KEY);
+        } catch {}
         if (!backgroundRevalidate) setState(prev => ({ ...prev, error: 'Failed to load invoices', loading: false }));
       } finally {
         if (!backgroundRevalidate) setState(prev => ({ ...prev, loading: false }));
       }
     };
 
-    if (!hasFetchedRef.current) {
-      hasFetchedRef.current = true;
+    const isRetry = retryTrigger > 0;
+    if (!hasFetchedRef.current || isRetry) {
+      if (!isRetry) hasFetchedRef.current = true;
       const { valid } = readCache();
-      if (valid) {
-        loadInvoices(true);
-      } else {
-        loadInvoices(false);
-      }
+      loadInvoices(isRetry ? false : valid);
     }
-  }, []);
+  }, [retryTrigger]);
 
   const filteredInvoices = searchTerm
     ? invoices.filter(invoice => {
@@ -106,6 +118,13 @@ export default function RecentInvoicesList({ className = '' }: RecentInvoicesLis
         <h3 className="text-base sm:text-lg font-semibold text-white mb-4">Recent Invoices</h3>
         <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
           <p className="text-red-400 text-sm">{error}</p>
+          <button
+            type="button"
+            onClick={retry}
+            className="mt-3 px-3 py-1.5 text-sm font-medium rounded-lg bg-red-500/20 text-red-300 hover:bg-red-500/30"
+          >
+            Retry
+          </button>
         </div>
       </div>
     );
