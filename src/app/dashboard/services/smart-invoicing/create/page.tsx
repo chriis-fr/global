@@ -1163,6 +1163,7 @@ export default function CreateInvoicePage() {
   const initialLoadDone = useRef(false);
   const lastUserId = useRef<string | undefined>(undefined);
   const companyDataLoaded = useRef(false); // Track if company data has been loaded from server
+  const loadedInvoiceIdRef = useRef<string | null>(null); // Prevent duplicate GET /api/invoices/[id]
   
   useEffect(() => {
     // When pre-filling from PDF draft (or just finished loading one), only load payment methods; don't overwrite company/client/items
@@ -1170,15 +1171,23 @@ export default function CreateInvoicePage() {
       loadSavedPaymentMethods();
       return;
     }
-    // Prevent multiple loads for the same user
     const currentUserId = session?.user?.id;
     if (invoiceId) {
-      if (!initialLoadDone.current) {
-        initialLoadDone.current = true;
-        loadInvoice(invoiceId);
-        companyDataLoaded.current = true; // Invoice data includes company info
+      // Already loaded this draft – avoid duplicate GET /api/invoices/[id]; payment methods already loaded
+      if (loadedInvoiceIdRef.current === invoiceId) {
+        return;
       }
-    } else if (currentUserId) {
+      loadedInvoiceIdRef.current = invoiceId;
+      initialLoadDone.current = true;
+      companyDataLoaded.current = true;
+      loadInvoice(invoiceId);
+      loadSavedPaymentMethods();
+      loadClients();
+      loadLogoFromSettings();
+      return;
+    }
+    loadedInvoiceIdRef.current = null;
+    if (currentUserId) {
       // CRITICAL: Always load company data when creating new invoice (not editing)
       // Check if company data is missing, and if so, load it
       const hasCompanyData = formData.companyName && formData.companyName.trim() !== '';
@@ -1485,38 +1494,44 @@ export default function CreateInvoicePage() {
     }
   };
 
-  // Check if bank name is custom (not in the list)
+  // Check if bank name is custom (not in the list) – only refetch when country or name actually changed
+  const lastBanksSearchRef = useRef<{ country: string; name: string }>({ country: '', name: '' });
   useEffect(() => {
-    const checkIfCustomBank = async () => {
-      if (!formData.bankName || !formData.bankCountryCode) {
-        setIsCustomBank(false);
-        setShowCustomBankFields(false);
-        return;
-      }
+    const country = formData.bankCountryCode || '';
+    const name = (formData.bankName || '').trim();
+    if (!name || !country) {
+      setIsCustomBank(false);
+      setShowCustomBankFields(false);
+      return;
+    }
+    if (lastBanksSearchRef.current.country === country && lastBanksSearchRef.current.name === name) {
+      return;
+    }
+    lastBanksSearchRef.current = { country, name };
 
+    let cancelled = false;
+    const checkIfCustomBank = async () => {
       try {
-        const response = await fetch(`/api/banks/search?country=${formData.bankCountryCode}`);
+        const response = await fetch(`/api/banks/search?country=${country}`);
+        if (cancelled) return;
         const data = await response.json();
-        
+        if (cancelled) return;
         if (data.success) {
-          const banks = data.data.banks as Bank[];
-          const isInList = banks.some(bank => 
-            bank.name.toLowerCase().trim() === formData.bankName?.toLowerCase().trim()
+          const banks = (data.data?.banks || []) as Bank[];
+          const isInList = banks.some(bank =>
+            bank.name.toLowerCase().trim() === name.toLowerCase()
           );
-          setIsCustomBank(!isInList);
-          if (!isInList) {
-            // If it's a custom bank, keep fields hidden until user toggles
-          } else {
-            setShowCustomBankFields(false);
+          if (!cancelled) {
+            setIsCustomBank(!isInList);
+            if (isInList) setShowCustomBankFields(false);
           }
         }
       } catch {
-        // If we can't check, assume it might be custom if there's a value
-        setIsCustomBank(!!formData.bankName);
+        if (!cancelled) setIsCustomBank(!!name);
       }
     };
-
     checkIfCustomBank();
+    return () => { cancelled = true; };
   }, [formData.bankName, formData.bankCountryCode]);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1810,12 +1825,14 @@ export default function CreateInvoicePage() {
       
       if (response.ok) {
         const data = await response.json();
-        if (!isEditing && data.success) {
-          // Update formData with the new invoice ID and invoice number
+        const invoice = data?.invoice ?? data?.data;
+        if (!isEditing && data?.success && invoice) {
+          const id = invoice._id ?? invoice.id;
+          const idStr = id != null ? (typeof id === 'string' ? id : (id as { toString?: () => string }).toString?.() ?? String(id)) : undefined;
           setFormData(prev => ({
             ...prev,
-            _id: data.data.id,
-            invoiceNumber: data.data.invoiceNumber
+            _id: idStr,
+            invoiceNumber: invoice.invoiceNumber ?? prev.invoiceNumber
           }));
           setIsEditing(true);
         }
