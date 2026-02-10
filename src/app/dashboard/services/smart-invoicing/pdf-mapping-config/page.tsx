@@ -23,8 +23,31 @@ export default function PdfMappingConfigPage() {
   const [isDefault, setIsDefault] = useState(false);
   const [isOrgUser, setIsOrgUser] = useState(false);
   const [previewAst, setPreviewAst] = useState<DocumentAST | null>(null);
+  const [previewFields, setPreviewFields] = useState<
+    { index: number; value: string; source: string; fieldType?: string; originalLine?: string }[]
+  >([]);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+
+  // Simple path reader so we can show non-technical “this is what will go into the invoice” previews
+  const getPreviewValueForPath = (path?: string): string | null => {
+    if (!previewAst || !path) return null;
+    const parts = path.split('.');
+    let current: unknown = previewAst;
+    for (const key of parts) {
+      if (current == null || typeof current !== 'object') return null;
+      current = (current as Record<string, unknown>)[key];
+    }
+    if (current == null) return null;
+    if (Array.isArray(current)) {
+      if (path === 'items') {
+        const len = current.length;
+        return len === 0 ? 'no line items found' : `${len} line item${len === 1 ? '' : 's'} detected`;
+      }
+      return `${current.length} value${current.length === 1 ? '' : 's'}`;
+    }
+    return String(current);
+  };
 
   const loadMapping = useCallback(async (selectAfterLoad?: string) => {
     try {
@@ -132,6 +155,7 @@ export default function PdfMappingConfigPage() {
     setPreviewLoading(true);
     setPreviewError(null);
     setPreviewAst(null);
+    setPreviewFields([]);
     try {
       const formData = new FormData();
       formData.append('file', file);
@@ -141,6 +165,7 @@ export default function PdfMappingConfigPage() {
         return;
       }
       setPreviewAst(result.data.document_ast);
+      setPreviewFields(result.data.previewFields ?? []);
     } catch (err) {
       setPreviewError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
@@ -229,7 +254,7 @@ export default function PdfMappingConfigPage() {
           Configure PDF mapping
         </h1>
         <p className="text-blue-200 mb-6">
-          Name and save mappings so you can choose which one to use when uploading. Add multiple for different PDF layouts.
+          Optional: set a default way to read this kind of PDF so fields auto-fill next time.
         </p>
 
         {!isOrgUser && (
@@ -257,10 +282,10 @@ export default function PdfMappingConfigPage() {
           <div className="mb-6 p-4 bg-white/5 border border-white/10 rounded-xl">
             <h2 className="text-white font-semibold mb-2 flex items-center gap-2">
               <Upload className="w-5 h-5" />
-              Upload sample PDF to preview
+              1. Upload a sample PDF
             </h2>
             <p className="text-blue-200 text-sm mb-3">
-              Upload a typical PDF to see extracted meta, parties, dates and line items. Use this to set mapping below.
+              We&apos;ll show what we can read from it (titles, names, tasks, totals).
             </p>
             <label className="flex items-center gap-2 px-4 py-2 bg-blue-600/30 border border-blue-400/50 rounded-lg cursor-pointer hover:bg-blue-600/50 w-fit">
               <FileText className="w-4 h-4" />
@@ -273,19 +298,61 @@ export default function PdfMappingConfigPage() {
                 disabled={previewLoading}
               />
             </label>
-            {previewLoading && <p className="text-blue-200 text-sm mt-2">Parsing...</p>}
+            {previewLoading && <p className="text-blue-200 text-sm mt-2">Reading your PDF…</p>}
             {previewError && <p className="text-red-300 text-sm mt-2">{previewError}</p>}
-            {previewAst && (
-              <div className="mt-4 p-4 bg-black/20 rounded-lg text-sm space-y-2 max-h-64 overflow-y-auto">
-                <p className="text-green-300 font-medium">Extracted: meta, parties, dates, and {previewAst.items?.length ?? 0} line item(s)</p>
-                {previewAst.items && previewAst.items.length > 0 && (
-                  <div>
-                    <p className="text-blue-200 font-medium mb-1">Line items (quantity = preceding number):</p>
-                    <ul className="list-disc list-inside text-blue-200 space-y-0.5">
-                      {previewAst.items.slice(0, 10).map((item, i) => (
-                        <li key={i}>qty {item.quantity}: {item.label.slice(0, 50)}{item.label.length > 50 ? '…' : ''}</li>
+            {(previewAst || previewFields.length > 0) && (
+              <div className="mt-4 grid gap-4 lg:grid-cols-2 max-h-80 overflow-y-auto">
+                {previewAst && (
+                  <div className="p-4 bg-black/20 rounded-lg text-sm space-y-2">
+                    <p className="text-green-300 font-medium">
+                      Summary of tasks
+                    </p>
+                    <p className="text-blue-200">
+                      <span className="font-semibold">Line items found:</span>{' '}
+                      {previewAst.items?.length ?? 0}
+                    </p>
+                    {previewAst.items && previewAst.items.length > 0 && (
+                      <ul className="mt-2 list-disc list-inside text-blue-200 space-y-0.5">
+                        {previewAst.items.slice(0, 10).map((item, i) => (
+                          <li key={i}>
+                            {item.quantity > 1 ? `x${item.quantity} – ` : ''}
+                            {item.label.slice(0, 70)}
+                            {item.label.length > 70 ? '…' : ''}
+                          </li>
+                        ))}
+                        {previewAst.items.length > 10 && (
+                          <li className="text-blue-300/80">
+                            … and {previewAst.items.length - 10} more
+                          </li>
+                        )}
+                      </ul>
+                    )}
+                  </div>
+                )}
+                {previewFields.length > 0 && (
+                  <div className="p-4 bg-black/20 rounded-lg text-xs space-y-2">
+                    <p className="text-green-300 font-medium">
+                      Text we found in your PDF
+                    </p>
+                    <p className="text-blue-200">
+                      Just check that invoice number, client, totals and tasks show up somewhere in this list.
+                    </p>
+                    <ul className="mt-2 space-y-1 text-blue-100">
+                      {previewFields.map((field) => (
+                        <li key={field.index} className="border border-white/10 rounded-md px-2 py-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[10px] uppercase tracking-wide text-blue-300">
+                              #{field.index} {field.fieldType ? `• ${field.fieldType}` : ''}
+                            </span>
+                            <span className="text-[10px] text-blue-400">
+                              {field.source}
+                            </span>
+                          </div>
+                          <p className="mt-1 break-words">
+                            {field.value || field.originalLine}
+                          </p>
+                        </li>
                       ))}
-                      {previewAst.items.length > 10 && <li className="text-blue-300/80">… and {previewAst.items.length - 10} more</li>}
                     </ul>
                   </div>
                 )}
@@ -294,11 +361,21 @@ export default function PdfMappingConfigPage() {
           </div>
         )}
 
-        {isOrgUser && (
+        {/* Step 2: Only show mapping UI AFTER they upload a sample PDF, so it's not guesswork. */}
+        {isOrgUser && !previewAst && previewFields.length === 0 && (
+          <div className="mt-4 p-4 bg-white/5 border border-white/10 rounded-xl text-sm text-blue-200">
+            <p className="font-medium text-white mb-1">2. Then match the fields</p>
+            <p>
+              Upload a sample first. After that, you can say &quot;use this bit as my invoice number / client / title&quot;.
+            </p>
+          </div>
+        )}
+
+        {isOrgUser && (previewAst || previewFields.length > 0) && (
           <>
             {/* List / Add mapping selector */}
             <div className="mb-4 flex flex-wrap items-center gap-2">
-              <span className="text-blue-200 text-sm">Edit mapping:</span>
+              <span className="text-blue-200 text-sm">Mapping presets:</span>
               {mappings.map((e) => (
                 <button
                   key={e.name}
@@ -332,7 +409,7 @@ export default function PdfMappingConfigPage() {
               {/* Mapping name + default */}
               <div className="flex flex-wrap items-end gap-4">
                 <div className="flex-1 min-w-[200px]">
-                  <label className="block text-sm font-medium text-blue-200 mb-2">Mapping name</label>
+                  <label className="block text-sm font-medium text-blue-200 mb-2">Preset name</label>
                   <input
                     type="text"
                     value={mappingName}
@@ -348,34 +425,46 @@ export default function PdfMappingConfigPage() {
                     onChange={(e) => setIsDefault(e.target.checked)}
                     className="rounded border-white/30 bg-white/10 text-indigo-600 focus:ring-blue-500"
                   />
-                  <span className="text-sm">Use as default when uploading</span>
+                  <span className="text-sm">Use as default for this PDF type</span>
                 </label>
               </div>
 
-              {INVOICE_FIELD_KEYS.filter((k) => k !== 'lineItems').map((fieldKey) => (
-                <div key={fieldKey}>
-                  <label className="block text-sm font-medium text-blue-200 mb-2">
-                    {INVOICE_FIELD_LABELS[fieldKey] ?? fieldKey}
-                  </label>
-                  <select
-                    value={(mapping as Record<string, string>)[fieldKey] ?? ''}
-                    onChange={(e) => handleFieldChange(fieldKey as keyof OrgPdfMappingConfig, e.target.value)}
-                    className="w-full px-4 py-2 bg-white/15 border border-white/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
-                  >
-                    {PDF_AST_PATH_OPTIONS.map((opt) => (
-                      <option key={opt.value || 'empty'} value={opt.value} className="bg-gray-800 text-white">
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ))}
+              {INVOICE_FIELD_KEYS.filter((k) => k !== 'lineItems').map((fieldKey) => {
+                const selectedPath = (mapping as Record<string, string>)[fieldKey];
+                const previewValue = selectedPath ? getPreviewValueForPath(selectedPath) : null;
+                return (
+                  <div key={fieldKey}>
+                    <label className="block text-sm font-medium text-blue-200 mb-1">
+                      {INVOICE_FIELD_LABELS[fieldKey] ?? fieldKey}
+                    </label>
+                    <select
+                      value={selectedPath ?? ''}
+                      onChange={(e) => handleFieldChange(fieldKey as keyof OrgPdfMappingConfig, e.target.value)}
+                      className="w-full px-4 py-2 bg-white/15 border border-white/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
+                    >
+                      {PDF_AST_PATH_OPTIONS.map((opt) => (
+                        <option key={opt.value || 'empty'} value={opt.value} className="bg-gray-800 text-white">
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                    {previewAst && selectedPath && (
+                      <p className="mt-1 text-xs text-blue-200/90">
+                        Example from this PDF:{' '}
+                        <span className="font-semibold text-blue-100">
+                          {previewValue ?? 'not found in sample PDF'}
+                        </span>
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
 
               {/* Line items mapping */}
               <div className="pt-4 border-t border-white/10 space-y-4">
-                <h3 className="text-white font-semibold">Line items (deliverables / tasks)</h3>
+                <h3 className="text-white font-semibold">Line items (tasks / deliverables)</h3>
                 <p className="text-blue-200 text-sm">
-                  Map how PDF line items (e.g. numbered tasks &quot;1.348 Script Writing...&quot;) become invoice line items. Quantity can be the preceding number (1, 2, 3, 4) or 1 per row.
+                  How we turn rows in your PDF into invoice rows.
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -385,7 +474,7 @@ export default function PdfMappingConfigPage() {
                       onChange={(e) => handleLineItemMapChange('description', e.target.value)}
                       className="w-full px-4 py-2 bg-white/15 border border-white/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
                     >
-                      {ITEM_FIELD_PATH_OPTIONS.filter((o) => ['label', 'description'].includes(o.value)).map((opt) => (
+                      {ITEM_FIELD_PATH_OPTIONS.filter((o) => o.value === 'label').map((opt) => (
                         <option key={opt.value} value={opt.value} className="bg-gray-800 text-white">{opt.label}</option>
                       ))}
                     </select>
@@ -401,7 +490,7 @@ export default function PdfMappingConfigPage() {
                         <option key={opt.value} value={opt.value} className="bg-gray-800 text-white">{opt.label}</option>
                       ))}
                     </select>
-                    <p className="text-blue-300/80 text-xs mt-1">Use &quot;Quantity&quot; for preceding number (1,2,3,4); &quot;Index&quot; for row #</p>
+                    <p className="text-blue-300/80 text-xs mt-1">Pick where quantity comes from for each row.</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-blue-200 mb-2">Unit price from (optional)</label>
@@ -417,6 +506,57 @@ export default function PdfMappingConfigPage() {
                     </select>
                   </div>
                 </div>
+
+                {/* Optional default prices per description */}
+                {previewAst?.items?.length ? (
+                  <div className="mt-4 space-y-2">
+                    <h4 className="text-sm font-semibold text-white">Optional default prices</h4>
+                    <p className="text-xs text-blue-200">
+                      Set a price for tasks you always bill the same. We&apos;ll use it when that description appears.
+                    </p>
+                    <div className="mt-2 space-y-1 max-h-48 overflow-y-auto pr-1">
+                      {Array.from(new Set(previewAst.items.map((i) => i.label))).map((label) => {
+                        const key = label.trim().toLowerCase();
+                        const current =
+                          (mapping.lineItemPrices && mapping.lineItemPrices[key]?.unitPrice) ?? '';
+                        return (
+                          <div key={key} className="flex items-center gap-2 text-xs text-blue-100">
+                            <div className="flex-1 truncate" title={label}>
+                              {label}
+                            </div>
+                            <span className="text-[10px] text-blue-300 whitespace-nowrap">
+                              Price (invoice currency)
+                            </span>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="0.00"
+                              value={current}
+                              onChange={(e) => {
+                                const value = e.target.value.trim();
+                                setMapping((prev) => {
+                                  const next: OrgPdfMappingConfig = { ...prev };
+                                  const norm = label.trim().toLowerCase();
+                                  const n = parseFloat(value);
+                                  if (!value || Number.isNaN(n) || n <= 0) {
+                                    if (next.lineItemPrices) {
+                                      delete next.lineItemPrices[norm];
+                                    }
+                                  } else {
+                                    next.lineItemPrices = next.lineItemPrices ?? {};
+                                    next.lineItemPrices[norm] = { unitPrice: n };
+                                  }
+                                  return next;
+                                });
+                              }}
+                              className="w-20 px-2 py-1 rounded bg-white/10 border border-white/20 text-right text-white [color-scheme:dark]"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
               <div className="flex flex-wrap items-center justify-end gap-3 pt-2">

@@ -109,9 +109,19 @@ export function applyPdfMapping(
       const quantity = map.quantity
         ? Number(getByPath(item, map.quantity)) || 1
         : 1;
-      const unitPrice = map.unitPrice
+      let unitPrice = map.unitPrice
         ? Number(getByPath(item, map.unitPrice)) || 0
         : 0;
+
+      // If no price was found in the PDF, fall back to any preset price for this description
+      if (!unitPrice && mapping.lineItemPrices) {
+        const key = description.trim().toLowerCase();
+        const preset = mapping.lineItemPrices[key];
+        if (preset && typeof preset.unitPrice === 'number' && preset.unitPrice > 0) {
+          unitPrice = preset.unitPrice;
+        }
+      }
+
       return {
         description,
         quantity,

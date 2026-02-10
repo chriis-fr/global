@@ -419,8 +419,20 @@ function Sidebar() {
             <div className="ml-4 space-y-1">
               {SETTINGS_LINKS.map(link => {
                 const active = pathname.startsWith(link.href);
+                const integrationsDisabled = link.key === 'integrations' && process.env.NODE_ENV !== 'development';
 
                 if (isMobile) {
+                  if (integrationsDisabled) {
+                    return (
+                      <div
+                        key={link.key}
+                        className="flex items-center px-3 py-3 rounded-lg text-sm font-medium text-white/50 cursor-not-allowed"
+                      >
+                        <link.icon className="h-5 w-5 mr-3" />
+                        {link.label}
+                      </div>
+                    );
+                  }
                   return (
                     <div
                       key={link.key}
@@ -441,6 +453,18 @@ function Sidebar() {
                       <link.icon className="h-5 w-5 mr-3" />
                       {link.label}
                     </div>
+                  );
+                }
+
+                if (integrationsDisabled) {
+                  return (
+                    <span
+                      key={link.key}
+                      className="flex items-center px-3 py-3 rounded-lg text-sm font-medium text-white/50 cursor-not-allowed"
+                    >
+                      <link.icon className="h-5 w-5 mr-3" />
+                      {link.label}
+                    </span>
                   );
                 }
 

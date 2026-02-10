@@ -53,6 +53,12 @@ export interface OrgPdfMappingConfig {
       status?: string;
     };
   };
+  /** Optional fixed prices for specific line item descriptions (key = normalized description). */
+  lineItemPrices?: {
+    [normalizedDescription: string]: {
+      unitPrice: number;
+    };
+  };
 }
 
 /** Named mapping entry (user-defined name for easy selection when uploading). */
