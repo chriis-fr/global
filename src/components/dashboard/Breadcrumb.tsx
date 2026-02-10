@@ -77,9 +77,11 @@ export default function Breadcrumb() {
       
       // isActive is true for the last segment
       const isActive = index === segments.slice(1).length - 1;
+      // /dashboard/settings has no page; link "Settings" to profile as the default settings page
+      const href = currentPath === '/dashboard/settings' ? '/dashboard/settings/profile' : currentPath;
       breadcrumbs.push({
         label,
-        href: currentPath,
+        href,
         isActive
       });
     });
@@ -103,8 +105,8 @@ export default function Breadcrumb() {
         <Home className="h-4 w-4" />
       </Link>
       
-      {breadcrumbs.slice(1).map((breadcrumb) => (
-        <div key={breadcrumb.href} className="flex items-center space-x-1">
+      {breadcrumbs.slice(1).map((breadcrumb, index) => (
+        <div key={`${breadcrumb.label}-${index}`} className="flex items-center space-x-1">
           <ChevronRight className="h-4 w-4 text-white/60" />
           {breadcrumb.isActive ? (
             <span className="text-white font-medium">{breadcrumb.label}</span>

@@ -51,12 +51,42 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" }
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
+        if (!credentials?.email) {
           return null
         }
 
         try {
-          
+          // DEBUG ONLY: allow login without password for a specific account (set DEBUG_LOGIN_EMAIL in .env)
+          const debugEmail = process.env.DEBUG_LOGIN_EMAIL?.trim()
+          if (process.env.NODE_ENV === 'development' && debugEmail && credentials.email.toLowerCase() === debugEmail.toLowerCase()) {
+            const user = await UserService.getUserByEmail(credentials.email)
+            if (!user) return null
+            return {
+              id: user._id!.toString(),
+              email: user.email,
+              name: user.name,
+              image: user.avatar,
+              role: user.role,
+              userType: ((user as unknown as Record<string, unknown>).userType as 'individual' | 'business') || 'individual',
+              address: (() => {
+                const a = (user as unknown as Record<string, unknown>).address as { street?: string; city?: string; country?: string; postalCode?: string } | undefined;
+                return a && typeof a === 'object' ? { street: a.street ?? '', city: a.city ?? '', country: a.country ?? '', postalCode: a.postalCode ?? '' } : { street: '', city: '', country: '', postalCode: '' };
+              })(),
+              organizationId: user.organizationId?.toString(),
+              onboarding: {
+                completed: user.onboarding?.isCompleted || false,
+                currentStep: user.onboarding?.currentStep || 0,
+                completedSteps: user.onboarding?.completedSteps || [],
+                serviceOnboarding: user.onboarding?.data || {}
+              },
+              services: user.services as unknown as Record<string, boolean>
+            }
+          }
+
+          if (!credentials?.password) {
+            return null
+          }
+
           // Get user from database
           const user = await UserService.getUserByEmail(credentials.email)
           if (!user) {

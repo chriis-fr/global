@@ -20,9 +20,26 @@ import {
 } from 'lucide-react';
 import { useSubscription } from '@/lib/contexts/SubscriptionContext';
 import { getOrganizationData } from '@/lib/actions/organization';
+import { getInvoiceStats } from '@/app/actions/invoice-actions';
 import InvoiceStatCard from '@/components/smart-invoicing/InvoiceStatCard';
 import RecentInvoicesList from '@/components/smart-invoicing/RecentInvoicesList';
 import OnboardingStatus from '@/components/smart-invoicing/OnboardingStatus';
+
+const STATS_CACHE_KEY = 'smart_invoicing_stats';
+const STATS_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+function readStatsCache(): { data: { totalInvoices?: number; totalRevenue?: number; statusCounts?: { sent?: number; pending?: number; paid?: number } }; loading: boolean } {
+  if (typeof window === 'undefined') return { data: {}, loading: true };
+  try {
+    const raw = localStorage.getItem(STATS_CACHE_KEY);
+    if (!raw) return { data: {}, loading: true };
+    const parsed = JSON.parse(raw);
+    if ((Date.now() - (parsed?.timestamp ?? 0)) >= STATS_CACHE_DURATION) return { data: {}, loading: true };
+    return { data: parsed?.data ?? {}, loading: false };
+  } catch {
+    return { data: {}, loading: true };
+  }
+}
 
 export default function SmartInvoicingPage() {
   const statsScrollRef = useRef<HTMLDivElement>(null);
@@ -32,6 +49,8 @@ export default function SmartInvoicingPage() {
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const [orgUserRole, setOrgUserRole] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [stats, setStats] = useState<{ data: { totalInvoices?: number; totalRevenue?: number; statusCounts?: { sent?: number; pending?: number; paid?: number } }; loading: boolean }>(readStatsCache);
+  const statsFetchedRef = useRef(false);
 
   useEffect(() => {
     setMounted(true);
@@ -76,6 +95,26 @@ export default function SmartInvoicingPage() {
   const router = useRouter();
   const { data: session } = useSession();
   const { subscription } = useSubscription();
+
+  // Single fetch for all stats (cached 5 min); init from cache so no skeleton when navigating back
+  useEffect(() => {
+    const load = async (background: boolean) => {
+      if (!background) setStats(prev => ({ ...prev, loading: true }));
+      const result = await getInvoiceStats();
+      if (result.success && result.data) {
+        const data = result.data;
+        setStats({ data, loading: false });
+        try {
+          localStorage.setItem(STATS_CACHE_KEY, JSON.stringify({ data, timestamp: Date.now() }));
+        } catch {}
+      } else if (!background) setStats(prev => ({ ...prev, loading: false }));
+    };
+    if (!statsFetchedRef.current) {
+      statsFetchedRef.current = true;
+      const { loading: cacheLoading } = readStatsCache();
+      load(!cacheLoading);
+    }
+  }, []);
 
   // Fetch org role so only admins/owners see Team Settings (members cannot manage permissions)
   useEffect(() => {
@@ -130,16 +169,22 @@ export default function SmartInvoicingPage() {
   };
 
   const handleRefresh = () => {
-    // Clear all caches to force refresh
+    localStorage.removeItem(STATS_CACHE_KEY);
     localStorage.removeItem('invoice_stat_total');
     localStorage.removeItem('invoice_stat_revenue');
     localStorage.removeItem('invoice_stat_pending');
     localStorage.removeItem('invoice_stat_paid');
     localStorage.removeItem('smart_invoicing_recent_invoices');
     localStorage.removeItem('smart_invoicing_onboarding_status');
-    
-    // Reload the page to trigger fresh data
     window.location.reload();
+  };
+
+  const d = stats.data;
+  const statValues = {
+    total: d.totalInvoices ?? 0,
+    revenue: d.totalRevenue ?? 0,
+    pending: (d.statusCounts?.sent ?? 0) + (d.statusCounts?.pending ?? 0),
+    paid: d.statusCounts?.paid ?? 0,
   };
 
   return (
@@ -236,7 +281,7 @@ export default function SmartInvoicingPage() {
                 </div>
               </div>
             }>
-              <InvoiceStatCard type="total" />
+              <InvoiceStatCard type="total" cachedValue={statValues.total} cachedLoading={stats.loading} />
             </Suspense>
           </div>
 
@@ -252,7 +297,7 @@ export default function SmartInvoicingPage() {
                 </div>
               </div>
             }>
-              <InvoiceStatCard type="revenue" />
+              <InvoiceStatCard type="revenue" cachedValue={statValues.revenue} cachedLoading={stats.loading} />
             </Suspense>
           </div>
 
@@ -268,7 +313,7 @@ export default function SmartInvoicingPage() {
                 </div>
               </div>
             }>
-              <InvoiceStatCard type="pending" />
+              <InvoiceStatCard type="pending" cachedValue={statValues.pending} cachedLoading={stats.loading} />
             </Suspense>
           </div>
 
@@ -284,7 +329,7 @@ export default function SmartInvoicingPage() {
                 </div>
               </div>
             }>
-              <InvoiceStatCard type="paid" />
+              <InvoiceStatCard type="paid" cachedValue={statValues.paid} cachedLoading={stats.loading} />
             </Suspense>
           </div>
         </div>

@@ -10,6 +10,14 @@ import { CurrencyService } from '@/lib/services/currencyService';
 const statsCache = new Map<string, { data: DashboardStats; timestamp: number }>();
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
+function toISOStringSafe(value: unknown): string {
+  if (value == null) return new Date().toISOString();
+  if (typeof value === 'string') return value;
+  if (value instanceof Date) return value.toISOString();
+  const d = new Date(value as string | number);
+  return Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+}
+
 // Dashboard Stats Interface (minimal data for display only)
 export interface DashboardStats {
   totalReceivables: number; // Expected revenue from all invoices
@@ -409,16 +417,27 @@ export async function getRecentInvoices(limit: number = 5): Promise<{ success: b
     const db = await connectToDatabase();
     const invoicesCollection = db.collection('invoices');
 
-    // Build query - Organization members should always see organization's invoices
+    // Build query - Organization members see org invoices (match string or ObjectId); individuals by issuerId/userId
     const isOrganization = !!session.user.organizationId;
-    const query = isOrganization 
-      ? { organizationId: session.user.organizationId }
-      : { 
-          $or: [
-            { issuerId: session.user.id },
-            { userId: session.user.email }
-          ]
-        };
+    const orgId = session.user.organizationId;
+    const issuerId = session.user.id;
+    const userEmail = session.user.email ?? '';
+    let query: Record<string, unknown>;
+
+    if (isOrganization && orgId) {
+      const isOrgObjectId = /^[0-9a-fA-F]{24}$/.test(orgId);
+      query = isOrgObjectId
+        ? { $or: [{ organizationId: orgId }, { organizationId: new ObjectId(orgId) }] }
+        : { organizationId: orgId };
+    } else {
+      const orClauses: Record<string, unknown>[] = [];
+      if (issuerId != null) orClauses.push({ issuerId });
+      if (userEmail) orClauses.push({ userId: userEmail });
+      if (orClauses.length === 0) {
+        return { success: false, error: 'Unable to determine invoice scope' };
+      }
+      query = { $or: orClauses };
+    }
 
     // Get only essential fields for list view
     const invoices = await invoicesCollection
@@ -441,24 +460,25 @@ export async function getRecentInvoices(limit: number = 5): Promise<{ success: b
       .limit(limit)
       .toArray();
 
-    // Transform to minimal data structure
+    // Transform to minimal data structure (safe dates: MongoDB may return Date or string)
     const recentInvoices: RecentInvoice[] = invoices.map(invoice => ({
       _id: invoice._id.toString(),
       invoiceNumber: invoice.invoiceNumber || 'Invoice',
-      clientName: invoice.clientDetails?.companyName || 
-                 invoice.clientDetails?.name || 
+      clientName: invoice.clientDetails?.companyName ||
+                 invoice.clientDetails?.name ||
                  'Client',
       total: invoice.total || invoice.totalAmount || 0,
       currency: invoice.currency || 'USD',
       status: invoice.status || 'draft',
-      createdAt: invoice.createdAt?.toISOString() || new Date().toISOString(),
+      createdAt: toISOStringSafe(invoice.createdAt),
       recipientType: invoice.recipientType,
       sentVia: invoice.sentVia
     }));
 
     return { success: true, data: recentInvoices };
 
-  } catch {
+  } catch (error) {
+    console.error('[Dashboard] getRecentInvoices failed:', error);
     return { success: false, error: 'Failed to fetch recent invoices' };
   }
 }

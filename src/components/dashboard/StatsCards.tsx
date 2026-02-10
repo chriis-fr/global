@@ -22,30 +22,22 @@ interface StatsCardsProps {
 
 // Move CACHE_DURATION outside component to avoid dependency issues
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
+const CACHE_KEY = 'dashboard_stats';
 
-// Helper function to get cached stats immediately (for initial state)
-const getCachedStats = (): DashboardStats | null => {
-  if (typeof window === 'undefined') return null;
-  
+// Return any cached stats (even stale) for immediate display when navigating back
+function readCache(): { data: DashboardStats | null; valid: boolean } {
+  if (typeof window === 'undefined') return { data: null, valid: false };
   try {
-    const cacheKey = 'dashboard_stats';
-    const cachedData = localStorage.getItem(cacheKey);
-    
-    if (cachedData) {
-      const parsed = JSON.parse(cachedData);
-      const now = Date.now();
-      
-      // Return cached data if it's less than 5 minutes old
-      if ((now - parsed.timestamp) < CACHE_DURATION) {
-        return parsed.data;
-      }
-    }
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return { data: null, valid: false };
+    const parsed = JSON.parse(raw);
+    const data = parsed?.data ?? null;
+    const valid = data && (Date.now() - (parsed?.timestamp ?? 0)) < CACHE_DURATION;
+    return { data, valid };
   } catch {
-    // Ignore cache errors
+    return { data: null, valid: false };
   }
-  
-  return null;
-};
+}
 
 export default function StatsCards({ className = '' }: StatsCardsProps) {
   const { data: session } = useSession();
@@ -54,21 +46,23 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
   
   // Only fetch data when on the dashboard page
   const isOnDashboardPage = pathname === '/dashboard';
-  
-  // Initialize with cached data if available to avoid loading state
-  const cachedStats = getCachedStats();
-  const [stats, setStats] = useState<DashboardStats>(cachedStats || {
-    totalReceivables: 0,
-    totalPaidRevenue: 0,
-    totalExpenses: 0,
-    pendingInvoices: 0,
-    paidInvoices: 0,
-    totalClients: 0,
-    netBalance: 0,
-    totalPayables: 0,
-    overdueCount: 0
+
+  // Sync init from cache (any cache, even stale) so returning to dashboard shows data immediately
+  const [stats, setStats] = useState<DashboardStats>(() => {
+    const { data } = readCache();
+    return data || {
+      totalReceivables: 0,
+      totalPaidRevenue: 0,
+      totalExpenses: 0,
+      pendingInvoices: 0,
+      paidInvoices: 0,
+      totalClients: 0,
+      netBalance: 0,
+      totalPayables: 0,
+      overdueCount: 0
+    };
   });
-  const [loading, setLoading] = useState(!cachedStats); // Only show loading if no cache
+  const [loading, setLoading] = useState(() => !readCache().data); // No loading if we have any cache to show
   const [error, setError] = useState<string | null>(null);
   const hasInitialized = useRef(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -105,61 +99,34 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
     }
 
     const loadStats = async () => {
-      const cacheKey = 'dashboard_stats';
-      
-      // Check localStorage cache first - load immediately if available
-      const cachedData = localStorage.getItem(cacheKey);
-      
+      const { data: cachedData } = readCache();
+
+      // If we have cache (valid or stale), show it and don't show loading; revalidate in background
       if (cachedData) {
-        try {
-          const parsed = JSON.parse(cachedData);
-          const now = Date.now();
-          
-          // Use cached data if it's less than 5 minutes old
-          if ((now - parsed.timestamp) < CACHE_DURATION) {
-            setStats(parsed.data);
-            setLoading(false);
-            hasInitialized.current = true;
-            // Still fetch in background to update cache, but don't show loading
-            getDashboardStats().then((result) => {
-              if (result.success && result.data) {
-                const cacheData = {
-                  data: result.data,
-                  timestamp: Date.now()
-                };
-                localStorage.setItem(cacheKey, JSON.stringify(cacheData));
-                setStats(result.data); // Update with fresh data silently
-              }
-            }).catch(() => {
-              // Silently fail background refresh
-            });
-            return;
-          } else {
-            // Cache expired, remove it
-            localStorage.removeItem(cacheKey);
+        setStats(cachedData);
+        setLoading(false);
+        hasInitialized.current = true;
+        getDashboardStats().then((result) => {
+          if (result.success && result.data) {
+            try {
+              localStorage.setItem(CACHE_KEY, JSON.stringify({ data: result.data, timestamp: Date.now() }));
+              setStats(result.data);
+            } catch {}
           }
-        } catch {
-          // If cache is corrupted, remove it and fetch fresh
-          localStorage.removeItem(cacheKey);
-        }
+        }).catch(() => {});
+        return;
       }
 
-      // No valid cache, fetch fresh data
+      // No cache at all - fetch and show loading
       try {
         setLoading(true);
         setError(null);
-        
         const result = await getDashboardStats();
-        
         if (result.success && result.data) {
           setStats(result.data);
-          
-          // Cache in localStorage
-          const cacheData = {
-            data: result.data,
-            timestamp: Date.now()
-          };
-          localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+          try {
+            localStorage.setItem(CACHE_KEY, JSON.stringify({ data: result.data, timestamp: Date.now() }));
+          } catch {}
         } else {
           setError(result.error || 'Failed to load stats');
         }

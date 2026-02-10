@@ -993,9 +993,41 @@ export default function CreateInvoicePage() {
           amount: round2(Number(item.amount) ?? 0),
           quantity: Math.max(0, Math.round(Number(item.quantity) || 1))
         }));
+        // Map nested companyDetails/clientDetails to flat form shape so From/To sections persist after save
+        const cd = raw.companyDetails as { name?: string; addressLine1?: string; city?: string; region?: string; postalCode?: string; country?: string; taxNumber?: string; logo?: string; email?: string; phone?: string } | undefined;
+        const clientD = raw.clientDetails as { firstName?: string; companyName?: string; email?: string; country?: string; region?: string; city?: string; postalCode?: string; addressLine1?: string; phone?: string } | undefined;
         const loadedData = {
           ...defaultInvoiceData,
           ...raw,
+          // Ensure From (company) section is always from saved data, not defaults
+          companyName: raw.companyName ?? cd?.name ?? defaultInvoiceData.companyName,
+          companyEmail: raw.companyEmail ?? (cd as { email?: string } | undefined)?.email ?? defaultInvoiceData.companyEmail,
+          companyPhone: raw.companyPhone ?? (cd as { phone?: string } | undefined)?.phone ?? defaultInvoiceData.companyPhone,
+          companyTaxNumber: raw.companyTaxNumber ?? cd?.taxNumber ?? defaultInvoiceData.companyTaxNumber,
+          companyLogo: raw.companyLogo ?? cd?.logo ?? defaultInvoiceData.companyLogo,
+          companyAddress: raw.companyAddress?.street !== undefined && raw.companyAddress?.country !== undefined
+            ? raw.companyAddress
+            : {
+                street: cd?.addressLine1 ?? raw.companyAddress?.street ?? '',
+                city: cd?.city ?? raw.companyAddress?.city ?? '',
+                state: cd?.region ?? raw.companyAddress?.state ?? '',
+                zipCode: cd?.postalCode ?? raw.companyAddress?.zipCode ?? '',
+                country: cd?.country ?? raw.companyAddress?.country ?? 'US'
+              },
+          // Ensure To (client) section is from saved data
+          clientName: raw.clientName ?? (clientD ? [clientD.firstName, (clientD as { lastName?: string }).lastName].filter(Boolean).join(' ') : undefined) ?? defaultInvoiceData.clientName,
+          clientCompany: raw.clientCompany ?? clientD?.companyName ?? defaultInvoiceData.clientCompany,
+          clientEmail: raw.clientEmail ?? clientD?.email ?? defaultInvoiceData.clientEmail,
+          clientPhone: raw.clientPhone ?? clientD?.phone ?? defaultInvoiceData.clientPhone,
+          clientAddress: raw.clientAddress?.street !== undefined && raw.clientAddress?.country !== undefined
+            ? raw.clientAddress
+            : {
+                street: clientD?.addressLine1 ?? raw.clientAddress?.street ?? '',
+                city: clientD?.city ?? raw.clientAddress?.city ?? '',
+                state: clientD?.region ?? raw.clientAddress?.state ?? '',
+                zipCode: clientD?.postalCode ?? raw.clientAddress?.zipCode ?? '',
+                country: clientD?.country ?? raw.clientAddress?.country ?? ''
+              },
           items,
           attachedFiles: raw.attachedFiles || [],
           ccClients: raw.ccClients || [],
@@ -1163,22 +1195,51 @@ export default function CreateInvoicePage() {
   const initialLoadDone = useRef(false);
   const lastUserId = useRef<string | undefined>(undefined);
   const companyDataLoaded = useRef(false); // Track if company data has been loaded from server
-  
+  const loadedInvoiceIdRef = useRef<string | null>(null); // Prevent duplicate GET /api/invoices/[id]
+  const hasResetForNewInvoiceRef = useRef(false);
+
   useEffect(() => {
     // When pre-filling from PDF draft (or just finished loading one), only load payment methods; don't overwrite company/client/items
     if (fromPdfDraftId || pdfDraftLoadDone.current) {
       loadSavedPaymentMethods();
       return;
     }
-    // Prevent multiple loads for the same user
     const currentUserId = session?.user?.id;
     if (invoiceId) {
-      if (!initialLoadDone.current) {
-        initialLoadDone.current = true;
-        loadInvoice(invoiceId);
-        companyDataLoaded.current = true; // Invoice data includes company info
+      hasResetForNewInvoiceRef.current = false;
+      // Already loaded this draft – avoid duplicate GET /api/invoices/[id]; payment methods already loaded
+      if (loadedInvoiceIdRef.current === invoiceId) {
+        return;
       }
-    } else if (currentUserId) {
+      loadedInvoiceIdRef.current = invoiceId;
+      initialLoadDone.current = true;
+      companyDataLoaded.current = true;
+      loadInvoice(invoiceId);
+      loadSavedPaymentMethods();
+      loadClients();
+      loadLogoFromSettings();
+      return;
+    }
+    loadedInvoiceIdRef.current = null;
+    // Create new invoice (no ?id=): if form still has a draft _id from a previous session, reset to fresh so "Create invoice" is clean
+    if (currentUserId && formData._id && !hasResetForNewInvoiceRef.current) {
+      hasResetForNewInvoiceRef.current = true;
+      const companyPreserved = {
+        companyName: formData.companyName,
+        companyEmail: formData.companyEmail,
+        companyPhone: formData.companyPhone,
+        companyAddress: formData.companyAddress,
+        companyTaxNumber: formData.companyTaxNumber,
+        companyLogo: formData.companyLogo
+      };
+      clearSavedData();
+      setFormData({ ...defaultInvoiceData, ...companyPreserved });
+      loadSavedPaymentMethods();
+      loadClients();
+      loadLogoFromSettings();
+      return;
+    }
+    if (currentUserId) {
       // CRITICAL: Always load company data when creating new invoice (not editing)
       // Check if company data is missing, and if so, load it
       const hasCompanyData = formData.companyName && formData.companyName.trim() !== '';
@@ -1208,7 +1269,9 @@ export default function CreateInvoicePage() {
         }
       }
     }
-  }, [invoiceId, fromPdfDraftId, session?.user?.id, formData.companyName, loadInvoice, loadServiceOnboardingData, loadOrganizationData, loadClients, loadLogoFromSettings, loadSavedPaymentMethods]);
+  // clearSavedData/setFormData are from hook and used only for "reset for new invoice"; omit to avoid effect running every render
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- invoiceId, formData._id, session, loaders are the intended triggers
+  }, [invoiceId, fromPdfDraftId, session?.user?.id, formData.companyName, formData.companyAddress, formData.companyEmail, formData.companyLogo, formData.companyPhone, formData.companyTaxNumber, formData._id, loadInvoice, loadServiceOnboardingData, loadOrganizationData, loadClients, loadLogoFromSettings, loadSavedPaymentMethods]);
 
   // When arriving from PDF upload: load draft and pre-fill create form (items, client, company, etc.). Use documentAst when invoiceData is empty.
   useEffect(() => {
@@ -1485,38 +1548,44 @@ export default function CreateInvoicePage() {
     }
   };
 
-  // Check if bank name is custom (not in the list)
+  // Check if bank name is custom (not in the list) – only refetch when country or name actually changed
+  const lastBanksSearchRef = useRef<{ country: string; name: string }>({ country: '', name: '' });
   useEffect(() => {
-    const checkIfCustomBank = async () => {
-      if (!formData.bankName || !formData.bankCountryCode) {
-        setIsCustomBank(false);
-        setShowCustomBankFields(false);
-        return;
-      }
+    const country = formData.bankCountryCode || '';
+    const name = (formData.bankName || '').trim();
+    if (!name || !country) {
+      setIsCustomBank(false);
+      setShowCustomBankFields(false);
+      return;
+    }
+    if (lastBanksSearchRef.current.country === country && lastBanksSearchRef.current.name === name) {
+      return;
+    }
+    lastBanksSearchRef.current = { country, name };
 
+    let cancelled = false;
+    const checkIfCustomBank = async () => {
       try {
-        const response = await fetch(`/api/banks/search?country=${formData.bankCountryCode}`);
+        const response = await fetch(`/api/banks/search?country=${country}`);
+        if (cancelled) return;
         const data = await response.json();
-        
+        if (cancelled) return;
         if (data.success) {
-          const banks = data.data.banks as Bank[];
-          const isInList = banks.some(bank => 
-            bank.name.toLowerCase().trim() === formData.bankName?.toLowerCase().trim()
+          const banks = (data.data?.banks || []) as Bank[];
+          const isInList = banks.some(bank =>
+            bank.name.toLowerCase().trim() === name.toLowerCase()
           );
-          setIsCustomBank(!isInList);
-          if (!isInList) {
-            // If it's a custom bank, keep fields hidden until user toggles
-          } else {
-            setShowCustomBankFields(false);
+          if (!cancelled) {
+            setIsCustomBank(!isInList);
+            if (isInList) setShowCustomBankFields(false);
           }
         }
       } catch {
-        // If we can't check, assume it might be custom if there's a value
-        setIsCustomBank(!!formData.bankName);
+        if (!cancelled) setIsCustomBank(!!name);
       }
     };
-
     checkIfCustomBank();
+    return () => { cancelled = true; };
   }, [formData.bankName, formData.bankCountryCode]);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1797,7 +1866,7 @@ export default function CreateInvoicePage() {
     try {
       const url = isEditing ? `/api/invoices/${formData._id}` : '/api/invoices';
       const method = isEditing ? 'PUT' : 'POST';
-      
+
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
@@ -1807,21 +1876,33 @@ export default function CreateInvoicePage() {
           withholdingTaxRatePercent: formData.withholdingTaxEnabled ? (formData.withholdingTaxRatePercent ?? 5) : undefined
         }))
       });
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (!isEditing && data.success) {
-          // Update formData with the new invoice ID and invoice number
-          setFormData(prev => ({
-            ...prev,
-            _id: data.data.id,
-            invoiceNumber: data.data.invoiceNumber
-          }));
-          setIsEditing(true);
-        }
+
+      const data = response.ok ? await response.json() : null;
+      const success = response.ok && data?.success;
+
+      if (!success) {
+        const message = data?.message || data?.error || `Save failed (${response.status})`;
+        toast.error(message);
+        return;
       }
+
+      toast.success('Draft saved.');
+      // Preserve company (From) in localStorage so next time they open Create invoice the form is fresh but keeps their details
+      const companyPreserved = {
+        companyName: formData.companyName,
+        companyEmail: formData.companyEmail,
+        companyPhone: formData.companyPhone,
+        companyAddress: formData.companyAddress,
+        companyTaxNumber: formData.companyTaxNumber,
+        companyLogo: formData.companyLogo
+      };
+      clearSavedData();
+      setFormData({ ...defaultInvoiceData, ...companyPreserved });
+      setIsEditing(false);
+      router.replace('/dashboard/services/smart-invoicing');
     } catch (error) {
       console.error('Failed to save draft:', error);
+      toast.error('Failed to save draft. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -2727,7 +2808,7 @@ export default function CreateInvoicePage() {
             className="flex items-center space-x-2 px-4 py-3 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm touch-manipulation active:scale-95 min-h-[44px]"
           >
             <ArrowLeft className="h-4 w-4" />
-            <span>Back to Dashboard</span>
+            <span>Back</span>
           </button>
           
           <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4 w-full sm:w-auto">

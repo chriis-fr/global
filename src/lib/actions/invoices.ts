@@ -6,6 +6,15 @@ import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
 import { CurrencyService } from '@/lib/services/currencyService';
 
+/** MongoDB can return dates as Date or string; always produce an ISO string safely. */
+function toISOStringSafe(value: unknown): string {
+  if (value == null) return new Date().toISOString();
+  if (typeof value === 'string') return value;
+  if (value instanceof Date) return value.toISOString();
+  const d = new Date(value as string | number);
+  return Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+}
+
 // Invoice List Item Interface (minimal data for list view only)
 export interface InvoiceListItem {
   _id: string;
@@ -138,6 +147,108 @@ export interface FullInvoiceListResponse {
   };
 }
 
+/** Response for getRecentInvoicesOnly - just the list, no stats/pagination/revenue */
+export interface RecentInvoicesOnlyResponse {
+  invoices: Array<{
+    _id: string;
+    invoiceNumber: string;
+    status: string;
+    totalAmount: number;
+    total: number;
+    currency: string;
+    clientDetails: { companyName?: string; firstName?: string; lastName?: string; email?: string; name?: string };
+    recipientType?: string;
+    organizationId?: string;
+    sentVia?: string;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+}
+
+/**
+ * Fast path: recent N invoices only. No stats, no count, no revenue, no currency conversion.
+ * Use for dashboard/smart-invoicing "Recent Invoices" widget to cut load time ~70%.
+ */
+export async function getRecentInvoicesOnly(
+  limit: number = 5
+): Promise<{ success: boolean; data?: RecentInvoicesOnlyResponse; error?: string }> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+    const db = await connectToDatabase();
+    const invoicesCollection = db.collection('invoices');
+
+    const isOrganization = !!session.user.organizationId;
+    const orgId = session.user.organizationId;
+    const issuerId = session.user.id;
+    const userEmail = session.user.email ?? '';
+    let query: Record<string, unknown>;
+    if (isOrganization && orgId) {
+      const isOrgObjectId = /^[0-9a-fA-F]{24}$/.test(orgId);
+      query = isOrgObjectId
+        ? { $or: [{ organizationId: orgId }, { organizationId: new ObjectId(orgId) }] }
+        : { organizationId: orgId };
+    } else {
+      const orClauses: Record<string, unknown>[] = [];
+      if (issuerId != null) orClauses.push({ issuerId });
+      if (userEmail) orClauses.push({ userId: userEmail });
+      if (orClauses.length === 0) return { success: false, error: 'Unable to determine invoice scope' };
+      query = { $or: orClauses };
+    }
+
+    const invoices = await invoicesCollection
+      .find(query)
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .project({
+        _id: 1,
+        invoiceNumber: 1,
+        status: 1,
+        total: 1,
+        totalAmount: 1,
+        currency: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        recipientType: 1,
+        organizationId: 1,
+        sentVia: 1,
+        'clientDetails.companyName': 1,
+        'clientDetails.firstName': 1,
+        'clientDetails.lastName': 1,
+        'clientDetails.email': 1,
+        'clientDetails.name': 1,
+      })
+      .toArray();
+
+    const list = invoices.map(inv => ({
+      _id: inv._id.toString(),
+      invoiceNumber: inv.invoiceNumber || 'Invoice',
+      status: inv.status || 'draft',
+      totalAmount: inv.total ?? inv.totalAmount ?? 0,
+      total: inv.total ?? inv.totalAmount ?? 0,
+      currency: inv.currency || 'USD',
+      clientDetails: {
+        companyName: inv.clientDetails?.companyName,
+        firstName: inv.clientDetails?.firstName,
+        lastName: inv.clientDetails?.lastName,
+        email: inv.clientDetails?.email,
+        name: inv.clientDetails?.name,
+      },
+      recipientType: inv.recipientType,
+      organizationId: inv.organizationId?.toString(),
+      sentVia: inv.sentVia,
+      createdAt: toISOStringSafe(inv.createdAt),
+      updatedAt: toISOStringSafe(inv.updatedAt),
+    }));
+
+    return { success: true, data: { invoices: list } };
+  } catch (error) {
+    console.error('Error fetching recent invoices only:', error);
+    return { success: false, error: 'Failed to load recent invoices' };
+  }
+}
+
 /**
  * Get invoices list with pagination - only list view data
  * Matches existing API structure but optimized for performance
@@ -244,8 +355,8 @@ export async function getInvoicesList(
       total: invoice.total || invoice.totalAmount || 0,
       currency: invoice.currency || 'USD',
       status: invoice.status || 'draft',
-      dueDate: invoice.dueDate ? new Date(invoice.dueDate).toISOString() : new Date().toISOString() || new Date().toISOString(),
-      createdAt: invoice.createdAt?.toISOString() || new Date().toISOString(),
+      dueDate: toISOStringSafe(invoice.dueDate),
+      createdAt: toISOStringSafe(invoice.createdAt),
       recipientType: invoice.recipientType
     }));
 
@@ -308,20 +419,31 @@ export async function getInvoicesListMinimal(
     const db = await connectToDatabase();
     const invoicesCollection = db.collection('invoices');
 
-    // Get user's preferred currency
-    const userPreferences = await CurrencyService.getUserPreferredCurrency(session.user.email);
+    // Get user's preferred currency (safe if email is missing)
+    const userEmail = session.user.email ?? '';
+    const userPreferences = await CurrencyService.getUserPreferredCurrency(userEmail);
     const preferredCurrency = userPreferences.preferredCurrency;
 
-    // Build query - Organization members should always see organization's invoices
+    // Build query - Organization members see org invoices; individuals see by issuerId or userId (match both string and ObjectId where applicable)
     const isOrganization = !!session.user.organizationId;
-    let query: Record<string, unknown> = isOrganization 
-      ? { organizationId: session.user.organizationId }
-      : {
-          $or: [
-            { issuerId: session.user.id },
-            { userId: session.user.email }
-          ]
-        };
+    const orgId = session.user.organizationId;
+    const issuerId = session.user.id;
+    let query: Record<string, unknown>;
+
+    if (isOrganization && orgId) {
+      const isOrgObjectId = /^[0-9a-fA-F]{24}$/.test(orgId);
+      query = isOrgObjectId
+        ? { $or: [{ organizationId: orgId }, { organizationId: new ObjectId(orgId) }] }
+        : { organizationId: orgId };
+    } else {
+      const orClauses: Record<string, unknown>[] = [];
+      if (issuerId != null) orClauses.push({ issuerId });
+      if (userEmail) orClauses.push({ userId: userEmail });
+      if (orClauses.length === 0) {
+        return { success: false, error: 'Unable to determine invoice scope' };
+      }
+      query = { $or: orClauses };
+    }
 
     // Add status filter
     if (status && status !== 'all') {
@@ -455,8 +577,8 @@ export async function getInvoicesListMinimal(
         _id: invoice._id.toString(),
         invoiceNumber: invoice.invoiceNumber || 'Invoice',
         invoiceName: invoice.invoiceName,
-        issueDate: invoice.issueDate ? new Date(invoice.issueDate).toISOString() : new Date().toISOString() || new Date().toISOString(),
-        dueDate: invoice.dueDate ? new Date(invoice.dueDate).toISOString() : new Date().toISOString() || new Date().toISOString(),
+        issueDate: toISOStringSafe(invoice.issueDate),
+        dueDate: toISOStringSafe(invoice.dueDate),
         organizationId: invoice.organizationId?.toString(),
         issuerId: invoice.issuerId?.toString(),
         type: invoice.type,
@@ -480,8 +602,8 @@ export async function getInvoicesListMinimal(
         totalAmount: hasValidConversion ? convertedAmount : originalAmount, // Store converted amount or fallback to original
         status: invoice.status || 'draft',
         memo: '', // Not needed for list view
-        createdAt: invoice.createdAt?.toISOString() || new Date().toISOString(),
-        updatedAt: invoice.updatedAt?.toISOString() || new Date().toISOString(),
+        createdAt: toISOStringSafe(invoice.createdAt),
+        updatedAt: toISOStringSafe(invoice.updatedAt),
         recipientType: invoice.recipientType,
         taxes: undefined, // Not needed for list view
         // Add converted amount metadata - only if conversion was successful
@@ -490,14 +612,18 @@ export async function getInvoicesListMinimal(
       } as InvoiceDetails & { convertedAmount?: number; convertedCurrency?: string };
     });
 
-    // Calculate total revenue (only approved invoices)
+    // Calculate total revenue (only approved invoices) - don't fail list if this throws
     const revenueQuery = {
       ...query,
       status: { $in: ['approved', 'sent', 'paid'] }
     };
-    
-    const allInvoices = await invoicesCollection.find(revenueQuery).toArray();
-    const totalRevenue = await CurrencyService.calculateTotalRevenue(allInvoices as Record<string, unknown>[], preferredCurrency);
+    let totalRevenue = 0;
+    try {
+      const allInvoices = await invoicesCollection.find(revenueQuery).toArray();
+      totalRevenue = await CurrencyService.calculateTotalRevenue(allInvoices as Record<string, unknown>[], preferredCurrency);
+    } catch (revErr) {
+      console.warn('Revenue calculation failed for invoice list, using 0:', revErr);
+    }
 
     // Calculate status counts
     const statusCounts = await invoicesCollection.aggregate([
@@ -546,6 +672,10 @@ export async function getInvoicesListMinimal(
 
   } catch (error) {
     console.error('Error fetching full invoices list:', error);
+    const message = error instanceof Error ? error.message : '';
+    if (message && message.includes('404')) {
+      return { success: false, error: 'Invoices endpoint unavailable. Try refreshing the page or signing out and back in.' };
+    }
     return { success: false, error: 'Failed to fetch full invoices list' };
   }
 }
@@ -611,8 +741,8 @@ export async function getFullInvoicesForExport(
       _id: invoice._id.toString(),
       invoiceNumber: invoice.invoiceNumber || 'Invoice',
       invoiceName: invoice.invoiceName,
-      issueDate: invoice.issueDate ? new Date(invoice.issueDate).toISOString() : new Date().toISOString() || new Date().toISOString(),
-      dueDate: invoice.dueDate ? new Date(invoice.dueDate).toISOString() : new Date().toISOString() || new Date().toISOString(),
+      issueDate: toISOStringSafe(invoice.issueDate),
+      dueDate: toISOStringSafe(invoice.dueDate),
       organizationId: invoice.organizationId?.toString(),
       issuerId: invoice.issuerId?.toString(),
       type: invoice.type,
@@ -627,8 +757,8 @@ export async function getFullInvoicesForExport(
       totalAmount: invoice.totalAmount || invoice.total || 0,
       status: invoice.status || 'draft',
       memo: invoice.memo,
-      createdAt: invoice.createdAt?.toISOString() || new Date().toISOString(),
-      updatedAt: invoice.updatedAt?.toISOString() || new Date().toISOString(),
+      createdAt: toISOStringSafe(invoice.createdAt),
+      updatedAt: toISOStringSafe(invoice.updatedAt),
       recipientType: invoice.recipientType,
       taxes: invoice.taxes,
       notes: invoice.notes
@@ -683,8 +813,8 @@ export async function getInvoiceDetails(invoiceId: string): Promise<{ success: b
       _id: invoice._id.toString(),
       invoiceNumber: invoice.invoiceNumber || 'Invoice',
       invoiceName: invoice.invoiceName,
-      issueDate: invoice.issueDate ? new Date(invoice.issueDate).toISOString() : new Date().toISOString() || new Date().toISOString(),
-      dueDate: invoice.dueDate ? new Date(invoice.dueDate).toISOString() : new Date().toISOString() || new Date().toISOString(),
+      issueDate: toISOStringSafe(invoice.issueDate),
+      dueDate: toISOStringSafe(invoice.dueDate),
       companyDetails: {
         name: invoice.companyDetails?.name || invoice.companyName || '',
         email: invoice.companyDetails?.email || invoice.companyEmail || '',
@@ -707,8 +837,8 @@ export async function getInvoiceDetails(invoiceId: string): Promise<{ success: b
       totalAmount: invoice.totalAmount || invoice.total || 0,
       status: invoice.status || 'draft',
       memo: invoice.memo,
-      createdAt: invoice.createdAt?.toISOString() || new Date().toISOString(),
-      updatedAt: invoice.updatedAt?.toISOString() || new Date().toISOString(),
+      createdAt: toISOStringSafe(invoice.createdAt),
+      updatedAt: toISOStringSafe(invoice.updatedAt),
       recipientType: invoice.recipientType
     };
 

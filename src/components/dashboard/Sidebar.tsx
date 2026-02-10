@@ -61,9 +61,22 @@ function Sidebar() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
+  const [sidebarReady, setSidebarReady] = useState(false);
 
   const sidebarRef = useRef<HTMLDivElement>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    setSidebarReady(true);
+  }, []);
+
+  useEffect(() => {
+    const update = () => setIsMobile(typeof window !== 'undefined' && window.innerWidth < 1024);
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -156,8 +169,6 @@ function Sidebar() {
   }, [router]);
 
   const SidebarContent = () => {
-    const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
-
     return (
       <>
         {/* Header */}
@@ -210,11 +221,11 @@ function Sidebar() {
                 >
                   <Bell className="h-5 w-5 text-white/70" />
                 </div>
-              ) : (
+              ) : (!isCollapsed || isAutoHidden) ? (
                 <Link href="/dashboard/notifications" className="p-2 rounded-lg hover:bg-blue-900/50">
                   <Bell className="h-5 w-5 text-white/70" />
                 </Link>
-              )}
+              ) : null}
 
               <button
                 onClick={closeMobileMenu}
@@ -258,18 +269,23 @@ function Sidebar() {
               </div>
             )}
 
-            {SERVICE_LINKS.filter(link => {
-              const isServiceEnabled = session?.user?.services?.[link.key] || false;
-              if (link.key === 'accountsPayable') {
-                return (subscription?.canAccessPayables || false) && isServiceEnabled;
-              }
-              if (link.key === 'smartInvoicing') {
-                const isPayablesOnly = subscription?.plan?.type === 'payables';
-                return !isPayablesOnly && isServiceEnabled;
-              }
-              return isServiceEnabled;
-            }).map(link => {
+            {(sidebarReady
+              ? SERVICE_LINKS.filter(link => {
+                  const isServiceEnabled = session?.user?.services?.[link.key] || false;
+                  if (link.key === 'accountsPayable') {
+                    return (subscription?.canAccessPayables || false) && isServiceEnabled;
+                  }
+                  if (link.key === 'smartInvoicing') {
+                    const isPayablesOnly = subscription?.plan?.type === 'payables';
+                    return !isPayablesOnly && isServiceEnabled;
+                  }
+                  return isServiceEnabled;
+                })
+              : []
+            ).map(link => {
               const active = pathname.startsWith(link.href);
+
+              const collapsed = isCollapsed && !isAutoHidden;
 
               if (isMobile) {
                 return (
@@ -284,12 +300,14 @@ function Sidebar() {
                         handleMobileNavigation(link.href);
                       }
                     }}
-                    className={`flex items-center px-3 py-3 rounded-lg text-sm font-medium cursor-pointer ${
+                    className={`flex items-center rounded-lg text-sm font-medium cursor-pointer ${
+                      collapsed ? 'p-1.5 justify-center' : 'px-3 py-3'
+                    } ${
                       active ? 'bg-blue-600 text-white' : 'text-white/70 hover:bg-white/10'
                     }`}
                     style={{ touchAction: 'manipulation' }}
                   >
-                    <link.icon className={`h-5 w-5 ${isCollapsed && !isAutoHidden ? 'mx-auto' : 'mr-3'}`} />
+                    <link.icon className={`${collapsed ? 'h-11 w-11 shrink-0' : 'h-5 w-5 mr-3'}`} />
                     {(!isCollapsed || isAutoHidden) && link.label}
                   </div>
                 );
@@ -299,11 +317,13 @@ function Sidebar() {
                 <Link
                   key={link.key}
                   href={link.href}
-                  className={`flex items-center px-3 py-3 rounded-lg text-sm font-medium ${
+                  className={`flex items-center rounded-lg text-sm font-medium ${
+                    collapsed ? 'p-2 justify-center' : 'px-3 py-3'
+                  } ${
                     active ? 'bg-blue-600 text-white' : 'text-white/70 hover:bg-white/10'
                   }`}
                 >
-                  <link.icon className={`h-5 w-5 ${isCollapsed && !isAutoHidden ? 'mx-auto' : 'mr-3'}`} />
+                  <link.icon className={`${collapsed ? 'h-11 w-11 shrink-0' : 'h-5 w-5 mr-3'}`} />
                   {(!isCollapsed || isAutoHidden) && link.label}
                 </Link>
               );
@@ -388,8 +408,8 @@ function Sidebar() {
             type="button"
             style={{ touchAction: 'manipulation' }}
           >
-            <span className="flex items-center text-white/80">
-              <User className="h-4 w-4 mr-3" />
+            <span className="flex items-center text-sm font-medium text-white/80">
+              <User className="h-5 w-5 mr-3" />
               {(!isCollapsed || isAutoHidden) && 'Settings'}
             </span>
             <ChevronRight  className={`h-4 w-4 text-white transition-transform duration-200 ${isSettingsOpen ? 'rotate-90' : ''}`} />
@@ -413,12 +433,12 @@ function Sidebar() {
                           handleMobileNavigation(link.href);
                         }
                       }}
-                      className={`flex px-3 py-2 rounded hover:rounded hover:bg-blue-900/50 cursor-pointer ${
-                        active ? 'bg-blue-800 text-white' : 'text-white/80'
+                      className={`flex items-center px-3 py-3 rounded-lg text-sm font-medium cursor-pointer ${
+                        active ? 'bg-blue-800 text-white' : 'text-white/80 hover:bg-blue-900/50'
                       }`}
                       style={{ touchAction: 'manipulation' }}
                     >
-                      <link.icon className="h-4 w-4 mr-3" />
+                      <link.icon className="h-5 w-5 mr-3" />
                       {link.label}
                     </div>
                   );
@@ -428,11 +448,11 @@ function Sidebar() {
                   <Link
                     key={link.key}
                     href={link.href}
-                    className={`flex px-3 py-2 rounded hover:bg-blue-900/50 ${
-                      active ? 'bg-blue-800 text-white' : 'text-white/80'
+                    className={`flex items-center px-3 py-3 rounded-lg text-sm font-medium ${
+                      active ? 'bg-blue-800 text-white' : 'text-white/80 hover:bg-blue-900/50'
                     }`}
                   >
-                    <link.icon className="h-4 w-4 mr-3" />
+                    <link.icon className="h-5 w-5 mr-3" />
                     {link.label}
                   </Link>
                 );
