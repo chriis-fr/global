@@ -235,7 +235,7 @@ export default function InvitationPage({ params }: { params: Promise<{ token: st
           <div className="text-center mb-8">
             <div className="flex justify-center mb-4">
               <Image
-                src="/chains.png"
+                src="/chainsnobg.png"
                 alt="ERP Logo"
                 width={64}
                 height={64}
