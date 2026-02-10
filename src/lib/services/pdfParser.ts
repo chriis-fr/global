@@ -363,12 +363,18 @@ function buildDocumentAst(
     const label = stripTrailingDateAndComplete(stripTrailingDateOrdinal(rawLabel)) || fullLine;
     // Skip rows that are only date/status junk (e.g. "th NovCOMPLETE") — not real line items
     if (isDateStatusJunkOnly(label)) continue;
+    const code = String(td['code'] ?? '').trim();
     const row: (typeof items)[0] = {
+      // Keep description clean here; we'll optionally prepend codes when we merge duplicates
       label: label || fullLine,
       quantity: 1,
       unit_price: null,
       status: td['Status'] ?? td['status'] ?? '',
     };
+    // Attach code as a non-typed helper so we can use it during merging
+    if (code) {
+      (row as typeof row & { _code?: string })._code = code;
+    }
     for (const [k, v] of Object.entries(td)) {
       const kl = k.toLowerCase();
       if (kl === 'label' || kl.includes('desc')) {
@@ -387,6 +393,64 @@ function buildDocumentAst(
     }
     if (isDateStatusJunkOnly(row.label)) continue;
     if (row.label || row.status) items.push(row);
+  }
+
+  // Merge identical deliverable rows into a single item with quantity > 1 where appropriate.
+  // This helps when the PDF repeats the same task/line multiple times instead of using an explicit quantity.
+  if (items.length > 0) {
+    const mergedMap = new Map<
+      string,
+      { label: string; quantity: number; unit_price: number | null; status?: string; codes: string[] }
+    >();
+
+    const normalizeLabel = (s: string) =>
+      stripTrailingDateAndComplete(stripTrailingDateOrdinal((s || '').trim())).toLowerCase();
+
+    for (const item of items as Array<typeof items[0] & { _code?: string }>) {
+      const key = normalizeLabel(item.label);
+      // If label disappears after normalization, keep as-is (avoid merging junk-only lines).
+      if (!key) {
+        const passthroughKey = `__raw__:${item.label}:${mergedMap.size}`;
+        mergedMap.set(passthroughKey, { ...item, codes: item._code ? [item._code] : [] });
+        continue;
+      }
+
+      const existing = mergedMap.get(key);
+      if (!existing) {
+        mergedMap.set(key, { ...item, codes: item._code ? [item._code] : [] });
+      } else {
+        // Same normalized label: bump quantity and preserve first non-null unit_price/status.
+        existing.quantity += item.quantity || 1;
+        if (existing.unit_price == null && item.unit_price != null) {
+          existing.unit_price = item.unit_price;
+        }
+        if (!existing.status && item.status) {
+          existing.status = item.status;
+        }
+        if (item._code) {
+          if (!existing.codes.includes(item._code)) {
+            existing.codes.push(item._code);
+          }
+        }
+      }
+    }
+
+    const mergedItems: DocumentAST['items'] = [];
+    for (const value of mergedMap.values()) {
+      const baseLabel = stripTrailingDateAndComplete(stripTrailingDateOrdinal(value.label));
+      const codesLabel =
+        value.codes && value.codes.length > 0 ? `${value.codes.join(', ')} ` : '';
+      mergedItems.push({
+        // Example: "585, 588, 589 Script Writing 20th Jan"
+        label: `${codesLabel}${baseLabel}`.trim(),
+        quantity: value.quantity > 0 ? value.quantity : 1,
+        unit_price: value.unit_price ?? null,
+        status: value.status,
+      });
+    }
+
+    // Replace items with merged version
+    (items as DocumentAST['items']).splice(0, items.length, ...mergedItems);
   }
 
   return {

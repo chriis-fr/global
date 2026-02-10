@@ -6,8 +6,9 @@ import { BlockchainBenefits } from "@/components/landing/blockchain-benefits";
 import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
 import Preloader from "@/components/preloader";
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import toast from 'react-hot-toast';
 
 // Lazy load AnimatedCursor - it's heavy and not needed for initial render
 const AnimatedCursor = dynamic(() => import('react-animated-cursor'), { ssr: false });
@@ -18,8 +19,67 @@ export default function Home() {
   const [cursorReady, setCursorReady] = useState(false);
   const landingPageRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
+  const router = useRouter();
   // Default to false (desktop) - will be detected once on mount only
   const [isTouchDevice, setIsTouchDevice] = useState<boolean>(false);
+  const redirectIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const redirectToastIdRef = useRef<string | null>(null);
+  const hasOfferedRedirectRef = useRef(false);
+  const [redirectSeconds, setRedirectSeconds] = useState<number | null>(null);
+
+  const renderRedirectToast = (seconds: number | null, t: { visible: boolean }) => (
+    <div className={`max-w-sm w-full bg-blue-950 border border-blue-500/40 rounded-xl shadow-lg px-4 py-3 text-sm text-white/90 flex items-start gap-3 ${t.visible ? 'animate-enter' : 'animate-leave'}`}>
+      <div className="mt-0.5">
+        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-500/20 text-blue-300 text-xs font-semibold">
+          GF
+        </span>
+      </div>
+      <div className="flex-1">
+        <p className="font-semibold">Already signed in</p>
+        <p className="text-xs text-blue-100 mt-1">
+          Redirecting to your dashboard in{' '}
+          <span className="font-semibold">{seconds ?? 5}s</span>.
+        </p>
+        <div className="mt-2 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (redirectIntervalRef.current) {
+                clearInterval(redirectIntervalRef.current);
+                redirectIntervalRef.current = null;
+              }
+              setRedirectSeconds(null);
+              if (redirectToastIdRef.current) {
+                toast.dismiss(redirectToastIdRef.current);
+                redirectToastIdRef.current = null;
+              }
+            }}
+            className="px-3 py-1.5 rounded-lg border border-blue-500/60 text-xs font-medium text-blue-100 hover:bg-blue-500/10 transition-colors"
+          >
+            Stay here
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (redirectIntervalRef.current) {
+                clearInterval(redirectIntervalRef.current);
+                redirectIntervalRef.current = null;
+              }
+              setRedirectSeconds(null);
+              if (redirectToastIdRef.current) {
+                toast.dismiss(redirectToastIdRef.current);
+                redirectToastIdRef.current = null;
+              }
+              router.push('/dashboard');
+            }}
+            className="px-3 py-1.5 rounded-lg bg-blue-500 text-xs font-medium text-white hover:bg-blue-400 transition-colors"
+          >
+            Go now
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   // Detect touch device ONCE on mount only - no resize/orientation listeners to prevent flicker
   useEffect(() => {
@@ -51,6 +111,67 @@ export default function Home() {
   // Return preloader structure immediately to prevent any flash
 
   const isHome = pathname === "/";
+
+  // If user is already authenticated on the landing page, offer a gentle redirect to dashboard with cancel option
+  useEffect(() => {
+    if (!isHome) return;
+    if (status !== 'authenticated') return;
+    if (hasOfferedRedirectRef.current) return;
+
+    hasOfferedRedirectRef.current = true;
+    setRedirectSeconds(5);
+
+    const id = toast.custom((t) => renderRedirectToast(5, t), { duration: 6000 });
+    redirectToastIdRef.current = id as unknown as string;
+    redirectIntervalRef.current = setInterval(() => {
+      setRedirectSeconds((prev) => {
+        const next = (prev ?? 5) - 1;
+        if (next <= 0) {
+          if (redirectIntervalRef.current) {
+            clearInterval(redirectIntervalRef.current);
+            redirectIntervalRef.current = null;
+          }
+          return 0;
+        }
+        return next;
+      });
+    }, 1000);
+
+    return () => {
+      if (redirectIntervalRef.current) {
+        clearInterval(redirectIntervalRef.current);
+        redirectIntervalRef.current = null;
+      }
+      toast.dismiss(id);
+    };
+    // Only depend on basic route/session state; countdown is handled separately
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHome, status, router]);
+
+  // When countdown reaches 0, perform the redirect (run as a separate effect to avoid setState-in-render warnings)
+  useEffect(() => {
+    if (!isHome) return;
+    if (status !== 'authenticated') return;
+    if (redirectSeconds !== 0) return;
+
+    if (redirectToastIdRef.current) {
+      toast.dismiss(redirectToastIdRef.current);
+      redirectToastIdRef.current = null;
+    }
+    router.push('/dashboard');
+  }, [redirectSeconds, isHome, status, router]);
+
+  // Update toast content when countdown changes so the seconds display stays in sync
+  useEffect(() => {
+    if (redirectSeconds == null) return;
+    if (!redirectToastIdRef.current) return;
+    toast.custom(
+      (t) => renderRedirectToast(redirectSeconds, t),
+      { id: redirectToastIdRef.current }
+    );
+    // renderRedirectToast is stable within component scope for this effect
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [redirectSeconds]);
 
   // Set cursor CSS variables early - before cursor mounts (minimal change)
   useEffect(() => {

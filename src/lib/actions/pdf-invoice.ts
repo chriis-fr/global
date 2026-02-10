@@ -159,6 +159,126 @@ export async function uploadAndParsePdf(formData: FormData, mappingName?: string
   }
 }
 
+/** Upload MULTIPLE PDFs of the same format and combine into a single draft invoice (one invoice, many PDFs). */
+export async function uploadAndParseMultiplePdfs(formData: FormData, mappingName?: string | null): Promise<{
+  success: boolean;
+  data?: { draftId: string; status: 'ready' };
+  error?: string;
+}> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const files = formData.getAll('files') as File[];
+    if (!files.length) {
+      return { success: false, error: 'No files provided' };
+    }
+
+    const maxSize = 10 * 1024 * 1024; // 10MB per file
+    for (const file of files) {
+      if (file.type !== 'application/pdf') {
+        return { success: false, error: 'Only PDF files are allowed' };
+      }
+      if (file.size > maxSize) {
+        return { success: false, error: 'Each file must be less than 10MB' };
+      }
+    }
+
+    const db = await connectToDatabase();
+    const usersCollection = db.collection('users');
+    const user = await usersCollection.findOne({ email: session.user.email });
+    if (!user) {
+      return { success: false, error: 'User not found' };
+    }
+
+    const orgOrUserDoc = user.organizationId
+      ? await db.collection('organizations').findOne({ _id: user.organizationId })
+      : isAdminPdfMappingBypass(user as { email?: string; adminTag?: boolean })
+        ? user
+        : null;
+    const mappings = orgOrUserDoc ? getMappingsList(orgOrUserDoc as Record<string, unknown>) : [];
+    const mapping = mappings.length ? resolveConfig(mappings, mappingName) : undefined;
+
+    let combinedInvoice: Partial<CreateInvoiceInput> = {};
+    const allExtractedFields: ExtractedField[] = [];
+    const allDocumentAsts: DocumentAST[] = [];
+
+    for (const file of files) {
+      const bytes = await file.arrayBuffer();
+      const pdfBuffer = Buffer.from(bytes);
+      const parseResult = await parsePdfBuffer(pdfBuffer);
+      if (!parseResult.success || !('fields' in parseResult)) {
+        return { success: false, error: parseResult.error ?? `Failed to parse PDF: ${file.name}` };
+      }
+
+      const documentAst = parseResult.document_ast as DocumentAST;
+      allDocumentAsts.push(documentAst);
+
+      type ParsedField = { field_type?: string; value?: string; text?: string; confidence?: number; source?: string; position?: unknown; original_line?: string; table_data?: unknown };
+      const extractedFields = parseResult.fields.map((field: ParsedField, index: number) => ({
+        key: field.field_type ? `field_${field.field_type}_${index}` : `field_${index + 1}`,
+        value: field.value || field.text || '',
+        confidence: field.confidence || 0.5,
+        source: (field.source || 'layout') as ExtractedField['source'],
+        position: field.position,
+        fieldType: field.field_type,
+        originalLine: field.original_line,
+        tableData: field.table_data,
+      })) as ExtractedField[];
+      allExtractedFields.push(...extractedFields);
+
+      if (mapping) {
+        const partial = applyPdfMapping(documentAst, mapping);
+        // First file wins for header fields; always append items.
+        if (!Object.keys(combinedInvoice).length) {
+          combinedInvoice = { ...partial };
+        } else {
+          const existingItems = combinedInvoice.items ?? [];
+          const newItems = partial.items ?? [];
+          combinedInvoice.items = [...existingItems, ...newItems];
+          // Recalculate subtotal/total from combined items
+          if (combinedInvoice.items.length) {
+            const subtotal = combinedInvoice.items.reduce((sum, i) => sum + (i.quantity * i.unitPrice), 0);
+            combinedInvoice.subtotal = subtotal;
+            if (!combinedInvoice.totalAmount || combinedInvoice.totalAmount === 0) {
+              combinedInvoice.totalAmount = subtotal;
+            }
+          }
+        }
+      }
+    }
+
+    const draftsCollection = db.collection('invoiceDrafts');
+    const draftResult = await draftsCollection.insertOne({
+      userId: user._id!,
+      organizationId: user.organizationId,
+      extractedFields: allExtractedFields,
+      status: 'ready',
+      invoiceData: combinedInvoice,
+      // For documentAst, just keep the first one as representative (structure is the same)
+      documentAst: allDocumentAsts[0] ?? null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    return {
+      success: true,
+      data: {
+        draftId: draftResult.insertedId.toString(),
+        status: 'ready',
+      },
+    };
+  } catch (error) {
+    console.error('Error in uploadAndParseMultiplePdfs:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to parse PDFs',
+    };
+  }
+}
+
 // Get invoice draft
 export async function getInvoiceDraft(draftId: string): Promise<{
   success: boolean;
@@ -403,7 +523,17 @@ export async function deleteOrgPdfMapping(name: string): Promise<{ success: bool
 /** Parse a sample PDF and return document_ast only (no draft saved). For org mapping config preview. */
 export async function parsePdfForPreview(formData: FormData): Promise<{
   success: boolean;
-  data?: { document_ast: DocumentAST; stats: { total_fields: number; itemsCount: number } };
+  data?: {
+    document_ast: DocumentAST;
+    stats: { total_fields: number; itemsCount: number };
+    previewFields: Array<{
+      index: number;
+      value: string;
+      source: string;
+      fieldType?: string;
+      originalLine?: string;
+    }>;
+  };
   error?: string;
 }> {
   try {
@@ -420,6 +550,24 @@ export async function parsePdfForPreview(formData: FormData): Promise<{
     if (!parseResult.success || !('document_ast' in parseResult)) {
       return { success: false, error: parseResult.error ?? 'Failed to parse PDF' };
     }
+
+    const previewFields =
+      'fields' in parseResult && Array.isArray(parseResult.fields)
+        ? (parseResult.fields.slice(0, 40).map((f, index) => ({
+            index: index + 1,
+            value: String((f as { value?: string }).value ?? '').slice(0, 140),
+            source: String((f as { source?: string }).source ?? ''),
+            fieldType: (f as { field_type?: string }).field_type,
+            originalLine: (f as { original_line?: string }).original_line,
+          })) as Array<{
+            index: number;
+            value: string;
+            source: string;
+            fieldType?: string;
+            originalLine?: string;
+          }>)
+        : [];
+
     return {
       success: true,
       data: {
@@ -428,6 +576,7 @@ export async function parsePdfForPreview(formData: FormData): Promise<{
           total_fields: parseResult.stats.total_fields,
           itemsCount: parseResult.document_ast.items?.length ?? 0,
         },
+        previewFields,
       },
     };
   } catch (error) {

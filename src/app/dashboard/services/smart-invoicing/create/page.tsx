@@ -1291,26 +1291,12 @@ export default function CreateInvoicePage() {
         };
         const company = (raw.companyDetails as Record<string, string> | undefined) ?? {};
         const client = (raw.clientDetails as Record<string, string> | undefined) ?? {};
-        // Items: prefer documentAst.items (parser = source of truth for description); fallback to invoiceData.items
+        // Items: prefer mapped draft invoiceData.items (includes any preset prices),
+        // otherwise fall back to documentAst.items (parser = source of truth for description)
         let items: Array<{ id: string; description: string; quantity: number; unitPrice: number; discount: number; tax: number; amount: number }>;
         const astItems = ast?.items ?? [];
         const draftItems = Array.isArray(raw.items) ? raw.items as Array<{ description?: string; quantity?: number; unitPrice?: number; total?: number; taxRate?: number }> : [];
-        if (astItems.length > 0) {
-          items = astItems.map((item, i) => {
-            const qty = Math.max(0, Math.round(Number(item.quantity) || 1));
-            const up = round2(Number(item.unit_price) ?? 0);
-            const desc = String(item.label ?? '').trim();
-            return {
-              id: String(i + 1),
-              description: desc,
-              quantity: qty,
-              unitPrice: up,
-              discount: 0,
-              tax: 0,
-              amount: round2(qty * up),
-            };
-          });
-        } else if (draftItems.length > 0) {
+        if (draftItems.length > 0) {
           items = draftItems.map((item, i) => {
             const qty = Math.max(0, Math.round(Number(item.quantity) || 1));
             const up = round2(Number(item.unitPrice) ?? 0);
@@ -1323,6 +1309,21 @@ export default function CreateInvoicePage() {
               discount: 0,
               tax: round2(Number(item.taxRate) ?? 0),
               amount,
+            };
+          });
+        } else if (astItems.length > 0) {
+          items = astItems.map((item, i) => {
+            const qty = Math.max(0, Math.round(Number(item.quantity) || 1));
+            const up = round2(Number(item.unit_price) ?? 0);
+            const desc = String(item.label ?? '').trim();
+            return {
+              id: String(i + 1),
+              description: desc,
+              quantity: qty,
+              unitPrice: up,
+              discount: 0,
+              tax: 0,
+              amount: round2(qty * up),
             };
           });
         } else {

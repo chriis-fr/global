@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { uploadAndParsePdf, getOrgPdfMappingList } from '@/lib/actions/pdf-invoice';
+import { uploadAndParsePdf, uploadAndParseMultiplePdfs, getOrgPdfMappingList } from '@/lib/actions/pdf-invoice';
 import { Upload, FileText, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 
 export default function PdfUploadPage() {
@@ -16,6 +16,8 @@ export default function PdfUploadPage() {
   const [mappingNames, setMappingNames] = useState<string[]>([]);
   const [defaultMappingName, setDefaultMappingName] = useState<string | null>(null);
   const [selectedMappingName, setSelectedMappingName] = useState<string>('');
+  const [multiMode, setMultiMode] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
 
   useEffect(() => {
     getOrgPdfMappingList().then((res) => {
@@ -28,24 +30,34 @@ export default function PdfUploadPage() {
   }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      if (selectedFile.type !== 'application/pdf') {
-        setError('Please select a PDF file');
+    const fileList = Array.from(e.target.files ?? []);
+    if (!fileList.length) return;
+
+    const maxSize = 10 * 1024 * 1024;
+    for (const f of fileList) {
+      if (f.type !== 'application/pdf') {
+        setError('Please select PDF files only');
         return;
       }
-      if (selectedFile.size > 10 * 1024 * 1024) {
-        setError('File size must be less than 10MB');
+      if (f.size > maxSize) {
+        setError('Each file must be less than 10MB');
         return;
       }
-      setFile(selectedFile);
-      setError(null);
     }
+
+    if (multiMode) {
+      setFiles(fileList);
+      setFile(fileList[0] ?? null);
+    } else {
+      setFile(fileList[0]);
+      setFiles([]);
+    }
+    setError(null);
   };
 
   const handleUpload = async () => {
-    if (!file) {
-      setError('Please select a file');
+    if (!file && (!multiMode || !files.length)) {
+      setError('Please select at least one PDF');
       return;
     }
 
@@ -55,33 +67,56 @@ export default function PdfUploadPage() {
     setSuccess(null);
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
+      if (multiMode) {
+        const formData = new FormData();
+        files.forEach((f) => formData.append('files', f));
 
-      // Parse PDF in memory — file is never saved to disk
-      const result = await uploadAndParsePdf(formData, selectedMappingName || undefined);
+        const result = await uploadAndParseMultiplePdfs(formData, selectedMappingName || undefined);
 
-      if (!result.success) {
-        setError(result.error || 'Failed to parse PDF');
-        return;
-      }
-
-      setDraftId(result.data!.draftId);
-      const status = result.data!.status ?? 'mapping';
-      setSuccess(
-        status === 'ready'
-          ? 'PDF parsed and mapped. Opening Create Invoice with items pre-filled…'
-          : `PDF parsed successfully! Found ${result.data!.extractedFields.length} fields.`
-      );
-
-      // Redirect: if mapping was applied (ready), go straight to create page with draft pre-filled; otherwise to mapping page
-      setTimeout(() => {
-        if (status === 'ready') {
-          router.push(`/dashboard/services/smart-invoicing/create?fromPdfDraft=${result.data!.draftId}`);
-        } else {
-          router.push(`/dashboard/services/smart-invoicing/pdf-map/${result.data!.draftId}`);
+        if (!result.success || !result.data) {
+          setError(result.error || 'Failed to parse PDFs');
+          return;
         }
-      }, status === 'ready' ? 800 : 1500);
+
+        setDraftId(result.data.draftId);
+        setSuccess('PDFs parsed and combined. Opening Create Invoice with items pre-filled…');
+
+        setTimeout(() => {
+          router.push(`/dashboard/services/smart-invoicing/create?fromPdfDraft=${result.data!.draftId}`);
+        }, 800);
+      } else {
+        if (!file) {
+          setError('Please select a PDF file');
+          return;
+        }
+        const formData = new FormData();
+        formData.append('file', file);
+
+        // Parse PDF in memory — file is never saved to disk
+        const result = await uploadAndParsePdf(formData, selectedMappingName || undefined);
+
+        if (!result.success || !result.data) {
+          setError(result.error || 'Failed to parse PDF');
+          return;
+        }
+
+        setDraftId(result.data.draftId);
+        const status = result.data.status ?? 'mapping';
+        setSuccess(
+          status === 'ready'
+            ? 'PDF parsed and mapped. Opening Create Invoice with items pre-filled…'
+            : `PDF parsed successfully! Found ${result.data.extractedFields.length} fields.`
+        );
+
+        // Redirect: if mapping was applied (ready), go straight to create page with draft pre-filled; otherwise to mapping page
+        setTimeout(() => {
+          if (status === 'ready') {
+            router.push(`/dashboard/services/smart-invoicing/create?fromPdfDraft=${result.data!.draftId}`);
+          } else {
+            router.push(`/dashboard/services/smart-invoicing/pdf-map/${result.data!.draftId}`);
+          }
+        }, status === 'ready' ? 800 : 1500);
+      }
     } catch (err) {
       console.error('Upload error:', err);
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -129,7 +164,7 @@ export default function PdfUploadPage() {
           {/* File Input */}
           <div className="mb-6">
             <label className="block text-sm font-medium text-white mb-2">
-              Select PDF File
+              {multiMode ? 'Select PDF files (same layout)' : 'Select PDF file'}
             </label>
             <div className="mt-2">
               <label className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed border-blue-300 rounded-lg cursor-pointer bg-white/5 hover:bg-white/10 transition-colors">
@@ -137,7 +172,9 @@ export default function PdfUploadPage() {
                   {file ? (
                     <>
                       <FileText className="w-12 h-12 text-blue-400 mb-4" />
-                      <p className="mb-2 text-sm text-white font-semibold">{file.name}</p>
+                      <p className="mb-2 text-sm text-white font-semibold">
+                        {multiMode && files.length > 1 ? `${files.length} files selected` : file.name}
+                      </p>
                       <p className="text-xs text-blue-200">
                         {(file.size / 1024 / 1024).toFixed(2)} MB
                       </p>
@@ -148,7 +185,9 @@ export default function PdfUploadPage() {
                       <p className="mb-2 text-sm text-white">
                         <span className="font-semibold">Click to upload</span> or drag and drop
                       </p>
-                      <p className="text-xs text-blue-200">PDF files only (MAX. 10MB)</p>
+                      <p className="text-xs text-blue-200">
+                        PDF files only (MAX. 10MB each){multiMode ? '; combined into one invoice' : ''}
+                      </p>
                     </>
                   )}
                 </div>
@@ -156,11 +195,31 @@ export default function PdfUploadPage() {
                   type="file"
                   className="hidden"
                   accept="application/pdf"
+                  multiple={multiMode}
                   onChange={handleFileChange}
                   disabled={uploading || parsing}
                 />
               </label>
             </div>
+          </div>
+
+          {/* Multi-upload toggle */}
+          <div className="mb-4 flex items-center gap-2">
+            <input
+              id="multi-upload-toggle"
+              type="checkbox"
+              checked={multiMode}
+              onChange={(e) => {
+                setMultiMode(e.target.checked);
+                setFile(null);
+                setFiles([]);
+                setError(null);
+              }}
+              className="rounded border-white/30 bg-white/10 text-indigo-600 focus:ring-blue-500"
+            />
+            <label htmlFor="multi-upload-toggle" className="text-sm text-blue-100">
+              Upload multiple PDFs (same format) into one invoice
+            </label>
           </div>
 
           {/* Error Message */}
@@ -190,7 +249,7 @@ export default function PdfUploadPage() {
             </button>
             <button
               onClick={handleUpload}
-              disabled={!file || uploading || parsing}
+              disabled={(!file && (!multiMode || !files.length)) || uploading || parsing}
               className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 min-w-[140px] justify-center"
             >
               {uploading || parsing ? (
