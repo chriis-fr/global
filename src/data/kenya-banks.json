@@ -38,6 +38,7 @@
     {"name": "Victoria Commercial Bank", "swift_code": "VICMKENA", "bank_code": "54"},
     {"name": "Oriental Commercial Bank Limited", "swift_code": "MORBKENA", "bank_code": "14"},
     {"name": "SBM Bank Kenya", "swift_code": "SBMKKENA", "bank_code": null},
-    {"name": "National Bank of Kenya", "swift_code": "NBKEKENX", "bank_code": "12"}
+    {"name": "National Bank of Kenya", "swift_code": "NBKEKENX", "bank_code": "12"},
+    {"name": "PostBank Kenya", "swift_code":"KPOBKEN1", "bank_code": null}
   ]
   
