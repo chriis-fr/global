@@ -10,6 +10,14 @@ import { CurrencyService } from '@/lib/services/currencyService';
 const statsCache = new Map<string, { data: DashboardStats; timestamp: number }>();
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
+function toISOStringSafe(value: unknown): string {
+  if (value == null) return new Date().toISOString();
+  if (typeof value === 'string') return value;
+  if (value instanceof Date) return value.toISOString();
+  const d = new Date(value as string | number);
+  return Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+}
+
 // Dashboard Stats Interface (minimal data for display only)
 export interface DashboardStats {
   totalReceivables: number; // Expected revenue from all invoices
@@ -452,24 +460,25 @@ export async function getRecentInvoices(limit: number = 5): Promise<{ success: b
       .limit(limit)
       .toArray();
 
-    // Transform to minimal data structure
+    // Transform to minimal data structure (safe dates: MongoDB may return Date or string)
     const recentInvoices: RecentInvoice[] = invoices.map(invoice => ({
       _id: invoice._id.toString(),
       invoiceNumber: invoice.invoiceNumber || 'Invoice',
-      clientName: invoice.clientDetails?.companyName || 
-                 invoice.clientDetails?.name || 
+      clientName: invoice.clientDetails?.companyName ||
+                 invoice.clientDetails?.name ||
                  'Client',
       total: invoice.total || invoice.totalAmount || 0,
       currency: invoice.currency || 'USD',
       status: invoice.status || 'draft',
-      createdAt: invoice.createdAt?.toISOString() || new Date().toISOString(),
+      createdAt: toISOStringSafe(invoice.createdAt),
       recipientType: invoice.recipientType,
       sentVia: invoice.sentVia
     }));
 
     return { success: true, data: recentInvoices };
 
-  } catch {
+  } catch (error) {
+    console.error('[Dashboard] getRecentInvoices failed:', error);
     return { success: false, error: 'Failed to fetch recent invoices' };
   }
 }
