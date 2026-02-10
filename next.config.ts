@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Allow PDF upload Server Actions up to 15MB (app allows 10MB per file, multi-PDF may send several)
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '15mb',
+    },
+  },
   // Optimize static file serving
   compress: true,
   poweredByHeader: false,
