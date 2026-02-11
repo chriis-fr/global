@@ -964,7 +964,9 @@ export default function CreateInvoicePage() {
   // Check if we're editing an existing invoice
   const invoiceId = searchParams.get('id');
   const fromPdfDraftId = searchParams.get('fromPdfDraft');
+  const fromClickUp = searchParams.get('fromClickUp') === '1';
   const pdfDraftLoadDone = useRef(false);
+  const clickUpLoadDone = useRef(false);
 
   // Check if any items have discounts (used to conditionally show Discount column)
   const hasAnyDiscounts = formData.items.some(item => item.discount > 0);
@@ -1371,6 +1373,42 @@ export default function CreateInvoicePage() {
     })();
     return () => { cancelled = true; };
   }, [fromPdfDraftId, router, setFormData]);
+
+  // When arriving from ClickUp: load selected tasks from sessionStorage and pre-fill line items
+  useEffect(() => {
+    if (!fromClickUp || clickUpLoadDone.current) return;
+    try {
+      const stored = sessionStorage.getItem('clickUpPrefillItems');
+      sessionStorage.removeItem('clickUpPrefillItems');
+      if (!stored) return;
+      const raw = JSON.parse(stored) as Array<{ id: string; name: string; listName?: string; spaceName?: string }>;
+      if (!Array.isArray(raw) || raw.length === 0) return;
+      const items = raw.map((t, i) => {
+        const desc = [t.name, t.spaceName, t.listName].filter(Boolean).join(' › ');
+        return {
+          id: String(i + 1),
+          description: desc || t.name,
+          quantity: 1,
+          unitPrice: 0,
+          discount: 0,
+          tax: 0,
+          amount: 0,
+        };
+      });
+      const subtotal = items.reduce((s, i) => s + (i.quantity ?? 1) * (i.unitPrice ?? 0), 0);
+      setFormData(prev => ({
+        ...prev,
+        items,
+        subtotal: round2(subtotal),
+        totalTax: 0,
+        total: round2(subtotal),
+      }));
+      clickUpLoadDone.current = true;
+      router.replace('/dashboard/services/smart-invoicing/create');
+    } catch (e) {
+      console.error('Failed to load ClickUp prefill:', e);
+    }
+  }, [fromClickUp, router, setFormData]);
 
   // Set client country to user's country if client country is empty and user has a country
   // This only runs once when session becomes available and formData is initialized

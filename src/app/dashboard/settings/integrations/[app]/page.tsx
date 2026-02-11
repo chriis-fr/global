@@ -2,7 +2,7 @@
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Link2, FileText, Loader2 } from 'lucide-react';
+import { ArrowLeft, Link2, FileText, Loader2, Unplug, ChevronDown, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import DashboardFloatingButton from '@/components/DashboardFloatingButton';
@@ -12,6 +12,7 @@ interface ClickUpTask {
   id: string;
   name: string;
   status?: string;
+  listId?: string;
   listName?: string;
   spaceName?: string;
 }
@@ -25,9 +26,31 @@ export default function IntegrationAppPage() {
   const [connected, setConnected] = useState(false);
   const [loading, setLoading] = useState(true);
   const [clickUpData, setClickUpData] = useState<ClickUpTask[]>([]);
+  const [clickUpHierarchy, setClickUpHierarchy] = useState<Array<{
+    id: string;
+    name: string;
+    folders?: Array<{ id: string; name: string; lists: Array<{ id: string; name: string; taskCount: number }> }>;
+    folderlessLists?: Array<{ id: string; name: string; taskCount: number }>;
+  }>>([]);
+  const [fetchMeta, setFetchMeta] = useState<{ spacesChecked?: number; listsChecked?: number } | null>(null);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
   const [loadingData, setLoadingData] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [workspaces, setWorkspaces] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>('');
+  const [loadingWorkspaces, setLoadingWorkspaces] = useState(false);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   const justConnected = searchParams?.get('connected') === '1';
+
+  const toggleExpanded = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
   const errorConfig = searchParams?.get('error') === 'config';
   const errorConnect = searchParams?.get('error') === '1';
   const errorNoOrg = searchParams?.get('error') === 'no_org';
@@ -60,18 +83,68 @@ export default function IntegrationAppPage() {
     }
   }, [justConnected, app, router]);
 
+  useEffect(() => {
+    if (app === 'clickup' && connected) {
+      setLoadingWorkspaces(true);
+      fetch('/api/integrations/clickup/workspaces')
+        .then((res) => res.json())
+        .then((data) => {
+          const list = data?.success && Array.isArray(data?.data) ? data.data : [];
+          setWorkspaces(list);
+          setSelectedWorkspaceId((prev) => (list.length > 0 && !prev ? list[0].id : prev));
+        })
+        .catch(() => setWorkspaces([]))
+        .finally(() => setLoadingWorkspaces(false));
+    }
+  }, [app, connected]);
+
+  const handleDisconnect = async () => {
+    if (!connected || disconnecting) return;
+    setDisconnecting(true);
+    try {
+      const res = await fetch('/api/integrations/clickup/disconnect', { method: 'DELETE' });
+      const data = await res.json();
+      if (data?.success) {
+        setConnected(false);
+        setClickUpData([]);
+        setClickUpHierarchy([]);
+        setFetchMeta(null);
+        setWorkspaces([]);
+        setSelectedWorkspaceId('');
+      }
+    } finally {
+      setDisconnecting(false);
+    }
+  };
+
   const handleFetchClickUpData = () => {
     setLoadingData(true);
-    fetch('/api/integrations/clickup/data')
+    const url = selectedWorkspaceId
+      ? `/api/integrations/clickup/data?teamId=${encodeURIComponent(selectedWorkspaceId)}`
+      : '/api/integrations/clickup/data';
+    fetch(url)
       .then((res) => res.json())
       .then((data) => {
         if (data?.success && Array.isArray(data?.data)) {
           setClickUpData(data.data);
+          setClickUpHierarchy(Array.isArray(data?.hierarchy) ? data.hierarchy : []);
+          setFetchMeta(data.meta ?? null);
+          setSelectedTaskIds(new Set());
+          setExpandedIds(new Set());
+          console.log('[ClickUp Page] Fetched:', data.data.length, 'tasks, hierarchy:', data.hierarchy?.length);
         } else {
           setClickUpData([]);
+          setClickUpHierarchy([]);
+          setFetchMeta(null);
+          console.log('[ClickUp Page] Fetch failed or no data:', data);
         }
       })
-      .catch(() => setClickUpData([]))
+      .catch((err) => {
+        setClickUpData([]);
+        setClickUpHierarchy([]);
+        setFetchMeta(null);
+        console.warn('[ClickUp Page] Fetch error:', err);
+      })
       .finally(() => setLoadingData(false));
   };
 
@@ -103,14 +176,30 @@ export default function IntegrationAppPage() {
         <ArrowLeft className="h-4 w-4 mr-2" /> Back to Integrations
       </Link>
 
-      <div className="mb-8 flex items-center gap-3">
-        <div className="w-12 h-12 rounded-lg overflow-hidden relative shrink-0">
-          <Image src="/clickup-logo.png" alt="" fill className="object-cover" sizes="48px" />
+      <div className="mb-8 flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-lg overflow-hidden relative shrink-0">
+            <Image src="/clickup-logo.png" alt="" fill className="object-cover" sizes="48px" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-white">ClickUp</h1>
+            <p className="text-blue-200 text-sm">Import tasks and lists, then use them to create invoices.</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-2xl font-bold text-white">ClickUp</h1>
-          <p className="text-blue-200 text-sm">Import tasks and lists, then use them to create invoices.</p>
-        </div>
+        {connected && (
+          <div className="flex items-center gap-2 text-xs text-green-400">
+            <span className="opacity-90">Connected</span>
+            <button
+              type="button"
+              onClick={handleDisconnect}
+              disabled={disconnecting}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded bg-red-500/20 hover:bg-red-500/30 text-red-200 font-medium disabled:opacity-50"
+            >
+              {disconnecting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Unplug className="h-3 w-3" />}
+              Disconnect
+            </button>
+          </div>
+        )}
       </div>
 
       {errorConfig && (
@@ -149,19 +238,36 @@ export default function IntegrationAppPage() {
         </div>
       ) : (
         <div className="space-y-6">
-          <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/30 text-green-300 text-sm">
-            ClickUp is connected. You can fetch data and use it for invoicing below.
-          </div>
-
           <div className="p-6 rounded-xl bg-white/5 border border-white/10">
             <h2 className="text-lg font-semibold text-white mb-2">Export data from ClickUp</h2>
             <p className="text-blue-200 text-sm mb-4">
-              Fetch tasks/lists from your connected workspace. Later you can select items and create an invoice from them.
+              Choose a workspace, then fetch tasks/lists. Later you can select items and create an invoice from them.
             </p>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-white/90 mb-2">Workspace</label>
+              <select
+                value={selectedWorkspaceId}
+                onChange={(e) => setSelectedWorkspaceId(e.target.value)}
+                disabled={loadingWorkspaces}
+                className="w-full max-w-md px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
+              >
+                {loadingWorkspaces ? (
+                  <option>Loading workspaces…</option>
+                ) : workspaces.length === 0 ? (
+                  <option>No workspaces found</option>
+                ) : (
+                  workspaces.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.name}
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
             <button
               type="button"
               onClick={handleFetchClickUpData}
-              disabled={loadingData}
+              disabled={loadingData || !selectedWorkspaceId}
               className="inline-flex items-center px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium disabled:opacity-50"
             >
               {loadingData ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
@@ -169,29 +275,215 @@ export default function IntegrationAppPage() {
             </button>
           </div>
 
-          {clickUpData.length > 0 && (
+          {(fetchMeta !== null || clickUpData.length > 0 || clickUpHierarchy.length > 0) && (
             <div className="p-6 rounded-xl bg-white/5 border border-white/10">
               <h2 className="text-lg font-semibold text-white mb-3">Data from ClickUp</h2>
-              <ul className="space-y-2">
-                {clickUpData.map((task) => (
-                  <li
-                    key={task.id}
-                    className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10"
+
+              {clickUpHierarchy.length > 0 && (
+                <div className="mb-6">
+                  <p className="text-blue-200 text-sm mb-3">Click to expand and see tasks (Space → Folder → List → Tasks)</p>
+                  <div className="space-y-2">
+                    {clickUpHierarchy.map((space) => {
+                      const spaceExpanded = expandedIds.has(`space-${space.id}`);
+                      const hasContent = (space.folderlessLists?.length ?? 0) > 0 || (space.folders?.length ?? 0) > 0;
+                      return (
+                        <div key={space.id} className="rounded-lg border border-white/10 overflow-hidden">
+                          <button
+                            type="button"
+                            onClick={() => hasContent && toggleExpanded(`space-${space.id}`)}
+                            className={`w-full flex items-center gap-2 px-3 py-2 bg-white/5 text-left text-white font-medium text-sm ${hasContent ? 'hover:bg-white/10 cursor-pointer' : 'cursor-default'}`}
+                          >
+                            {hasContent ? (spaceExpanded ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />) : null}
+                            <span className="flex-1">{space.name}</span>
+                          </button>
+                          {spaceExpanded && (
+                            <div className="border-t border-white/10">
+                              {space.folderlessLists?.map((list) => {
+                                const listExpanded = expandedIds.has(`list-${list.id}`);
+                                const listTasks = clickUpData.filter((t) => t.listId === list.id);
+                                return (
+                                  <div key={list.id} className="border-t border-white/5 first:border-t-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleExpanded(`list-${list.id}`)}
+                                      className="w-full flex items-center gap-2 px-4 py-2 text-left text-blue-200 text-sm hover:bg-white/5 cursor-pointer"
+                                    >
+                                      <ChevronRight className={`h-4 w-4 shrink-0 transition-transform ${listExpanded ? 'rotate-90' : ''}`} />
+                                      <span className="flex-1">{list.name}</span>
+                                      <span className="text-blue-300/80 text-xs">{list.taskCount} task{list.taskCount !== 1 ? 's' : ''}</span>
+                                    </button>
+                                    {listExpanded && (
+                                      <div className="px-6 py-2 bg-white/5 border-t border-white/5">
+                                        {listTasks.length > 0 ? (
+                                          listTasks.map((task) => (
+                                            <label
+                                              key={task.id}
+                                              className="flex items-center gap-3 py-2 px-2 rounded hover:bg-white/5 cursor-pointer"
+                                            >
+                                              <input
+                                                type="checkbox"
+                                                checked={selectedTaskIds.has(task.id)}
+                                                onChange={(e) => {
+                                                  setSelectedTaskIds((prev) => {
+                                                    const next = new Set(prev);
+                                                    if (e.target.checked) next.add(task.id);
+                                                    else next.delete(task.id);
+                                                    return next;
+                                                  });
+                                                }}
+                                                className="h-3.5 w-3.5 rounded border-white/30 text-blue-600"
+                                                onClick={(e) => e.stopPropagation()}
+                                              />
+                                              <span className="text-white text-sm">{task.name}</span>
+                                            </label>
+                                          ))
+                                        ) : (
+                                          <p className="text-blue-300/70 text-xs py-1">No tasks in this list</p>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                              {space.folders?.map((folder) => {
+                                const folderExpanded = expandedIds.has(`folder-${folder.id}`);
+                                return (
+                                  <div key={folder.id} className="border-t border-white/5">
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleExpanded(`folder-${folder.id}`)}
+                                      className="w-full flex items-center gap-2 px-4 py-2 text-left text-blue-300 font-medium text-sm hover:bg-white/5 cursor-pointer"
+                                    >
+                                      {folderExpanded ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+                                      <span className="flex-1">{folder.name}</span>
+                                    </button>
+                                    {folderExpanded &&
+                                      folder.lists.map((list) => {
+                                        const listExpanded = expandedIds.has(`list-${list.id}`);
+                                        const listTasks = clickUpData.filter((t) => t.listId === list.id);
+                                        return (
+                                          <div key={list.id} className="border-t border-white/5 ml-4">
+                                            <button
+                                              type="button"
+                                              onClick={() => toggleExpanded(`list-${list.id}`)}
+                                              className="w-full flex items-center gap-2 px-3 py-2 text-left text-blue-200 text-sm hover:bg-white/5 cursor-pointer"
+                                            >
+                                              <ChevronRight className={`h-4 w-4 shrink-0 transition-transform ${listExpanded ? 'rotate-90' : ''}`} />
+                                              <span className="flex-1">{list.name}</span>
+                                              <span className="text-blue-300/80 text-xs">{list.taskCount} task{list.taskCount !== 1 ? 's' : ''}</span>
+                                            </button>
+                                            {listExpanded && (
+                                              <div className="px-5 py-2 bg-white/5 border-t border-white/5 ml-4">
+                                                {listTasks.length > 0 ? (
+                                                  listTasks.map((task) => (
+                                                    <label
+                                                      key={task.id}
+                                                      className="flex items-center gap-3 py-2 px-2 rounded hover:bg-white/5 cursor-pointer"
+                                                    >
+                                                      <input
+                                                        type="checkbox"
+                                                        checked={selectedTaskIds.has(task.id)}
+                                                        onChange={(e) => {
+                                                          setSelectedTaskIds((prev) => {
+                                                            const next = new Set(prev);
+                                                            if (e.target.checked) next.add(task.id);
+                                                            else next.delete(task.id);
+                                                            return next;
+                                                          });
+                                                        }}
+                                                        className="h-3.5 w-3.5 rounded border-white/30 text-blue-600"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                      />
+                                                      <span className="text-white text-sm">{task.name}</span>
+                                                    </label>
+                                                  ))
+                                                ) : (
+                                                  <p className="text-blue-300/70 text-xs py-1">No tasks in this list</p>
+                                                )}
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {selectedTaskIds.size > 0 && (
+                <div className="mb-6">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const selected = clickUpData.filter((t) => selectedTaskIds.has(t.id));
+                      if (selected.length === 0) return;
+                      const items = selected.map((t) => ({
+                        id: t.id,
+                        name: t.name,
+                        listName: t.listName,
+                        spaceName: t.spaceName,
+                      }));
+                      try {
+                        sessionStorage.setItem('clickUpPrefillItems', JSON.stringify(items));
+                        router.push('/dashboard/services/smart-invoicing/create?fromClickUp=1');
+                      } catch (e) {
+                        console.warn('sessionStorage failed:', e);
+                      }
+                    }}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium"
                   >
-                    <span className="text-white font-medium">{task.name}</span>
-                    {task.listName && <span className="text-blue-200 text-sm">{task.listName}</span>}
-                  </li>
-                ))}
-              </ul>
-              <p className="text-blue-200 text-sm mt-4">
-                In a full integration you could select items above and open &quot;Create invoice&quot; with prefilled line items. This page does not change any existing invoice or sidebar logic.
-              </p>
-              <Link
-                href="/dashboard/services/smart-invoicing/create"
-                className="inline-flex items-center mt-4 text-blue-300 hover:text-white text-sm"
-              >
-                <FileText className="h-4 w-4 mr-2" /> Go to Create Invoice (unchanged)
-              </Link>
+                    <FileText className="h-4 w-4" />
+                    Create invoice from selected ({selectedTaskIds.size})
+                  </button>
+                </div>
+              )}
+
+              {clickUpData.length > 0 && clickUpHierarchy.length === 0 ? (
+                <>
+                  <p className="text-blue-200 text-sm mb-3">Select tasks for invoice line items.</p>
+                  <ul className="space-y-2 mb-4">
+                    {clickUpData.map((task) => (
+                      <label key={task.id} className="flex items-center gap-3 p-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedTaskIds.has(task.id)}
+                          onChange={(e) => {
+                            setSelectedTaskIds((prev) => {
+                              const next = new Set(prev);
+                              if (e.target.checked) next.add(task.id);
+                              else next.delete(task.id);
+                              return next;
+                            });
+                          }}
+                          className="h-4 w-4 rounded border-white/30 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="flex-1 text-white font-medium">{task.name}</span>
+                        <span className="text-blue-200 text-sm">{[task.spaceName, task.listName].filter(Boolean).join(' › ')}</span>
+                      </label>
+                    ))}
+                  </ul>
+                </>
+              ) : clickUpHierarchy.length > 0 ? (
+                <p className="text-blue-200 text-sm">
+                  Expand the lists above to see tasks. Select tasks and click &quot;Create invoice from selected&quot; to add them as line items.
+                </p>
+              ) : (
+                <p className="text-blue-200 text-sm">
+                  No spaces or lists found.
+                  {fetchMeta && (
+                    <span className="block mt-1 text-blue-300/80">
+                      Checked {fetchMeta.spacesChecked ?? 0} space(s), {fetchMeta.listsChecked ?? 0} list(s).
+                    </span>
+                  )}
+                </p>
+              )}
             </div>
           )}
         </div>

@@ -88,6 +88,17 @@ export function applyPdfMapping(
       }
     }
   }
+  // Fallback: when mapping doesn't map total but document has meta.reference_numbers.total (e.g. task order PDFs)
+  if (out.totalAmount == null) {
+    const v = get('meta.reference_numbers.total');
+    if (v != null) {
+      const n = parseFloat(String(v).replace(/,/g, ''));
+      if (!Number.isNaN(n) && n > 0) {
+        out.totalAmount = n;
+        out.subtotal = out.subtotal ?? n;
+      }
+    }
+  }
   if (mapping.notes) {
     const v = get(mapping.notes);
     if (v != null) out.notes = String(v);
@@ -105,7 +116,9 @@ export function applyPdfMapping(
     // AST items use "label" for the description text; config may say "description" — resolve to label when needed
     const descriptionPath = (map.description === 'description' || map.description === 'Description') ? 'label' : (map.description || 'label');
     out.items = arr.map((item: Record<string, unknown>) => {
-      const description = String(getByPath(item, descriptionPath) ?? '') || String(getByPath(item, 'label') ?? '');
+      const rawDescription = String(getByPath(item, descriptionPath) ?? '') || String(getByPath(item, 'label') ?? '');
+      const key = rawDescription.trim().toLowerCase();
+      const description = mapping.lineItemDescriptions?.[key] ?? rawDescription;
       const quantity = map.quantity
         ? Number(getByPath(item, map.quantity)) || 1
         : 1;
@@ -113,9 +126,8 @@ export function applyPdfMapping(
         ? Number(getByPath(item, map.unitPrice)) || 0
         : 0;
 
-      // If no price was found in the PDF, fall back to any preset price for this description
+      // If no price was found in the PDF, fall back to any preset price for this description (key = raw extracted text)
       if (!unitPrice && mapping.lineItemPrices) {
-        const key = description.trim().toLowerCase();
         const preset = mapping.lineItemPrices[key];
         if (preset && typeof preset.unitPrice === 'number' && preset.unitPrice > 0) {
           unitPrice = preset.unitPrice;

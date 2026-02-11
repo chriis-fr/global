@@ -542,6 +542,53 @@ export default function PdfMappingConfigPage() {
                   </div>
                 </div>
 
+                {/* Optional display names (extracted code → human-readable description) */}
+                {previewAst?.items?.length ? (
+                  <div className="mt-4 space-y-2">
+                    <h4 className="text-sm font-semibold text-white">Optional display names</h4>
+                    <p className="text-xs text-blue-200">
+                      Map extracted codes to human-readable names (e.g. &quot;CH, 402 – Ch. 021&quot; → &quot;Script Writing&quot;).
+                    </p>
+                    <div className="mt-2 space-y-1 max-h-32 overflow-y-auto pr-1">
+                      {Array.from(new Set(previewAst.items.map((i) => i.label))).map((label) => {
+                        const key = label.trim().toLowerCase();
+                        const displayName = (mapping.lineItemDescriptions && mapping.lineItemDescriptions[key]) ?? '';
+                        return (
+                          <div key={key} className="flex items-center gap-2 text-xs text-blue-100">
+                            <div className="flex-1 truncate min-w-0" title={label}>
+                              {label}
+                            </div>
+                            <span className="text-[10px] text-blue-300 whitespace-nowrap">→</span>
+                            <input
+                              type="text"
+                              placeholder="Display name"
+                              value={displayName}
+                              onChange={(e) => {
+                                const value = e.target.value.trim();
+                                setMapping((prev) => {
+                                  const next: OrgPdfMappingConfig = { ...prev };
+                                  const norm = label.trim().toLowerCase();
+                                  if (!value) {
+                                    if (next.lineItemDescriptions) {
+                                      const { [norm]: _, ...rest } = next.lineItemDescriptions;
+                                      next.lineItemDescriptions = Object.keys(rest).length ? rest : undefined;
+                                    }
+                                  } else {
+                                    next.lineItemDescriptions = next.lineItemDescriptions ?? {};
+                                    next.lineItemDescriptions[norm] = value;
+                                  }
+                                  return next;
+                                });
+                              }}
+                              className="flex-1 min-w-0 px-2 py-1 rounded bg-white/10 border border-white/20 text-white placeholder:text-blue-400/60 [color-scheme:dark]"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+
                 {/* Optional default prices per description */}
                 {previewAst?.items?.length ? (
                   <div className="mt-4 space-y-2">

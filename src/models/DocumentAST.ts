@@ -59,6 +59,8 @@ export interface OrgPdfMappingConfig {
       unitPrice: number;
     };
   };
+  /** Optional display-name mapping: map extracted codes to human-readable descriptions (key = normalized extracted text). */
+  lineItemDescriptions?: Record<string, string>;
 }
 
 /** Named mapping entry (user-defined name for easy selection when uploading). */
