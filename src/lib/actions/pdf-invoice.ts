@@ -370,7 +370,12 @@ function resolveMappingConfig(
 // Get org PDF mappings list (for config page and upload dropdown)
 export async function getOrgPdfMapping(): Promise<{
   success: boolean;
-  data?: { mappings: PdfMappingEntry[]; defaultName: string | null };
+  data?: {
+    mappings: PdfMappingEntry[];
+    defaultName: string | null;
+    assignedPresetIds?: string[];
+    isAdmin?: boolean;
+  };
   hasOrganization?: boolean;
   error?: string;
 }> {
@@ -387,16 +392,25 @@ export async function getOrgPdfMapping(): Promise<{
     }
     const adminBypass = isAdminPdfMappingBypass(user as { email?: string; adminTag?: boolean });
     if (!user.organizationId && !adminBypass) {
-      return { success: true, data: { mappings: [], defaultName: null }, hasOrganization: false };
+      return { success: true, data: { mappings: [], defaultName: null, isAdmin: adminBypass }, hasOrganization: false };
     }
     const doc = user.organizationId
       ? await db.collection('organizations').findOne({ _id: user.organizationId })
       : user;
     const mappings = doc ? getMappingsList(doc as Record<string, unknown>) : [];
     const defaultName = mappings.find((e) => e.isDefault)?.name ?? (mappings[0]?.name ?? null);
-    // hasOrganization/canUsePdfMapping: true if org user OR admin bypass (so config page shows form)
+    const assignedPresetIds = (doc as { pdfFormatPresets?: string[] })?.pdfFormatPresets as string[] | undefined;
     const canUsePdfMapping = Boolean(user.organizationId || adminBypass);
-    return { success: true, data: { mappings, defaultName }, hasOrganization: canUsePdfMapping };
+    return {
+      success: true,
+      data: {
+        mappings,
+        defaultName,
+        assignedPresetIds: Array.isArray(assignedPresetIds) ? assignedPresetIds : undefined,
+        isAdmin: adminBypass,
+      },
+      hasOrganization: canUsePdfMapping,
+    };
   } catch (error) {
     console.error('Error getting org PDF mapping:', error);
     return {
@@ -407,9 +421,9 @@ export async function getOrgPdfMapping(): Promise<{
 }
 
 /** Option for format dropdown: preset (built-in) or custom org mapping. */
-export type PdfFormatOption = { name: string; isPreset: boolean; description?: string };
+export type PdfFormatOption = { name: string; isPreset: boolean; description?: string; presetId?: string };
 
-/** List of format options: built-in presets first, then org mappings. For upload page dropdown. */
+/** List of format options: built-in presets first, then org mappings. Org-specific: only shows presets assigned to that org. */
 export async function getOrgPdfMappingList(): Promise<{
   success: boolean;
   data?: { options: PdfFormatOption[]; defaultName: string | null };
@@ -419,11 +433,18 @@ export async function getOrgPdfMappingList(): Promise<{
   if (!result.success || !result.data) {
     return { success: result.success, data: result.data as undefined, error: result.error };
   }
-  const presetOptions: PdfFormatOption[] = (PDF_FORMAT_PRESETS ?? []).map((p) => ({
+  const assignedIds = result.data.assignedPresetIds;
+  const isAdmin = result.data.isAdmin === true;
+  const allPresets = (PDF_FORMAT_PRESETS ?? []).map((p) => ({
     name: p.name,
     isPreset: true,
     description: p.description,
+    presetId: p.id,
   }));
+  const presetOptions: PdfFormatOption[] =
+    isAdmin || assignedIds == null || assignedIds.length === 0
+      ? allPresets
+      : allPresets.filter((p) => p.presetId && assignedIds.includes(p.presetId));
   const customOptions: PdfFormatOption[] = (result.data.mappings ?? []).map((e) => ({
     name: e.name,
     isPreset: false,
@@ -544,6 +565,166 @@ export async function deleteOrgPdfMapping(name: string): Promise<{ success: bool
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to delete mapping',
+    };
+  }
+}
+
+/** Admin only: assign which PDF format presets an organization can use. */
+export async function assignPdfFormatsToOrg(
+  organizationId: string,
+  presetIds: string[]
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return { success: false, error: 'Unauthorized' };
+    }
+    const db = await connectToDatabase();
+    const usersCollection = db.collection('users');
+    const user = await usersCollection.findOne({ email: session.user.email });
+    if (!user || !(user as { adminTag?: boolean }).adminTag) {
+      return { success: false, error: 'Admin access required' };
+    }
+    const validIds = (PDF_FORMAT_PRESETS ?? []).map((p) => p.id);
+    const filtered = presetIds.filter((id) => validIds.includes(id));
+    const orgId = new ObjectId(organizationId);
+    const org = await db.collection('organizations').findOne({ _id: orgId });
+    if (!org) {
+      return { success: false, error: 'Organization not found' };
+    }
+    await db.collection('organizations').updateOne(
+      { _id: orgId },
+      { $set: { pdfFormatPresets: filtered, updatedAt: new Date() } }
+    );
+    return { success: true };
+  } catch (error) {
+    console.error('Error assigning PDF formats to org:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to assign formats',
+    };
+  }
+}
+
+/** Admin only: search orgs by partial email or org name. Fetches as you type. */
+export async function searchOrganizationsForAdmin(query: string): Promise<{
+  success: boolean;
+  data?: Array<{
+    organizationId: string;
+    organizationName?: string;
+    sampleMemberEmail?: string;
+    assignedPresetIds?: string[];
+  }>;
+  error?: string;
+}> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return { success: false, error: 'Unauthorized' };
+    }
+    const db = await connectToDatabase();
+    const adminUser = await db.collection('users').findOne({ email: session.user.email });
+    if (!adminUser || !(adminUser as { adminTag?: boolean }).adminTag) {
+      return { success: false, error: 'Admin access required' };
+    }
+    const q = (query ?? '').trim();
+    if (q.length < 2) {
+      return { success: true, data: [] };
+    }
+    const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    const seenIds = new Set<string>();
+    const results: Array<{
+      organizationId: string;
+      organizationName?: string;
+      sampleMemberEmail?: string;
+      assignedPresetIds?: string[];
+    }> = [];
+
+    const users = await db
+      .collection('users')
+      .find({ email: regex, organizationId: { $exists: true, $ne: null } })
+      .limit(15)
+      .toArray();
+
+    for (const u of users) {
+      const orgId = (u.organizationId as { toString?: () => string })?.toString?.() ?? String(u.organizationId);
+      if (seenIds.has(orgId)) continue;
+      seenIds.add(orgId);
+      const org = await db.collection('organizations').findOne({ _id: u.organizationId });
+      const assignedPresetIds = (org as { pdfFormatPresets?: string[] })?.pdfFormatPresets;
+      results.push({
+        organizationId: orgId,
+        organizationName: (org as { name?: string })?.name,
+        sampleMemberEmail: u.email as string,
+        assignedPresetIds: Array.isArray(assignedPresetIds) ? assignedPresetIds : [],
+      });
+    }
+
+    const orgsByName = await db
+      .collection('organizations')
+      .find({ name: regex })
+      .limit(10)
+      .toArray();
+
+    for (const org of orgsByName) {
+      const orgId = (org._id as { toString?: () => string })?.toString?.() ?? String(org._id);
+      if (seenIds.has(orgId)) continue;
+      seenIds.add(orgId);
+      const assignedPresetIds = (org as { pdfFormatPresets?: string[] }).pdfFormatPresets;
+      const member = await db.collection('users').findOne({ organizationId: org._id }, { projection: { email: 1 } });
+      results.push({
+        organizationId: orgId,
+        organizationName: (org as { name?: string }).name,
+        sampleMemberEmail: member?.email as string | undefined,
+        assignedPresetIds: Array.isArray(assignedPresetIds) ? assignedPresetIds : [],
+      });
+    }
+
+    return { success: true, data: results.slice(0, 10) };
+  } catch (error) {
+    console.error('Error searching organizations:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to search',
+    };
+  }
+}
+
+/** Admin only: get org by email (finds user then their org). */
+export async function getOrgByUserEmail(userEmail: string): Promise<{
+  success: boolean;
+  data?: { organizationId: string; organizationName?: string; assignedPresetIds?: string[] };
+  error?: string;
+}> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return { success: false, error: 'Unauthorized' };
+    }
+    const db = await connectToDatabase();
+    const adminUser = await db.collection('users').findOne({ email: session.user.email });
+    if (!adminUser || !(adminUser as { adminTag?: boolean }).adminTag) {
+      return { success: false, error: 'Admin access required' };
+    }
+    const targetUser = await db.collection('users').findOne({ email: userEmail.trim().toLowerCase() });
+    if (!targetUser?.organizationId) {
+      return { success: false, error: 'User not found or has no organization' };
+    }
+    const org = await db.collection('organizations').findOne({ _id: targetUser.organizationId });
+    const assignedPresetIds = (org as { pdfFormatPresets?: string[] })?.pdfFormatPresets;
+    return {
+      success: true,
+      data: {
+        organizationId: targetUser.organizationId.toString(),
+        organizationName: (org as { name?: string })?.name,
+        assignedPresetIds: Array.isArray(assignedPresetIds) ? assignedPresetIds : [],
+      },
+    };
+  } catch (error) {
+    console.error('Error getting org by email:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get organization',
     };
   }
 }

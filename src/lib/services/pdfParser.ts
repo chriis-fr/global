@@ -397,15 +397,25 @@ function buildDocumentAst(
   }
 
   // Fallback: Task order code format (#TO1-WB-005CH. 413CU3-3--, etc.) — when table heuristic picks wrong rows.
-  // User needs PP, CU, QC and Holiday/Weekend sections. Only runs when table gives poor results (≤2 items).
+  // User needs PP, CU, QC and Holiday/Weekend sections. Works for similar PDFs (Alvan, Barvin, etc.).
   const taskOrderCodePattern = /#TO\d+/;
   const categoryCodePattern = /(\d+)([A-Z]{2}\d+)/;
   const taskOrderLines = rawLines.filter((l) => taskOrderCodePattern.test(l));
   const hasHolidayWeekend = rawLines.some(
     (l) => /holiday\/weekend/i.test(l) || (/holiday/i.test(l) && /compensation/i.test(l))
   );
+  const itemsContainTemplateJunk = items.some((it) => {
+    const lbl = (it.label ?? '').toLowerCase();
+    return (
+      /do not|delete this template|template/i.test(lbl) ||
+      /gross pay\s*\(?ksh\)?/i.test(lbl) ||
+      /^day\s*\(jan/i.test(lbl) ||
+      /sat\)\s*gross/i.test(lbl)
+    );
+  });
   const shouldUseTaskOrderFallback =
-    items.length <= 2 && taskOrderLines.length >= 3 && (taskOrderLines.length > 0 || hasHolidayWeekend);
+    (items.length <= 5 || itemsContainTemplateJunk) &&
+    (taskOrderLines.length >= 3 || hasHolidayWeekend);
 
   if (shouldUseTaskOrderFallback) {
     // Extract chapter + category per row: e.g. "413CU3" -> Ch. 413, CU3. Format: "CU, 3 – Ch. 413" (category, subtype – chapter).
