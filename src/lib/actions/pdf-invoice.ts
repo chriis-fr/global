@@ -9,6 +9,7 @@ import { CreateInvoiceInput, ClientDetails } from '@/models/Invoice';
 import type { DocumentAST, OrgPdfMappingConfig, PdfMappingEntry } from '@/models/DocumentAST';
 import { applyPdfMapping } from '@/lib/utils/pdfMappingEngine';
 import { parsePdfBuffer } from '@/lib/services/pdfParser';
+import { getPresetByName, PDF_FORMAT_PRESETS } from '@/data/pdfFormatPresets';
 
 /** Serialize draft for Client Components (ObjectId/Date to plain values; documentAst as plain object for fromPdfDraft prefill). */
 function serializeDraft(draft: Record<string, unknown>): InvoiceDraft {
@@ -113,15 +114,14 @@ export async function uploadAndParsePdf(formData: FormData, mappingName?: string
       : isAdminPdfMappingBypass(user as { email?: string; adminTag?: boolean })
         ? user
         : null;
-    if (doc) {
-      const mapping = resolveConfig(getMappingsList(doc as Record<string, unknown>), mappingName);
-      if (documentAst && mapping && Object.keys(mapping).length > 0) {
-        invoiceData = applyPdfMapping(documentAst, mapping);
-        console.log('[PDF Parse] Applied mapping:', mappingName ?? 'default');
-        console.log('[PDF Parse] Mapped result (invoiceData):', JSON.stringify(invoiceData, null, 2));
-      } else {
-        console.log('[PDF Parse] No mapping applied (no org mapping or empty config)');
-      }
+    const orgMappings = doc ? getMappingsList(doc as Record<string, unknown>) : [];
+    const mapping = resolveMappingConfig(mappingName, orgMappings);
+    if (documentAst && mapping && Object.keys(mapping).length > 0) {
+      invoiceData = applyPdfMapping(documentAst, mapping);
+      console.log('[PDF Parse] Applied mapping:', mappingName ?? 'default');
+      console.log('[PDF Parse] Mapped result (invoiceData):', JSON.stringify(invoiceData, null, 2));
+    } else if (!mapping) {
+      console.log('[PDF Parse] No mapping applied (no org mapping or empty config)');
     }
 
     const draftStatus: 'ready' | 'mapping' = Object.keys(invoiceData).length > 0 ? 'ready' : 'mapping';
@@ -199,7 +199,7 @@ export async function uploadAndParseMultiplePdfs(formData: FormData, mappingName
         ? user
         : null;
     const mappings = orgOrUserDoc ? getMappingsList(orgOrUserDoc as Record<string, unknown>) : [];
-    const mapping = mappings.length ? resolveConfig(mappings, mappingName) : undefined;
+    const mapping = resolveMappingConfig(mappingName, mappings);
 
     let combinedInvoice: Partial<CreateInvoiceInput> = {};
     const allExtractedFields: ExtractedField[] = [];
@@ -353,6 +353,20 @@ function resolveConfig(mappings: PdfMappingEntry[], mappingName?: string | null)
   return defaultEntry?.config;
 }
 
+/** Resolve mapping: built-in presets first, then org mappings. Ensures accuracy for known formats. */
+function resolveMappingConfig(
+  mappingName: string | null | undefined,
+  orgMappings: PdfMappingEntry[]
+): OrgPdfMappingConfig | undefined {
+  if (mappingName) {
+    const preset = getPresetByName(mappingName);
+    if (preset) return preset.config;
+    return resolveConfig(orgMappings, mappingName);
+  }
+  const defaultEntry = orgMappings.find((e) => e.isDefault) ?? orgMappings[0];
+  return defaultEntry?.config;
+}
+
 // Get org PDF mappings list (for config page and upload dropdown)
 export async function getOrgPdfMapping(): Promise<{
   success: boolean;
@@ -392,22 +406,36 @@ export async function getOrgPdfMapping(): Promise<{
   }
 }
 
-/** Lightweight list of mapping names + default (for upload page dropdown). */
+/** Option for format dropdown: preset (built-in) or custom org mapping. */
+export type PdfFormatOption = { name: string; isPreset: boolean; description?: string };
+
+/** List of format options: built-in presets first, then org mappings. For upload page dropdown. */
 export async function getOrgPdfMappingList(): Promise<{
   success: boolean;
-  data?: { names: string[]; defaultName: string | null };
+  data?: { options: PdfFormatOption[]; defaultName: string | null };
   error?: string;
 }> {
   const result = await getOrgPdfMapping();
   if (!result.success || !result.data) {
     return { success: result.success, data: result.data as undefined, error: result.error };
   }
+  const presetOptions: PdfFormatOption[] = (PDF_FORMAT_PRESETS ?? []).map((p) => ({
+    name: p.name,
+    isPreset: true,
+    description: p.description,
+  }));
+  const customOptions: PdfFormatOption[] = (result.data.mappings ?? []).map((e) => ({
+    name: e.name,
+    isPreset: false,
+  }));
+  const options = [...presetOptions, ...customOptions];
+  const defaultName =
+    result.data.defaultName ??
+    (customOptions.length ? customOptions[0]?.name : presetOptions[0]?.name) ??
+    null;
   return {
     success: true,
-    data: {
-      names: result.data.mappings.map((e) => e.name),
-      defaultName: result.data.defaultName,
-    },
+    data: { options, defaultName },
   };
 }
 
@@ -567,6 +595,16 @@ export async function parsePdfForPreview(formData: FormData): Promise<{
             originalLine?: string;
           }>)
         : [];
+
+    // DEBUG: Log uploaded PDF parse data for config page debugging
+    console.log('\n========== [PDF Config Preview] Uploaded PDF parse data ==========');
+    console.log('[PDF Config Preview] File name:', file.name, '| Size:', file.size, 'bytes');
+    console.log('[PDF Config Preview] Stats:', JSON.stringify(parseResult.stats, null, 2));
+    console.log('[PDF Config Preview] Raw fields count:', 'fields' in parseResult ? parseResult.fields.length : 0);
+    console.log('[PDF Config Preview] Raw fields (full):', JSON.stringify('fields' in parseResult ? parseResult.fields : [], null, 2));
+    console.log('[PDF Config Preview] Document AST:', JSON.stringify(parseResult.document_ast, null, 2));
+    console.log('[PDF Config Preview] PreviewFields (first 40):', JSON.stringify(previewFields, null, 2));
+    console.log('========== [PDF Config Preview] End ==========\n');
 
     return {
       success: true,

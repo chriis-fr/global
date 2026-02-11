@@ -78,6 +78,7 @@ const PATTERNS: Record<string, RegExp[]> = {
   total: [
     /total\s*:?\s*\$?\s*([\d,]+\.?\d*)/i,
     /amount\s+due\s*:?\s*\$?\s*([\d,]+\.?\d*)/i,
+    /gross\s+pay\s*\(?[^)]*\)?\s*:?\s*([\d,]+\.?\d*)/i,
   ],
   subtotal: [
     /subtotal\s*:?\s*\$?\s*([\d,]+\.?\d*)/i,
@@ -393,6 +394,56 @@ function buildDocumentAst(
     }
     if (isDateStatusJunkOnly(row.label)) continue;
     if (row.label || row.status) items.push(row);
+  }
+
+  // Fallback: Task order code format (#TO1-WB-005CH. 413CU3-3--, etc.) — when table heuristic picks wrong rows.
+  // User needs PP, CU, QC and Holiday/Weekend sections. Only runs when table gives poor results (≤2 items).
+  const taskOrderCodePattern = /#TO\d+/;
+  const categoryCodePattern = /(\d+)([A-Z]{2}\d+)/;
+  const taskOrderLines = rawLines.filter((l) => taskOrderCodePattern.test(l));
+  const hasHolidayWeekend = rawLines.some(
+    (l) => /holiday\/weekend/i.test(l) || (/holiday/i.test(l) && /compensation/i.test(l))
+  );
+  const shouldUseTaskOrderFallback =
+    items.length <= 2 && taskOrderLines.length >= 3 && (taskOrderLines.length > 0 || hasHolidayWeekend);
+
+  if (shouldUseTaskOrderFallback) {
+    const categoryCount = new Map<string, number>();
+    for (const line of taskOrderLines) {
+      const m = line.match(categoryCodePattern);
+      if (m?.[2]) {
+        const code = m[2].toUpperCase();
+        categoryCount.set(code, (categoryCount.get(code) ?? 0) + 1);
+      }
+    }
+    const newItems: DocumentAST['items'] = [];
+    for (const [code, qty] of categoryCount.entries()) {
+      newItems.push({
+        label: code,
+        quantity: qty,
+        unit_price: null,
+        status: '',
+      });
+    }
+    if (hasHolidayWeekend) {
+      const hwIdx = rawLines.findIndex((l) => /holiday/i.test(l));
+      const nextIsCompensation = hwIdx >= 0 && rawLines[hwIdx + 1]?.toLowerCase().trim() === 'compensation';
+      const label =
+        hwIdx >= 0
+          ? nextIsCompensation
+            ? `${rawLines[hwIdx].trim()} ${rawLines[hwIdx + 1].trim()}`
+            : rawLines[hwIdx].trim()
+          : 'Holiday/Weekend compensation';
+      newItems.push({
+        label,
+        quantity: 1,
+        unit_price: null,
+        status: '',
+      });
+    }
+    if (newItems.length > 0) {
+      items.splice(0, items.length, ...newItems);
+    }
   }
 
   // Merge identical deliverable rows into a single item with quantity > 1 where appropriate.

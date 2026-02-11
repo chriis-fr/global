@@ -5,16 +5,24 @@ import { useRouter } from 'next/navigation';
 import { uploadAndParsePdf, uploadAndParseMultiplePdfs, getOrgPdfMappingList } from '@/lib/actions/pdf-invoice';
 import { Upload, FileText, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 
+const LOADING_STEPS = [
+  'Uploading your PDF…',
+  'Extracting text and fields from the document…',
+  'Applying format mapping…',
+  'Preparing your invoice…',
+];
+
 export default function PdfUploadPage() {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [parsing, setParsing] = useState(false);
+  const [loadingStep, setLoadingStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [, setDraftId] = useState<string | null>(null);
-  const [mappingNames, setMappingNames] = useState<string[]>([]);
-  const [defaultMappingName, setDefaultMappingName] = useState<string | null>(null);
+  const [formatOptions, setFormatOptions] = useState<{ name: string; isPreset: boolean; description?: string }[]>([]);
+  const [defaultFormatName, setDefaultFormatName] = useState<string | null>(null);
   const [selectedMappingName, setSelectedMappingName] = useState<string>('');
   const [multiMode, setMultiMode] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
@@ -22,12 +30,24 @@ export default function PdfUploadPage() {
   useEffect(() => {
     getOrgPdfMappingList().then((res) => {
       if (res.success && res.data) {
-        setMappingNames(res.data.names);
-        setDefaultMappingName(res.data.defaultName);
-        setSelectedMappingName(res.data.defaultName ?? res.data.names[0] ?? '');
+        const options = res.data.options ?? [];
+        setFormatOptions(options);
+        setDefaultFormatName(res.data.defaultName ?? null);
+        setSelectedMappingName(res.data.defaultName ?? options[0]?.name ?? '');
       }
     });
   }, []);
+
+  // Cycle through loading steps to show progress feedback
+  const isProcessing = uploading || parsing;
+  useEffect(() => {
+    if (!isProcessing) return;
+    setLoadingStep(0);
+    const interval = setInterval(() => {
+      setLoadingStep((s) => (s + 1) % LOADING_STEPS.length);
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [isProcessing]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const fileList = Array.from(e.target.files ?? []);
@@ -131,32 +151,65 @@ export default function PdfUploadPage() {
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Upload PDF Invoice</h1>
-          <p className="text-blue-200">Upload a PDF invoice to extract and create an invoice automatically</p>
+          <h1 className="text-3xl font-bold text-white mb-2">PDF to Invoice</h1>
+          <p className="text-blue-200">Upload a PDF from your existing work flow to generate an invoice</p>
         </div>
 
         {/* Upload Card */}
-        <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl p-6 sm:p-8 shadow-lg">
-          {/* Mapping selector */}
-          {mappingNames.length > 0 && (
+        <div className="relative bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl p-6 sm:p-8 shadow-lg">
+          {/* Loading overlay - blocks interaction and shows progress */}
+          {(uploading || parsing) && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-blue-900/95 backdrop-blur-sm">
+              <div className="flex flex-col items-center gap-6 px-8 py-10 text-center max-w-md">
+                <Loader2 className="h-14 w-14 animate-spin text-blue-300" />
+                <div>
+                  <p className="text-lg font-medium text-white">
+                    {LOADING_STEPS[loadingStep]}
+                  </p>
+                  <p className="mt-1 text-sm text-blue-200">
+                    {multiMode && files.length > 1
+                      ? `Processing ${files.length} PDF files`
+                      : 'This may take a few seconds'}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  {LOADING_STEPS.map((_, i) => (
+                    <div
+                      key={i}
+                      className={`h-1.5 w-1.5 rounded-full transition-all ${
+                        i <= loadingStep ? 'bg-blue-300 scale-110' : 'bg-blue-400/40'
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+          {/* Format selector: presets + custom mappings */}
+          {(formatOptions ?? []).length > 0 && (
             <div className="mb-6">
               <label className="block text-sm font-medium text-white mb-2">
-                Use mapping
+                PDF format
               </label>
               <select
                 value={selectedMappingName}
                 onChange={(e) => setSelectedMappingName(e.target.value)}
-                className="w-full max-w-xs px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full max-w-md px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                {mappingNames.map((name) => (
-                  <option key={name} value={name} className="bg-gray-800 text-white">
-                    {name}
-                    {name === defaultMappingName ? ' (default)' : ''}
+                {formatOptions.map((opt) => (
+                  <option key={opt.name} value={opt.name} className="bg-gray-800 text-white">
+                    {opt.isPreset ? `✓ ${opt.name}` : opt.name}
+                    {opt.name === defaultFormatName ? ' (default)' : ''}
                   </option>
                 ))}
               </select>
-              <p className="text-blue-200/90 text-xs mt-1">
-                Choose which saved mapping to apply to this PDF. Configure in Smart Invoicing → Config.
+              {formatOptions.find((o) => o.name === selectedMappingName)?.description && (
+                <p className="text-blue-200/90 text-xs mt-1">
+                  {formatOptions.find((o) => o.name === selectedMappingName)?.description}
+                </p>
+              )}
+              <p className="text-blue-200/70 text-xs mt-1">
+                Presets ensure accuracy. Add custom formats in Smart Invoicing → Config.
               </p>
             </div>
           )}
@@ -255,7 +308,7 @@ export default function PdfUploadPage() {
               {uploading || parsing ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>{parsing ? 'Parsing...' : 'Uploading...'}</span>
+                  <span>Processing…</span>
                 </>
               ) : (
                 <>
@@ -265,26 +318,6 @@ export default function PdfUploadPage() {
               )}
             </button>
           </div>
-
-          {/* Status Info */}
-          {(uploading || parsing) && (
-            <div className="mt-4 p-4 bg-blue-500/20 border border-blue-500/50 rounded-lg">
-              <div className="flex items-center space-x-2 text-blue-200 text-sm">
-                {uploading && (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Uploading PDF file...</span>
-                  </>
-                )}
-                {parsing && (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Extracting fields from PDF...</span>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Instructions */}

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { getOrgPdfMapping, saveOrgPdfMapping, deleteOrgPdfMapping, parsePdfForPreview } from '@/lib/actions/pdf-invoice';
 import type { OrgPdfMappingConfig, DocumentAST, PdfMappingEntry } from '@/models/DocumentAST';
 import { PDF_AST_PATH_OPTIONS, INVOICE_FIELD_KEYS, INVOICE_FIELD_LABELS, ITEM_FIELD_PATH_OPTIONS } from '@/data/pdfAstPaths';
+import { PDF_FORMAT_PRESETS } from '@/data/pdfFormatPresets';
 import { ArrowLeft, Save, Loader2, CheckCircle, AlertCircle, Settings, Upload, FileText, Plus, Trash2 } from 'lucide-react';
 
 const ADD_NEW_ID = '__new__';
@@ -164,6 +165,14 @@ export default function PdfMappingConfigPage() {
         setPreviewError(result.error ?? 'Failed to parse PDF');
         return;
       }
+      // DEBUG: Log uploaded PDF data received by config page (browser console)
+      console.log('[PDF Config] Uploaded PDF data received:', {
+        fileName: file.name,
+        stats: result.data.stats,
+        documentAst: result.data.document_ast,
+        previewFields: result.data.previewFields,
+        previewFieldsCount: result.data.previewFields?.length ?? 0,
+      });
       setPreviewAst(result.data.document_ast);
       setPreviewFields(result.data.previewFields ?? []);
     } catch (err) {
@@ -428,6 +437,32 @@ export default function PdfMappingConfigPage() {
                   <span className="text-sm">Use as default for this PDF type</span>
                 </label>
               </div>
+              {selectedId === ADD_NEW_ID && (
+                <div>
+                  <label className="block text-sm font-medium text-blue-200 mb-2">Start from preset format</label>
+                  <select
+                    className="w-full max-w-md px-4 py-2 bg-white/15 border border-white/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
+                    defaultValue=""
+                    onChange={(e) => {
+                      const preset = PDF_FORMAT_PRESETS.find((p) => p.name === e.target.value);
+                      if (preset) {
+                        setMapping(JSON.parse(JSON.stringify(preset.config)));
+                        if (!mappingName) setMappingName(preset.name);
+                      }
+                    }}
+                  >
+                    <option value="" className="bg-gray-800 text-white">— Don&apos;t use a preset —</option>
+                    {PDF_FORMAT_PRESETS.map((p) => (
+                      <option key={p.id} value={p.name} className="bg-gray-800 text-white">
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-blue-200/80 text-xs mt-1">
+                    Built-in formats ensure accuracy. Customize after loading.
+                  </p>
+                </div>
+              )}
 
               {INVOICE_FIELD_KEYS.filter((k) => k !== 'lineItems').map((fieldKey) => {
                 const selectedPath = (mapping as Record<string, string>)[fieldKey];
