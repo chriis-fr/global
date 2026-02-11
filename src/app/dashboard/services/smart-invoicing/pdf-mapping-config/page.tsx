@@ -570,8 +570,9 @@ export default function PdfMappingConfigPage() {
                                   const norm = label.trim().toLowerCase();
                                   if (!value) {
                                     if (next.lineItemDescriptions) {
-                                      const { [norm]: _, ...rest } = next.lineItemDescriptions;
-                                      next.lineItemDescriptions = Object.keys(rest).length ? rest : undefined;
+                                      const rest = { ...next.lineItemDescriptions };
+                                      delete rest[norm];
+                                      next.lineItemDescriptions = Object.keys(rest).length > 0 ? rest : undefined;
                                     }
                                   } else {
                                     next.lineItemDescriptions = next.lineItemDescriptions ?? {};
