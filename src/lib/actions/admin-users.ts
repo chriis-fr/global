@@ -379,6 +379,122 @@ export async function deleteAdminUser(
 }
 
 /**
+ * Add a user to an organization (admin only).
+ * Use when a user created an individual account instead of following an invite link.
+ */
+export async function addUserToOrganization(
+  userEmail: string,
+  organizationId: string,
+  role: 'admin' | 'financeManager' | 'accountant' | 'approver' = 'accountant'
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const session = await getServerSession(authOptions);
+
+    if (!session?.user?.email) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const db = await getDatabase();
+    const adminUser = await db.collection('users').findOne({
+      email: session.user.email,
+    });
+
+    if (!adminUser || !adminUser.adminTag) {
+      return { success: false, error: 'Admin access required' };
+    }
+
+    const user = await db.collection('users').findOne({
+      email: userEmail.toLowerCase().trim(),
+    });
+
+    if (!user) {
+      return { success: false, error: 'User not found' };
+    }
+
+    const targetOrgId = new ObjectId(organizationId);
+    const organization = await db.collection('organizations').findOne({
+      _id: targetOrgId,
+    });
+
+    if (!organization) {
+      return { success: false, error: 'Organization not found' };
+    }
+
+    const members = (organization.members as Array<{ userId: { toString: () => string }; email: string }>) ?? [];
+    const alreadyMember = members.some(
+      (m) =>
+        m.userId?.toString() === user._id?.toString() ||
+        (m.email || '').toLowerCase() === (user.email || '').toLowerCase()
+    );
+
+    if (alreadyMember) {
+      return { success: false, error: 'User is already a member of this organization' };
+    }
+
+    if (user.organizationId && user.organizationId.toString() !== organizationId) {
+      return {
+        success: false,
+        error: 'User already belongs to another organization. Remove them from that org first.',
+      };
+    }
+
+    const { getRolePermissions } = await import('@/lib/utils/roles');
+    const { createDefaultServices } = await import('@/lib/services/serviceManager');
+
+    const newMember = {
+      userId: user._id,
+      email: user.email,
+      name: user.name || user.email,
+      role,
+      permissions: getRolePermissions(role),
+      status: 'active',
+      joinedAt: new Date(),
+      lastActiveAt: new Date(),
+    };
+
+    const orgServices = (organization.services as Record<string, boolean>) ?? {};
+    const hasOrgServices = Object.values(orgServices).some(Boolean);
+    const effectiveServices = hasOrgServices ? orgServices : (user.services ?? createDefaultServices());
+
+    await db.collection('organizations').updateOne(
+      { _id: targetOrgId },
+      ({
+        $push: { members: { $each: [newMember] } },
+        $set: { updatedAt: new Date() },
+      } as unknown as import('mongodb').UpdateFilter<import('mongodb').Document>)
+    );
+
+    await db.collection('users').updateOne(
+      { _id: user._id },
+      {
+        $set: {
+          organizationId: targetOrgId,
+          userType: 'business',
+          services: effectiveServices,
+          subscription: null,
+          usage: null,
+          onboarding: {
+            ...(user.onboarding || {}),
+            completed: true,
+            currentStep: 4,
+            completedSteps: ['1', '2', '3', '4'],
+          },
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    return { success: true };
+  } catch (error) {
+    console.error('Add user to organization error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to add user to organization',
+    };
+  }
+}
+
+/**
  * Send password reset email to user (admin only)
  */
 export async function sendPasswordResetEmail(

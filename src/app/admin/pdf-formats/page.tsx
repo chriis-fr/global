@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSession } from '@/lib/auth-client';
 import { useRouter } from 'next/navigation';
-import { assignPdfFormatsToOrg, searchOrganizationsForAdmin } from '@/lib/actions/pdf-invoice';
+import { assignPdfFormatsToOrg, searchOrganizationsForAdmin, copyMyPdfMappingsToOrganization, getOrgPdfMapping, getOrgPdfMappingsForAdmin } from '@/lib/actions/pdf-invoice';
 import { PDF_FORMAT_PRESETS } from '@/data/pdfFormatPresets';
-import { FileText, Loader2, Search, CheckCircle, ArrowLeft } from 'lucide-react';
+import { FileText, Loader2, Search, CheckCircle, ArrowLeft, Copy } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const DEBOUNCE_MS = 300;
@@ -29,8 +29,38 @@ export default function AdminPdfFormatsPage() {
     assignedPresetIds: string[];
   } | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [copyingMappings, setCopyingMappings] = useState(false);
+  const [myMappings, setMyMappings] = useState<Array<{ name: string; isDefault?: boolean }>>([]);
+  const [orgMappings, setOrgMappings] = useState<Array<{ name: string; isDefault?: boolean }>>([]);
+  const [loadingMyMappings, setLoadingMyMappings] = useState(true);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (status !== 'authenticated') return;
+    setLoadingMyMappings(true);
+    getOrgPdfMapping().then((r) => {
+      if (r.success && r.data?.mappings) {
+        setMyMappings(r.data.mappings.map((m) => ({ name: m.name, isDefault: m.isDefault })));
+      } else {
+        setMyMappings([]);
+      }
+    }).finally(() => setLoadingMyMappings(false));
+  }, [status]);
+
+  useEffect(() => {
+    if (!orgData?.organizationId) {
+      setOrgMappings([]);
+      return;
+    }
+    getOrgPdfMappingsForAdmin(orgData.organizationId).then((r) => {
+      if (r.success && r.data?.mappings) {
+        setOrgMappings(r.data.mappings);
+      } else {
+        setOrgMappings([]);
+      }
+    });
+  }, [orgData?.organizationId]);
 
   const runSearch = useCallback(async (q: string) => {
     const trimmed = q.trim();
@@ -128,6 +158,23 @@ export default function AdminPdfFormatsPage() {
     }
   };
 
+  const handleCopyMyMappings = async () => {
+    if (!orgData) return;
+    setCopyingMappings(true);
+    try {
+      const result = await copyMyPdfMappingsToOrganization(orgData.organizationId);
+      if (result.success) {
+        toast.success(`Copied ${result.data?.copied ?? 0} custom mapping(s) to this organization. Members can now use them.`);
+      } else {
+        toast.error(result.error ?? 'Failed to copy mappings');
+      }
+    } catch {
+      toast.error('Failed to copy mappings');
+    } finally {
+      setCopyingMappings(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -147,6 +194,34 @@ export default function AdminPdfFormatsPage() {
               Assign which PDF formats each organization can use. Only assigned formats appear in their upload dropdown.
             </p>
           </div>
+        </div>
+
+        <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <h3 className="text-sm font-semibold text-gray-900 mb-2">Your PDF mappings</h3>
+          <p className="text-xs text-gray-500 mb-3">Custom formats on your account (used when you upload PDFs)</p>
+          {loadingMyMappings ? (
+            <p className="text-sm text-gray-500 flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Loading...</p>
+          ) : (
+            <div className="space-y-3">
+              {myMappings.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {myMappings.map((m) => (
+                    <span
+                      key={m.name}
+                      className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800"
+                    >
+                      {m.name}{m.isDefault ? ' (default)' : ''}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 italic">No custom mappings. Create one in Smart Invoicing → Config.</p>
+              )}
+              <p className="text-xs text-gray-500 pt-1">
+                Built-in presets you can use: {PDF_FORMAT_PRESETS.map((p) => p.name).join(', ')}
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 relative" ref={searchContainerRef}>
@@ -202,6 +277,24 @@ export default function AdminPdfFormatsPage() {
             </h2>
             <p className="text-xs text-gray-500 mb-4">ID: {orgData.organizationId}</p>
 
+            <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-900 mb-2">This organization&apos;s custom mappings</h3>
+              {orgMappings.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {orgMappings.map((m) => (
+                    <span
+                      key={m.name}
+                      className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-green-100 text-green-800"
+                    >
+                      {m.name}{m.isDefault ? ' (default)' : ''}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 italic">No custom mappings yet.</p>
+              )}
+            </div>
+
             <p className="text-sm text-gray-600 mb-4">
               Select which built-in PDF formats this organization can use:
             </p>
@@ -228,6 +321,26 @@ export default function AdminPdfFormatsPage() {
               ))}
             </div>
 
+            <div className="mt-6 pt-6 border-t border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-900 mb-2">Copy my custom PDF mappings</h3>
+              <p className="text-sm text-gray-600 mb-3">
+                Copy your mappings ({myMappings.length ? myMappings.map((m) => m.name).join(', ') : 'none'}) to this organization so members can use the same format when uploading PDFs.
+              </p>
+              <button
+                type="button"
+                onClick={handleCopyMyMappings}
+                disabled={copyingMappings || myMappings.length === 0}
+                className="w-full py-2.5 px-4 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg hover:bg-amber-100 disabled:opacity-50 flex items-center justify-center gap-2 font-medium text-sm"
+              >
+                {copyingMappings ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+                Copy my mappings to this organization
+              </button>
+            </div>
+
             <button
               onClick={handleSave}
               disabled={saving}
@@ -244,9 +357,9 @@ export default function AdminPdfFormatsPage() {
           <ul className="list-disc list-inside mt-2 space-y-1 text-blue-700">
             <li>Type to search by org name or member email—results appear as you type</li>
             <li>Select which PDF format presets that org can use</li>
-            <li>Only assigned formats appear in their Smart Invoicing → Upload PDF dropdown</li>
+            <li><strong>Copy my custom mappings</strong> — if you have custom formats (e.g. &quot;script&quot;) on your account, copy them to the org so members inherit them</li>
+            <li>Only assigned presets + org mappings appear in their Smart Invoicing → Upload PDF dropdown</li>
             <li>Admin (your account) always sees all formats</li>
-            <li>Orgs with no assignment yet see all presets (backward compatible)</li>
           </ul>
         </div>
       </div>

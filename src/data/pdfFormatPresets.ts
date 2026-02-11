@@ -11,14 +11,14 @@ export interface PdfFormatPreset {
   config: OrgPdfMappingConfig;
 }
 
-/** Built-in presets — always available, ensures accuracy for known formats. */
+/** Built-in presets — always available, ensures accuracy for known formats. No hardcoded prices. */
 export const PDF_FORMAT_PRESETS: PdfFormatPreset[] = [
   {
     id: 'task-order-cu-pp-qc',
     name: 'Task Order (CU, PP, QC, Holiday/Weekend)',
     description: 'For task order PDFs with deliverable codes (CU1, CU3, PP2, PP4, PP5, QC1) and chapters. Includes Holiday/Weekend compensation.',
     config: {
-      invoiceTitle: 'meta.title',
+      invoiceTitle: 'meta.reference_numbers.task_order',
       issueDate: 'dates.signed',
       dueDate: 'dates.due',
       companyName: 'parties.issuer',
@@ -62,7 +62,7 @@ export const PDF_FORMAT_PRESETS: PdfFormatPreset[] = [
 ];
 
 export function getPresetByName(name: string): PdfFormatPreset | undefined {
-  return PDF_FORMAT_PRESETS.find((p) => p.name === name);
+  return PDF_FORMAT_PRESETS.find((p) => p.name.toLowerCase() === name.toLowerCase());
 }
 
 export function getPresetById(id: string): PdfFormatPreset | undefined {

@@ -966,6 +966,7 @@ export default function CreateInvoicePage() {
   const fromPdfDraftId = searchParams.get('fromPdfDraft');
   const fromClickUp = searchParams.get('fromClickUp') === '1';
   const pdfDraftLoadDone = useRef(false);
+  const lastLoadedPdfDraftId = useRef<string | null>(null);
   const clickUpLoadDone = useRef(false);
 
   // Check if any items have discounts (used to conditionally show Discount column)
@@ -1277,7 +1278,8 @@ export default function CreateInvoicePage() {
 
   // When arriving from PDF upload: load draft and pre-fill create form (items, client, company, etc.). Use documentAst when invoiceData is empty.
   useEffect(() => {
-    if (!fromPdfDraftId || pdfDraftLoadDone.current) return;
+    if (!fromPdfDraftId) return;
+    if (lastLoadedPdfDraftId.current === fromPdfDraftId && pdfDraftLoadDone.current) return;
     let cancelled = false;
     (async () => {
       try {
@@ -1363,6 +1365,7 @@ export default function CreateInvoicePage() {
           total: safeTotal,
           memo: (raw.notes as string) ?? prev.memo,
         }));
+        lastLoadedPdfDraftId.current = fromPdfDraftId;
         pdfDraftLoadDone.current = true;
         router.replace('/dashboard/services/smart-invoicing/create');
       } catch (e) {

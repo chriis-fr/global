@@ -37,6 +37,8 @@ export interface ParseResult {
     amount_fields: number;
     layout_included: number;
   };
+  /** Raw text extracted by pdf-parse – use for debugging parser/mapping. */
+  raw_text?: string;
 }
 
 export interface ParseError {
@@ -225,11 +227,72 @@ function stripTrailingDateOrdinal(s: string): string {
   return s.replace(/\s*\d{1,2}(?:st|nd|rd|th)$/i, '').trim();
 }
 
-/** Strip trailing "25th Nov COMPLETE" / "th NovCOMPLETE" style date+status from descriptions. */
+/** Strip trailing "25th Nov COMPLETE" / "th NovCOMPLETE" style date+status from descriptions. Never strip "(N completed)". */
 function stripTrailingDateAndComplete(s: string): string {
   return s
     .replace(/\s*\d{0,2}(?:st|nd|rd|th)?\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*COMPLETE\s*$/i, '')
     .trim();
+}
+
+/**
+ * Parse trailing column numbers from task order table rows.
+ * Formats: "Description 1 0 9 0 0" (5 cols: Assigned, Extra, Completed, Incomplete, Reassigned)
+ *          "Description 1 9 0" (3 cols: Assigned, Completed, Incomplete)
+ * Returns { description, completedUnits } so we can append " (N completed)" when applicable.
+ */
+function parseTrailingColumnNumbers(raw: string): { description: string; completedUnits?: number } {
+  const fiveNums = raw.match(/^(.+?)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)$/);
+  if (fiveNums) {
+    const completed = parseInt(fiveNums[4], 10); // 3rd number = Completed
+    return {
+      description: fiveNums[1].trim(),
+      completedUnits: !Number.isNaN(completed) && completed > 0 ? completed : undefined,
+    };
+  }
+  const threeNums = raw.match(/^(.+?)\s+(\d+)\s+(\d+)\s+(\d+)$/);
+  if (threeNums) {
+    const completed = parseInt(threeNums[3], 10); // 2nd number = Completed
+    return {
+      description: threeNums[1].trim(),
+      completedUnits: !Number.isNaN(completed) && completed > 0 ? completed : undefined,
+    };
+  }
+  return { description: raw.trim() };
+}
+
+/** Convert task-order code to proper format: "429CU9-9" -> "CU, 9 – Ch. 429 (9 completed)", "021CH402" -> "CH, 402 – Ch. 021", "CH435TS3-3" -> "TS, 3 – Ch. 435 (3 completed)". */
+function formatTaskOrderLabel(text: string): string | null {
+  const t = text.trim();
+  const categoryWithUnitsPattern = /(\d+)([A-Z]{2}\d+)(?:-(\d+))?/gi;
+  let m = categoryWithUnitsPattern.exec(t);
+  if (m) {
+    const chapter = m[1];
+    const code = m[2].toUpperCase();
+    if (chapter && code) {
+      const categoryPart = code.length >= 3 ? `${code.slice(0, 2)}, ${code.slice(2)}` : code;
+      const baseLabel = `${categoryPart} – Ch. ${chapter}`;
+      const completedUnits = m[3] ? parseInt(m[3], 10) : undefined;
+      return completedUnits != null && !Number.isNaN(completedUnits)
+        ? `${baseLabel} (${completedUnits} completed)`
+        : baseLabel;
+    }
+  }
+  // Consecutive codes: CH435TS3-3 → TS, 3 – Ch. 435 (3 completed) (any 2-letter type: CH, CU, PP, QC, TS, etc.)
+  const consecutiveCodesPattern = /([A-Z]{2})(\d+)([A-Z]{2}\d+)(?:-(\d+))?/gi;
+  m = consecutiveCodesPattern.exec(t);
+  if (m) {
+    const sharedNum = m[2];
+    const secondCode = m[3].toUpperCase();
+    const completedUnits = m[4] ? parseInt(m[4], 10) : undefined;
+    if (sharedNum && secondCode) {
+      const categoryPart = secondCode.length >= 3 ? `${secondCode.slice(0, 2)}, ${secondCode.slice(2)}` : secondCode;
+      const baseLabel = `${categoryPart} – Ch. ${sharedNum}`;
+      return completedUnits != null && !Number.isNaN(completedUnits)
+        ? `${baseLabel} (${completedUnits} completed)`
+        : baseLabel;
+    }
+  }
+  return null;
 }
 
 /** True if label is only date/status junk (e.g. "th NovCOMPLETE", "25th Nov COMPLETE") — should not be a line item. */
@@ -283,7 +346,9 @@ function heuristicTableFromLines(lines: LayoutField[]): TableField[] {
     if (!m || !m[3] || m[3].length < 2) return;
     const rowIndex = m[1];
     const code = m[2]?.trim() ?? '';
-    const description = stripTrailingDateAndComplete(stripTrailingDateOrdinal(m[3].trim()));
+    const rest = m[3].trim();
+    const { description: descPart, completedUnits } = parseTrailingColumnNumbers(rest);
+    const description = stripTrailingDateAndComplete(stripTrailingDateOrdinal(descPart));
     const rowData: Record<string, string> = {
       index: rowIndex,
       quantity: '1',
@@ -291,6 +356,9 @@ function heuristicTableFromLines(lines: LayoutField[]): TableField[] {
       description,
       label: description,
     };
+    if (completedUnits != null) {
+      rowData['completed_units'] = String(completedUnits);
+    }
     tableFields.push({
       ...lineObj,
       position: { ...lineObj.position, width: 0, height: 0 },
@@ -356,23 +424,28 @@ function buildDocumentAst(
     }
   }
 
+  const taskOrderRef = meta.reference_numbers.task_order ?? '';
+  const chapterFromTaskOrder = taskOrderRef ? taskOrderRef.match(/-(\d+)$/)?.[1] ?? '' : '';
+
   for (const f of tableFields) {
     const td = f.table_data ?? {};
     const fullLine = (f.value ?? '').trim();
     const rawLabel =
       (td['label'] ?? td['Description'] ?? td['description'] ?? td['Deliverable'] ?? '').trim() || fullLine;
-    const label = stripTrailingDateAndComplete(stripTrailingDateOrdinal(rawLabel)) || fullLine;
+    let label = stripTrailingDateAndComplete(stripTrailingDateOrdinal(rawLabel)) || fullLine;
+    // Convert task-order codes (e.g. "429CU9-9", "021CH402") to proper format with "(N completed)" when present
+    const formatted =
+      formatTaskOrderLabel(rawLabel) || formatTaskOrderLabel(rawLabel.replace(/\s+/g, ''));
+    if (formatted) label = formatted;
     // Skip rows that are only date/status junk (e.g. "th NovCOMPLETE") — not real line items
     if (isDateStatusJunkOnly(label)) continue;
     const code = String(td['code'] ?? '').trim();
     const row: (typeof items)[0] = {
-      // Keep description clean here; we'll optionally prepend codes when we merge duplicates
       label: label || fullLine,
       quantity: 1,
       unit_price: null,
       status: td['Status'] ?? td['status'] ?? '',
     };
-    // Attach code as a non-typed helper so we can use it during merging
     if (code) {
       (row as typeof row & { _code?: string })._code = code;
     }
@@ -392,13 +465,31 @@ function buildDocumentAst(
         if (!Number.isNaN(n)) row.unit_price = n;
       } else if (kl.includes('status')) row.status = v ?? row.status;
     }
-    if (isDateStatusJunkOnly(row.label)) continue;
+    // Apply enhancements after loop so they are not overwritten
+    label = row.label ?? '';
+    const completedUnits = td['completed_units'] ? parseInt(td['completed_units'], 10) : undefined;
+    if (
+      completedUnits != null &&
+      !Number.isNaN(completedUnits) &&
+      completedUnits > 0 &&
+      !/\(\d+\s+completed\)$/i.test(label)
+    ) {
+      label = `${label} (${completedUnits} completed)`;
+    }
+    if (
+      chapterFromTaskOrder &&
+      !/–\s*Ch\.\s*\d+/i.test(label) &&
+      /^[A-Z]{2}\s*,\s*\d+/i.test(label.trim())
+    ) {
+      label = `${label.trim()} – Ch. ${chapterFromTaskOrder}`;
+    }
+    row.label = label;
+    if (isDateStatusJunkOnly(label)) continue;
     if (row.label || row.status) items.push(row);
   }
 
-  // Fallback: Task order code format (#TO1-WB-005CH. 413CU3-3--, 414PP5-2--, etc.) — when table heuristic picks wrong rows.
-  // User needs PP, CU, QC, TS and Holiday/Weekend sections. Works for similar PDFs (Alvan, Barvin, etc.).
-  // Scan ALL lines for chapter+category: data often on separate lines (413CU3-3--, 414PP5-2--), not just #TO lines.
+  // Task order: scan rawLines for chapter+category format (413CU3-3--, 021CH402) to produce proper labels.
+  // Formats: "CU, 3 – Ch. 413 (3 completed)" when completed units present, "CH, 402 – Ch. 021" otherwise.
   const taskOrderCodePattern = /#TO\d+/;
   const hasTaskOrderRef = rawLines.some((l) => taskOrderCodePattern.test(l));
   const hasHolidayWeekend = rawLines.some(
@@ -413,35 +504,79 @@ function buildDocumentAst(
       /sat\)\s*gross/i.test(lbl)
     );
   });
-  const shouldUseTaskOrderFallback =
-    (items.length <= 5 || itemsContainTemplateJunk) &&
-    (hasTaskOrderRef || hasHolidayWeekend);
+  const categoryWithUnitsPattern = /(\d+)([A-Z]{2}\d+)(?:-(\d+))?/g;
+  // Consecutive codes: CH435TS3-3 → CH435 and TS3-3; TS uses 435 as chapter (letters don't matter: CH, CU, PP, QC, TS, etc.)
+  const consecutiveCodesPattern = /([A-Z]{2})(\d+)([A-Z]{2}\d+)(?:-(\d+))?/g;
 
-  if (shouldUseTaskOrderFallback) {
-    // Match: chapter + category (CU3, PP5, QC1, TS1) + optional completed units (-3, -2).
-    // e.g. "413CU3-3--" -> Ch. 413, CU3. Format: "CU, 3 – Ch. 413 (3 completed)".
-    // Quantity stays 1 per line; completed units are shown in the label, not mixed with quantity.
-    const categoryWithUnitsPattern = /(\d+)([A-Z]{2}\d+)(?:-(\d+))?/g;
+  /** Scan text for task-order codes. Supports: "435TS3-3", "021CH402", "CH435TS3-3" (CH + TS/PP/CU/QC – any 2-letter type). */
+  const scanForTaskOrderCodes = (text: string): DocumentAST['items'] => {
     const newItems: DocumentAST['items'] = [];
-    for (const line of rawLines) {
-      let m: RegExpExecArray | null;
-      categoryWithUnitsPattern.lastIndex = 0;
-      while ((m = categoryWithUnitsPattern.exec(line)) !== null) {
-        const chapter = m[1];
-        const code = m[2].toUpperCase();
-        const completedUnits = m[3] ? parseInt(m[3], 10) : undefined;
-        if (!chapter || !code) continue;
-        const categoryPart = code.length >= 3 ? `${code.slice(0, 2)}, ${code.slice(2)}` : code;
-        const baseLabel = chapter ? `${categoryPart} – Ch. ${chapter}` : categoryPart;
-        const label = completedUnits != null && !Number.isNaN(completedUnits)
+    const seen = new Set<string>();
+
+    // 1) chapter+code format: 435TS3-3, 021CH402, 428PP11-11
+    categoryWithUnitsPattern.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = categoryWithUnitsPattern.exec(text)) !== null) {
+      const chapter = m[1];
+      const code = m[2].toUpperCase();
+      const completedUnits = m[3] ? parseInt(m[3], 10) : undefined;
+      if (!chapter || !code) continue;
+      const categoryPart = code.length >= 3 ? `${code.slice(0, 2)}, ${code.slice(2)}` : code;
+      const baseLabel = `${categoryPart} – Ch. ${chapter}`;
+      const label =
+        completedUnits != null && !Number.isNaN(completedUnits)
           ? `${baseLabel} (${completedUnits} completed)`
           : baseLabel;
-        newItems.push({
-          label,
-          quantity: 1,
-          unit_price: null,
-          status: '',
-        });
+      const key = `${chapter}-${code}-${completedUnits ?? ''}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        newItems.push({ label, quantity: 1, unit_price: null, status: '' });
+      }
+    }
+
+    // 2) Consecutive codes: CH435TS3-3 → second code (TS3-3) uses first code's number (435) as chapter
+    consecutiveCodesPattern.lastIndex = 0;
+    while ((m = consecutiveCodesPattern.exec(text)) !== null) {
+      const firstType = m[1].toUpperCase();
+      const sharedNum = m[2];
+      const secondCode = m[3].toUpperCase();
+      const completedUnits = m[4] ? parseInt(m[4], 10) : undefined;
+      if (!sharedNum || !secondCode) continue;
+      const categoryPart = secondCode.length >= 3 ? `${secondCode.slice(0, 2)}, ${secondCode.slice(2)}` : secondCode;
+      const chapter = sharedNum;
+      const baseLabel = `${categoryPart} – Ch. ${chapter}`;
+      const label =
+        completedUnits != null && !Number.isNaN(completedUnits)
+          ? `${baseLabel} (${completedUnits} completed)`
+          : baseLabel;
+      const key = `consec-${chapter}-${secondCode}-${completedUnits ?? ''}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        newItems.push({ label, quantity: 1, unit_price: null, status: '' });
+      }
+    }
+    return newItems;
+  };
+
+  const extractTaskOrderItemsFromRawLines = (): DocumentAST['items'] => {
+    const newItems: DocumentAST['items'] = [];
+    // 1) Line-by-line scan (Cedric-style: codes on single lines)
+    for (const line of rawLines) {
+      newItems.push(...scanForTaskOrderCodes(line));
+    }
+    // 2) Full-text scan fallback: similar layouts can produce different line breaks – codes may be split across lines.
+    //    Collapse whitespace so "428\nPP11-11" or "428 PP11-11" becomes "428PP11-11" and matches.
+    const fullText = rawLines.join('\n');
+    const collapsedText = fullText.replace(/\s+/g, '');
+    if (fullText.length > 0) {
+      const fullScanItems = scanForTaskOrderCodes(collapsedText);
+      const existingKeys = new Set(newItems.map((it) => (it.label ?? '').toLowerCase()));
+      for (const it of fullScanItems) {
+        const key = (it.label ?? '').toLowerCase();
+        if (!existingKeys.has(key)) {
+          newItems.push(it);
+          existingKeys.add(key);
+        }
       }
     }
     if (hasHolidayWeekend) {
@@ -453,15 +588,31 @@ function buildDocumentAst(
             ? `${rawLines[hwIdx].trim()} ${rawLines[hwIdx + 1].trim()}`
             : rawLines[hwIdx].trim()
           : 'Holiday/Weekend compensation';
-      newItems.push({
-        label,
-        quantity: 1,
-        unit_price: null,
-        status: '',
-      });
+      newItems.push({ label, quantity: 1, unit_price: null, status: '' });
     }
-    if (newItems.length > 0) {
-      items.splice(0, items.length, ...newItems);
+    return newItems;
+  };
+
+  if (hasTaskOrderRef || hasHolidayWeekend) {
+    const rawLineItems = extractTaskOrderItemsFromRawLines();
+    const shouldReplace =
+      (items.length <= 5 || itemsContainTemplateJunk) && rawLineItems.length > 0;
+    if (shouldReplace) {
+      items.splice(0, items.length, ...rawLineItems);
+    } else if (rawLineItems.length > 0) {
+      // Merge: add rawLine items that table missed (e.g. "CU, 9 – Ch. 429 (9 completed)" from "429CU9-9")
+      const existingKeys = new Set(
+        items.map((it) =>
+          stripTrailingDateAndComplete(stripTrailingDateOrdinal((it.label ?? '').trim())).toLowerCase()
+        )
+      );
+      for (const it of rawLineItems) {
+        const key = stripTrailingDateAndComplete(stripTrailingDateOrdinal((it.label ?? '').trim())).toLowerCase();
+        if (!existingKeys.has(key)) {
+          items.push(it);
+          existingKeys.add(key);
+        }
+      }
     }
   }
 
@@ -599,6 +750,7 @@ export async function parsePdfBuffer(buffer: Buffer): Promise<ParseResult | Pars
       success: true,
       fields: allFields,
       document_ast,
+      raw_text: text,
       stats: {
         total_fields: allFields.length,
         pattern_fields: patternFields.length,

@@ -2,11 +2,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { getOrgPdfMapping, saveOrgPdfMapping, deleteOrgPdfMapping, parsePdfForPreview } from '@/lib/actions/pdf-invoice';
+import { getOrgPdfMapping, saveOrgPdfMapping, deleteOrgPdfMapping, setOrgPdfMappingDefault, parsePdfForPreview } from '@/lib/actions/pdf-invoice';
 import type { OrgPdfMappingConfig, DocumentAST, PdfMappingEntry } from '@/models/DocumentAST';
 import { PDF_AST_PATH_OPTIONS, INVOICE_FIELD_KEYS, INVOICE_FIELD_LABELS, ITEM_FIELD_PATH_OPTIONS } from '@/data/pdfAstPaths';
 import { PDF_FORMAT_PRESETS } from '@/data/pdfFormatPresets';
-import { ArrowLeft, Save, Loader2, CheckCircle, AlertCircle, Settings, Upload, FileText, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, CheckCircle, AlertCircle, Settings, Upload, FileText, Plus, Trash2, Star } from 'lucide-react';
 
 const ADD_NEW_ID = '__new__';
 
@@ -15,6 +15,7 @@ export default function PdfMappingConfigPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [actionTarget, setActionTarget] = useState<string | null>(null); // name being set-default or deleted
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [mappings, setMappings] = useState<PdfMappingEntry[]>([]);
@@ -213,20 +214,48 @@ export default function PdfMappingConfigPage() {
   const handleDelete = async () => {
     if (selectedId === ADD_NEW_ID || mappings.length <= 1) return;
     if (!confirm(`Delete mapping "${selectedId}"?`)) return;
+    await handleDeleteMapping(selectedId);
+  };
+
+  const handleDeleteMapping = async (name: string) => {
+    if (mappings.length <= 1) return;
+    if (!confirm(`Delete mapping "${name}"?`)) return;
     try {
       setDeleting(true);
+      setActionTarget(name);
       setError(null);
-      const result = await deleteOrgPdfMapping(selectedId);
+      const result = await deleteOrgPdfMapping(name);
       if (!result.success) {
         setError(result.error || 'Failed to delete mapping');
         return;
       }
       await loadMapping();
-      setSelectedId(mappings.length > 2 ? mappings[0].name === selectedId ? mappings[1].name : mappings[0].name : ADD_NEW_ID);
+      const remaining = mappings.filter((m) => m.name !== name);
+      setSelectedId(remaining.length > 0 ? remaining[0].name : ADD_NEW_ID);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setDeleting(false);
+      setActionTarget(null);
+    }
+  };
+
+  const handleSetDefault = async (name: string) => {
+    if (mappings.find((e) => e.name === name)?.isDefault) return;
+    try {
+      setActionTarget(name);
+      setError(null);
+      const result = await setOrgPdfMappingDefault(name);
+      if (!result.success) {
+        setError(result.error || 'Failed to set default');
+        return;
+      }
+      await loadMapping();
+      setIsDefault(selectedId === name);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setActionTarget(null);
     }
   };
 
@@ -380,27 +409,125 @@ export default function PdfMappingConfigPage() {
           </div>
         )}
 
-        {isOrgUser && (previewAst || previewFields.length > 0) && (
-          <>
-            {/* List / Add mapping selector */}
-            <div className="mb-4 flex flex-wrap items-center gap-2">
-              <span className="text-blue-200 text-sm">Mapping presets:</span>
+        {/* Always show mapping list so users can see and select from all their mappings */}
+        {isOrgUser && mappings.length > 0 && (
+          <div className="mb-6 p-4 bg-white/5 border border-white/10 rounded-xl">
+            <p className="text-blue-200 text-sm font-medium mb-2">Your mapping presets ({mappings.length})</p>
+            <div className="flex flex-wrap gap-2">
               {mappings.map((e) => (
-                <button
+                <div
                   key={e.name}
-                  type="button"
-                  onClick={() => selectMapping(e.name)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  className={`group flex items-center gap-1 rounded-lg overflow-hidden ${
                     selectedId === e.name
                       ? 'bg-indigo-600 text-white'
                       : 'bg-white/10 text-blue-200 hover:bg-white/20'
                   }`}
                 >
-                  {e.name}
-                  {e.isDefault && (
-                    <span className="ml-1.5 text-xs text-amber-300">(default)</span>
-                  )}
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => selectMapping(e.name)}
+                    className="px-3 py-1.5 text-sm font-medium transition-colors text-left flex-1 min-w-0"
+                  >
+                    {e.name}
+                    {e.isDefault && (
+                      <span className="ml-1.5 text-xs text-amber-300">(default)</span>
+                    )}
+                  </button>
+                  <div className="flex items-center pr-1">
+                    {!e.isDefault && (
+                      <button
+                        type="button"
+                        onClick={(ev) => { ev.stopPropagation(); handleSetDefault(e.name); }}
+                        disabled={actionTarget !== null}
+                        title="Set as default"
+                        className="p-1.5 rounded hover:bg-white/20 text-amber-300/80 hover:text-amber-300 disabled:opacity-50 transition-colors"
+                      >
+                        {actionTarget === e.name ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Star className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    )}
+                    {mappings.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={(ev) => { ev.stopPropagation(); handleDeleteMapping(e.name); }}
+                        disabled={actionTarget !== null}
+                        title="Delete mapping"
+                        className="p-1.5 rounded hover:bg-red-500/30 text-red-300/80 hover:text-red-200 disabled:opacity-50 transition-colors"
+                      >
+                        {deleting && actionTarget === e.name ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {isOrgUser && (previewAst || previewFields.length > 0) && (
+          <>
+            {/* List / Add mapping selector (duplicate for when preview is loaded) */}
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <span className="text-blue-200 text-sm">Mapping presets:</span>
+              {mappings.map((e) => (
+                <div
+                  key={e.name}
+                  className={`group flex items-center gap-1 rounded-lg overflow-hidden ${
+                    selectedId === e.name
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-white/10 text-blue-200 hover:bg-white/20'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => selectMapping(e.name)}
+                    className="px-3 py-1.5 text-sm font-medium transition-colors text-left flex-1 min-w-0"
+                  >
+                    {e.name}
+                    {e.isDefault && (
+                      <span className="ml-1.5 text-xs text-amber-300">(default)</span>
+                    )}
+                  </button>
+                  <div className="flex items-center pr-1">
+                    {!e.isDefault && (
+                      <button
+                        type="button"
+                        onClick={(ev) => { ev.stopPropagation(); handleSetDefault(e.name); }}
+                        disabled={actionTarget !== null}
+                        title="Set as default"
+                        className="p-1.5 rounded hover:bg-white/20 text-amber-300/80 hover:text-amber-300 disabled:opacity-50 transition-colors"
+                      >
+                        {actionTarget === e.name ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Star className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    )}
+                    {mappings.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={(ev) => { ev.stopPropagation(); handleDeleteMapping(e.name); }}
+                        disabled={actionTarget !== null}
+                        title="Delete mapping"
+                        className="p-1.5 rounded hover:bg-red-500/30 text-red-300/80 hover:text-red-200 disabled:opacity-50 transition-colors"
+                      >
+                        {deleting && actionTarget === e.name ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                </div>
               ))}
               <button
                 type="button"

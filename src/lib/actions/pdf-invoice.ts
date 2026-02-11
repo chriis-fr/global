@@ -78,6 +78,15 @@ export async function uploadAndParsePdf(formData: FormData, mappingName?: string
     // ——— Log parsed output so you can align mapping ———
     console.log('\n========== [PDF Parse] Uploaded file:', file.name, '==========');
     if (stats) console.log('[PDF Parse] Stats:', JSON.stringify(stats, null, 2));
+    const rawText = (parseResult as { raw_text?: string }).raw_text;
+    if (rawText) {
+      const lines = rawText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      console.log('[PDF Parse] Raw extracted text (line-by-line) – use this to mold the parser:');
+      lines.forEach((line, i) => {
+        console.log(`  [${i + 1}] ${line.slice(0, 100)}${line.length > 100 ? '...' : ''}`);
+      });
+      console.log(`[PDF Parse] Total raw lines: ${lines.length} | Char count: ${rawText.length}`);
+    }
     console.log('[PDF Parse] Document AST (what mapping uses):');
     console.log('  meta:', JSON.stringify(documentAst?.meta ?? {}, null, 2));
     console.log('  parties:', JSON.stringify(documentAst?.parties ?? {}, null, 2));
@@ -89,6 +98,11 @@ export async function uploadAndParsePdf(formData: FormData, mappingName?: string
       });
     }
     console.log('  raw_lines (first 20):', documentAst?.raw_lines?.slice(0, 20) ?? []);
+    // Diagnostic: Cedric-style PDFs have lines like "#TO4-WD-003CH 428PP11-11--"; Barvin-style may not
+    const hasTaskOrderCodes = rawText?.match(/#TO\d+[^#]*\d{2,3}(?:CH|CU|PP|QC|TS)\d+/);
+    if (rawText && !hasTaskOrderCodes && documentAst?.items?.length && documentAst.items.some((i) => /^CH,\s*\d+/.test(i.label ?? ''))) {
+      console.log('[PDF Parse] ⚠️ No raw task-order codes (e.g. #TO4-WD-003CH 428PP11-11--) in extracted text – PDF layout differs from Cedric-style. Parser only found CH labels.');
+    }
     console.log('[PDF Parse] All extracted fields (order matters for mapping):');
     parseResult.fields.forEach((f: { value?: string; source?: string; field_type?: string }, i: number) => {
       const val = (f.value ?? '').slice(0, 70);
@@ -117,8 +131,13 @@ export async function uploadAndParsePdf(formData: FormData, mappingName?: string
     const orgMappings = doc ? getMappingsList(doc as Record<string, unknown>) : [];
     const mapping = resolveMappingConfig(mappingName, orgMappings);
     if (documentAst && mapping && Object.keys(mapping).length > 0) {
+      const descCount = mapping.lineItemDescriptions ? Object.keys(mapping.lineItemDescriptions).length : 0;
+      const priceCount = mapping.lineItemPrices ? Object.keys(mapping.lineItemPrices).length : 0;
+      console.log('[PDF Parse] Applied mapping:', mappingName ?? 'default', '| lineItemDescriptions:', descCount, '| lineItemPrices:', priceCount);
+      if (descCount > 0) {
+        console.log('[PDF Parse] lineItemDescriptions sample keys:', Object.keys(mapping.lineItemDescriptions!).slice(0, 3));
+      }
       invoiceData = applyPdfMapping(documentAst, mapping);
-      console.log('[PDF Parse] Applied mapping:', mappingName ?? 'default');
       console.log('[PDF Parse] Mapped result (invoiceData):', JSON.stringify(invoiceData, null, 2));
     } else if (!mapping) {
       console.log('[PDF Parse] No mapping applied (no org mapping or empty config)');
@@ -353,13 +372,27 @@ function resolveConfig(mappings: PdfMappingEntry[], mappingName?: string | null)
   return defaultEntry?.config;
 }
 
-/** Resolve mapping: built-in presets first, then org mappings. Ensures accuracy for known formats. */
+/** Resolve mapping: org mappings first, merge preset lineItemDescriptions/lineItemPrices when org has none. */
 function resolveMappingConfig(
   mappingName: string | null | undefined,
   orgMappings: PdfMappingEntry[]
 ): OrgPdfMappingConfig | undefined {
   if (mappingName) {
+    const orgEntry = orgMappings.find((e) => e.name === mappingName);
     const preset = getPresetByName(mappingName);
+    if (orgEntry?.config) {
+      if (preset?.config) {
+        const org = orgEntry.config;
+        const pre = preset.config;
+        const hasOrgDesc = org.lineItemDescriptions && Object.keys(org.lineItemDescriptions).length > 0;
+        return {
+          ...org,
+          lineItemDescriptions: hasOrgDesc ? org.lineItemDescriptions : pre.lineItemDescriptions ?? org.lineItemDescriptions,
+          lineItemPrices: org.lineItemPrices ?? pre.lineItemPrices ?? org.lineItemPrices,
+        };
+      }
+      return orgEntry.config;
+    }
     if (preset) return preset.config;
     return resolveConfig(orgMappings, mappingName);
   }
@@ -400,6 +433,8 @@ export async function getOrgPdfMapping(): Promise<{
     const mappings = doc ? getMappingsList(doc as Record<string, unknown>) : [];
     const defaultName = mappings.find((e) => e.isDefault)?.name ?? (mappings[0]?.name ?? null);
     const assignedPresetIds = (doc as { pdfFormatPresets?: string[] })?.pdfFormatPresets as string[] | undefined;
+    const rawList = (doc as Record<string, unknown>)?.pdfInvoiceMappings;
+    console.log('[PDF Mappings] For', session.user.email, '| Source:', user.organizationId ? 'organization' : 'user (admin bypass)', '| Count:', mappings.length, '| All:', mappings.map((m) => m.name + (m.isDefault ? ' (default)' : '')).join(', ') || 'none', '| Raw array length:', Array.isArray(rawList) ? rawList.length : 'n/a');
     const canUsePdfMapping = Boolean(user.organizationId || adminBypass);
     return {
       success: true,
@@ -450,6 +485,7 @@ export async function getOrgPdfMappingList(): Promise<{
     isPreset: false,
   }));
   const options = [...presetOptions, ...customOptions];
+  console.log('[PDF Mapping List] Custom count:', customOptions.length, '| Custom names:', customOptions.map((o) => o.name).join(', '), '| Total options:', options.length);
   const defaultName =
     result.data.defaultName ??
     (customOptions.length ? customOptions[0]?.name : presetOptions[0]?.name) ??
@@ -522,6 +558,134 @@ export async function saveOrgPdfMapping(
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to save mapping',
+    };
+  }
+}
+
+/**
+ * Admin only: Get PDF mappings for an organization by ID.
+ */
+export async function getOrgPdfMappingsForAdmin(organizationId: string): Promise<{
+  success: boolean;
+  data?: { mappings: Array<{ name: string; isDefault?: boolean }> };
+  error?: string;
+}> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) return { success: false, error: 'Unauthorized' };
+    const db = await connectToDatabase();
+    const user = await db.collection('users').findOne({ email: session.user.email });
+    if (!user || !(user as { adminTag?: boolean }).adminTag) {
+      return { success: false, error: 'Admin access required' };
+    }
+    const org = await db.collection('organizations').findOne({ _id: new ObjectId(organizationId) });
+    if (!org) return { success: false, error: 'Organization not found' };
+    const mappings = getMappingsList((org as Record<string, unknown>) ?? {});
+    return {
+      success: true,
+      data: {
+        mappings: mappings.map((m) => ({ name: m.name, isDefault: m.isDefault })),
+      },
+    };
+  } catch (error) {
+    console.error('getOrgPdfMappingsForAdmin:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch' };
+  }
+}
+
+/**
+ * Admin only: Copy the current user's PDF mappings (e.g. "script") to an organization.
+ * Use when your custom mappings are on your user account (admin bypass) and you want
+ * org members to inherit them.
+ */
+export async function copyMyPdfMappingsToOrganization(organizationId: string): Promise<{
+  success: boolean;
+  data?: { copied: number };
+  error?: string;
+}> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return { success: false, error: 'Unauthorized' };
+    }
+    const db = await connectToDatabase();
+    const usersCollection = db.collection('users');
+    const user = await usersCollection.findOne({ email: session.user.email });
+    if (!user) {
+      return { success: false, error: 'User not found' };
+    }
+    if (!(user as { adminTag?: boolean }).adminTag) {
+      return { success: false, error: 'Admin access required' };
+    }
+    const targetOrgId = new ObjectId(organizationId);
+    const org = await db.collection('organizations').findOne({ _id: targetOrgId });
+    if (!org) {
+      return { success: false, error: 'Organization not found' };
+    }
+    const sourceDoc = user.organizationId
+      ? await db.collection('organizations').findOne({ _id: user.organizationId })
+      : user;
+    const myMappings = sourceDoc ? getMappingsList(sourceDoc as Record<string, unknown>) : [];
+    if (myMappings.length === 0) {
+      return { success: false, error: 'You have no custom PDF mappings to copy. Create one in Smart Invoicing → Config first.' };
+    }
+    const orgMappings = getMappingsList((org as Record<string, unknown>) ?? {});
+    const merged = [...orgMappings];
+    for (const m of myMappings) {
+      const idx = merged.findIndex((e) => e.name === m.name);
+      if (idx >= 0) merged[idx] = m;
+      else merged.push(m);
+    }
+    await db.collection('organizations').updateOne(
+      { _id: targetOrgId },
+      { $set: { pdfInvoiceMappings: merged, updatedAt: new Date() }, $unset: { pdfInvoiceMapping: '' } }
+    );
+    return { success: true, data: { copied: myMappings.length } };
+  } catch (error) {
+    console.error('Copy PDF mappings to org:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to copy mappings',
+    };
+  }
+}
+
+/** Set a mapping as the default (no config changes). */
+export async function setOrgPdfMappingDefault(name: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return { success: false, error: 'Unauthorized' };
+    }
+    const db = await connectToDatabase();
+    const usersCollection = db.collection('users');
+    const user = await usersCollection.findOne({ email: session.user.email });
+    if (!user) {
+      return { success: false, error: 'User not found' };
+    }
+    const adminBypass = isAdminPdfMappingBypass(user as { email?: string; adminTag?: boolean });
+    if (!user.organizationId && !adminBypass) {
+      return { success: false, error: 'Organization required' };
+    }
+    const collection = user.organizationId ? db.collection('organizations') : usersCollection;
+    const targetId = user.organizationId ?? user._id;
+    const doc = await collection.findOne({ _id: targetId });
+    const list = doc ? getMappingsList(doc as Record<string, unknown>) : [];
+    const idx = list.findIndex((e) => e.name === name);
+    if (idx < 0) {
+      return { success: false, error: 'Mapping not found' };
+    }
+    const next = list.map((e, i) => ({ ...e, isDefault: i === idx }));
+    await collection.updateOne(
+      { _id: targetId },
+      { $set: { pdfInvoiceMappings: next, updatedAt: new Date() }, $unset: { pdfInvoiceMapping: '' } }
+    );
+    return { success: true };
+  } catch (error) {
+    console.error('Error setting PDF mapping default:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to set default',
     };
   }
 }
@@ -628,7 +792,7 @@ export async function searchOrganizationsForAdmin(query: string): Promise<{
       return { success: false, error: 'Admin access required' };
     }
     const q = (query ?? '').trim();
-    if (q.length < 2) {
+    if (q.length < 1) {
       return { success: true, data: [] };
     }
     const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');

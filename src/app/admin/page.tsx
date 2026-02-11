@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSession } from '@/lib/auth-client';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
@@ -71,7 +71,15 @@ export default function AdminDashboard() {
       billingPeriod: string;
     };
     services: Record<string, boolean>;
+    organizationId?: string;
   } | null>(null);
+  const [addToOrgQuery, setAddToOrgQuery] = useState('');
+  const [addToOrgResults, setAddToOrgResults] = useState<Array<{ organizationId: string; organizationName?: string }>>([]);
+  const [addToOrgSelected, setAddToOrgSelected] = useState<{ organizationId: string; organizationName?: string } | null>(null);
+  const [addToOrgRole, setAddToOrgRole] = useState<'accountant' | 'approver' | 'financeManager' | 'admin'>('accountant');
+  const [addingToOrg, setAddingToOrg] = useState(false);
+  const [addToOrgSearching, setAddToOrgSearching] = useState(false);
+  const addToOrgDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [searching, setSearching] = useState(false);
   const [updatingPlan, setUpdatingPlan] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string>('');
@@ -81,6 +89,36 @@ export default function AdminDashboard() {
   const [loadingUnknownCount, setLoadingUnknownCount] = useState(false);
   const [bulkUpdatePlan, setBulkUpdatePlan] = useState<string>('receivables-free');
   const [bulkUpdating, setBulkUpdating] = useState(false);
+
+  // Org search for "Add to organization"
+  useEffect(() => {
+    if (addToOrgDebounceRef.current) clearTimeout(addToOrgDebounceRef.current);
+    const q = addToOrgQuery.trim();
+    if (q.length < 1) {
+      setAddToOrgResults([]);
+      return;
+    }
+    addToOrgDebounceRef.current = setTimeout(async () => {
+      setAddToOrgSearching(true);
+      try {
+        const { searchOrganizationsForAdmin } = await import('@/lib/actions/pdf-invoice');
+        const result = await searchOrganizationsForAdmin(q);
+        if (result.success && result.data) {
+          setAddToOrgResults(result.data.map((r) => ({ organizationId: r.organizationId, organizationName: r.organizationName })));
+        } else {
+          setAddToOrgResults([]);
+        }
+      } catch {
+        setAddToOrgResults([]);
+      } finally {
+        setAddToOrgSearching(false);
+        addToOrgDebounceRef.current = null;
+      }
+    }, 300);
+    return () => {
+      if (addToOrgDebounceRef.current) clearTimeout(addToOrgDebounceRef.current);
+    };
+  }, [addToOrgQuery]);
 
   // Load unknown plans count function
   const loadUnknownPlansCount = async () => {
@@ -220,9 +258,13 @@ export default function AdminDashboard() {
           email: result.data.email,
           name: result.data.name,
           subscription: result.data.subscription,
-          services: result.data.services
+          services: result.data.services,
+          organizationId: result.data.organizationId,
         });
         setSelectedPlan(result.data.subscription.planId);
+        setAddToOrgSelected(null);
+        setAddToOrgQuery('');
+        setAddToOrgResults([]);
         toast.success('User found');
       } else {
         toast.error(result.error || 'User not found');
@@ -274,6 +316,29 @@ export default function AdminDashboard() {
       toast.error('Failed to update plan');
     } finally {
       setUpdatingPlan(false);
+    }
+  };
+
+  const handleAddToOrg = async () => {
+    if (!searchedUser || !addToOrgSelected) {
+      toast.error('Select an organization');
+      return;
+    }
+    setAddingToOrg(true);
+    try {
+      const { addUserToOrganization } = await import('@/lib/actions/admin-users');
+      const result = await addUserToOrganization(searchedUser.email, addToOrgSelected.organizationId, addToOrgRole);
+      if (result.success) {
+        toast.success(`Added ${searchedUser.name} to ${addToOrgSelected.organizationName || 'organization'}`);
+        await handleSearchUser();
+      } else {
+        toast.error(result.error || 'Failed to add user to organization');
+      }
+    } catch (error) {
+      console.error('Add to org:', error);
+      toast.error('Failed to add user to organization');
+    } finally {
+      setAddingToOrg(false);
     }
   };
 
@@ -527,6 +592,12 @@ export default function AdminDashboard() {
                     <div className="flex items-center space-x-2 mt-1">
                       <Mail className="h-4 w-4 text-gray-500" />
                       <span className="text-sm text-gray-600">{searchedUser.email}</span>
+                      {searchedUser.organizationId && (
+                        <span className="text-xs text-gray-500 flex items-center gap-1">
+                          <Link2 className="h-3 w-3" />
+                          In organization
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="text-right">
@@ -613,6 +684,108 @@ export default function AdminDashboard() {
                       <strong>Note:</strong> The plan will be updated immediately in the database. 
                       The user&apos;s subscription cache will be cleared and changes will take effect on their next page refresh.
                     </p>
+                  </div>
+                )}
+
+                {!searchedUser.organizationId && (
+                  <div className="mt-6 pt-6 border-t border-gray-200">
+                    <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                      <Link2 className="h-4 w-4 text-blue-600" />
+                      Add to organization
+                    </h4>
+                    <p className="text-sm text-gray-600 mb-3">
+                      User created an individual account. Search for an organization and select from the list below.
+                    </p>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Search organization</label>
+                        <input
+                          type="text"
+                          value={addToOrgQuery}
+                          onChange={(e) => setAddToOrgQuery(e.target.value)}
+                          placeholder="Type org name or member email to see list"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                        {addToOrgSearching && (
+                          <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                            <Loader2 className="h-3 w-3 animate-spin" /> Searching...
+                          </p>
+                        )}
+                      </div>
+                      {addToOrgResults.length > 0 && !addToOrgSelected && (
+                        <div className="border border-gray-200 rounded-lg bg-white shadow-sm">
+                          <p className="px-3 py-2 text-xs font-medium text-gray-600 border-b border-gray-100 bg-gray-50 rounded-t-lg">
+                            Select an organization from the list:
+                          </p>
+                          <ul className="max-h-48 overflow-y-auto">
+                            {addToOrgResults.map((r) => (
+                              <li
+                                key={r.organizationId}
+                                className="px-3 py-3 text-sm hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0 flex items-center justify-between group"
+                                onClick={() => {
+                                  setAddToOrgSelected(r);
+                                  setAddToOrgQuery(r.organizationName || r.organizationId);
+                                }}
+                              >
+                                <span className="font-medium text-gray-900">{r.organizationName || r.organizationId}</span>
+                                <span className="text-xs text-gray-500 group-hover:text-blue-600">Click to select</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {addToOrgQuery.trim().length >= 1 && addToOrgResults.length === 0 && !addToOrgSearching && (
+                        <p className="text-sm text-gray-500 italic">No organizations found. Try a different search term.</p>
+                      )}
+                      {addToOrgSelected && (
+                        <div className="flex items-center justify-between p-2 bg-blue-50 border border-blue-200 rounded-lg">
+                          <span className="text-sm text-blue-900 font-medium">
+                            {addToOrgSelected.organizationName || addToOrgSelected.organizationId}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAddToOrgSelected(null);
+                              setAddToOrgQuery('');
+                            }}
+                            className="text-xs text-blue-600 hover:underline"
+                          >
+                            Change
+                          </button>
+                        </div>
+                      )}
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Role</label>
+                        <select
+                          value={addToOrgRole}
+                          onChange={(e) => setAddToOrgRole(e.target.value as typeof addToOrgRole)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="accountant">Accountant</option>
+                          <option value="approver">Approver</option>
+                          <option value="financeManager">Finance Manager</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleAddToOrg}
+                        disabled={!addToOrgSelected || addingToOrg}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
+                      >
+                        {addingToOrg ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Adding...
+                          </>
+                        ) : (
+                          <>
+                            <Link2 className="h-4 w-4" />
+                            Add to organization
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
