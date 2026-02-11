@@ -61,16 +61,16 @@ export const BILLING_PLANS: BillingPlan[] = [
     tier: 'pro',
     name: 'Pro',
     description: 'Ideal for growing businesses',
-    monthlyPrice: 4.49,
-    yearlyPrice: 44.99,
+    monthlyPrice: 5.99,
+    yearlyPrice: 59.99,
     monthlyPaystackPlanCode: "PLN_0y0kyk5x9wjp56c", // Set after creating plan in Paystack dashboard
     yearlyPaystackPlanCode: "PLN_1ds98cto81gpb0y", // Set after creating plan in Paystack dashboard
     currency: 'USD',
     features: [
       { id: 'unlimited-invoices', name: 'Unlimited invoices', description: 'Create as many invoices as you need', included: true },
       { id: 'client-management', name: 'Client management', description: 'Organize and manage your clients', included: true },
-      { id: 'reconciliation', name: 'Real-time reconciliation', description: 'Automatic payment tracking', included: true },
-      { id: 'organization', name: 'Organization setup', description: 'Team collaboration and branding', included: true },
+      { id: 'reconciliation', name: 'Real-time support', description: 'Round-clock customer support', included: true },
+      { id: 'organization', name: 'Organization setup', description: 'Team collaboration and customisation', included: true },
     ],
     limits: {
       invoicesPerMonth: -1, // Unlimited

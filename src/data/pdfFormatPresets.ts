@@ -16,7 +16,7 @@ export const PDF_FORMAT_PRESETS: PdfFormatPreset[] = [
   {
     id: 'task-order-cu-pp-qc',
     name: 'Task Order (CU, PP, QC, Holiday/Weekend)',
-    description: 'For task order PDFs with deliverable codes (CU1, CU3, PP2, PP4, PP5, QC1) and Holiday/Weekend compensation.',
+    description: 'For task order PDFs with deliverable codes (CU1, CU3, PP2, PP4, PP5, QC1) and chapters. Includes Holiday/Weekend compensation.',
     config: {
       invoiceTitle: 'meta.title',
       issueDate: 'dates.signed',

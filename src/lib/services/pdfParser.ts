@@ -408,22 +408,22 @@ function buildDocumentAst(
     items.length <= 2 && taskOrderLines.length >= 3 && (taskOrderLines.length > 0 || hasHolidayWeekend);
 
   if (shouldUseTaskOrderFallback) {
-    const categoryCount = new Map<string, number>();
+    // Extract chapter + category per row: e.g. "413CU3" -> Ch. 413, CU3. Format: "CU, 3 – Ch. 413" (category, subtype – chapter).
+    const newItems: DocumentAST['items'] = [];
     for (const line of taskOrderLines) {
       const m = line.match(categoryCodePattern);
-      if (m?.[2]) {
+      if (m?.[1] && m?.[2]) {
+        const chapter = m[1];
         const code = m[2].toUpperCase();
-        categoryCount.set(code, (categoryCount.get(code) ?? 0) + 1);
+        const categoryPart = code.length >= 3 ? `${code.slice(0, 2)}, ${code.slice(2)}` : code;
+        const label = chapter ? `${categoryPart} – Ch. ${chapter}` : categoryPart;
+        newItems.push({
+          label,
+          quantity: 1,
+          unit_price: null,
+          status: '',
+        });
       }
-    }
-    const newItems: DocumentAST['items'] = [];
-    for (const [code, qty] of categoryCount.entries()) {
-      newItems.push({
-        label: code,
-        quantity: qty,
-        unit_price: null,
-        status: '',
-      });
     }
     if (hasHolidayWeekend) {
       const hwIdx = rawLines.findIndex((l) => /holiday/i.test(l));
