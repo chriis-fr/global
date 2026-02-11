@@ -396,11 +396,11 @@ function buildDocumentAst(
     if (row.label || row.status) items.push(row);
   }
 
-  // Fallback: Task order code format (#TO1-WB-005CH. 413CU3-3--, etc.) — when table heuristic picks wrong rows.
-  // User needs PP, CU, QC and Holiday/Weekend sections. Works for similar PDFs (Alvan, Barvin, etc.).
+  // Fallback: Task order code format (#TO1-WB-005CH. 413CU3-3--, 414PP5-2--, etc.) — when table heuristic picks wrong rows.
+  // User needs PP, CU, QC, TS and Holiday/Weekend sections. Works for similar PDFs (Alvan, Barvin, etc.).
+  // Scan ALL lines for chapter+category: data often on separate lines (413CU3-3--, 414PP5-2--), not just #TO lines.
   const taskOrderCodePattern = /#TO\d+/;
-  const categoryCodePattern = /(\d+)([A-Z]{2}\d+)/;
-  const taskOrderLines = rawLines.filter((l) => taskOrderCodePattern.test(l));
+  const hasTaskOrderRef = rawLines.some((l) => taskOrderCodePattern.test(l));
   const hasHolidayWeekend = rawLines.some(
     (l) => /holiday\/weekend/i.test(l) || (/holiday/i.test(l) && /compensation/i.test(l))
   );
@@ -415,18 +415,27 @@ function buildDocumentAst(
   });
   const shouldUseTaskOrderFallback =
     (items.length <= 5 || itemsContainTemplateJunk) &&
-    (taskOrderLines.length >= 3 || hasHolidayWeekend);
+    (hasTaskOrderRef || hasHolidayWeekend);
 
   if (shouldUseTaskOrderFallback) {
-    // Extract chapter + category per row: e.g. "413CU3" -> Ch. 413, CU3. Format: "CU, 3 – Ch. 413" (category, subtype – chapter).
+    // Match: chapter + category (CU3, PP5, QC1, TS1) + optional completed units (-3, -2).
+    // e.g. "413CU3-3--" -> Ch. 413, CU3. Format: "CU, 3 – Ch. 413 (3 completed)".
+    // Quantity stays 1 per line; completed units are shown in the label, not mixed with quantity.
+    const categoryWithUnitsPattern = /(\d+)([A-Z]{2}\d+)(?:-(\d+))?/g;
     const newItems: DocumentAST['items'] = [];
-    for (const line of taskOrderLines) {
-      const m = line.match(categoryCodePattern);
-      if (m?.[1] && m?.[2]) {
+    for (const line of rawLines) {
+      let m: RegExpExecArray | null;
+      categoryWithUnitsPattern.lastIndex = 0;
+      while ((m = categoryWithUnitsPattern.exec(line)) !== null) {
         const chapter = m[1];
         const code = m[2].toUpperCase();
+        const completedUnits = m[3] ? parseInt(m[3], 10) : undefined;
+        if (!chapter || !code) continue;
         const categoryPart = code.length >= 3 ? `${code.slice(0, 2)}, ${code.slice(2)}` : code;
-        const label = chapter ? `${categoryPart} – Ch. ${chapter}` : categoryPart;
+        const baseLabel = chapter ? `${categoryPart} – Ch. ${chapter}` : categoryPart;
+        const label = completedUnits != null && !Number.isNaN(completedUnits)
+          ? `${baseLabel} (${completedUnits} completed)`
+          : baseLabel;
         newItems.push({
           label,
           quantity: 1,
