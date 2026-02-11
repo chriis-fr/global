@@ -537,7 +537,6 @@ function buildDocumentAst(
     // 2) Consecutive codes: CH435TS3-3 → second code (TS3-3) uses first code's number (435) as chapter
     consecutiveCodesPattern.lastIndex = 0;
     while ((m = consecutiveCodesPattern.exec(text)) !== null) {
-      const firstType = m[1].toUpperCase();
       const sharedNum = m[2];
       const secondCode = m[3].toUpperCase();
       const completedUnits = m[4] ? parseInt(m[4], 10) : undefined;

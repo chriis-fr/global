@@ -23,6 +23,9 @@ export const getBanksForCountry = async (countryCode: string): Promise<Bank[]> =
       case 'AE':
         const uaeBanks = await import('./uae-banks.json');
         return uaeBanks.default;
+      case 'NG':
+        const nigeriaBanks = await import('./nigeria-banks.json');
+        return nigeriaBanks.default;
       default:
         return [];
     }

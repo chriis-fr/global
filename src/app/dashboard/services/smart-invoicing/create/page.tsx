@@ -3789,6 +3789,7 @@ export default function CreateInvoicePage() {
                               >
                                 <option value="GH">Ghana</option>
                                 <option value="KE">Kenya</option>
+                                <option value="NG">Nigeria</option>
                                 <option value="AE">UAE</option>
                               </select>
                               <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-600 pointer-events-none" />
