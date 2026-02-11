@@ -8,6 +8,7 @@ import { Footer } from "@/components/landing/footer";
 import Preloader from "@/components/preloader";
 import { usePathname, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import Image from 'next/image';
 import toast from 'react-hot-toast';
 
 // Lazy load AnimatedCursor - it's heavy and not needed for initial render
@@ -30,9 +31,13 @@ export default function Home() {
   const renderRedirectToast = (seconds: number | null, t: { visible: boolean }) => (
     <div className={`max-w-sm w-full bg-blue-950 border border-blue-500/40 rounded-xl shadow-lg px-4 py-3 text-sm text-white/90 flex items-start gap-3 ${t.visible ? 'animate-enter' : 'animate-leave'}`}>
       <div className="mt-0.5">
-        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-500/20 text-blue-300 text-xs font-semibold">
-          GF
-        </span>
+        <Image
+          src="/chainsnobg.png"
+          alt="Logo"
+          width={24}
+          height={24}
+          className="h-6 w-6 rounded-full bg-white object-cover"
+        />
       </div>
       <div className="flex-1">
         <p className="font-semibold">Already signed in</p>
