@@ -342,6 +342,82 @@ function mergeContinuationLines(lines: LayoutField[]): LayoutField[] {
   return out;
 }
 
+/** Check if a line looks like a markdown table row (starts with | and contains at least one more |). */
+function isMarkdownTableRow(line: string): boolean {
+  const t = line.trim();
+  return t.startsWith('|') && t.length > 2 && t.includes('|', 1);
+}
+
+/** Check if line looks like a markdown table separator (|---|---|). */
+function isMarkdownTableSeparator(line: string): boolean {
+  return /^\|[\s\-:]+\|/.test(line.trim()) && line.trim().replace(/\s/g, '').replace(/:/g, '-').split('|').every((c) => c === '' || /^-+$/.test(c));
+}
+
+/**
+ * Parse markdown table blocks from lines (e.g. from ClickUp doc content).
+ * First line with | = header; following | lines = data rows. Produces TableField[] with table_data keyed by header names.
+ */
+function parseMarkdownTableFromLines(lines: LayoutField[]): TableField[] {
+  const tableFields: TableField[] = [];
+  let headerCells: string[] = [];
+  let tableStartIndex = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const lineObj = lines[i];
+    const line = (lineObj.value ?? '').trim();
+    if (!isMarkdownTableRow(line)) {
+      headerCells = [];
+      continue;
+    }
+    const cells = line.split('|').map((c) => c.trim());
+    if (cells.length < 2) continue;
+    if (isMarkdownTableSeparator(line)) continue;
+
+    if (headerCells.length === 0) {
+      headerCells = cells.map((c, idx) => (c && c.length > 0 ? c : `col_${idx}`));
+      tableStartIndex = i;
+      continue;
+    }
+
+    const rowData: Record<string, string> = {};
+    headerCells.forEach((h, idx) => {
+      rowData[h] = cells[idx] ?? '';
+    });
+    const description =
+      rowData['Deliverable Description'] ??
+      rowData['Deliverable description'] ??
+      rowData['Description'] ??
+      rowData['description'] ??
+      rowData['label'] ??
+      cells.join(' ').trim();
+    if (!description && cells.every((c) => !c)) continue;
+    rowData['label'] = description;
+    // Look for explicit quantity columns (Quantity, Qty, etc.) - NOT "Deliverable #" which is just an identifier
+    const quantityKeys = Object.keys(rowData).filter(
+      (k) => k.toLowerCase().includes('quantity') || k.toLowerCase().includes('qty')
+    );
+    let quantity = 1;
+    if (quantityKeys.length > 0) {
+      const qtyVal = quantityKeys.map((k) => rowData[k]).find((v) => v && v.trim());
+      if (qtyVal) {
+        const parsed = parseInt(String(qtyVal).replace(/,/g, ''), 10);
+        if (!Number.isNaN(parsed) && parsed > 0) quantity = parsed;
+      }
+    }
+    rowData['quantity'] = String(quantity);
+    tableFields.push({
+      ...lineObj,
+      value: description || cells.join(' | '),
+      position: { ...lineObj.position, width: 0, height: 0 },
+      source: 'table',
+      table_data: rowData,
+      table_index: 0,
+      row_index: i - tableStartIndex - 1,
+    });
+  }
+  return tableFields;
+}
+
 /**
  * Heuristic: lines that look like "1.348 Script Writing...", "2.349 Script...", "1. CODE Description"
  * Leading number is row index, NOT quantity. Each row = one deliverable with quantity 1.
@@ -709,7 +785,9 @@ function parseTextToAstInternal(text: string, numPages: number): ParseResult {
   const mergedLayout = mergeContinuationLines(layoutFields);
   const patternFields = patternMatchFields(layoutFields);
   const amountFields = extractAmounts(layoutFields);
-  const tableFields = heuristicTableFromLines(mergedLayout);
+  const markdownTableFields = parseMarkdownTableFromLines(mergedLayout);
+  const tableFields =
+    markdownTableFields.length > 0 ? markdownTableFields : heuristicTableFromLines(mergedLayout);
 
   const allFields: Array<PatternField | TableField | LayoutField> = [];
   const seenValues = new Set<string>();

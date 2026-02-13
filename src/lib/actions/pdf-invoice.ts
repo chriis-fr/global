@@ -292,13 +292,22 @@ export async function createInvoiceDraftFromClickUpPage(input: {
       /* keep as string */
     }
 
+    // Use only the page's markdown content so we don't parse doc/page IDs (e.g. 2kxuhmbz-572) as line items
     const text = extractTextFromClickUpPagePayload(pagePayload);
-    if (!text.trim()) {
+    const contentOnly =
+      typeof pagePayload === 'object' &&
+      pagePayload !== null &&
+      'content' in pagePayload &&
+      typeof (pagePayload as { content?: string }).content === 'string'
+        ? (pagePayload as { content: string }).content.trim()
+        : '';
+    const textToParse = contentOnly || text;
+    if (!textToParse) {
       return { success: false, error: 'ClickUp page content was empty after extraction' };
     }
 
     // Parse plain text using same AST builder as PDFs
-    const parseResult = parsePdfText(text, 1);
+    const parseResult = parsePdfText(textToParse, 1);
     if (!parseResult.success || !('fields' in parseResult)) {
       return { success: false, error: parseResult.error ?? 'Failed to parse ClickUp page text' };
     }
