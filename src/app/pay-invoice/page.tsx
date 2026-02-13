@@ -90,7 +90,7 @@ function formatCountry(addr: Invoice['companyDetails']['address']): string {
 
 function PayInvoiceContent() {
   const searchParams = useSearchParams();
-  const token = searchParams.get('token');
+  const token = searchParams?.get('token');
 
   const [data, setData] = useState<TokenData | null>(null);
   const [loading, setLoading] = useState(true);

@@ -112,7 +112,13 @@ export default function PayableViewPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showMarkPaidModal, setShowMarkPaidModal] = useState(false);
 
-  const payableId = params.id as string;
+  const payableIdRaw = (params as unknown as { id?: string | string[] } | null)?.id;
+  const payableId =
+    typeof payableIdRaw === 'string'
+      ? payableIdRaw
+      : Array.isArray(payableIdRaw)
+        ? payableIdRaw[0] ?? ''
+        : '';
 
   const loadPayable = useCallback(async () => {
     try {

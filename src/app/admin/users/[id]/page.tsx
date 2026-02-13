@@ -31,7 +31,13 @@ export default function AdminUserDetailPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const params = useParams();
-  const userId = params.id as string;
+  const userIdRaw = (params as unknown as { id?: string | string[] } | null)?.id;
+  const userId =
+    typeof userIdRaw === 'string'
+      ? userIdRaw
+      : Array.isArray(userIdRaw)
+        ? userIdRaw[0] ?? ''
+        : '';
 
   const [user, setUser] = useState<AdminUserDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -61,6 +67,12 @@ export default function AdminUserDetailPage() {
 
     if (!session?.user?.adminTag) {
       router.push('/dashboard');
+      return;
+    }
+
+    if (!userId) {
+      toast.error('Missing user id');
+      router.push('/admin');
       return;
     }
 

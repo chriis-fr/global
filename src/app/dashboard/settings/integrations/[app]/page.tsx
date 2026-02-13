@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { ArrowLeft, Link2, FileText, Loader2, Unplug, ChevronDown, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { createInvoiceDraftFromClickUpPage } from '@/lib/actions/pdf-invoice';
 
 
 // ClickUp task - matches API response with full destructuring (attachments for document conversion)
@@ -65,6 +66,8 @@ export default function IntegrationAppPage() {
   const [expandedDocIds, setExpandedDocIds] = useState<Set<string>>(new Set());
   const [docLoadingIds, setDocLoadingIds] = useState<Set<string>>(new Set());
   const [docErrors, setDocErrors] = useState<Record<string, string | undefined>>({});
+  const [creatingDraftDocIds, setCreatingDraftDocIds] = useState<Set<string>>(new Set());
+  const [createDraftErrors, setCreateDraftErrors] = useState<Record<string, string | undefined>>({});
 
   const justConnected = searchParams?.get('connected') === '1';
 
@@ -381,7 +384,11 @@ export default function IntegrationAppPage() {
                                             </label>
                                           ))
                                         ) : (
-                                          <p className="text-blue-300/70 text-xs py-1">No tasks in this list</p>
+                                          <p className="text-blue-300/70 text-xs py-1">
+                                            {listDocs.length > 0
+                                              ? 'No tasks in this list (docs available below)'
+                                              : 'No tasks in this list'}
+                                          </p>
                                         )}
                                         {listDocs.length > 0 && (
                                           <div className="mt-2 border-t border-white/10 pt-2">
@@ -584,6 +591,77 @@ export default function IntegrationAppPage() {
                                                                 <div className="whitespace-pre-wrap break-words max-h-40 overflow-auto">
                                                                   {doc.pagePreviews[doc.selectedPageId]}
                                                                 </div>
+                                                                <div className="mt-2 flex items-center gap-2">
+                                                                  <button
+                                                                    type="button"
+                                                                    disabled={
+                                                                      !selectedWorkspaceId ||
+                                                                      !doc.selectedPageId ||
+                                                                      creatingDraftDocIds.has(doc.id)
+                                                                    }
+                                                                    onClick={async () => {
+                                                                      if (!selectedWorkspaceId || !doc.selectedPageId) return;
+                                                                      setCreatingDraftDocIds((prev) => {
+                                                                        const next = new Set(prev);
+                                                                        next.add(doc.id);
+                                                                        return next;
+                                                                      });
+                                                                      setCreateDraftErrors((prev) => ({
+                                                                        ...prev,
+                                                                        [doc.id]: undefined,
+                                                                      }));
+                                                                      try {
+                                                                        const result =
+                                                                          await createInvoiceDraftFromClickUpPage({
+                                                                            workspaceId: selectedWorkspaceId,
+                                                                            docId: doc.id,
+                                                                            pageId: doc.selectedPageId,
+                                                                            mappingName: null,
+                                                                          });
+                                                                        if (!result.success || !result.data) {
+                                                                          setCreateDraftErrors((prev) => ({
+                                                                            ...prev,
+                                                                            [doc.id]:
+                                                                              result.error ||
+                                                                              'Failed to create invoice draft',
+                                                                          }));
+                                                                          return;
+                                                                        }
+                                                                        const { draftId, status } = result.data;
+                                                                        if (status === 'ready') {
+                                                                          router.push(
+                                                                            `/dashboard/services/smart-invoicing/create?fromPdfDraft=${draftId}`
+                                                                          );
+                                                                        } else {
+                                                                          router.push(
+                                                                            `/dashboard/services/smart-invoicing/pdf-map/${draftId}`
+                                                                          );
+                                                                        }
+                                                                      } finally {
+                                                                        setCreatingDraftDocIds((prev) => {
+                                                                          const next = new Set(prev);
+                                                                          next.delete(doc.id);
+                                                                          return next;
+                                                                        });
+                                                                      }
+                                                                    }}
+                                                                    className="inline-flex items-center gap-2 px-2 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium disabled:opacity-50"
+                                                                  >
+                                                                    {creatingDraftDocIds.has(doc.id) ? (
+                                                                      <>
+                                                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                                                        Creating…
+                                                                      </>
+                                                                    ) : (
+                                                                      'Create invoice from this page'
+                                                                    )}
+                                                                  </button>
+                                                                  {createDraftErrors[doc.id] && (
+                                                                    <span className="text-red-300 text-[11px]">
+                                                                      {createDraftErrors[doc.id]}
+                                                                    </span>
+                                                                  )}
+                                                                </div>
                                                               </div>
                                                             )}
                                                           </>
@@ -664,7 +742,11 @@ export default function IntegrationAppPage() {
                                                     </label>
                                                   ))
                                                 ) : (
-                                                  <p className="text-blue-300/70 text-xs py-1">No tasks in this list</p>
+                                                  <p className="text-blue-300/70 text-xs py-1">
+                                                    {listDocs.length > 0
+                                                      ? 'No tasks in this list (docs available below)'
+                                                      : 'No tasks in this list'}
+                                                  </p>
                                                 )}
                                                 {listDocs.length > 0 && (
                                                   <div className="mt-2 border-t border-white/10 pt-2">
@@ -866,6 +948,77 @@ export default function IntegrationAppPage() {
                                                                           </div>
                                                                           <div className="whitespace-pre-wrap break-words max-h-40 overflow-auto">
                                                                             {doc.pagePreviews[doc.selectedPageId]}
+                                                                          </div>
+                                                                          <div className="mt-2 flex items-center gap-2">
+                                                                            <button
+                                                                              type="button"
+                                                                              disabled={
+                                                                                !selectedWorkspaceId ||
+                                                                                !doc.selectedPageId ||
+                                                                                creatingDraftDocIds.has(doc.id)
+                                                                              }
+                                                                              onClick={async () => {
+                                                                                if (!selectedWorkspaceId || !doc.selectedPageId) return;
+                                                                                setCreatingDraftDocIds((prev) => {
+                                                                                  const next = new Set(prev);
+                                                                                  next.add(doc.id);
+                                                                                  return next;
+                                                                                });
+                                                                                setCreateDraftErrors((prev) => ({
+                                                                                  ...prev,
+                                                                                  [doc.id]: undefined,
+                                                                                }));
+                                                                                try {
+                                                                                  const result =
+                                                                                    await createInvoiceDraftFromClickUpPage({
+                                                                                      workspaceId: selectedWorkspaceId,
+                                                                                      docId: doc.id,
+                                                                                      pageId: doc.selectedPageId,
+                                                                                      mappingName: null,
+                                                                                    });
+                                                                                  if (!result.success || !result.data) {
+                                                                                    setCreateDraftErrors((prev) => ({
+                                                                                      ...prev,
+                                                                                      [doc.id]:
+                                                                                        result.error ||
+                                                                                        'Failed to create invoice draft',
+                                                                                    }));
+                                                                                    return;
+                                                                                  }
+                                                                                  const { draftId, status } = result.data;
+                                                                                  if (status === 'ready') {
+                                                                                    router.push(
+                                                                                      `/dashboard/services/smart-invoicing/create?fromPdfDraft=${draftId}`
+                                                                                    );
+                                                                                  } else {
+                                                                                    router.push(
+                                                                                      `/dashboard/services/smart-invoicing/pdf-map/${draftId}`
+                                                                                    );
+                                                                                  }
+                                                                                } finally {
+                                                                                  setCreatingDraftDocIds((prev) => {
+                                                                                    const next = new Set(prev);
+                                                                                    next.delete(doc.id);
+                                                                                    return next;
+                                                                                  });
+                                                                                }
+                                                                              }}
+                                                                              className="inline-flex items-center gap-2 px-2 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium disabled:opacity-50"
+                                                                            >
+                                                                              {creatingDraftDocIds.has(doc.id) ? (
+                                                                                <>
+                                                                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                                                                  Creating…
+                                                                                </>
+                                                                              ) : (
+                                                                                'Create invoice from this page'
+                                                                              )}
+                                                                            </button>
+                                                                            {createDraftErrors[doc.id] && (
+                                                                              <span className="text-red-300 text-[11px]">
+                                                                                {createDraftErrors[doc.id]}
+                                                                              </span>
+                                                                            )}
                                                                           </div>
                                                                         </div>
                                                                       )}

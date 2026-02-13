@@ -196,6 +196,13 @@ function invoiceToPdfData(inv: Invoice): InvoicePdfData {
 export default function InvoiceViewPage() {
   const router = useRouter();
   const params = useParams();
+  const invoiceIdRaw = (params as unknown as { id?: string | string[] } | null)?.id;
+  const invoiceId =
+    typeof invoiceIdRaw === 'string'
+      ? invoiceIdRaw
+      : Array.isArray(invoiceIdRaw)
+        ? invoiceIdRaw[0] ?? ''
+        : '';
   const { data: session } = useSession();
   const { permissions } = usePermissions();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
@@ -321,11 +328,11 @@ export default function InvoiceViewPage() {
 
   // Load invoice only once when component mounts and ID is available
   useEffect(() => {
-    const invoiceId = params.id as string;
+  // invoiceId from route
     if (invoiceId && session?.user && !invoice) {
       loadInvoice(invoiceId);
     }
-  }, [params.id, session?.user, invoice, loadInvoice]);
+  }, [invoiceId, session?.user, invoice, loadInvoice]);
 
   const handleDeleteInvoice = async () => {
     if (!invoice || !confirm('Are you sure you want to delete this invoice?')) return;

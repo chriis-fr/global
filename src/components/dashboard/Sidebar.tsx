@@ -283,7 +283,7 @@ function Sidebar() {
                 })
               : []
             ).map(link => {
-              const active = pathname.startsWith(link.href);
+              const active = (pathname ?? '').startsWith(link.href);
 
               const collapsed = isCollapsed && !isAutoHidden;
 
@@ -339,7 +339,7 @@ function Sidebar() {
                 </h3>
               )}
               {ADMIN_LINKS.map(link => {
-                const active = pathname.startsWith(link.href);
+                const active = (pathname ?? '').startsWith(link.href);
 
                 const isApprovalsLink = link.key === 'approvals';
                 const hasPending = pendingApprovalsCount > 0;
@@ -418,7 +418,7 @@ function Sidebar() {
           {isSettingsOpen && (
             <div className="ml-4 space-y-1">
               {SETTINGS_LINKS.map(link => {
-                const active = pathname.startsWith(link.href);
+                const active = (pathname ?? '').startsWith(link.href);
                 const integrationsDisabled = link.key === 'integrations' && process.env.NODE_ENV !== 'development';
 
                 if (isMobile) {

@@ -90,7 +90,14 @@ export async function GET(request: Request) {
     }
 
     const pages = rawPages
-      .map((p) => ({ id: p.id ? String(p.id) : undefined, title: (p.title ?? p.name) ? String(p.title ?? p.name) : undefined }))
+      .map((p) => {
+        const id = p.id ? String(p.id) : undefined;
+        const title = (p.title ?? p.name) ? String(p.title ?? p.name) : undefined;
+        return {
+          id,
+          ...(title ? { title } : {}),
+        };
+      })
       .filter((p): p is { id: string; title?: string } => !!p.id);
 
     // 2) Fetch page content for either a requested pageId, or the first page.

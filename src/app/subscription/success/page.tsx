@@ -18,11 +18,11 @@ export default function SubscriptionSuccessPage() {
   useEffect(() => {
     const handleSuccess = async () => {
       // Get reference again inside useEffect to ensure we have the latest value
-      const ref = searchParams.get('trxref') || searchParams.get('reference') || searchParams.get('session_id')
+      const ref = searchParams?.get('trxref') || searchParams?.get('reference') || searchParams?.get('session_id')
       const cleanRef = ref && ref.trim() !== '' ? ref.trim() : null
       
       console.log('🔔 [SubscriptionSuccess] Success page loaded, reference:', cleanRef, 'raw reference:', ref)
-      console.log('📋 [SubscriptionSuccess] All search params:', Object.fromEntries(searchParams.entries()))
+      console.log('📋 [SubscriptionSuccess] All search params:', Object.fromEntries(searchParams?.entries?.() ?? []))
       
       try {
         if (cleanRef) {
@@ -71,10 +71,10 @@ export default function SubscriptionSuccessPage() {
           // No reference found, but still try to refresh (might be webhook-activated)
           console.log('⚠️ [SubscriptionSuccess] No reference found in URL, refreshing subscription data')
           console.log('📋 [SubscriptionSuccess] Search params:', {
-            trxref: searchParams.get('trxref'),
-            reference: searchParams.get('reference'),
-            session_id: searchParams.get('session_id'),
-            allParams: Object.fromEntries(searchParams.entries())
+            trxref: searchParams?.get('trxref'),
+            reference: searchParams?.get('reference'),
+            session_id: searchParams?.get('session_id'),
+            allParams: Object.fromEntries(searchParams?.entries?.() ?? [])
           })
           await refetch()
           setTimeout(() => {

@@ -224,6 +224,7 @@ function AuthContent() {
 
   // Check for reset token in URL
   useEffect(() => {
+    if (!searchParams) return
     const token = searchParams.get('resetToken')
     if (token) {
       setResetToken(token)
@@ -233,6 +234,7 @@ function AuthContent() {
 
   // Handle invoice token from URL
   useEffect(() => {
+    if (!searchParams) return
     const invoiceToken = searchParams.get('invoiceToken')
     const email = searchParams.get('email')
     
@@ -716,7 +718,7 @@ function AuthContent() {
                 console.log('✅ [Auth] Automatic login successful, refreshing session...')
                 await refreshSession()
                 // Check if this signup was triggered by an invoice token
-                const invoiceToken = searchParams.get('invoiceToken')
+                const invoiceToken = searchParams?.get('invoiceToken')
                 if (invoiceToken) {
                   console.log('🔗 [Auth] Processing invoice token:', invoiceToken)
                   try {
@@ -938,7 +940,7 @@ function AuthContent() {
           </div>
 
           {/* Invoice Signup Notice */}
-          {isEmailLocked && searchParams.get('invoiceToken') && (
+          {isEmailLocked && searchParams?.get('invoiceToken') && (
             <div className="mb-6 p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg">
               <div className="flex items-center space-x-2 mb-2">
                 <Receipt className="h-5 w-5 text-blue-400" />
@@ -1375,7 +1377,7 @@ function AuthContent() {
                               <div className="space-y-2">
                                 <label className="text-sm font-medium text-blue-100">
                                   Email Address
-                                  {isEmailLocked && searchParams.get('invoiceToken') && (
+                                  {isEmailLocked && searchParams?.get('invoiceToken') && (
                                     <span className="ml-2 text-xs text-blue-300 bg-blue-900/30 px-2 py-1 rounded">
                                       Locked to invoice recipient
                                     </span>
@@ -1399,7 +1401,7 @@ function AuthContent() {
                                         : 'bg-white/10 border-white/20'
                                     }`}
                                     placeholder={
-                                      isEmailLocked && searchParams.get('invoiceToken') 
+                                      isEmailLocked && searchParams?.get('invoiceToken') 
                                         ? "Email locked to invoice recipient" 
                                         : isEmailLocked && !!localStorage.getItem('invitationData')
                                         ? "Email from invitation"
@@ -1409,7 +1411,7 @@ function AuthContent() {
                                   />
                                   <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-blue-300" />
                                 </div>
-                                {isEmailLocked && searchParams.get('invoiceToken') && (
+                                {isEmailLocked && searchParams?.get('invoiceToken') && (
                                   <p className="text-xs text-blue-300 mt-1">
                                     This email address is locked because you&apos;re creating an account to access an invoice sent to this address.
                                   </p>

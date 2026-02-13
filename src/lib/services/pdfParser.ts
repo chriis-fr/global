@@ -704,6 +704,86 @@ function buildDocumentAst(
   };
 }
 
+function parseTextToAstInternal(text: string, numPages: number): ParseResult {
+  const layoutFields = extractLinesFromText(text, numPages);
+  const mergedLayout = mergeContinuationLines(layoutFields);
+  const patternFields = patternMatchFields(layoutFields);
+  const amountFields = extractAmounts(layoutFields);
+  const tableFields = heuristicTableFromLines(mergedLayout);
+
+  const allFields: Array<PatternField | TableField | LayoutField> = [];
+  const seenValues = new Set<string>();
+
+  for (const f of patternFields) {
+    const v = (f.value ?? '').trim().toLowerCase();
+    if (v && !seenValues.has(v)) {
+      allFields.push(f);
+      seenValues.add(v);
+    }
+  }
+  for (const f of tableFields) {
+    const v = (f.value ?? '').trim().toLowerCase();
+    if (v && v.length > 3 && !seenValues.has(v)) {
+      allFields.push(f);
+      seenValues.add(v);
+    }
+  }
+  for (const f of amountFields) {
+    const v = (f.value ?? '').trim();
+    if (v && !seenValues.has(v)) {
+      allFields.push(f);
+      seenValues.add(v);
+    }
+  }
+
+  const skipPrefixes = ['deliverable', '#', 'date', 'description', 'due', 'status', 'index'];
+  for (const field of layoutFields) {
+    const fieldValue = (field.value ?? '').trim();
+    const fieldLower = fieldValue.toLowerCase();
+    if (!fieldValue || fieldValue.length < 4) continue;
+    if (seenValues.has(fieldLower)) continue;
+    if (skipPrefixes.some((p) => fieldLower.startsWith(p) && fieldValue.length < 25)) continue;
+    if (fieldValue.replace(/[.\s,]/g, '').match(/^\d+$/)) continue;
+    allFields.push(field);
+    seenValues.add(fieldLower);
+  }
+
+  const orderKey = (x: { source?: string; confidence?: number }) => {
+    const s = x.source ?? '';
+    if (s === 'pattern') return 0;
+    if (s === 'table') return 1;
+    if (s === 'amount') return 2;
+    return 3;
+  };
+  allFields.sort((a, b) => orderKey(a) - orderKey(b) || (b.confidence ?? 0) - (a.confidence ?? 0));
+
+  const document_ast = buildDocumentAst(layoutFields, patternFields, tableFields);
+
+  return {
+    success: true,
+    fields: allFields,
+    document_ast,
+    raw_text: text,
+    stats: {
+      total_fields: allFields.length,
+      pattern_fields: patternFields.length,
+      table_fields: tableFields.length,
+      amount_fields: amountFields.length,
+      layout_included: allFields.filter((f) => f.source === 'layout').length,
+    },
+  };
+}
+
+/** Parse already-extracted plain text and return fields + document_ast (same output shape as PDF parsing). */
+export function parsePdfText(text: string, numPages = 1): ParseResult | ParseError {
+  try {
+    return parseTextToAstInternal(text ?? '', numPages);
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    return { success: false, error: error.message, traceback: error.stack };
+  }
+}
+
 /** Parse PDF buffer and return fields + document_ast. */
 export async function parsePdfBuffer(buffer: Buffer): Promise<ParseResult | ParseError> {
   try {
@@ -712,74 +792,7 @@ export async function parsePdfBuffer(buffer: Buffer): Promise<ParseResult | Pars
     const data = await pdf(buffer);
     const text = (data as { text?: string }).text ?? '';
     const numPages = (data as { numpages?: number }).numpages ?? 1;
-
-    const layoutFields = extractLinesFromText(text, numPages);
-    const mergedLayout = mergeContinuationLines(layoutFields);
-    const patternFields = patternMatchFields(layoutFields);
-    const amountFields = extractAmounts(layoutFields);
-    const tableFields = heuristicTableFromLines(mergedLayout);
-
-    const allFields: Array<PatternField | TableField | LayoutField> = [];
-    const seenValues = new Set<string>();
-
-    for (const f of patternFields) {
-      const v = (f.value ?? '').trim().toLowerCase();
-      if (v && !seenValues.has(v)) {
-        allFields.push(f);
-        seenValues.add(v);
-      }
-    }
-    for (const f of tableFields) {
-      const v = (f.value ?? '').trim().toLowerCase();
-      if (v && v.length > 3 && !seenValues.has(v)) {
-        allFields.push(f);
-        seenValues.add(v);
-      }
-    }
-    for (const f of amountFields) {
-      const v = (f.value ?? '').trim();
-      if (v && !seenValues.has(v)) {
-        allFields.push(f);
-        seenValues.add(v);
-      }
-    }
-
-    const skipPrefixes = ['deliverable', '#', 'date', 'description', 'due', 'status', 'index'];
-    for (const field of layoutFields) {
-      const fieldValue = (field.value ?? '').trim();
-      const fieldLower = fieldValue.toLowerCase();
-      if (!fieldValue || fieldValue.length < 4) continue;
-      if (seenValues.has(fieldLower)) continue;
-      if (skipPrefixes.some((p) => fieldLower.startsWith(p) && fieldValue.length < 25)) continue;
-      if (fieldValue.replace(/[.\s,]/g, '').match(/^\d+$/)) continue;
-      allFields.push(field);
-      seenValues.add(fieldLower);
-    }
-
-    const orderKey = (x: { source?: string; confidence?: number }) => {
-      const s = x.source ?? '';
-      if (s === 'pattern') return 0;
-      if (s === 'table') return 1;
-      if (s === 'amount') return 2;
-      return 3;
-    };
-    allFields.sort((a, b) => orderKey(a) - orderKey(b) || (b.confidence ?? 0) - (a.confidence ?? 0));
-
-    const document_ast = buildDocumentAst(layoutFields, patternFields, tableFields);
-
-    return {
-      success: true,
-      fields: allFields,
-      document_ast,
-      raw_text: text,
-      stats: {
-        total_fields: allFields.length,
-        pattern_fields: patternFields.length,
-        table_fields: tableFields.length,
-        amount_fields: amountFields.length,
-        layout_included: allFields.filter((f) => f.source === 'layout').length,
-      },
-    };
+    return parseTextToAstInternal(text, numPages);
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
     return {

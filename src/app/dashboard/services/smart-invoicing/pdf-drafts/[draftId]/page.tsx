@@ -40,7 +40,13 @@ function recalcFromItems(items: InvoiceItemRow[]): { subtotal: number; totalAmou
 export default function DraftEditorPage() {
   const router = useRouter();
   const params = useParams();
-  const draftId = params.draftId as string;
+  const draftIdRaw = (params as unknown as { draftId?: string | string[] } | null)?.draftId;
+  const draftId =
+    typeof draftIdRaw === 'string'
+      ? draftIdRaw
+      : Array.isArray(draftIdRaw)
+        ? draftIdRaw[0] ?? ''
+        : '';
 
   const [loading, setLoading] = useState(true);
   const [converting, setConverting] = useState(false);
@@ -70,8 +76,13 @@ export default function DraftEditorPage() {
   }, [draftId]);
 
   useEffect(() => {
+    if (!draftId) {
+      setError('Missing draft ID');
+      setLoading(false);
+      return;
+    }
     loadDraft();
-  }, [loadDraft]);
+  }, [loadDraft, draftId]);
 
   const handleFieldChange = (field: string, value: unknown) => {
     setInvoiceData((prev) => ({ ...prev, [field]: value }));

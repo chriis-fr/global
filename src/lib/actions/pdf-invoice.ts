@@ -8,7 +8,7 @@ import { InvoiceDraft, CreateInvoiceDraftInput, ExtractedField } from '@/models/
 import { CreateInvoiceInput, ClientDetails } from '@/models/Invoice';
 import type { DocumentAST, OrgPdfMappingConfig, PdfMappingEntry } from '@/models/DocumentAST';
 import { applyPdfMapping } from '@/lib/utils/pdfMappingEngine';
-import { parsePdfBuffer } from '@/lib/services/pdfParser';
+import { parsePdfBuffer, parsePdfText } from '@/lib/services/pdfParser';
 import { getPresetByName, PDF_FORMAT_PRESETS } from '@/data/pdfFormatPresets';
 
 /** Serialize draft for Client Components (ObjectId/Date to plain values; documentAst as plain object for fromPdfDraft prefill). */
@@ -29,6 +29,50 @@ function serializeDraft(draft: Record<string, unknown>): InvoiceDraft {
     invoiceData: plainInvoiceData,
     documentAst: plainDocumentAst,
   } as unknown as InvoiceDraft;
+}
+
+function extractTextFromClickUpPagePayload(payload: unknown): string {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const maxChars = 220_000;
+  const maxStrings = 12_000;
+  let totalChars = 0;
+
+  const push = (s: string) => {
+    const t = (s ?? '').replace(/\s+/g, ' ').trim();
+    if (!t) return;
+    if (t.length > 5000) return; // avoid massive blobs
+    if (seen.has(t)) return;
+    seen.add(t);
+    out.push(t);
+    totalChars += t.length + 1;
+  };
+
+  const walk = (node: unknown, depth: number) => {
+    if (out.length >= maxStrings || totalChars >= maxChars) return;
+    if (node == null) return;
+    if (typeof node === 'string') {
+      push(node);
+      return;
+    }
+    if (typeof node === 'number' || typeof node === 'boolean') return;
+    if (Array.isArray(node)) {
+      for (const v of node) walk(v, depth + 1);
+      return;
+    }
+    if (typeof node === 'object') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const obj = node as any;
+      // If there is an obvious "name/title" field, include it early
+      if (typeof obj.name === 'string') push(obj.name);
+      if (typeof obj.title === 'string') push(obj.title);
+      // Walk values only (we don't want to inject keys)
+      for (const v of Object.values(obj)) walk(v, depth + 1);
+    }
+  };
+
+  walk(payload, 0);
+  return out.join('\n');
 }
 
 /** Upload PDF and parse in memory only — no file is saved. Creates draft from extracted data; PDF is never stored. */
@@ -175,6 +219,163 @@ export async function uploadAndParsePdf(formData: FormData, mappingName?: string
       success: false,
       error: error instanceof Error ? error.message : 'Failed to parse PDF',
     };
+  }
+}
+
+/**
+ * Create an invoice draft from a ClickUp Doc Page (v3).
+ * This reuses the SAME parser + mapping pipeline as PDFs (DocumentAST → applyPdfMapping),
+ * then opens Create Invoice via `fromPdfDraft=...` (no format changes).
+ */
+export async function createInvoiceDraftFromClickUpPage(input: {
+  workspaceId: string;
+  docId: string;
+  pageId: string;
+  mappingName?: string | null;
+}): Promise<{
+  success: boolean;
+  data?: { draftId: string; status: 'ready' | 'mapping' };
+  error?: string;
+}> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return { success: false, error: 'Unauthorized' };
+    }
+    const workspaceId = (input.workspaceId ?? '').trim();
+    const docId = (input.docId ?? '').trim();
+    const pageId = (input.pageId ?? '').trim();
+    if (!workspaceId || !docId || !pageId) {
+      return { success: false, error: 'workspaceId, docId, and pageId are required' };
+    }
+
+    const db = await connectToDatabase();
+    const usersCollection = db.collection('users');
+    const user = await usersCollection.findOne({ email: session.user.email });
+    if (!user) return { success: false, error: 'User not found' };
+    const isAdmin = (session.user as { adminTag?: boolean }).adminTag === true;
+
+    // Get ClickUp connection token
+    let connection = null;
+    if (user.organizationId) {
+      connection = await db.collection('integration_connections').findOne({
+        organizationId: user.organizationId,
+        provider: 'clickup',
+      });
+    } else if (isAdmin && user?._id) {
+      connection = await db.collection('integration_connections').findOne({
+        userId: user._id.toString(),
+        provider: 'clickup',
+      });
+    }
+    const accessToken = connection?.accessToken as string | undefined;
+    if (!accessToken) {
+      return { success: false, error: 'Not connected to ClickUp' };
+    }
+
+    // Fetch page content (v3)
+    const pageRes = await fetch(
+      `https://api.clickup.com/api/v3/workspaces/${encodeURIComponent(
+        workspaceId
+      )}/docs/${encodeURIComponent(docId)}/pages/${encodeURIComponent(pageId)}`,
+      { headers: { Authorization: accessToken } }
+    );
+    const pageRaw = await pageRes.text();
+    console.log('[ClickUp→Invoice] GET page status:', pageRes.status, 'raw (first 300):', pageRaw.slice(0, 300));
+    if (!pageRes.ok) {
+      return { success: false, error: `Failed to fetch ClickUp page (${pageRes.status})` };
+    }
+    let pagePayload: unknown = pageRaw;
+    try {
+      pagePayload = JSON.parse(pageRaw);
+    } catch {
+      /* keep as string */
+    }
+
+    const text = extractTextFromClickUpPagePayload(pagePayload);
+    if (!text.trim()) {
+      return { success: false, error: 'ClickUp page content was empty after extraction' };
+    }
+
+    // Parse plain text using same AST builder as PDFs
+    const parseResult = parsePdfText(text, 1);
+    if (!parseResult.success || !('fields' in parseResult)) {
+      return { success: false, error: parseResult.error ?? 'Failed to parse ClickUp page text' };
+    }
+
+    const documentAst = parseResult.document_ast as DocumentAST;
+
+    // Convert fields to extractedFields (same as PDF flow)
+    type ParsedField = {
+      field_type?: string;
+      value?: string;
+      text?: string;
+      confidence?: number;
+      source?: string;
+      position?: unknown;
+      original_line?: string;
+      table_data?: unknown;
+    };
+    const extractedFields = parseResult.fields.map((field: ParsedField, index: number) => ({
+      key: field.field_type ? `field_${field.field_type}_${index}` : `field_${index + 1}`,
+      value: field.value || field.text || '',
+      confidence: field.confidence || 0.5,
+      source: (field.source || 'layout') as ExtractedField['source'],
+      position: field.position,
+      fieldType: field.field_type,
+      originalLine: field.original_line,
+      tableData: field.table_data as ExtractedField['tableData'],
+    })) as ExtractedField[];
+
+    // Resolve mapping config (same as PDF flow)
+    const orgOrUserDoc =
+      user.organizationId
+        ? await db.collection('organizations').findOne({ _id: user.organizationId })
+        : isAdminPdfMappingBypass(user as { email?: string; adminTag?: boolean })
+          ? user
+          : null;
+    const mappings = orgOrUserDoc ? getMappingsList(orgOrUserDoc as Record<string, unknown>) : [];
+    const mapping = resolveMappingConfig(input.mappingName ?? null, mappings);
+
+    let invoiceData: Partial<CreateInvoiceInput> = {};
+    if (mapping && Object.keys(mapping).length > 0) {
+      invoiceData = applyPdfMapping(documentAst, mapping);
+      console.log('[ClickUp→Invoice] Applied mapping:', input.mappingName ?? 'default', 'invoiceData keys:', Object.keys(invoiceData));
+    } else {
+      console.log('[ClickUp→Invoice] No mapping applied (missing/empty config)');
+    }
+
+    const status: 'ready' | 'mapping' = Object.keys(invoiceData).length > 0 ? 'ready' : 'mapping';
+
+    const draftInput: CreateInvoiceDraftInput = {
+      userId: user._id!,
+      organizationId: user.organizationId,
+      extractedFields,
+      status,
+    };
+
+    const draftsCollection = db.collection('invoiceDrafts');
+    const draftResult = await draftsCollection.insertOne({
+      ...draftInput,
+      invoiceData,
+      documentAst: documentAst ?? null,
+      extractionMetadata: {
+        extractionMethod: 'clickup_doc_page',
+        extractionTime: Date.now(),
+        aiUsed: false,
+      },
+      sourceClickUp: { workspaceId, docId, pageId },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    return {
+      success: true,
+      data: { draftId: draftResult.insertedId.toString(), status },
+    };
+  } catch (error) {
+    console.error('createInvoiceDraftFromClickUpPage:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to create draft from ClickUp' };
   }
 }
 
