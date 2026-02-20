@@ -6,7 +6,7 @@ const PAYSTACK_BASE_URL = 'https://api.paystack.co';
 /** Paystack currency – depends on your account (e.g. KES, NGN, GHS). Check Paystack Dashboard. */
 const PAYSTACK_CURRENCY = (process.env.PAYSTACK_CURRENCY || 'KES').toUpperCase();
 /** Convert USD to local: amount_local = amountUsd * this rate (e.g. 130 for KES) */
-const PAYSTACK_USD_TO_LOCAL_RATE = Number(process.env.PAYSTACK_USD_TO_LOCAL_RATE || '130') || 130;
+const PAYSTACK_USD_TO_LOCAL_RATE = Number(process.env.PAYSTACK_USD_TO_LOCAL_RATE || '132') || 132;
 
 // Paystack Plan Codes mapping (for paid plans only - free plan has null)
 // These will be populated from billingPlans.ts or set directly here after creating plans in Paystack
