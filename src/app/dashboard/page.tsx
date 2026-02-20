@@ -26,19 +26,21 @@ export default function DashboardPage() {
   const [organizationName, setOrganizationName] = useState<string>('');
   const [mounted, setMounted] = useState(false);
   const sessionRefreshDoneRef = useRef(false);
+  const subscriptionSuccessHandledRef = useRef(false);
 
   // Avoid hydration mismatch: isPaidUser depends on client-loaded subscription
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // When landing from subscription success, refetch subscription immediately so only paid-for services show
+  // When landing from subscription success: run once, refetch, then strip query param to avoid repeated POSTs/loops
   useEffect(() => {
     if (searchParams?.get('from') !== 'subscription-success' || !session?.user?.id) return;
+    if (subscriptionSuccessHandledRef.current) return;
+    subscriptionSuccessHandledRef.current = true;
     clearCache?.();
     refetch();
-    const t = setTimeout(() => router.replace('/dashboard', { scroll: false }), 600);
-    return () => clearTimeout(t);
+    router.replace('/dashboard', { scroll: false });
   }, [searchParams?.get('from'), session?.user?.id, refetch, clearCache, router]);
 
   // After onboarding redirect, session can have stale services; refresh once so services show (both individual and org users)

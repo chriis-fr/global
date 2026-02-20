@@ -43,27 +43,20 @@ export default function SubscriptionSuccessPage() {
           if (result.success) {
             console.log('✅ [SubscriptionSuccess] Subscription activated successfully')
             
-            // Brief wait for DB to settle
-            await new Promise(resolve => setTimeout(resolve, 800))
+            // Short wait for DB to settle (user.services + subscriptionJustUpdatedAt are set by verifyAndActivateSubscription)
+            await new Promise(resolve => setTimeout(resolve, 300))
             
             // Refresh subscription (clears cache and fetches so sidebar/dashboard show only paid-for services)
             console.log('🔄 [SubscriptionSuccess] Refetching subscription...')
             await refetch()
             
-            // Trigger NextAuth JWT refresh so session.user.services matches DB (hides Payables if plan is receivables-only)
+            // Trigger session refresh so next getSession gets fresh JWT (subscriptionJustUpdatedAt forces JWT callback to refresh)
             try {
-              if (typeof updateNextAuth === 'function') {
-                await updateNextAuth({})
-              }
-            } catch (_) {
-              // Non-fatal; subscription refetch is enough for plan-based visibility
-            }
-            // Sync our session context with the new JWT
-            try {
+              if (typeof updateNextAuth === 'function') await updateNextAuth({})
               await updateOurSession?.()
             } catch (_) {}
             
-            await new Promise(resolve => setTimeout(resolve, 1200))
+            await new Promise(resolve => setTimeout(resolve, 400))
             
             // Check for pending organization data
             let redirectPath = '/dashboard?from=subscription-success';

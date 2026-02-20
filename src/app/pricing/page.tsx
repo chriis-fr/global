@@ -677,7 +677,13 @@ function PlanCard({
       </div>
 
       <div className="space-y-2 mb-6 max-h-48 overflow-y-auto">
-        {plan.features.map((feature) => {
+        {plan.features
+          .filter((feature) => {
+            // Integrations (ClickUp & integrations) are for organizations only — hide for individual accounts
+            if (hideSeatSelector && feature.id === 'integrations') return false;
+            return true;
+          })
+          .map((feature) => {
           // For individual users, update seat-related feature wording
           let displayName = feature.name;
           let displayDescription = feature.description;
@@ -686,9 +692,6 @@ function PlanCard({
             // Individual users: show "1 seat" instead of "X seats included"
             displayName = '1 seat';
             displayDescription = 'Individual account';
-          } else if (hideSeatSelector && feature.id === 'integrations') {
-            // Individual users: update integrations description (remove "team" reference)
-            displayDescription = 'Connect your tools';
           } else if (hideSeatSelector && feature.id === 'receivables-payables') {
             // Individual users: keep the same but ensure description is appropriate
             displayDescription = 'Full suite for your account';

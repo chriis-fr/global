@@ -64,10 +64,10 @@ export class SubscriptionServicePaystack {
       }
     });
 
-    // Update user services in database
+    // Update user services in database and set a short-lived flag so the next session load picks up new services immediately
     await db.collection('users').updateOne(
       { _id: userId },
-      { $set: { services: updatedServices } }
+      { $set: { services: updatedServices, subscriptionJustUpdatedAt: new Date() } }
     );
 
     console.log('✅ [SubscriptionServicePaystack] Services updated for plan:', {

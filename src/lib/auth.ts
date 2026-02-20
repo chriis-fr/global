@@ -253,10 +253,23 @@ export const authOptions: NextAuthOptions = {
       // 1. Token doesn't have mongoId yet (first time)
       // 2. Explicitly triggered (e.g., session update)
       // 3. Token is older than 5 minutes (reduce DB calls by 95%)
-      const shouldRefresh = !token.mongoId || 
+      // 4. User's subscription/services were just updated (subscriptionJustUpdatedAt set) so dashboard shows Pay etc. immediately
+      let shouldRefresh = !token.mongoId || 
                            trigger === 'update' || 
                            !token.lastRefresh ||
                            (token.lastRefresh && Date.now() - (token.lastRefresh as number) > 5 * 60 * 1000);
+
+      if (token.email && !shouldRefresh) {
+        try {
+          const recentUser = await UserService.getUserByEmail(token.email as string)
+          const justUpdated = (recentUser as { subscriptionJustUpdatedAt?: Date })?.subscriptionJustUpdatedAt
+          if (justUpdated && Date.now() - new Date(justUpdated).getTime() < 90 * 1000) {
+            shouldRefresh = true
+          }
+        } catch {
+          // non-blocking
+        }
+      }
       
       if (token.email && shouldRefresh) {
         try {
@@ -328,6 +341,16 @@ export const authOptions: NextAuthOptions = {
             token.mongoId = dbUser._id?.toString()
             token.adminTag = dbUser.adminTag || false
             token.lastRefresh = Date.now() // Track when we last refreshed
+            // Clear subscriptionJustUpdatedAt so we don't force refresh on every request
+            const justUpdated = (dbUser as { subscriptionJustUpdatedAt?: Date }).subscriptionJustUpdatedAt
+            if (justUpdated && dbUser._id) {
+              getDatabase().then((db) => {
+                db.collection('users').updateOne(
+                  { _id: dbUser._id },
+                  { $unset: { subscriptionJustUpdatedAt: 1 } }
+                ).catch(() => {})
+              })
+            }
           }
         } catch {
           // Error fetching latest user data for JWT
