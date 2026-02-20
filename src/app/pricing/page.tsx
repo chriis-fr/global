@@ -109,9 +109,21 @@ export default function PricingPage() {
     if (effectiveAudience === 'individual') return a === 'individual' || a === 'both'
     return a === 'business' || a === 'both'
   })
-  const filteredPlans = effectiveAudience === 'individual'
-    ? plansForAudience.filter(plan => plan.type === 'receivables')
-    : plansForAudience.filter(plan => plan.type === selectedType)
+  // Filter plans based on audience and type
+  // For individuals: only show growth tier (not scale or enterprise) for payables and combined
+  const filteredPlans = plansForAudience.filter(plan => {
+    if (plan.type !== selectedType) return false;
+    
+    // For individual users, exclude scale and enterprise tiers for payables and combined
+    if (effectiveAudience === 'individual') {
+      if (plan.type === 'payables' || plan.type === 'combined') {
+        // Only show growth tier for individuals
+        return plan.tier === 'growth';
+      }
+    }
+    
+    return true;
+  })
 
   const getSeatsForPlan = (plan: BillingPlan) => {
     if (plan.dynamicPricing) {
@@ -127,8 +139,25 @@ export default function PricingPage() {
     return 1
   }
 
-  const isIndividualSingleSeat = (plan: BillingPlan) =>
-    effectiveAudience === 'individual' && (plan.planId === 'receivables-growth-individual' || plan.audience === 'individual')
+  // Individual users should have single seat (no seat selector) for:
+  // 1. receivables-growth-individual plan
+  // 2. Any plan with audience === 'individual'
+  // 3. Payables and combined plans (individuals only get 1 seat)
+  const isIndividualSingleSeat = (plan: BillingPlan) => {
+    if (effectiveAudience !== 'individual') return false;
+    
+    // Individual-specific receivables plan
+    if (plan.planId === 'receivables-growth-individual' || plan.audience === 'individual') {
+      return true;
+    }
+    
+    // For payables and combined plans, individuals always get 1 seat
+    if (plan.type === 'payables' || plan.type === 'combined') {
+      return true;
+    }
+    
+    return false;
+  }
 
   const setSeatsForPlan = (planId: string, seats: number) => {
     setSeatsByPlanId(prev => ({ ...prev, [planId]: Math.max(1, Math.min(50, seats)) }))
@@ -150,9 +179,10 @@ export default function PricingPage() {
       return
     }
 
-    const planAudience = (plan as { audience?: string }).audience ?? 'business'
-    const isBusinessPlan = planAudience === 'business'
-    if (isBusinessPlan && !hasOrganization) {
+    const planAudience = (plan as { audience?: string }).audience ?? 'both'
+    // Only require organization for business-only plans (not 'both' or 'individual')
+    const isBusinessOnlyPlan = planAudience === 'business'
+    if (isBusinessOnlyPlan && !hasOrganization) {
       setShowCreateOrgModal(true)
       return
     }
@@ -416,12 +446,12 @@ export default function PricingPage() {
         </div>
       </div>
 
-      {/* Plan Type Selector – only for Business & Teams */}
-      {effectiveAudience === 'business' && (
-        <div className="bg-white py-6">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              {(['receivables', 'payables', 'combined'] as PlanType[]).map((type) => (
+      {/* Plan Type Selector – Available for both Individual and Business */}
+      <div className="bg-white py-6">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            {(['receivables', 'payables', 'combined'] as PlanType[]).map((type) => {
+              return (
                 <button
                   key={type}
                   onClick={() => setSelectedType(type)}
@@ -436,11 +466,11 @@ export default function PricingPage() {
                     <div className="text-sm opacity-80">{getTypeDescription(type)}</div>
                   </div>
                 </button>
-              ))}
-            </div>
+              );
+            })}
           </div>
         </div>
-      )}
+      </div>
 
       {/* Plans Grid */}
       <div className="py-16 bg-gray-50">
@@ -647,23 +677,41 @@ function PlanCard({
       </div>
 
       <div className="space-y-2 mb-6 max-h-48 overflow-y-auto">
-        {plan.features.map((feature) => (
-          <div key={feature.id} className="flex items-start gap-2">
-            <div className="flex-shrink-0 mt-0.5">
-              {feature.included ? (
-                <Check className="h-4 w-4 text-green-500" />
-              ) : (
-                <X className="h-4 w-4 text-red-400" />
-              )}
+        {plan.features.map((feature) => {
+          // For individual users, update seat-related feature wording
+          let displayName = feature.name;
+          let displayDescription = feature.description;
+          
+          if (hideSeatSelector && feature.id === 'seats') {
+            // Individual users: show "1 seat" instead of "X seats included"
+            displayName = '1 seat';
+            displayDescription = 'Individual account';
+          } else if (hideSeatSelector && feature.id === 'integrations') {
+            // Individual users: update integrations description (remove "team" reference)
+            displayDescription = 'Connect your tools';
+          } else if (hideSeatSelector && feature.id === 'receivables-payables') {
+            // Individual users: keep the same but ensure description is appropriate
+            displayDescription = 'Full suite for your account';
+          }
+          
+          return (
+            <div key={feature.id} className="flex items-start gap-2">
+              <div className="flex-shrink-0 mt-0.5">
+                {feature.included ? (
+                  <Check className="h-4 w-4 text-green-500" />
+                ) : (
+                  <X className="h-4 w-4 text-red-400" />
+                )}
+              </div>
+              <div className="text-gray-600 text-sm">
+                <span className="font-medium">{displayName}</span>
+                {displayDescription && (
+                  <span className="block text-xs opacity-80">{displayDescription}</span>
+                )}
+              </div>
             </div>
-            <div className="text-gray-600 text-sm">
-              <span className="font-medium">{feature.name}</span>
-              {feature.description && (
-                <span className="block text-xs opacity-80">{feature.description}</span>
-              )}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {isEnterprise ? (

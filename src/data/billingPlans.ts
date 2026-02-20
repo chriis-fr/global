@@ -193,11 +193,11 @@ export const BILLING_PLANS: BillingPlan[] = [
     ctaVariant: 'outline',
   },
 
-  // ─── PAYABLES (Business / Teams only) ───────────────────────────────────
+  // ─── PAYABLES (Available for both Individual and Business) ───────────────────────────────────
   // Payables Team – $9 per seat (3 included)
   {
     planId: 'payables-basic',
-    audience: 'business',
+    audience: 'both',
     type: 'payables',
     tier: 'growth',
     name: 'Payables Team',
@@ -229,7 +229,7 @@ export const BILLING_PLANS: BillingPlan[] = [
   // Scale – $19 per seat (5 included)
   {
     planId: 'payables-pro',
-    audience: 'business',
+    audience: 'both',
     type: 'payables',
     tier: 'scale',
     name: 'Scale',
@@ -283,11 +283,11 @@ export const BILLING_PLANS: BillingPlan[] = [
     ctaVariant: 'outline',
   },
 
-  // ─── COMBINED (Business / Teams only) ──────────────────────────────────
+  // ─── COMBINED (Available for both Individual and Business) ──────────────────────────────────
   // Combined Growth – $15 per seat (3 included)
   {
     planId: 'combined-basic',
-    audience: 'business',
+    audience: 'both',
     type: 'combined',
     tier: 'growth',
     name: 'Combined Growth',
@@ -321,7 +321,7 @@ export const BILLING_PLANS: BillingPlan[] = [
   // Combined Scale – $25 per seat (5 included)
   {
     planId: 'combined-pro',
-    audience: 'business',
+    audience: 'both',
     type: 'combined',
     tier: 'scale',
     name: 'Combined Scale',
@@ -355,7 +355,7 @@ export const BILLING_PLANS: BillingPlan[] = [
   // Combined Enterprise
   {
     planId: 'combined-enterprise',
-    audience: 'business',
+    audience: 'both',
     type: 'combined',
     tier: 'enterprise',
     name: 'Combined Enterprise',

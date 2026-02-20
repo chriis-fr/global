@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { ArrowLeft, Link2, FileText, Loader2, Unplug, ChevronDown, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useSession } from '@/lib/auth-client';
 import { createInvoiceDraftFromClickUpPage } from '@/lib/actions/pdf-invoice';
 
 
@@ -63,7 +64,15 @@ export default function IntegrationAppPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { data: session } = useSession();
   const app = (params?.app as string) || '';
+
+  // Redirect non-admin users - integrations are admin-only
+  useEffect(() => {
+    if (session && !session.user?.adminTag) {
+      router.push('/dashboard');
+    }
+  }, [session, router]);
 
   const [connected, setConnected] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -206,6 +215,11 @@ export default function IntegrationAppPage() {
       })
       .finally(() => setLoadingData(false));
   };
+
+  // Don't render anything if not admin
+  if (!session?.user?.adminTag) {
+    return null;
+  }
 
   // Only ClickUp is implemented for now
   if (app !== 'clickup') {

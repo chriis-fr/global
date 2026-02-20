@@ -280,7 +280,18 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
         // Feature access based on organization subscription
         const isPastDue = orgSubscription.status === 'past_due';
         const isPaidPlan = planId !== 'receivables-free' && planId !== 'trial-premium';
-        const isActiveOrCombined = !isPastDue && (orgSubscription.status === 'active' || (isPaidPlan && planId.includes('combined')));
+        
+        // GRACE PERIOD FOR RENEWALS: Same logic as individual subscriptions
+        const orgCurrentPeriodEnd = orgSubscription.currentPeriodEnd ? new Date(orgSubscription.currentPeriodEnd) : null;
+        const orgGracePeriodDays = 3; // 3 days grace period for renewals
+        const orgGracePeriodEnd = orgCurrentPeriodEnd ? new Date(orgCurrentPeriodEnd.getTime() + (orgGracePeriodDays * 24 * 60 * 60 * 1000)) : null;
+        const orgIsWithinGracePeriod = orgCurrentPeriodEnd && orgGracePeriodEnd && currentDate < orgGracePeriodEnd && orgSubscription.status === 'active' && isPaidPlan;
+        
+        // Only check grace period if we have a Paystack subscription (active subscriptions that auto-renew)
+        const orgHasPaystackSubscription = !!orgSubscription.paystackSubscriptionCode;
+        const orgIsSubscriptionActive = orgSubscription.status === 'active' && (orgHasPaystackSubscription ? (orgIsWithinGracePeriod || !orgCurrentPeriodEnd || currentDate < orgCurrentPeriodEnd) : true);
+        
+        const isActiveOrCombined = !isPastDue && (orgIsSubscriptionActive || (isPaidPlan && planId.includes('combined')));
         
         const canCreateOrganization = false; // Members can't create organizations
         const canAccessPayables = Boolean(
@@ -421,8 +432,34 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
     // Feature access (trial users get full access)
     // past_due = payment failed; block access until they pay (data is kept)
     const isPastDue = subscription.status === 'past_due';
+    
+    // GRACE PERIOD FOR RENEWALS: If currentPeriodEnd has passed but status is still 'active',
+    // give a 3-day grace period to account for Paystack automatic renewal timing and webhook delays.
+    // Paystack automatically charges users at the end of their billing period, but:
+    // 1. Paystack may charge slightly before currentPeriodEnd
+    // 2. Webhooks can be delayed by network issues
+    // 3. The charge.success webhook updates currentPeriodEnd, but there's a window where it hasn't arrived yet
+    // This grace period prevents downtime for users who pay on time, allowing them to continue using
+    // the app while the webhook processes in the background. The webhook will eventually sync the
+    // subscription status and update currentPeriodEnd to the new billing period.
+    const currentPeriodEnd = subscription.currentPeriodEnd ? new Date(subscription.currentPeriodEnd) : null;
+    const gracePeriodDays = 3; // 3 days grace period for renewals (matches the 3-day grace period for payment failures)
+    const gracePeriodEnd = currentPeriodEnd ? new Date(currentPeriodEnd.getTime() + (gracePeriodDays * 24 * 60 * 60 * 1000)) : null;
+    const hasPaystackSubscription = !!subscription.paystackSubscriptionCode;
+    const isPeriodExpired = currentPeriodEnd && currentDate >= currentPeriodEnd;
+    const isWithinGracePeriod = isPeriodExpired && gracePeriodEnd && currentDate < gracePeriodEnd && subscription.status === 'active' && isPaidPlan && hasPaystackSubscription;
+    
+    // Subscription is active if:
+    // 1. Status is 'active' AND (period hasn't expired OR we're within grace period)
+    // 2. For Paystack subscriptions, we check grace period; for others, just check status
+    const isSubscriptionActive = subscription.status === 'active' && (
+      hasPaystackSubscription 
+        ? (!isPeriodExpired || isWithinGracePeriod || !currentPeriodEnd)
+        : true
+    );
+    
     // isPaidPlan already declared above (line 399)
-    const isActiveOrCombined = !isPastDue && (subscription.status === 'active' || (isPaidPlan && planId.includes('combined')));
+    const isActiveOrCombined = !isPastDue && (isSubscriptionActive || (isPaidPlan && planId.includes('combined')));
     const isTrialOrPro = isTrialPremiumPlan || (isPaidPlan && isActiveOrCombined);
     const canCreateOrganization = Boolean(isTrialOrPro);
     const canAccessPayables = Boolean(

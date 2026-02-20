@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { ChevronRight, LayoutList, Link2, Unplug, Loader2 } from 'lucide-react';
+import { useSession } from '@/lib/auth-client';
 import DashboardFloatingButton from '@/components/DashboardFloatingButton';
 
 const INTEGRATIONS = [
@@ -21,15 +22,31 @@ const INTEGRATIONS = [
 
 export default function IntegrationsSettingsPage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const [clickUpConnected, setClickUpConnected] = useState<boolean | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
 
+  // Redirect non-admin users - integrations are admin-only
   useEffect(() => {
-    fetch('/api/integrations/clickup/status')
-      .then((res) => res.json())
-      .then((data) => setClickUpConnected(!!data?.connected))
-      .catch(() => setClickUpConnected(false));
-  }, []);
+    if (session && !session.user?.adminTag) {
+      router.push('/dashboard');
+    }
+  }, [session, router]);
+
+  useEffect(() => {
+    // Only fetch status if user is admin
+    if (session?.user?.adminTag) {
+      fetch('/api/integrations/clickup/status')
+        .then((res) => res.json())
+        .then((data) => setClickUpConnected(!!data?.connected))
+        .catch(() => setClickUpConnected(false));
+    }
+  }, [session]);
+
+  // Don't render anything if not admin
+  if (!session?.user?.adminTag) {
+    return null;
+  }
 
   const handleDisconnectClickUp = async (e: React.MouseEvent) => {
     e.preventDefault();

@@ -31,9 +31,24 @@ export function calculatePlanPrice(
     };
   }
 
-  const extraSeats = Math.max(0, seats - dp.includedSeats);
-  const base = dp.basePrice;
-  const seatTotal = extraSeats * dp.seatPrice; // Only pay for seats beyond included
+  // For individuals (seats < includedSeats), charge per seat instead of base price
+  // This ensures individuals pay only for what they use (1 seat) rather than the base price for multiple seats
+  const isIndividualPricing = seats < dp.includedSeats;
+  
+  let base: number;
+  let seatTotal: number;
+  
+  if (isIndividualPricing) {
+    // Individual pricing: pay seatPrice * seats (no base price)
+    base = 0;
+    seatTotal = seats * dp.seatPrice;
+  } else {
+    // Business pricing: basePrice covers included seats, pay extra for additional seats
+    const extraSeats = Math.max(0, seats - dp.includedSeats);
+    base = dp.basePrice;
+    seatTotal = extraSeats * dp.seatPrice;
+  }
+  
   let invoiceOverage = 0;
   if (options?.extraInvoices && dp.invoiceOveragePrice !== undefined && dp.invoiceOverageBlock) {
     const blocks = Math.ceil(options.extraInvoices / dp.invoiceOverageBlock);
