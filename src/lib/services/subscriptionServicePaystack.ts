@@ -100,7 +100,7 @@ export class SubscriptionServicePaystack {
 
     // IMPORTANT: Only update Paystack-specific fields
     // This preserves existing Stripe subscription data for backward compatibility
-    const updateData = {
+    const updateData: Record<string, unknown> = {
       'subscription.planId': planId,
       'subscription.status': 'active',
       'subscription.currentPeriodStart': currentPeriodStart,
@@ -109,13 +109,12 @@ export class SubscriptionServicePaystack {
       'subscription.paystackSubscriptionCode': paystackSubscriptionCode,
       'subscription.paystackPlanCode': paystackPlanCode,
       'subscription.updatedAt': new Date()
-      // NOTE: We intentionally do NOT update stripeSubscriptionId or stripePriceId
-      // to preserve existing Stripe subscriptions
     };
+    // Clear payment-failed state when they pay
+    const unsetData: Record<string, 1> = { 'subscription.paymentFailedAt': 1 };
 
     console.log('💾 [SubscriptionServicePaystack] Updating database with:', JSON.stringify(updateData, null, 2));
 
-    // Get current user subscription before update (for logging)
     const userBefore = await db.collection('users').findOne({ _id: userId });
     console.log('📋 [SubscriptionServicePaystack] Current subscription before update:', {
       planId: userBefore?.subscription?.planId,
@@ -125,7 +124,7 @@ export class SubscriptionServicePaystack {
 
     const result = await db.collection('users').updateOne(
       { _id: userId },
-      { $set: updateData }
+      { $set: updateData, $unset: unsetData }
     );
 
     console.log('📊 [SubscriptionServicePaystack] Database update result:', {

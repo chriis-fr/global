@@ -3,13 +3,17 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { CheckCircle, Loader2 } from 'lucide-react'
+import { useSession as useNextAuthSession } from 'next-auth/react'
 import { useSubscription } from '@/lib/contexts/SubscriptionContext'
+import { useSession } from '@/lib/auth-client'
 import { verifyAndActivateSubscription } from '@/lib/actions/paystack'
 
 export default function SubscriptionSuccessPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { refetch } = useSubscription()
+  const { update: updateNextAuth } = useNextAuthSession()
+  const { update: updateOurSession } = useSession()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -39,47 +43,43 @@ export default function SubscriptionSuccessPage() {
           if (result.success) {
             console.log('✅ [SubscriptionSuccess] Subscription activated successfully')
             
-            // Force clear cache and wait a bit for database to update
-            await new Promise(resolve => setTimeout(resolve, 1000))
+            // Brief wait for DB to settle
+            await new Promise(resolve => setTimeout(resolve, 800))
             
-            // Clear cache and refresh subscription data immediately
-            console.log('🔄 [SubscriptionSuccess] First refetch...')
+            // Refresh subscription (clears cache and fetches so sidebar/dashboard show only paid-for services)
+            console.log('🔄 [SubscriptionSuccess] Refetching subscription...')
             await refetch()
             
-            // Wait a bit more and refetch again to ensure we have the latest data
-            await new Promise(resolve => setTimeout(resolve, 1500))
-            console.log('🔄 [SubscriptionSuccess] Second refetch...')
-            await refetch()
+            // Trigger NextAuth JWT refresh so session.user.services matches DB (hides Payables if plan is receivables-only)
+            try {
+              if (typeof updateNextAuth === 'function') {
+                await updateNextAuth({})
+              }
+            } catch (_) {
+              // Non-fatal; subscription refetch is enough for plan-based visibility
+            }
+            // Sync our session context with the new JWT
+            try {
+              await updateOurSession?.()
+            } catch (_) {}
             
-            console.log('✅ [SubscriptionSuccess] Subscription data refreshed, redirecting to dashboard')
-            
-            // Redirect to dashboard after a short delay
-            setTimeout(() => {
-              router.push('/dashboard')
-            }, 1000)
+            await new Promise(resolve => setTimeout(resolve, 1200))
+            console.log('✅ [SubscriptionSuccess] Redirecting to dashboard with fresh data')
+            router.push('/dashboard?from=subscription-success')
           } else {
             console.error('❌ [SubscriptionSuccess] Verification failed:', result.error)
             console.log('⚠️ [SubscriptionSuccess] Still attempting to refresh in case webhook processed it')
-            // Still try to refetch in case webhook already processed it
             await new Promise(resolve => setTimeout(resolve, 2000))
             await refetch()
-            setTimeout(() => {
-              router.push('/dashboard')
-            }, 2000)
+            try { await updateNextAuth?.({}); await updateOurSession?.(); } catch (_) {}
+            router.push('/dashboard')
           }
         } else {
           // No reference found, but still try to refresh (might be webhook-activated)
           console.log('⚠️ [SubscriptionSuccess] No reference found in URL, refreshing subscription data')
-          console.log('📋 [SubscriptionSuccess] Search params:', {
-            trxref: searchParams?.get('trxref'),
-            reference: searchParams?.get('reference'),
-            session_id: searchParams?.get('session_id'),
-            allParams: Object.fromEntries(searchParams?.entries?.() ?? [])
-          })
           await refetch()
-          setTimeout(() => {
-            router.push('/dashboard')
-          }, 2000)
+          try { await updateNextAuth?.({}); await updateOurSession?.(); } catch (_) {}
+          router.push('/dashboard')
         }
       } catch (err) {
         console.error('❌ [SubscriptionSuccess] Error handling subscription success:', err)
@@ -87,13 +87,11 @@ export default function SubscriptionSuccessPage() {
           message: err instanceof Error ? err.message : 'Unknown error',
           stack: err instanceof Error ? err.stack : undefined
         })
-        // Still try to refresh subscription in case webhook processed it
         try {
           console.log('🔄 [SubscriptionSuccess] Attempting recovery refetch...')
           await refetch()
-          setTimeout(() => {
-            router.push('/dashboard')
-          }, 2000)
+          try { await updateNextAuth?.({}); await updateOurSession?.(); } catch (_) {}
+          router.push('/dashboard')
         } catch (refetchError) {
           console.error('❌ [SubscriptionSuccess] Recovery refetch also failed:', refetchError)
           setError('Failed to process subscription. Please check your dashboard or contact support.')
@@ -104,7 +102,7 @@ export default function SubscriptionSuccessPage() {
     }
 
     handleSuccess()
-  }, [refetch, router, searchParams])
+  }, [refetch, router, searchParams, updateNextAuth, updateOurSession])
 
   if (loading) {
     return (

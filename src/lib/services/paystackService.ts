@@ -3,6 +3,11 @@ import { BILLING_PLANS } from '@/data/billingPlans';
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || '';
 const PAYSTACK_BASE_URL = 'https://api.paystack.co';
 
+/** Paystack currency – depends on your account (e.g. KES, NGN, GHS). Check Paystack Dashboard. */
+const PAYSTACK_CURRENCY = (process.env.PAYSTACK_CURRENCY || 'KES').toUpperCase();
+/** Convert USD to local: amount_local = amountUsd * this rate (e.g. 130 for KES) */
+const PAYSTACK_USD_TO_LOCAL_RATE = Number(process.env.PAYSTACK_USD_TO_LOCAL_RATE || '130') || 130;
+
 // Paystack Plan Codes mapping (for paid plans only - free plan has null)
 // These will be populated from billingPlans.ts or set directly here after creating plans in Paystack
 export const PAYSTACK_PLAN_CODES = {
@@ -175,7 +180,8 @@ export class PaystackService {
 
   /**
    * Create a one-off subscription plan in Paystack with custom amount (for dynamic pricing).
-   * Amount in USD dollars; converted to cents for Paystack.
+   * amountUsd: price in USD (from billing plans). Converted to local currency via PAYSTACK_USD_TO_LOCAL_RATE.
+   * Currency from PAYSTACK_CURRENCY (e.g. NGN, GHS). Paystack often does not support USD.
    */
   static async createDynamicPlan(
     name: string,
@@ -186,8 +192,12 @@ export class PaystackService {
     if (!PAYSTACK_SECRET_KEY || PAYSTACK_SECRET_KEY.trim() === '') {
       throw new Error('Paystack API key is not configured.');
     }
-    const amountCents = Math.round(amountUsd * 100); // USD to cents
     const paystackInterval = interval === 'yearly' ? 'annually' : 'monthly';
+    // Amount in smallest unit: NGN = kobo (×100), GHS = pesewas (×100), ZAR = cents (×100)
+    const amountInSubunit =
+      PAYSTACK_CURRENCY === 'USD'
+        ? Math.round(amountUsd * 100)
+        : Math.round(amountUsd * PAYSTACK_USD_TO_LOCAL_RATE * 100);
     try {
       const response = await fetch(`${PAYSTACK_BASE_URL}/plan`, {
         method: 'POST',
@@ -197,9 +207,9 @@ export class PaystackService {
         },
         body: JSON.stringify({
           name: name.substring(0, 255),
-          amount: amountCents,
+          amount: amountInSubunit,
           interval: paystackInterval,
-          currency: 'USD',
+          currency: PAYSTACK_CURRENCY,
           description: metadata ? `Plan: ${metadata.planId}${metadata.seats != null ? `, ${metadata.seats} seats` : ''}` : undefined,
         }),
       });
@@ -208,7 +218,7 @@ export class PaystackService {
         console.error('❌ [PaystackService] Create plan failed:', data);
         throw new Error(data.message || 'Failed to create plan');
       }
-      console.log('✅ [PaystackService] Dynamic plan created:', data.data.plan_code);
+      console.log('✅ [PaystackService] Dynamic plan created:', data.data.plan_code, { currency: PAYSTACK_CURRENCY, amountInSubunit });
       return data.data.plan_code;
     } catch (error) {
       console.error('❌ [PaystackService] Error creating dynamic plan:', error);

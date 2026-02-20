@@ -423,6 +423,48 @@ export async function POST(request: NextRequest) {
       }
       break;
 
+    case 'charge.failed':
+      console.log('⚠️ [PaystackWebhook] Processing charge.failed event');
+      const failedCharge = event.data as { customer?: { customer_code?: string }; reference?: string } | undefined;
+      if (failedCharge?.customer?.customer_code) {
+        try {
+          const db = await getDatabase();
+          const user = await db.collection('users').findOne({
+            paystackCustomerCode: failedCharge.customer.customer_code
+          });
+          if (user && user._id && user.subscription?.planId && user.subscription.planId !== 'receivables-free') {
+            const now = new Date();
+            const updatePayload = {
+              'subscription.status': 'past_due',
+              'subscription.paymentFailedAt': now,
+              'subscription.updatedAt': now
+            };
+            await db.collection('users').updateOne(
+              { _id: user._id },
+              { $set: updatePayload }
+            );
+            const updatedUser = await db.collection('users').findOne({ _id: user._id });
+            if (updatedUser?.subscription) {
+              const orgs = await db.collection('organizations').find({
+                'members.userId': user._id,
+                'members.role': 'owner'
+              }).toArray();
+              for (const org of orgs) {
+                await db.collection('organizations').updateOne(
+                  { _id: org._id },
+                  { $set: { subscription: updatedUser.subscription, updatedAt: now } }
+                );
+              }
+            }
+            await clearSubscriptionCache(user._id.toString());
+            console.log(`✅ [PaystackWebhook] User ${user._id} set to past_due after payment failure`);
+          }
+        } catch (error) {
+          console.error('❌ [PaystackWebhook] Error processing charge.failed:', error);
+        }
+      }
+      break;
+
     default:
       console.log(`❓ [PaystackWebhook] Unhandled event type: ${event.event}`);
       break;

@@ -16,6 +16,10 @@ export interface SubscriptionData {
   status: string;
   isTrialActive: boolean;
   trialDaysRemaining: number;
+  /** Next payment due date (for paid plans); show "Pay by X" in UI */
+  currentPeriodEnd?: Date | null;
+  /** When payment failed; used for past_due and reminders */
+  paymentFailedAt?: Date | null;
   usage: {
     invoicesThisMonth: number;
     monthlyVolume: number;
@@ -274,9 +278,9 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
         const trialDaysRemaining = trialEndDate ? Math.max(0, Math.ceil((trialEndDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24))) : 0;
         
         // Feature access based on organization subscription
-        // For combined plans, allow access even if status is not explicitly 'active' (for old accounts)
+        const isPastDue = orgSubscription.status === 'past_due';
         const isPaidPlan = planId !== 'receivables-free' && planId !== 'trial-premium';
-        const isActiveOrCombined = orgSubscription.status === 'active' || (isPaidPlan && planId.includes('combined'));
+        const isActiveOrCombined = !isPastDue && (orgSubscription.status === 'active' || (isPaidPlan && planId.includes('combined')));
         
         const canCreateOrganization = false; // Members can't create organizations
         const canAccessPayables = Boolean(
@@ -284,14 +288,12 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
           ((planId.includes('payables') || planId.includes('combined')) && isActiveOrCombined)
         );
         
-        // Get organization's current month invoice count (use organization's usage, not individual)
         const currentMonthInvoiceCount = orgSubscription.usage?.invoicesThisMonth || 0;
         
-        // CRITICAL: Check if organization can create invoice
-        // Trial-premium organizations ALWAYS get unlimited invoices
         let canCreateInvoice = false;
-        if (isTrialPremiumPlan) {
-          // Trial-premium organizations get unlimited invoices - ALWAYS TRUE
+        if (isPastDue) {
+          canCreateInvoice = false;
+        } else if (isTrialPremiumPlan) {
           canCreateInvoice = true;
           console.log('✅ [getUserSubscription] Organization on trial-premium - unlimited invoice creation allowed');
         } else if (planId === 'receivables-free') {
@@ -300,7 +302,7 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
           canCreateInvoice = orgSubscription.status === 'active';
         }
         
-        const canUseAdvancedFeatures = Boolean(isTrialPremiumPlan || (planId !== 'receivables-free' && orgSubscription.status === 'active'));
+        const canUseAdvancedFeatures = Boolean(isTrialPremiumPlan || (planId !== 'receivables-free' && orgSubscription.status === 'active' && !isPastDue));
         
         const subscriptionData = {
           plan: plan ? {
@@ -311,6 +313,8 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
           status: orgSubscription.status || 'inactive',
           isTrialActive,
           trialDaysRemaining,
+          currentPeriodEnd: orgSubscription.currentPeriodEnd ? new Date(orgSubscription.currentPeriodEnd) : null,
+          paymentFailedAt: orgSubscription.paymentFailedAt ? new Date(orgSubscription.paymentFailedAt) : null,
           usage: {
             invoicesThisMonth: currentMonthInvoiceCount,
             monthlyVolume: orgSubscription.usage?.monthlyVolume || 0,
@@ -412,9 +416,10 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
     }
     
     // Feature access (trial users get full access)
-    // For combined plans, allow access even if status is not explicitly 'active' (for old accounts)
+    // past_due = payment failed; block access until they pay (data is kept)
+    const isPastDue = subscription.status === 'past_due';
     const isPaidPlan = planId !== 'receivables-free' && planId !== 'trial-premium';
-    const isActiveOrCombined = subscription.status === 'active' || (isPaidPlan && planId.includes('combined'));
+    const isActiveOrCombined = !isPastDue && (subscription.status === 'active' || (isPaidPlan && planId.includes('combined')));
     const isTrialOrPro = isTrialPremiumPlan || (isPaidPlan && isActiveOrCombined);
     const canCreateOrganization = Boolean(isTrialOrPro);
     const canAccessPayables = Boolean(
@@ -426,19 +431,17 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
     const currentMonthInvoiceCount = await getCurrentMonthInvoiceCount(session.user.id);
     
     // CRITICAL: Check if user can create invoice based on plan and usage limits
-    // Trial users ALWAYS get unlimited invoices - no checks needed
+    // past_due: no access until they pay
     let canCreateInvoice = false;
     
-    // PRIORITY: Trial-premium users ALWAYS get unlimited invoices
-    if (isTrialPremiumPlan) {
-      // Trial users get unlimited invoices - ALWAYS TRUE (even if trialEndDate is missing, they're on trial)
+    if (isPastDue) {
+      canCreateInvoice = false;
+    } else if (isTrialPremiumPlan) {
       canCreateInvoice = true;
       console.log('✅ [getUserSubscription] Trial-premium user - unlimited invoice creation allowed');
     } else if (planId === 'receivables-free') {
-      // Free plan users can create invoices only if they haven't reached the monthly limit
       canCreateInvoice = currentMonthInvoiceCount < 5;
     } else {
-      // Paid plan users can create invoices based on their plan limits
       const planLimit = plan?.limits?.invoicesPerMonth || -1;
       canCreateInvoice = planLimit === -1 || currentMonthInvoiceCount < planLimit;
     }
@@ -461,6 +464,8 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
       status: subscription.status || 'active',
       isTrialActive,
       trialDaysRemaining,
+      currentPeriodEnd: subscription.currentPeriodEnd ? new Date(subscription.currentPeriodEnd) : null,
+      paymentFailedAt: subscription.paymentFailedAt ? new Date(subscription.paymentFailedAt) : null,
       usage: {
         invoicesThisMonth: currentMonthInvoiceCount,
         monthlyVolume: user.usage?.monthlyVolume || 0,

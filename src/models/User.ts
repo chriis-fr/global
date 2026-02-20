@@ -122,11 +122,13 @@ export interface User {
   // Subscription & Billing Fields
   subscription: {
     planId: string; // e.g., 'receivables-free', 'payables-pro'
-    status: 'trial' | 'active' | 'cancelled' | 'expired';
+    status: 'trial' | 'active' | 'cancelled' | 'expired' | 'past_due';
     trialStartDate?: Date;
     trialEndDate?: Date;
     currentPeriodStart?: Date;
     currentPeriodEnd?: Date;
+    /** Set when payment fails; used for grace period and reminders */
+    paymentFailedAt?: Date;
     billingPeriod: 'monthly' | 'yearly';
     stripePriceId?: string;
     paystackSubscriptionCode?: string; // Paystack subscription code

@@ -78,7 +78,7 @@ export interface UserSubscription {
   userId: ObjectId;
   organizationId: ObjectId;
   planId: string;
-  status: 'active' | 'cancelled' | 'expired' | 'trial';
+  status: 'active' | 'cancelled' | 'expired' | 'trial' | 'past_due';
   currentPeriodStart: Date;
   currentPeriodEnd: Date;
   billingPeriod: BillingPeriod;
