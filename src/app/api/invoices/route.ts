@@ -107,24 +107,8 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     
-    if (!session?.user?.id) {
+    if (!session?.user?.id || !session?.user?.email) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Check if user can create invoice using server action
-    const canCreate = await canCreateInvoice();
-    
-    if (!canCreate.allowed) {
-      console.log('❌ [API Invoices] Invoice creation blocked:', canCreate.reason);
-      return NextResponse.json({
-        success: false,
-        error: canCreate.reason,
-        requiresUpgrade: canCreate.requiresUpgrade
-      }, { status: 403 });
-    }
-
-    if (!session?.user?.email) {
-      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await request.json();
@@ -178,6 +162,18 @@ export async function POST(request: NextRequest) {
     const subtotalRounded = round2(parseFloat(subtotal) || 0);
     const totalTaxRounded = round2(parseFloat(totalTax) || 0);
     const totalRounded = round2(parseFloat(total) || 0);
+
+    // Check subscription limits (invoice count and volume) with this invoice's total
+    const canCreate = await canCreateInvoice(totalRounded);
+    if (!canCreate.allowed) {
+      console.log('❌ [API Invoices] Invoice creation blocked:', canCreate.reason);
+      return NextResponse.json({
+        success: false,
+        error: canCreate.reason,
+        requiresUpgrade: canCreate.requiresUpgrade
+      }, { status: 403 });
+    }
+
     const itemsNormalized = Array.isArray(items)
       ? items.map((item: { unitPrice?: number; amount?: number; discount?: number; tax?: number; [k: string]: unknown }) => ({
           ...item,
@@ -521,10 +517,17 @@ export async function POST(request: NextRequest) {
       // Don't fail the request if sync fails
     }
 
-           // After successful invoice creation, increment usage:
+           // After successful invoice creation, increment invoice count and volume
            await SubscriptionService.incrementInvoiceUsage(
              new ObjectId(session.user.id)
            );
+           if (totalRounded > 0) {
+             await SubscriptionService.updateUsage(
+               new ObjectId(session.user.id),
+               'volume',
+               totalRounded
+             );
+           }
 
            // Send approval notifications only if org has approval emails enabled
            const approvalEmailsEnabled = organization?.approvalSettings?.emailSettings?.approvalNotifications !== false;

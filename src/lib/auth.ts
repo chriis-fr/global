@@ -119,7 +119,7 @@ export const authOptions: NextAuthOptions = {
               lastLoginAt: new Date()
             })
             
-            // Check if existing user should get 30-day trial
+            // Check if existing user should get 15-day trial
             const { activate30DayTrial } = await import('@/lib/actions/subscription');
             const hasProSubscription = existingUser.subscription && existingUser.subscription.planId !== 'receivables-free' && existingUser.subscription.status === 'active';
             const hasUsedTrial = existingUser.subscription?.hasUsedTrial;

@@ -181,7 +181,7 @@ export default function PricingPage() {
               transition={{ delay: 0.2 }}
               className="text-xl text-blue-100 max-w-3xl mx-auto"
             >
-              Start with a 30-day free trial. No credit card required for trial users.
+              Start with a 15-day free trial. No credit card required for trial users.
             </motion.p>
 
             {/* Production Environment Banner */}
@@ -194,7 +194,7 @@ export default function PricingPage() {
               >
                 <div className="flex items-center justify-center gap-3 mb-2">
                   <CheckCircle className="h-6 w-6" />
-                  <h2 className="text-2xl font-bold">30-Day Free Trial Active</h2>
+                  <h2 className="text-2xl font-bold">15-Day Free Trial Active</h2>
                 </div>
                 <p className="text-lg opacity-90">
                   All features are available for free during the trial period. Subscriptions will be enabled soon.

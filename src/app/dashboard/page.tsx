@@ -178,6 +178,31 @@ export default function DashboardPage() {
               <p className="text-blue-200">Welcome back, {displayName}!</p>
             </div>
         </div>
+        {/* Trial indicator - top right on desktop, fixed beside menu button on mobile */}
+        {mounted && subscription?.isTrialActive && (
+          <>
+            {/* Mobile: Fixed position to the left of menu button */}
+            <div className="lg:hidden fixed top-4 right-[4.5rem] z-[60] flex items-center gap-1.5 px-2 py-1.5 bg-blue-500/20 border border-blue-400/30 rounded-lg">
+              <Clock className="h-3.5 w-3.5 text-blue-300 shrink-0" />
+              <div className="flex flex-col leading-tight">
+                <span className="text-xs font-medium text-blue-200">
+                  {subscription.trialDaysRemaining} {subscription.trialDaysRemaining === 1 ? 'day' : 'days'}
+                </span>
+                <span className="text-[10px] text-blue-300/80">Trial</span>
+              </div>
+            </div>
+            {/* Desktop: In header flow */}
+            <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-blue-500/20 border border-blue-400/30 rounded-lg shrink-0">
+              <Clock className="h-3.5 w-3.5 text-blue-300 shrink-0" />
+              <div className="flex flex-col leading-tight">
+                <span className="text-xs font-medium text-blue-200">
+                  {subscription.trialDaysRemaining} {subscription.trialDaysRemaining === 1 ? 'day' : 'days'} left
+                </span>
+                <span className="text-[10px] text-blue-300/80">Free trial</span>
+              </div>
+            </div>
+          </>
+        )}
         {/* <div className="text-right">
             <p className="text-sm text-blue-300">Last updated</p>
             <p className="text-sm text-white">{new Date().toLocaleDateString()}</p>

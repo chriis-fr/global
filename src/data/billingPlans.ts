@@ -1,7 +1,7 @@
 import { BillingPlan } from '@/models/Billing';
 
 export const BILLING_PLANS: BillingPlan[] = [
-  // TRIAL PLAN (30-day free trial with all features)
+  // TRIAL PLAN (15-day free trial with all features; then free plan: 5 invoices, low volume)
   {
     planId: 'trial-premium',
     type: 'trial',

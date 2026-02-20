@@ -98,8 +98,8 @@ export async function clearSubscriptionCache(userId?: string): Promise<void> {
 }
 
 /**
- * Activate 30-day trial for a user
- * This gives them access to all features for 30 days
+ * Activate 15-day trial for a user
+ * Gives full access for 15 days; after that they move to free plan (5 invoices, low volume).
  */
 export async function activate30DayTrial(userId: string): Promise<{ success: boolean; error?: string }> {
   try {
@@ -122,9 +122,9 @@ export async function activate30DayTrial(userId: string): Promise<{ success: boo
       return { success: false, error: 'Trial already used' };
     }
     
-    // Calculate trial dates
+    // 15-day trial from sign up
     const now = new Date();
-    const trialEndDate = new Date(now.getTime() + (30 * 24 * 60 * 60 * 1000)); // 30 days from now
+    const trialEndDate = new Date(now.getTime() + (15 * 24 * 60 * 60 * 1000)); // 15 days from now
     
     // Update user with trial subscription
     await db.collection('users').updateOne(
@@ -355,7 +355,7 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
         return null; // Return null to indicate no subscription yet (will be set after invitation completion)
       }
       
-      // Activate 30-day trial for new users
+      // Activate 15-day trial for new users
       const trialResult = await activate30DayTrial(session.user.id);
       if (!trialResult.success) {
         await db.collection('users').updateOne(
@@ -440,7 +440,9 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
       canCreateInvoice = true;
       console.log('✅ [getUserSubscription] Trial-premium user - unlimited invoice creation allowed');
     } else if (planId === 'receivables-free') {
-      canCreateInvoice = currentMonthInvoiceCount < 5;
+      const volumeLimit = plan?.limits?.monthlyVolume ?? 2000;
+      const currentVolume = user.usage?.monthlyVolume ?? 0;
+      canCreateInvoice = currentMonthInvoiceCount < 5 && (volumeLimit <= 0 || currentVolume < volumeLimit);
     } else {
       const planLimit = plan?.limits?.invoicesPerMonth || -1;
       canCreateInvoice = planLimit === -1 || currentMonthInvoiceCount < planLimit;
@@ -498,7 +500,10 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
   }
 }
 
-export async function canCreateInvoice(): Promise<{
+/**
+ * Check if the user can create an invoice. Optionally pass the invoice total to enforce volume limit.
+ */
+export async function canCreateInvoice(proposedVolumeAmount?: number): Promise<{
   allowed: boolean;
   reason?: string;
   requiresUpgrade?: boolean;
@@ -515,18 +520,40 @@ export async function canCreateInvoice(): Promise<{
       };
     }
     
-    // Check if user has reached their monthly limit
+    // Check if user has reached their monthly invoice count limit
     if (!subscription.canCreateInvoice) {
       if (subscription.plan?.planId === 'receivables-free') {
+        const volLimit = subscription.limits.monthlyVolume;
+        const volUsed = subscription.usage.monthlyVolume ?? 0;
+        if (volLimit > 0 && volUsed >= volLimit) {
+          return {
+            allowed: false,
+            reason: `You have reached your monthly volume limit ($${volLimit.toLocaleString()}). Upgrade to issue more.`,
+            requiresUpgrade: true
+          };
+        }
         return {
           allowed: false,
-          reason: `You have reached your monthly limit of 5 invoices. Upgrade to create more invoices.`,
+          reason: 'You have reached your monthly limit of 5 invoices. Upgrade to create more invoices.',
           requiresUpgrade: true
         };
       } else {
         return {
           allowed: false,
           reason: `You have reached your monthly limit of ${subscription.limits.invoicesPerMonth} invoices. Upgrade to create more invoices.`,
+          requiresUpgrade: true
+        };
+      }
+    }
+    
+    // Enforce volume limit when creating a new invoice (e.g. free plan $2,000/month)
+    const volumeLimit = subscription.limits.monthlyVolume;
+    if (volumeLimit > 0 && typeof proposedVolumeAmount === 'number' && proposedVolumeAmount >= 0) {
+      const currentVolume = subscription.usage.monthlyVolume ?? 0;
+      if (currentVolume + proposedVolumeAmount > volumeLimit) {
+        return {
+          allowed: false,
+          reason: `This invoice would exceed your monthly volume limit ($${volumeLimit.toLocaleString()}). Current: $${currentVolume.toLocaleString()}. Upgrade for higher limits.`,
           requiresUpgrade: true
         };
       }
