@@ -48,11 +48,14 @@ export default function PricingPage() {
 
   const getSeatsForPlan = (plan: BillingPlan) => {
     if (plan.dynamicPricing) {
-      const defaultSeats = audience === 'individual' && plan.planId === 'receivables-pro' ? 1 : (plan.dynamicPricing.includedSeats || 1)
+      const defaultSeats = audience === 'individual' ? 1 : (plan.dynamicPricing.includedSeats || 1)
       return seatsByPlanId[plan.planId] ?? defaultSeats
     }
     return 1
   }
+
+  const isIndividualSingleSeat = (plan: BillingPlan) =>
+    audience === 'individual' && (plan.planId === 'receivables-growth-individual' || plan.audience === 'individual')
 
   const setSeatsForPlan = (planId: string, seats: number) => {
     setSeatsByPlanId(prev => ({ ...prev, [planId]: Math.max(1, Math.min(50, seats)) }))
@@ -210,7 +213,7 @@ export default function PricingPage() {
               <UsersRound className="h-7 w-7" />
               <div className="text-left">
                 <div className="font-semibold">For growing business & Teams</div>
-                <div className="text-sm opacity-80">Organisations · ClickUp & integrations · Multi-seat</div>
+                <div className="text-sm opacity-80">Organisations · Integrations · Multi-seat</div>
               </div>
             </button>
           </div>
@@ -279,17 +282,18 @@ export default function PricingPage() {
               Invoicing for you — one seat, full features. Upgrade to Growth for real-time reconciliation, API access, and more.
             </p>
           )}
-          <div className={`grid gap-6 max-w-6xl mx-auto ${audience === 'individual' ? 'grid-cols-1 sm:grid-cols-2 max-w-2xl' : 'md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'}`}>
+          <div className={`grid gap-6 mx-auto ${audience === 'individual' ? 'grid-cols-1 sm:grid-cols-2 max-w-2xl' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-5xl'}`}>
             {filteredPlans.map((plan) => (
               <PlanCard
                 key={plan.planId}
                 plan={plan}
                 billingPeriod={billingPeriod}
                 seats={getSeatsForPlan(plan)}
-                onSeatsChange={plan.dynamicPricing ? (s) => setSeatsForPlan(plan.planId, s) : undefined}
+                onSeatsChange={!isIndividualSingleSeat(plan) && plan.dynamicPricing ? (s) => setSeatsForPlan(plan.planId, s) : undefined}
                 onSubscribe={handleSubscribe}
                 loading={loading === plan.planId}
                 isCurrentPlan={session && subscription?.plan?.planId === plan.planId ? true : undefined}
+                hideSeatSelector={isIndividualSingleSeat(plan)}
               />
             ))}
           </div>
@@ -336,7 +340,8 @@ function PlanCard({
   onSeatsChange,
   onSubscribe,
   loading,
-  isCurrentPlan
+  isCurrentPlan,
+  hideSeatSelector = false
 }: {
   plan: BillingPlan
   billingPeriod: BillingPeriod
@@ -345,6 +350,7 @@ function PlanCard({
   onSubscribe: (plan: BillingPlan, seats?: number) => void
   loading: boolean
   isCurrentPlan?: boolean
+  hideSeatSelector?: boolean
 }) {
   const isEnterprise = plan.isEnterprise
   const calculated = useMemo(() => {
@@ -388,7 +394,7 @@ function PlanCard({
         <h3 className="text-xl font-bold text-gray-900 mb-1">{plan.name}</h3>
         <p className="text-gray-600 text-sm mb-3">{plan.description}</p>
 
-        {plan.dynamicPricing && !isEnterprise && (
+        {plan.dynamicPricing && !isEnterprise && !hideSeatSelector && (
           <div className="flex items-center justify-center gap-2 mb-2">
             <Users className="h-4 w-4 text-gray-500" />
             <span className="text-sm text-gray-600">Seats:</span>
@@ -402,6 +408,9 @@ function PlanCard({
             />
           </div>
         )}
+        {hideSeatSelector && (
+          <div className="text-sm text-gray-600 mb-2">1 seat · Individual account</div>
+        )}
 
         <div className="mb-2">
           <span className="text-2xl font-bold text-gray-900">{priceLabel}</span>
@@ -410,7 +419,7 @@ function PlanCard({
               ${(calculated.totalYearly / 12).toFixed(2)}/mo billed yearly
             </div>
           )}
-          {plan.dynamicPricing && !isEnterprise && (
+          {plan.dynamicPricing && !isEnterprise && !hideSeatSelector && (
             <div className="text-xs text-gray-500 mt-0.5">
               {plan.dynamicPricing.includedSeats > 0
                 ? `$${plan.dynamicPricing.seatPrice}/seat after ${plan.dynamicPricing.includedSeats} included`

@@ -6,8 +6,8 @@ export const BILLING_PLANS: BillingPlan[] = [
     planId: 'trial-premium',
     type: 'trial',
     tier: 'premium',
-    name: '30-Day Free Trial',
-    description: 'Full access to all features for 30 days',
+    name: '15-Day Free Trial',
+    description: 'Full access to all features for 15 days',
     monthlyPrice: 0,
     yearlyPrice: 0,
     currency: 'USD',
@@ -32,7 +32,7 @@ export const BILLING_PLANS: BillingPlan[] = [
   },
 
   // ─── RECEIVABLES ─────────────────────────────────────────────────────────
-  // Starter (Free) – Individual & Business
+  // Starter (Free) – Individual only (contractors, freelancers)
   {
     planId: 'receivables-free',
     type: 'receivables',
@@ -44,7 +44,7 @@ export const BILLING_PLANS: BillingPlan[] = [
     monthlyPaystackPlanCode: null,
     yearlyPaystackPlanCode: null,
     currency: 'USD',
-    audience: 'both',
+    audience: 'individual',
     features: [
       { id: 'invoices', name: '5 invoices per month', description: 'Create and send invoices', included: true, limit: 5, unit: 'invoices' },
       { id: 'clients', name: 'Limited client management', description: 'Save & manage up to 3 clients', included: true },
@@ -58,7 +58,43 @@ export const BILLING_PLANS: BillingPlan[] = [
     ctaText: 'Get Started Free',
     ctaVariant: 'outline',
   },
-  // Growth – $5.99 per seat from 1 seat (solo or team)
+  // Growth for Individual – 1 seat only, 50 invoices, no API (fixed $5.99)
+  {
+    planId: 'receivables-growth-individual',
+    type: 'receivables',
+    tier: 'growth',
+    name: 'Growth',
+    description: ' Full features for your individual account.',
+    monthlyPrice: 5.99,
+    yearlyPrice: 59.88,
+    currency: 'USD',
+    audience: 'individual',
+    dynamicPricing: {
+      basePrice: 5.99,
+      seatPrice: 0,
+      includedSeats: 1, // 1 seat only, no extra seats
+      invoiceLimit: 50,
+      invoiceOveragePrice: 10,
+      invoiceOverageBlock: 100,
+      volumeThreshold: 25000,
+      volumeFee: 0.005,
+    },
+    features: [
+      { id: 'seats', name: '1 seat', description: 'Individual account', included: true },
+      { id: 'invoices', name: '50 invoices per month', description: 'Extra: $10 per 100 invoices', included: true, limit: 50, unit: 'invoices' },
+      { id: 'volume', name: '$25,000 volume included', description: '0.5% over volume', included: true },
+      { id: 'reconciliation', name: 'Real-time reconciliation', description: 'Automatic payment tracking', included: true },
+    ],
+    limits: {
+      invoicesPerMonth: 50,
+      monthlyVolume: 25000,
+      overageFee: 0.5,
+    },
+    popular: true,
+    ctaText: 'Start Growth',
+    ctaVariant: 'primary',
+  },
+  // Growth – $5.99 per seat from 1 seat (for Business / teams)
   {
     planId: 'receivables-pro',
     type: 'receivables',
@@ -68,7 +104,7 @@ export const BILLING_PLANS: BillingPlan[] = [
     monthlyPrice: 5.99,
     yearlyPrice: 59.88,
     currency: 'USD',
-    audience: 'both',
+    audience: 'business',
     dynamicPricing: {
       basePrice: 0,
       seatPrice: 5.99,
@@ -91,7 +127,6 @@ export const BILLING_PLANS: BillingPlan[] = [
       monthlyVolume: 25000,
       overageFee: 0.5,
     },
-    popular: true,
     ctaText: 'Start Growth',
     ctaVariant: 'primary',
   },

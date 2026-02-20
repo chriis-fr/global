@@ -13,7 +13,7 @@ export const SERVICE_DEFINITIONS = {
     icon: 'FileText',
     ready: true,
     subscriptionRequired: {
-      plans: ['receivables-free', 'receivables-pro', 'receivables-scale', 'receivables-enterprise', 'combined-basic', 'combined-pro', 'combined-enterprise'] as string[],
+      plans: ['receivables-free', 'receivables-growth-individual', 'receivables-pro', 'receivables-scale', 'receivables-enterprise', 'combined-basic', 'combined-pro', 'combined-enterprise'] as string[],
       minTier: 'free'
     }
   },
@@ -26,7 +26,7 @@ export const SERVICE_DEFINITIONS = {
     icon: 'ArrowRight',
     ready: true,
     subscriptionRequired: {
-      plans: ['receivables-free', 'receivables-pro', 'receivables-scale', 'receivables-enterprise', 'combined-basic', 'combined-pro', 'combined-enterprise'] as string[],
+      plans: ['receivables-free', 'receivables-growth-individual', 'receivables-pro', 'receivables-scale', 'receivables-enterprise', 'combined-basic', 'combined-pro', 'combined-enterprise'] as string[],
       minTier: 'free'
     }
   },
