@@ -1,12 +1,15 @@
 'use client';
-import { useState, useEffect } from 'react';
-import { Building2, Users, Edit, User, Plus, Image, Crown, Settings, ChevronDown, Search, ArrowLeft } from 'lucide-react';
+import { useState, useEffect, startTransition } from 'react';
+import { Building2, Users, Edit, User, Plus, Image, Crown, Settings, ChevronDown, Search, ArrowLeft, AlertTriangle, X } from 'lucide-react';
 import { countries } from '@/data/countries';
 import { LogoManager } from '@/components/LogoManager';
 import { LogoDisplay } from '@/components/LogoDisplay';
 import { ApprovalSettingsComponent } from '@/components/settings/ApprovalSettings';
 import { useSubscription } from '@/lib/contexts/SubscriptionContext';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useSession } from '@/lib/auth-client';
+import { BILLING_PLANS } from '@/data/billingPlans';
+import { getOrganizationData, createOrganization, updateOrganization } from '@/lib/actions/organization';
 
 interface OrganizationAddress {
   street: string;
@@ -72,9 +75,11 @@ interface Logo {
 
 export default function OrganizationSettingsPage() {
   const { subscription } = useSubscription();
+  const { data: session } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
   const fromPricing = searchParams?.get('from') === 'pricing';
+  const fromSubscriptionSuccess = searchParams?.get('from') === 'subscription-success';
   const [orgInfo, setOrgInfo] = useState<OrganizationInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -85,13 +90,14 @@ export default function OrganizationSettingsPage() {
   const [showCountryDropdown, setShowCountryDropdown] = useState(false);
   const [countrySearch, setCountrySearch] = useState('');
   const [selectedLogo, setSelectedLogo] = useState<Logo | null>(null);
+  const [hasPrefilledForm, setHasPrefilledForm] = useState(false);
   const [formData, setFormData] = useState<CreateOrganizationForm>({
     name: '',
     industry: '',
     companySize: '1-10',
     businessType: 'LLC',
     phone: '',
-    billingEmail: '',
+    billingEmail: session?.user?.email || '',
     taxId: '',
     address: {
       street: '',
@@ -101,25 +107,175 @@ export default function OrganizationSettingsPage() {
     }
   });
 
+  // Load organization data using server action - non-blocking, independent loading (like dashboard)
   useEffect(() => {
-    fetchOrganizationData();
-  }, []);
+    if (!session?.user?.email) {
+      setLoading(false);
+      return;
+    }
+    
+    // Load in background using server action - don't block render
+    startTransition(async () => {
+      try {
+        const result = await getOrganizationData();
+        if (result.success && result.data) {
+          setOrgInfo(result.data as unknown as OrganizationInfo);
+        } else {
+          setMessage({ type: 'error', text: result.error || 'Failed to load organization data' });
+        }
+      } catch (error) {
+        console.error('Error fetching organization data:', error);
+        setMessage({ type: 'error', text: 'Failed to load organization data' });
+      } finally {
+        setLoading(false);
+      }
+    });
+  }, [session?.user?.email]);
 
+  // Auto-dismiss success messages after 5 seconds
+  useEffect(() => {
+    if (message?.type === 'success') {
+      const timer = setTimeout(() => {
+        setMessage(null);
+      }, 5000); // 5 seconds
+
+      return () => clearTimeout(timer);
+    }
+  }, [message]);
+
+  // Prefill form with user data when showing create form
+  // Billing email is ALWAYS set from user's account and cannot be changed
+  useEffect(() => {
+    if (showCreateForm && session?.user?.email) {
+      // Always ensure billing email is set from user's account (cannot be edited)
+      setFormData(prev => ({
+        ...prev,
+        billingEmail: session.user.email || prev.billingEmail
+      }));
+
+      // Fetch additional user data to prefill other fields if available (only if empty)
+      if (!hasPrefilledForm) {
+        const fetchUserData = async () => {
+          try {
+            const response = await fetch('/api/user/settings');
+            const data = await response.json();
+            
+            if (data.success && data.data?.profile) {
+              const profile = data.data.profile;
+              setFormData(prev => ({
+                ...prev,
+                billingEmail: session.user.email || prev.billingEmail, // Always use account email
+                phone: prev.phone || profile.phone || '',
+                address: {
+                  street: prev.address.street || profile.address?.street || '',
+                  city: prev.address.city || profile.address?.city || '',
+                  // Always prefill country if available from user profile (collected during signup)
+                  country: profile.address?.country || prev.address.country || '',
+                  postalCode: prev.address.postalCode || profile.address?.postalCode || ''
+                },
+                industry: prev.industry || profile.industry || '',
+                taxId: prev.taxId || profile.taxId || ''
+              }));
+            }
+          } catch (error) {
+            console.error('Error fetching user data for prefilling:', error);
+            // Non-critical error - just ensure email is set from account
+            setFormData(prev => ({
+              ...prev,
+              billingEmail: session.user.email || prev.billingEmail
+            }));
+          }
+        };
+
+        fetchUserData();
+        setHasPrefilledForm(true);
+      }
+    } else if (!showCreateForm) {
+      // Reset prefilled flag when form is closed
+      setHasPrefilledForm(false);
+    }
+  }, [showCreateForm, session?.user?.email, hasPrefilledForm]);
+
+  // Check for pending organization data after payment (when user returns from pricing/subscription success with paid plan or trial)
+  useEffect(() => {
+    const checkPendingOrganization = async () => {
+      if (!subscription || loading) return;
+      
+      const planId = subscription?.plan?.planId;
+      const isPaidPlan = planId && planId !== 'receivables-free' && planId !== 'trial-premium';
+      const isTrialActive = subscription?.isTrialActive && planId === 'trial-premium';
+      
+      // Only proceed if user has paid plan or active trial
+      if (!isPaidPlan && !isTrialActive) {
+        // If they came from subscription success but don't have paid plan or trial, clear pending data
+        if (fromSubscriptionSuccess && typeof window !== 'undefined') {
+          localStorage.removeItem('pending_organization_data');
+        }
+        return;
+      }
+      
+      try {
+        const pendingDataStr = localStorage.getItem('pending_organization_data');
+        if (!pendingDataStr) return;
+        
+        const pendingData = JSON.parse(pendingDataStr);
+        // Check if data is recent (within 1 hour)
+        if (Date.now() - (pendingData.timestamp || 0) > 60 * 60 * 1000) {
+          localStorage.removeItem('pending_organization_data');
+          return;
+        }
+        
+        // User has paid plan or trial and pending org data - create organization
+        setCreating(true);
+        const { timestamp, ...orgFormData } = pendingData;
+        // Ensure billing email is always from user's account, not from pending data
+        const finalFormData = {
+          ...orgFormData,
+          billingEmail: session?.user?.email || orgFormData.billingEmail || ''
+        };
+        setFormData(finalFormData);
+        
+        const result = await createOrganization(finalFormData);
+
+        if (result.success) {
+          localStorage.removeItem('pending_organization_data');
+          const isTrial = subscription?.isTrialActive && subscription?.plan?.planId === 'trial-premium';
+          const successMessage = isTrial 
+            ? 'Organization created successfully! Remember to upgrade to a paid plan before your trial ends to maintain access.'
+            : 'Organization created successfully! Your payment has been processed and your organization is ready.';
+          setMessage({ type: 'success', text: successMessage });
+          setShowCreateForm(false);
+          setShowCountryDropdown(false);
+          await fetchOrganizationData();
+          // Clean URL
+          router.replace('/dashboard/settings/organization', { scroll: false });
+        } else {
+          setMessage({ type: 'error', text: result.error || 'Failed to create organization after payment' });
+        }
+      } catch (error) {
+        console.error('Error creating pending organization:', error);
+        localStorage.removeItem('pending_organization_data');
+        setMessage({ type: 'error', text: 'Failed to create organization. Please try again.' });
+      } finally {
+        setCreating(false);
+      }
+    };
+
+    checkPendingOrganization();
+  }, [subscription, loading, fromSubscriptionSuccess, router]);
+
+  // Refetch organization data (using server action for faster loading)
   const fetchOrganizationData = async () => {
     try {
-      const response = await fetch('/api/organization');
-      const data = await response.json();
-      
-      if (data.success) {
-        setOrgInfo(data.data);
+      const result = await getOrganizationData();
+      if (result.success && result.data) {
+        setOrgInfo(result.data as unknown as OrganizationInfo);
       } else {
-        setMessage({ type: 'error', text: 'Failed to load organization data' });
+        setMessage({ type: 'error', text: result.error || 'Failed to load organization data' });
       }
     } catch (error) {
       console.error('Error fetching organization data:', error);
       setMessage({ type: 'error', text: 'Failed to load organization data' });
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -129,29 +285,49 @@ export default function OrganizationSettingsPage() {
       return;
     }
 
+    // Check if user has access (paid plan OR trial)
+    const planId = subscription?.plan?.planId;
+    const isPaidPlan = planId && planId !== 'receivables-free' && planId !== 'trial-premium';
+    const isTrialActive = subscription?.isTrialActive && planId === 'trial-premium';
+    
+    // Block free plan users (redirect to pricing)
+    if (!isPaidPlan && !isTrialActive) {
+      // Store form data temporarily and redirect to pricing
+      try {
+        localStorage.setItem('pending_organization_data', JSON.stringify({
+          ...formData,
+          timestamp: Date.now()
+        }));
+        router.push('/pricing?createOrg=true');
+        return;
+      } catch (err) {
+        console.error('Failed to save pending organization data:', err);
+        setMessage({ type: 'error', text: 'Failed to save organization data. Please try again.' });
+        return;
+      }
+    }
+
+    // User has paid plan or trial - proceed with creation using server action
     setCreating(true);
     try {
-      const response = await fetch('/api/organization', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
+      const result = await createOrganization(formData);
 
-      const data = await response.json();
-
-      if (data.success) {
-        setMessage({ type: 'success', text: 'Organization created successfully! You can now collaborate with team members.' });
+      if (result.success) {
+        const isTrial = subscription?.isTrialActive && subscription?.plan?.planId === 'trial-premium';
+        const successMessage = isTrial
+          ? `Organization created successfully! You can now collaborate with team members. Remember to upgrade to a paid plan before your trial ends (${subscription?.trialDaysRemaining || 0} ${subscription?.trialDaysRemaining === 1 ? 'day' : 'days'} remaining) to maintain access.`
+          : 'Organization created successfully! You can now collaborate with team members.';
+        setMessage({ type: 'success', text: successMessage });
         setShowCreateForm(false);
         setShowCountryDropdown(false);
+        // Refetch using server action
         await fetchOrganizationData();
         if (fromPricing) {
           router.push('/pricing');
           return;
         }
       } else {
-        setMessage({ type: 'error', text: data.message || 'Failed to create organization' });
+        setMessage({ type: 'error', text: result.error || 'Failed to create organization' });
       }
     } catch (error) {
       console.error('Error creating organization:', error);
@@ -214,27 +390,23 @@ export default function OrganizationSettingsPage() {
     setSavingOrg(true);
     setMessage(null);
     try {
-      const response = await fetch('/api/organization', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: formData.name.trim(),
-          industry: formData.industry || undefined,
-          companySize: formData.companySize,
-          businessType: formData.businessType,
-          phone: formData.phone || undefined,
-          taxId: formData.taxId?.trim() || undefined,
-          address: formData.address
-        })
+      const result = await updateOrganization({
+        name: formData.name.trim(),
+        industry: formData.industry || undefined,
+        companySize: formData.companySize,
+        businessType: formData.businessType,
+        phone: formData.phone || undefined,
+        taxId: formData.taxId?.trim() || undefined,
+        address: formData.address
       });
-      const data = await response.json();
-      if (data.success) {
+      
+      if (result.success) {
         setMessage({ type: 'success', text: 'Organization updated.' });
         setIsEditingOrg(false);
         setShowCountryDropdown(false);
         await fetchOrganizationData();
       } else {
-        setMessage({ type: 'error', text: data.message || 'Failed to update organization' });
+        setMessage({ type: 'error', text: result.error || 'Failed to update organization' });
       }
     } catch (error) {
       console.error('Error updating organization:', error);
@@ -244,8 +416,18 @@ export default function OrganizationSettingsPage() {
     }
   };
 
-  // Check if user has organization access (Pro plans for individuals, or organization membership)
+  // Get current plan name for display
+  const getCurrentPlanName = () => {
+    if (!subscription?.plan?.planId) return 'Free Plan';
+    const plan = BILLING_PLANS.find(p => p.planId === subscription.plan.planId);
+    return plan?.name || subscription.plan.planId;
+  };
+
+  // Check if user has organization access (paid plans, trial users, or organization membership)
+  // Trial users can create organizations but will be downgraded if they don't pay
   const hasOrganizationAccess = subscription?.canCreateOrganization || (orgInfo?.hasOrganization && orgInfo?.organization);
+  const isTrialUser = subscription?.isTrialActive && subscription?.plan?.planId === 'trial-premium';
+  const isFreePlan = subscription?.plan?.planId === 'receivables-free';
 
   if (loading) {
     return (
@@ -292,9 +474,12 @@ export default function OrganizationSettingsPage() {
             </div>
           </div>
           
-          <h2 className="text-2xl font-bold text-white mb-4">Upgrade to Pro for Organization Access</h2>
+          <h2 className="text-2xl font-bold text-white mb-4">Upgrade Account to Create Organization</h2>
+          <p className="text-blue-200 mb-4 max-w-2xl mx-auto">
+            You are currently on the <span className="font-semibold text-white">{getCurrentPlanName()}</span> plan.
+          </p>
           <p className="text-blue-200 mb-6 max-w-2xl mx-auto">
-            Organization management and team collaboration features are available with our Pro plans. 
+            Organization management and team collaboration features are available with our paid plans. 
             Upgrade your account to create organizations, manage team members, and collaborate with your business partners.
           </p>
 
@@ -333,7 +518,7 @@ export default function OrganizationSettingsPage() {
             className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 mx-auto"
           >
             <Crown className="h-5 w-5" />
-            <span>Upgrade to Pro</span>
+            <span>Upgrade to Create Organization</span>
           </button>
         </div>
 
@@ -366,12 +551,21 @@ export default function OrganizationSettingsPage() {
       </div>
       
       {message && (
-        <div className={`mb-6 p-4 rounded-lg ${
+        <div className={`mb-6 p-4 rounded-lg relative ${
           message.type === 'success' 
             ? 'bg-green-600/20 border border-green-500/50 text-green-200' 
             : 'bg-red-600/20 border border-red-500/50 text-red-200'
         }`}>
-          {message.text}
+          <div className="pr-8">
+            {message.text}
+          </div>
+          <button
+            onClick={() => setMessage(null)}
+            className="absolute top-2 right-2 text-current opacity-70 hover:opacity-100 transition-opacity"
+            aria-label="Dismiss message"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 
@@ -430,6 +624,21 @@ export default function OrganizationSettingsPage() {
                   Cancel
                 </button>
               </div>
+
+              {/* Trial User Warning */}
+              {isTrialUser && (
+                <div className="mb-6 bg-yellow-500/20 border border-yellow-400/30 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-5 w-5 text-yellow-400 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h4 className="text-yellow-300 font-medium mb-1">Free Trial Active</h4>
+                      <p className="text-yellow-200 text-sm">
+                        You can create an organization during your free trial. However, if you don't upgrade to a paid plan before your trial ends ({subscription?.trialDaysRemaining || 0} {subscription?.trialDaysRemaining === 1 ? 'day' : 'days'} remaining), your account will be downgraded to the free plan and you may lose access to organization features.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -523,10 +732,14 @@ export default function OrganizationSettingsPage() {
                   <input
                     type="email"
                     value={formData.billingEmail}
-                    onChange={(e) => handleInputChange('billingEmail', e.target.value)}
-                    className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    readOnly
+                    disabled
+                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-gray-400 cursor-not-allowed"
                     placeholder="Enter billing email"
                   />
+                  <p className="text-xs text-blue-300/70 mt-1">
+                    This will use your account email ({session?.user?.email || 'your email'})
+                  </p>
                 </div>
               </div>
 
@@ -635,7 +848,30 @@ export default function OrganizationSettingsPage() {
 
               <div className="mt-6 flex justify-end space-x-3">
                 <button
-                  onClick={() => setShowCreateForm(false)}
+                  onClick={() => {
+                    // Clear pending organization data if user cancels
+                    if (typeof window !== 'undefined') {
+                      localStorage.removeItem('pending_organization_data');
+                    }
+                    // Reset form but preserve email
+                    const userEmail = session?.user?.email || '';
+                    setFormData({
+                      name: '',
+                      industry: '',
+                      companySize: '1-10',
+                      businessType: 'LLC',
+                      phone: '',
+                      billingEmail: userEmail,
+                      taxId: '',
+                      address: {
+                        street: '',
+                        city: '',
+                        country: '',
+                        postalCode: ''
+                      }
+                    });
+                    setShowCreateForm(false);
+                  }}
                   className="px-4 py-2 text-blue-300 hover:text-white transition-colors"
                   disabled={creating}
                 >
@@ -790,9 +1026,12 @@ export default function OrganizationSettingsPage() {
                       type="email"
                       value={formData.billingEmail}
                       readOnly
-                      className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white cursor-not-allowed text-sm"
+                      disabled
+                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-gray-400 cursor-not-allowed text-sm"
                     />
-                    <p className="text-blue-200/80 text-xs mt-1">Billing email cannot be changed here.</p>
+                    <p className="text-xs text-blue-300/70 mt-1">
+                      This uses your account email ({session?.user?.email || 'your email'})
+                    </p>
                   </div>
                 </div>
                 <div className="mt-6">

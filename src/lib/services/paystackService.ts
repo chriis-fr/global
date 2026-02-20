@@ -234,7 +234,8 @@ export class PaystackService {
     planId: string,
     billingPeriod: 'monthly' | 'yearly',
     successUrl: string,
-    cancelUrl: string
+    cancelUrl: string,
+    options?: { seats?: number }
   ): Promise<string> {
     console.log('💳 [PaystackService] Initializing subscription transaction:', {
       customerCode,
@@ -299,6 +300,7 @@ export class PaystackService {
           planId: string;
           billingPeriod: string;
           customerCode: string;
+          seats?: number;
         };
       } = {
         email: customerEmail,
@@ -309,6 +311,7 @@ export class PaystackService {
           planId,
           billingPeriod,
           customerCode,
+          ...(options?.seats ? { seats: options.seats } : {})
         },
       };
 

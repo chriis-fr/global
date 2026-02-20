@@ -26,6 +26,7 @@ import { useSearchParams } from 'next/navigation'
 import { countries, defaultCountry } from '@/data/countries'
 import { getIndustriesByCategory, getIndustryCategories } from '@/data/industries'
 import { useOnboardingStore } from '@/lib/stores/onboardingStore'
+import { getOrganizationData } from '@/lib/actions/organization'
 
 function AuthContent() {
   const { data: session, status, update: refreshSession } = useSession()
@@ -796,9 +797,8 @@ function AuthContent() {
                   } else {
                     // No special tokens: route based on organization membership
                     try {
-                      const orgResp = await fetch('/api/organization')
-                      const orgJson = await orgResp.json()
-                      if (orgJson.success && orgJson.data?.hasOrganization) {
+                      const orgResult = await getOrganizationData()
+                      if (orgResult.success && orgResult.data?.hasOrganization) {
                         window.location.href = '/dashboard'
                       } else {
                         window.location.href = '/onboarding'
@@ -828,9 +828,8 @@ function AuthContent() {
             } else {
               // Try org-based routing
               try {
-                const orgResp = await fetch('/api/organization')
-                const orgJson = await orgResp.json()
-                if (orgJson.success && orgJson.data?.hasOrganization) {
+                const orgResult = await getOrganizationData()
+                if (orgResult.success && orgResult.data?.hasOrganization) {
                   window.location.href = '/dashboard'
                 } else {
                   window.location.href = '/onboarding'

@@ -83,7 +83,8 @@ export class SubscriptionServicePaystack {
     planId: string, 
     billingPeriod: 'monthly' | 'yearly',
     paystackSubscriptionCode: string,
-    paystackPlanCode: string
+    paystackPlanCode: string,
+    options?: { seats?: number }
   ): Promise<void> {
     console.log('🔄 [SubscriptionServicePaystack] Subscribing user to plan:', {
       userId: userId.toString(),
@@ -108,10 +109,16 @@ export class SubscriptionServicePaystack {
       'subscription.billingPeriod': billingPeriod,
       'subscription.paystackSubscriptionCode': paystackSubscriptionCode,
       'subscription.paystackPlanCode': paystackPlanCode,
-      'subscription.updatedAt': new Date()
+      'subscription.updatedAt': new Date(),
+      ...(options?.seats ? { 'subscription.seats': options.seats } : {})
     };
-    // Clear payment-failed state when they pay
-    const unsetData: Record<string, 1> = { 'subscription.paymentFailedAt': 1 };
+    // Clear payment-failed state and trial fields when they pay (user is now a paying customer)
+    const unsetData: Record<string, 1> = { 
+      'subscription.paymentFailedAt': 1,
+      'subscription.trialStartDate': 1,
+      'subscription.trialEndDate': 1,
+      'subscription.trialActivatedAt': 1
+    };
 
     console.log('💾 [SubscriptionServicePaystack] Updating database with:', JSON.stringify(updateData, null, 2));
 

@@ -183,7 +183,7 @@ export type ServiceKey = keyof typeof SERVICE_DEFINITIONS;
 // Create default services object with all services disabled
 // Services will only be enabled after user completes onboarding and selects them
 export function createDefaultServices(): UserServices {
-  console.log(' [ServiceManager] Creating default services (all disabled until onboarding)...');
+  // Removed console.log to reduce noise - this function is called frequently
   return {
     // Core Invoicing & Payments - ALL disabled until onboarding
     smartInvoicing: false, // Will be enabled during onboarding if user selects it

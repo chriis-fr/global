@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { ApprovalSettings } from '@/types/approval';
 import { SettingsGuard } from '@/components/PermissionGuard';
 import { OrganizationMember } from '@/models/Organization';
+import { getOrganizationData } from '@/lib/actions/organization';
 interface ApprovalSettingsProps {
   onSave?: (settings: ApprovalSettings) => void;
 }
@@ -56,17 +57,19 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
       setError(null);
 
       // Fetch approval settings, organization data, and members in parallel
-      const [settingsResponse, orgResponse, membersResponse] = await Promise.all([
+      const [settingsResponse, orgDataResult, membersResponse] = await Promise.all([
         fetch('/api/organization/approval-settings'),
-        fetch('/api/organization'),
+        getOrganizationData(),
         fetch('/api/organization/members')
       ]);
 
-      const [settingsData, orgData, membersData] = await Promise.all([
+      const [settingsData, , membersData] = await Promise.all([
         settingsResponse.json(),
-        orgResponse.json(),
+        Promise.resolve(orgDataResult), // orgData is already resolved from server action
         membersResponse.json()
       ]);
+      
+      const orgData = orgDataResult.success ? { success: true, data: orgDataResult.data } : { success: false };
 
       if (settingsData.success) {
         setSettings(settingsData.data);

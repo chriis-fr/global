@@ -1,7 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useSession } from '@/lib/auth-client';
-import { useSession as useNextAuthSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Breadcrumb from '@/components/dashboard/Breadcrumb';
@@ -10,7 +9,6 @@ import { useOnboardingStore } from '@/lib/stores/onboardingStore';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { data: session, status, update: refreshSession } = useSession();
-  const { update: nextAuthUpdate } = useNextAuthSession();
   const router = useRouter();
   const [sidebarState, setSidebarState] = useState<'expanded' | 'collapsed' | 'auto-hidden'>('expanded');
   const mainContentRef = useRef<HTMLDivElement>(null);
@@ -62,9 +60,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     // Session says not completed: try JWT refresh (e.g. after full-page load from onboarding completion)
     if (!refreshAttemptedRef.current) {
       refreshAttemptedRef.current = true;
-      nextAuthUpdate?.()
-        .then(() => refreshSession())
-        .catch(() => {})
+      // Use refreshSession directly instead of nextAuthUpdate to avoid NextAuth client fetch errors
+      refreshSession()
+        .catch((error) => {
+          console.warn('Session refresh failed:', error);
+        })
         .finally(() => {
           // Effect will re-run when session updates
         });
@@ -75,9 +75,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (!delayedRetryRef.current) {
       delayedRetryRef.current = true;
       setTimeout(() => {
-        nextAuthUpdate?.()
-          .then(() => refreshSession())
-          .catch(() => {});
+        refreshSession()
+          .catch((error) => {
+            console.warn('Delayed session refresh failed:', error);
+          });
       }, 1200);
       return;
     }
@@ -104,7 +105,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     } else {
       fetchOnboardingRef.current();
     }
-  }, [session, status, setOnboarding, router, refreshSession, nextAuthUpdate]);
+  }, [session, status, setOnboarding, router, refreshSession]);
 
   // Listen for sidebar state changes
   useEffect(() => {

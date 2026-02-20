@@ -189,7 +189,8 @@ export async function initializePaystackSubscription(
         planId,
         billingPeriod,
         `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/subscription/success?reference={REFERENCE}`,
-        `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/pricing?cancelled=true`
+        `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/pricing?cancelled=true`,
+        { seats }
       );
 
     console.log('✅ [PaystackAction] Subscription initialized successfully');
@@ -239,7 +240,7 @@ export async function verifyAndActivateSubscription(
     const transactionStatus = 'status' in transactionData ? String(transactionData.status) : undefined;
     const transactionCustomer = 'customer' in transactionData && transactionData.customer && typeof transactionData.customer === 'object' ? transactionData.customer as { customer_code?: string } : null;
     const transactionSubscriptionCode = 'subscription_code' in transactionData && transactionData.subscription_code ? String(transactionData.subscription_code) : null;
-    const transactionMetadata = 'metadata' in transactionData && transactionData.metadata && typeof transactionData.metadata === 'object' ? transactionData.metadata as { planId?: string; billingPeriod?: string; customerCode?: string } : null;
+    const transactionMetadata = 'metadata' in transactionData && transactionData.metadata && typeof transactionData.metadata === 'object' ? transactionData.metadata as { planId?: string; billingPeriod?: string; customerCode?: string; seats?: number } : null;
 
     console.log('✅ [PaystackAction] Transaction verified:', {
       reference: transactionReference,
@@ -275,7 +276,7 @@ export async function verifyAndActivateSubscription(
       const subscription = await PaystackService.getSubscription(subscriptionCode);
       const subscriptionData = subscription && typeof subscription === 'object' ? subscription : null;
       const subscriptionPlan = subscriptionData && 'plan' in subscriptionData && subscriptionData.plan && typeof subscriptionData.plan === 'object' ? subscriptionData.plan as { plan_code?: string } : null;
-      const subscriptionMetadata = subscriptionData && 'metadata' in subscriptionData && subscriptionData.metadata && typeof subscriptionData.metadata === 'object' ? subscriptionData.metadata as { planId?: string; billingPeriod?: string } : null;
+      const subscriptionMetadata = subscriptionData && 'metadata' in subscriptionData && subscriptionData.metadata && typeof subscriptionData.metadata === 'object' ? subscriptionData.metadata as { planId?: string; billingPeriod?: string; seats?: number } : null;
       const subscriptionCustomer = subscriptionData && 'customer' in subscriptionData && subscriptionData.customer && typeof subscriptionData.customer === 'object' ? subscriptionData.customer as { customer_code?: string } : null;
       
       console.log('📋 [PaystackAction] Subscription details:', {
@@ -318,12 +319,16 @@ export async function verifyAndActivateSubscription(
             subscriptionCode
           });
           
+          // Extract seats from metadata if available (prioritize transaction metadata, then subscription metadata)
+          const seatsFromMetadata = (transactionMetadata as { seats?: number })?.seats || subscriptionMetadata?.seats;
+          
           await SubscriptionServicePaystack.subscribeToPlan(
             user._id,
             planId,
             billingPeriod,
             subscriptionCode,
-            planCode
+            planCode,
+            seatsFromMetadata ? { seats: seatsFromMetadata } : undefined
           );
 
           // Clear subscription cache
@@ -384,6 +389,9 @@ export async function verifyAndActivateSubscription(
               note: 'This is a fallback when subscription_code is not yet available. Webhook will update with subscription_code later.'
             });
 
+            // Extract seats from metadata if available
+            const seats = (transactionMetadata as { seats?: number })?.seats;
+            
             const updateResult = await db.collection('users').updateOne(
               { _id: user._id },
               {
@@ -394,7 +402,14 @@ export async function verifyAndActivateSubscription(
                   'subscription.currentPeriodEnd': currentPeriodEnd,
                   'subscription.billingPeriod': transactionBillingPeriod,
                   'subscription.updatedAt': now,
+                  ...(seats ? { 'subscription.seats': seats } : {}),
                   // Note: paystackSubscriptionCode and paystackPlanCode will be set by webhook
+                },
+                $unset: {
+                  'subscription.trialStartDate': '',
+                  'subscription.trialEndDate': '',
+                  'subscription.trialActivatedAt': '',
+                  'subscription.paymentFailedAt': ''
                 }
               }
             );

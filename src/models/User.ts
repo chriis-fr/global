@@ -133,6 +133,7 @@ export interface User {
     stripePriceId?: string;
     paystackSubscriptionCode?: string; // Paystack subscription code
     paystackPlanCode?: string; // Paystack plan code
+    seats?: number; // Number of seats purchased (for dynamic pricing plans)
     createdAt: Date;
     updatedAt: Date;
     // New trial system fields

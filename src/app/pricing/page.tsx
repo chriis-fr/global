@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useSession } from '@/lib/auth-client'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   Check,
   X,
@@ -26,6 +26,7 @@ import { BillingPlan, PlanType, BillingPeriod } from '@/models/Billing'
 import { useSubscription } from '@/lib/contexts/SubscriptionContext'
 import { initializePaystackSubscription } from '@/lib/actions/paystack'
 import { calculatePlanPrice, getDisplayPrice } from '@/lib/pricingEngine'
+import { getOrganizationSeatInfo } from '@/lib/actions/organization'
 
 export type PricingAudience = 'individual' | 'business'
 
@@ -35,35 +36,99 @@ export default function PricingPage() {
   const { data: session } = useSession()
   const { subscription, refetch } = useSubscription()
   const router = useRouter()
-  const [audience, setAudience] = useState<PricingAudience>('individual')
+  const searchParams = useSearchParams()
+  const createOrg = searchParams?.get('createOrg') === 'true'
+  const hasOrganization = Boolean(session?.user?.organizationId)
+  // If user has an organization, automatically show business plans only
+  const [audience, setAudience] = useState<PricingAudience>(hasOrganization ? 'business' : 'individual')
   const [selectedType, setSelectedType] = useState<PlanType>('receivables')
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly')
   const [loading, setLoading] = useState<string | null>(null)
   const [seatsByPlanId, setSeatsByPlanId] = useState<Record<string, number>>({})
   const [showCreateOrgModal, setShowCreateOrgModal] = useState(false)
+  const [hasPendingOrgData, setHasPendingOrgData] = useState(false)
+  const [currentPlanSeats, setCurrentPlanSeats] = useState<number | null>(null)
 
-  const hasOrganization = Boolean(session?.user?.organizationId)
   const needsOrgForBusiness = audience === 'business' && session && !hasOrganization
 
+  // Update audience to business if user has organization
+  useEffect(() => {
+    if (hasOrganization && audience === 'individual') {
+      setAudience('business')
+    }
+  }, [hasOrganization, audience])
+
+  // Check for pending organization data
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const pending = localStorage.getItem('pending_organization_data');
+      setHasPendingOrgData(!!pending);
+    }
+  }, []);
+
+  // Fetch current plan seats if user has organization
+  useEffect(() => {
+    const fetchCurrentSeats = async () => {
+      if (hasOrganization && subscription?.plan?.planId) {
+        try {
+          const result = await getOrganizationSeatInfo();
+          if (result.success && result.data) {
+            setCurrentPlanSeats(result.data.paidSeats);
+          }
+        } catch (error) {
+          console.error('Error fetching current plan seats:', error);
+        }
+      } else {
+        setCurrentPlanSeats(null);
+      }
+    };
+
+    fetchCurrentSeats();
+  }, [hasOrganization, subscription?.plan?.planId]);
+
+  // Clear pending org data if user navigates away without paying (cleanup on unmount or when they cancel)
+  useEffect(() => {
+    return () => {
+      // Only clear if they're leaving pricing without a paid plan
+      if (typeof window !== 'undefined' && createOrg) {
+        const planId = subscription?.plan?.planId;
+        const isPaidPlan = planId && planId !== 'receivables-free' && planId !== 'trial-premium';
+        if (!isPaidPlan) {
+          // User is leaving without paying - keep data for now, will expire after 1 hour
+          // Or clear if they explicitly cancel - we'll handle that separately
+        }
+      }
+    };
+  }, [createOrg, subscription]);
+
+  // If user has organization, only show business plans
+  const effectiveAudience = hasOrganization ? 'business' : audience
+  
   const plansForAudience = BILLING_PLANS.filter(plan => {
     const a = plan.audience ?? 'both'
-    if (audience === 'individual') return a === 'individual' || a === 'both'
+    if (effectiveAudience === 'individual') return a === 'individual' || a === 'both'
     return a === 'business' || a === 'both'
   })
-  const filteredPlans = audience === 'individual'
+  const filteredPlans = effectiveAudience === 'individual'
     ? plansForAudience.filter(plan => plan.type === 'receivables')
     : plansForAudience.filter(plan => plan.type === selectedType)
 
   const getSeatsForPlan = (plan: BillingPlan) => {
     if (plan.dynamicPricing) {
-      const defaultSeats = audience === 'individual' ? 1 : (plan.dynamicPricing.includedSeats || 1)
+      // If this is the current plan, default to current seats, otherwise use plan defaults
+      const isCurrentPlan = session && subscription?.plan?.planId === plan.planId;
+      if (isCurrentPlan && currentPlanSeats) {
+        // Use current seats as default, but allow user to change
+        return seatsByPlanId[plan.planId] ?? currentPlanSeats;
+      }
+      const defaultSeats = effectiveAudience === 'individual' ? 1 : (plan.dynamicPricing.includedSeats || 1)
       return seatsByPlanId[plan.planId] ?? defaultSeats
     }
     return 1
   }
 
   const isIndividualSingleSeat = (plan: BillingPlan) =>
-    audience === 'individual' && (plan.planId === 'receivables-growth-individual' || plan.audience === 'individual')
+    effectiveAudience === 'individual' && (plan.planId === 'receivables-growth-individual' || plan.audience === 'individual')
 
   const setSeatsForPlan = (planId: string, seats: number) => {
     setSeatsByPlanId(prev => ({ ...prev, [planId]: Math.max(1, Math.min(50, seats)) }))
@@ -201,44 +266,90 @@ export default function PricingPage() {
                 </p>
               </motion.div>
             )}
+
+            {/* Pending Organization Creation Banner */}
+            {createOrg && hasPendingOrgData && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="mt-8 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-xl p-6 max-w-4xl mx-auto"
+              >
+                <div className="flex items-center justify-center gap-3 mb-2">
+                  <Building2 className="h-6 w-6" />
+                  <h2 className="text-2xl font-bold">Complete Your Organization Setup</h2>
+                </div>
+                <p className="text-lg opacity-90 text-center">
+                  Your organization details are saved. Please subscribe to a paid plan to complete the organization creation. After payment, your organization will be created automatically.
+                </p>
+                <button
+                  onClick={() => {
+                    localStorage.removeItem('pending_organization_data');
+                    setHasPendingOrgData(false);
+                    router.push('/dashboard/settings/organization');
+                  }}
+                  className="mt-4 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors text-sm"
+                >
+                  Cancel and return to organization settings
+                </button>
+              </motion.div>
+            )}
           </div>
         </div>
       </div>
 
       {/* Audience: For Individual vs For Business & Teams */}
-      <div className="bg-white py-8 border-b border-gray-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <p className="text-center text-gray-600 mb-4">Choose your plan type</p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button
-              onClick={() => setAudience('individual')}
-              className={`flex items-center justify-center gap-3 px-8 py-5 rounded-xl border-2 transition-all ${audience === 'individual'
-                  ? 'border-blue-600 bg-blue-50 text-blue-900 shadow-sm'
-                  : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
-                }`}
-            >
-              <User className="h-7 w-7" />
-              <div className="text-left">
-                <div className="font-semibold">For Individual</div>
-                <div className="text-sm opacity-80">Solo invoicer · One seat · Just you</div>
-              </div>
-            </button>
-            <button
-              onClick={() => setAudience('business')}
-              className={`flex items-center justify-center gap-3 px-8 py-5 rounded-xl border-2 transition-all ${audience === 'business'
-                  ? 'border-blue-600 bg-blue-50 text-blue-900 shadow-sm'
-                  : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
-                }`}
-            >
-              <UsersRound className="h-7 w-7" />
-              <div className="text-left">
-                <div className="font-semibold">For growing business & Teams</div>
-                <div className="text-sm opacity-80">Organisations · Integrations · Multi-seat</div>
-              </div>
-            </button>
+      {/* Hide audience selector if user has an organization - show only business plans */}
+      {!hasOrganization && (
+        <div className="bg-white py-8 border-b border-gray-100">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <p className="text-center text-gray-600 mb-4">Choose your plan type</p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <button
+                onClick={() => setAudience('individual')}
+                className={`flex items-center justify-center gap-3 px-8 py-5 rounded-xl border-2 transition-all ${audience === 'individual'
+                    ? 'border-blue-600 bg-blue-50 text-blue-900 shadow-sm'
+                    : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                  }`}
+              >
+                <User className="h-7 w-7" />
+                <div className="text-left">
+                  <div className="font-semibold">For Individual</div>
+                  <div className="text-sm opacity-80">Solo invoicer · One seat · Just you</div>
+                </div>
+              </button>
+              <button
+                onClick={() => setAudience('business')}
+                className={`flex items-center justify-center gap-3 px-8 py-5 rounded-xl border-2 transition-all ${audience === 'business'
+                    ? 'border-blue-600 bg-blue-50 text-blue-900 shadow-sm'
+                    : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                  }`}
+              >
+                <UsersRound className="h-7 w-7" />
+                <div className="text-left">
+                  <div className="font-semibold">For growing business & Teams</div>
+                  <div className="text-sm opacity-80">Organisations · Integrations · Multi-seat</div>
+                </div>
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* Show organization plans header if user has organization */}
+      {hasOrganization && (
+        <div className="bg-blue-50 py-6 border-b border-blue-100">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-center gap-3">
+              <Building2 className="h-6 w-6 text-blue-600" />
+              <div className="text-center">
+                <h2 className="text-lg font-semibold text-gray-900">Organization Plans</h2>
+                <p className="text-sm text-gray-600 mt-1">Choose a plan for your organization</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Individual user on Business plans: must create organisation first */}
       {needsOrgForBusiness && (
@@ -306,7 +417,7 @@ export default function PricingPage() {
       </div>
 
       {/* Plan Type Selector – only for Business & Teams */}
-      {audience === 'business' && (
+      {effectiveAudience === 'business' && (
         <div className="bg-white py-6">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -334,25 +445,30 @@ export default function PricingPage() {
       {/* Plans Grid */}
       <div className="py-16 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {audience === 'individual' && (
+          {effectiveAudience === 'individual' && (
             <p className="text-center text-gray-600 mb-8 max-w-xl mx-auto">
               Invoicing for you — one seat, full features. Upgrade to Growth for real-time reconciliation, API access, and more.
             </p>
           )}
-          <div className={`grid gap-6 mx-auto ${audience === 'individual' ? 'grid-cols-1 sm:grid-cols-2 max-w-2xl' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-5xl'}`}>
-            {filteredPlans.map((plan) => (
-              <PlanCard
-                key={plan.planId}
-                plan={plan}
-                billingPeriod={billingPeriod}
-                seats={getSeatsForPlan(plan)}
-                onSeatsChange={!isIndividualSingleSeat(plan) && plan.dynamicPricing ? (s) => setSeatsForPlan(plan.planId, s) : undefined}
-                onSubscribe={handleSubscribe}
-                loading={loading === plan.planId}
-                isCurrentPlan={session && subscription?.plan?.planId === plan.planId ? true : undefined}
-                hideSeatSelector={isIndividualSingleSeat(plan)}
-              />
-            ))}
+          <div className={`grid gap-6 mx-auto ${effectiveAudience === 'individual' ? 'grid-cols-1 sm:grid-cols-2 max-w-2xl' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-5xl'}`}>
+            {filteredPlans.map((plan) => {
+              const isCurrentPlan = session && subscription?.plan?.planId === plan.planId;
+              return (
+                <PlanCard
+                  key={plan.planId}
+                  plan={plan}
+                  billingPeriod={billingPeriod}
+                  seats={getSeatsForPlan(plan)}
+                  onSeatsChange={!isIndividualSingleSeat(plan) && plan.dynamicPricing ? (s) => setSeatsForPlan(plan.planId, s) : undefined}
+                  onSubscribe={handleSubscribe}
+                  loading={loading === plan.planId}
+                  isCurrentPlan={isCurrentPlan ? true : undefined}
+                  hideSeatSelector={isIndividualSingleSeat(plan)}
+                  currentPlanSeats={isCurrentPlan ? currentPlanSeats : undefined}
+                  allowSeatUpgrade={isCurrentPlan && plan.dynamicPricing ? true : undefined}
+                />
+              );
+            })}
           </div>
         </div>
       </div>
@@ -435,7 +551,9 @@ function PlanCard({
   onSubscribe,
   loading,
   isCurrentPlan,
-  hideSeatSelector = false
+  hideSeatSelector = false,
+  currentPlanSeats,
+  allowSeatUpgrade
 }: {
   plan: BillingPlan
   billingPeriod: BillingPeriod
@@ -445,6 +563,8 @@ function PlanCard({
   loading: boolean
   isCurrentPlan?: boolean
   hideSeatSelector?: boolean
+  currentPlanSeats?: number | null
+  allowSeatUpgrade?: boolean
 }) {
   const isEnterprise = plan.isEnterprise
   const calculated = useMemo(() => {
@@ -500,6 +620,9 @@ function PlanCard({
               onChange={(e) => onSeatsChange?.(parseInt(e.target.value, 10) || 1)}
               className="w-14 rounded border border-gray-300 px-2 py-1 text-center text-sm"
             />
+            {isCurrentPlan && currentPlanSeats && seats > currentPlanSeats && (
+              <span className="text-xs text-blue-600 font-medium">+{seats - currentPlanSeats} more</span>
+            )}
           </div>
         )}
         {hideSeatSelector && (
@@ -553,25 +676,38 @@ function PlanCard({
       ) : (
         <button
           onClick={() => onSubscribe(plan, plan.dynamicPricing ? seats : undefined)}
-          disabled={loading || isCurrentPlan}
-          className={`w-full py-3 px-4 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${isCurrentPlan
-              ? 'bg-green-100 text-green-700 cursor-not-allowed'
-              : plan.ctaVariant === 'primary'
-                ? 'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-400'
-                : plan.ctaVariant === 'secondary'
-                  ? 'bg-gray-600 text-white hover:bg-gray-700 disabled:bg-gray-400'
-                  : 'border-2 border-gray-300 text-gray-700 hover:bg-gray-50 disabled:bg-gray-100'
-            }`}
+          disabled={loading || (isCurrentPlan && !allowSeatUpgrade) || (isCurrentPlan && allowSeatUpgrade && currentPlanSeats !== null && currentPlanSeats !== undefined && seats <= currentPlanSeats)}
+          className={`w-full py-3 px-4 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
+            isCurrentPlan && allowSeatUpgrade && currentPlanSeats !== null && currentPlanSeats !== undefined && seats > currentPlanSeats
+              ? 'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-400'
+              : isCurrentPlan && (!allowSeatUpgrade || (currentPlanSeats !== null && currentPlanSeats !== undefined && seats <= currentPlanSeats))
+                ? 'bg-green-100 text-green-700 cursor-not-allowed'
+                : plan.ctaVariant === 'primary'
+                  ? 'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-400'
+                  : plan.ctaVariant === 'secondary'
+                    ? 'bg-gray-600 text-white hover:bg-gray-700 disabled:bg-gray-400'
+                    : 'border-2 border-gray-300 text-gray-700 hover:bg-gray-50 disabled:bg-gray-100'
+          }`}
         >
           {loading ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
               <span>Processing...</span>
             </>
+          ) : isCurrentPlan && allowSeatUpgrade && currentPlanSeats !== null && currentPlanSeats !== undefined && seats > currentPlanSeats ? (
+            <>
+              <Users className="h-4 w-4" />
+              <span>Upgrade to {seats} Seats</span>
+            </>
           ) : isCurrentPlan ? (
             <>
               <CheckCircle className="h-4 w-4" />
-              <span>Current Plan</span>
+              <span>
+                Current Plan
+                {currentPlanSeats && plan.dynamicPricing && (
+                  <span className="ml-1 text-xs opacity-90">({currentPlanSeats} seat{currentPlanSeats === 1 ? '' : 's'})</span>
+                )}
+              </span>
             </>
           ) : (
             plan.ctaText

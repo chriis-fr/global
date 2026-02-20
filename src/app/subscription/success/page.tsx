@@ -64,22 +64,51 @@ export default function SubscriptionSuccessPage() {
             } catch (_) {}
             
             await new Promise(resolve => setTimeout(resolve, 1200))
-            console.log('✅ [SubscriptionSuccess] Redirecting to dashboard with fresh data')
-            router.push('/dashboard?from=subscription-success')
+            
+            // Check for pending organization data
+            let redirectPath = '/dashboard?from=subscription-success';
+            if (typeof window !== 'undefined') {
+              const pendingOrgData = localStorage.getItem('pending_organization_data');
+              if (pendingOrgData) {
+                // Redirect to organization settings to complete org creation
+                redirectPath = '/dashboard/settings/organization?from=subscription-success';
+              }
+            }
+            
+            console.log('✅ [SubscriptionSuccess] Redirecting to', redirectPath)
+            router.push(redirectPath)
           } else {
             console.error('❌ [SubscriptionSuccess] Verification failed:', result.error)
             console.log('⚠️ [SubscriptionSuccess] Still attempting to refresh in case webhook processed it')
             await new Promise(resolve => setTimeout(resolve, 2000))
             await refetch()
             try { await updateNextAuth?.({}); await updateOurSession?.(); } catch (_) {}
-            router.push('/dashboard')
+            
+            // Check for pending organization data
+            let redirectPath = '/dashboard';
+            if (typeof window !== 'undefined') {
+              const pendingOrgData = localStorage.getItem('pending_organization_data');
+              if (pendingOrgData) {
+                redirectPath = '/dashboard/settings/organization?from=subscription-success';
+              }
+            }
+            router.push(redirectPath)
           }
         } else {
           // No reference found, but still try to refresh (might be webhook-activated)
           console.log('⚠️ [SubscriptionSuccess] No reference found in URL, refreshing subscription data')
           await refetch()
           try { await updateNextAuth?.({}); await updateOurSession?.(); } catch (_) {}
-          router.push('/dashboard')
+          
+          // Check for pending organization data
+          let redirectPath = '/dashboard';
+          if (typeof window !== 'undefined') {
+            const pendingOrgData = localStorage.getItem('pending_organization_data');
+            if (pendingOrgData) {
+              redirectPath = '/dashboard/settings/organization?from=subscription-success';
+            }
+          }
+          router.push(redirectPath)
         }
       } catch (err) {
         console.error('❌ [SubscriptionSuccess] Error handling subscription success:', err)
@@ -91,7 +120,16 @@ export default function SubscriptionSuccessPage() {
           console.log('🔄 [SubscriptionSuccess] Attempting recovery refetch...')
           await refetch()
           try { await updateNextAuth?.({}); await updateOurSession?.(); } catch (_) {}
-          router.push('/dashboard')
+          
+          // Check for pending organization data
+          let redirectPath = '/dashboard';
+          if (typeof window !== 'undefined') {
+            const pendingOrgData = localStorage.getItem('pending_organization_data');
+            if (pendingOrgData) {
+              redirectPath = '/dashboard/settings/organization?from=subscription-success';
+            }
+          }
+          router.push(redirectPath)
         } catch (refetchError) {
           console.error('❌ [SubscriptionSuccess] Recovery refetch also failed:', refetchError)
           setError('Failed to process subscription. Please check your dashboard or contact support.')

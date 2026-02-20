@@ -57,10 +57,18 @@ export async function GET() {
         profile: {
           name: user.name, // User's full name
           email: user.email,
-          phone: '',
+          phone: user.phone || '',
           currencyPreference: user.preferences?.currency || 'USD',
           profilePhoto: user.avatar || '',
           isGoogleUser: false, // Default to false since googleId is not in User interface
+          address: user.address || {
+            street: '',
+            city: '',
+            country: '',
+            postalCode: ''
+          },
+          industry: user.industry || '',
+          taxId: user.taxId || ''
         },
         organization: organizationData || {
           industry: '',

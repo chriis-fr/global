@@ -394,9 +394,12 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
     const currentDate = new Date();
     const trialEndDate = subscription.trialEndDate ? new Date(subscription.trialEndDate) : null;
     // CRITICAL: If planId is trial-premium, user is on trial regardless of status field
+    // BUT: If user has paid (status is 'active' and planId is NOT trial-premium), they are NOT on trial
     const isTrialPremiumPlan = planId === 'trial-premium';
-    const isTrialActive = !!(isTrialPremiumPlan && trialEndDate && currentDate < trialEndDate);
-    const trialDaysRemaining = trialEndDate ? Math.max(0, Math.ceil((trialEndDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24))) : 0;
+    const isPaidPlan = planId !== 'receivables-free' && planId !== 'trial-premium';
+    // User is only on trial if they have trial-premium plan AND trial hasn't expired AND they haven't paid
+    const isTrialActive = !!(isTrialPremiumPlan && trialEndDate && currentDate < trialEndDate && !isPaidPlan);
+    const trialDaysRemaining = isTrialActive && trialEndDate ? Math.max(0, Math.ceil((trialEndDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24))) : 0;
     
     // If trial has expired, downgrade to free plan (only if it's actually expired)
     if (isTrialPremiumPlan && trialEndDate && currentDate >= trialEndDate) {
@@ -418,7 +421,7 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
     // Feature access (trial users get full access)
     // past_due = payment failed; block access until they pay (data is kept)
     const isPastDue = subscription.status === 'past_due';
-    const isPaidPlan = planId !== 'receivables-free' && planId !== 'trial-premium';
+    // isPaidPlan already declared above (line 399)
     const isActiveOrCombined = !isPastDue && (subscription.status === 'active' || (isPaidPlan && planId.includes('combined')));
     const isTrialOrPro = isTrialPremiumPlan || (isPaidPlan && isActiveOrCombined);
     const canCreateOrganization = Boolean(isTrialOrPro);

@@ -200,8 +200,27 @@ export async function POST(request: NextRequest) {
             console.log('📋 [PaystackWebhook] Subscription metadata:', {
               planId: newSubscription.metadata?.planId,
               billingPeriod: newSubscription.metadata?.billingPeriod,
+              seats: newSubscription.metadata?.seats,
               allMetadata: newSubscription.metadata
             });
+
+            // Also check transaction metadata if subscription metadata doesn't have seats
+            // Paystack sometimes doesn't copy transaction metadata to subscription metadata
+            let seats = newSubscription.metadata?.seats;
+            if (!seats && event.data?.authorization?.metadata?.seats) {
+              seats = event.data.authorization.metadata.seats;
+              console.log('📋 [PaystackWebhook] Found seats in transaction metadata:', seats);
+            }
+            
+            // Fallback: Try to extract seats from plan name/description if metadata is missing
+            if (!seats && newSubscription.plan?.name) {
+              const planName = newSubscription.plan.name;
+              const seatsMatch = planName.match(/(\d+)\s*seat/i);
+              if (seatsMatch) {
+                seats = parseInt(seatsMatch[1], 10);
+                console.log('📋 [PaystackWebhook] Extracted seats from plan name:', seats);
+              }
+            }
 
             if (planId && billingPeriod && newSubscription.subscription_code && newSubscription.plan?.plan_code) {
               const subscriptionCode = String(newSubscription.subscription_code);
@@ -212,7 +231,8 @@ export async function POST(request: NextRequest) {
                 userId: user._id.toString(),
                 planId,
                 billingPeriod,
-                subscriptionCode
+                subscriptionCode,
+                seats: seats || 'not found'
               });
               
               await SubscriptionServicePaystack.subscribeToPlan(
@@ -220,7 +240,8 @@ export async function POST(request: NextRequest) {
                 planId,
                 billingPeriod,
                 subscriptionCode,
-                planCode
+                planCode,
+                seats ? { seats: typeof seats === 'number' ? seats : parseInt(String(seats), 10) } : undefined
               );
 
               // Clear subscription cache
@@ -268,6 +289,7 @@ export async function POST(request: NextRequest) {
             if (planId && billingPeriod && updatedSubscription.subscription_code && updatedSubscription.plan?.plan_code) {
               const subscriptionCode = String(updatedSubscription.subscription_code);
               const planCode = String(updatedSubscription.plan.plan_code);
+              const seats = updatedSubscription.metadata?.seats;
               
               console.log('💾 [PaystackWebhook] Updating subscription for user:', user.email);
               
@@ -276,7 +298,8 @@ export async function POST(request: NextRequest) {
                 planId,
                 billingPeriod,
                 subscriptionCode,
-                planCode
+                planCode,
+                seats ? { seats } : undefined
               );
 
               // Update organization subscription if user is an organization owner
@@ -401,6 +424,7 @@ export async function POST(request: NextRequest) {
 
                 if (planId && billingPeriod) {
                   const planCode = String(subscription.plan.plan_code);
+                  const seats = subscription.metadata?.seats;
                   console.log('💾 [PaystackWebhook] Activating subscription after successful charge:', user.email);
                   
                   await SubscriptionServicePaystack.subscribeToPlan(
@@ -408,7 +432,8 @@ export async function POST(request: NextRequest) {
                     planId,
                     billingPeriod,
                     subscriptionCode,
-                    planCode
+                    planCode,
+                    seats ? { seats } : undefined
                   );
 
                   await clearSubscriptionCache(user._id.toString());
@@ -458,6 +483,35 @@ export async function POST(request: NextRequest) {
             }
             await clearSubscriptionCache(user._id.toString());
             console.log(`✅ [PaystackWebhook] User ${user._id} set to past_due after payment failure`);
+
+            // Send immediate payment failed notification email
+            try {
+              const { sendPaymentFailedEmail } = await import('@/lib/services/emailService');
+              const { BILLING_PLANS } = await import('@/data/billingPlans');
+              const plan = BILLING_PLANS.find(p => p.planId === updatedUser?.subscription?.planId);
+              
+              if (plan && updatedUser) {
+                const billingPeriod = updatedUser.subscription.billingPeriod || 'monthly';
+                const amount = billingPeriod === 'yearly' ? plan.yearlyPrice : plan.monthlyPrice;
+                const hasOrganization = !!updatedUser.organizationId;
+                
+                await sendPaymentFailedEmail(
+                  updatedUser.email,
+                  updatedUser.name || updatedUser.email,
+                  {
+                    planName: plan.name,
+                    amount,
+                    currency: plan.currency || 'USD',
+                    daysSinceFailure: 0,
+                    hasOrganization
+                  }
+                );
+                console.log(`✅ [PaystackWebhook] Payment failed email sent to ${updatedUser.email}`);
+              }
+            } catch (emailError) {
+              console.error('❌ [PaystackWebhook] Failed to send payment failed email:', emailError);
+              // Don't fail the webhook if email fails
+            }
           }
         } catch (error) {
           console.error('❌ [PaystackWebhook] Error processing charge.failed:', error);
