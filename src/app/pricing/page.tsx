@@ -15,7 +15,9 @@ import {
   CheckCircle,
   Users,
   User,
-  UsersRound
+  UsersRound,
+  AlertCircle,
+  ArrowRight
 } from 'lucide-react'
 import Image from 'next/image'
 import { Header } from '@/components/landing/header'
@@ -27,6 +29,8 @@ import { calculatePlanPrice, getDisplayPrice } from '@/lib/pricingEngine'
 
 export type PricingAudience = 'individual' | 'business'
 
+const ORGANIZATION_SETTINGS_PATH = '/dashboard/settings/organization'
+
 export default function PricingPage() {
   const { data: session } = useSession()
   const { subscription, refetch } = useSubscription()
@@ -36,6 +40,10 @@ export default function PricingPage() {
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly')
   const [loading, setLoading] = useState<string | null>(null)
   const [seatsByPlanId, setSeatsByPlanId] = useState<Record<string, number>>({})
+  const [showCreateOrgModal, setShowCreateOrgModal] = useState(false)
+
+  const hasOrganization = Boolean(session?.user?.organizationId)
+  const needsOrgForBusiness = audience === 'business' && session && !hasOrganization
 
   const plansForAudience = BILLING_PLANS.filter(plan => {
     const a = plan.audience ?? 'both'
@@ -61,9 +69,26 @@ export default function PricingPage() {
     setSeatsByPlanId(prev => ({ ...prev, [planId]: Math.max(1, Math.min(50, seats)) }))
   }
 
+  const goToCreateOrganization = () => {
+    router.push(`${ORGANIZATION_SETTINGS_PATH}?from=pricing`)
+    setShowCreateOrgModal(false)
+  }
+
   const handleSubscribe = async (plan: BillingPlan, seats?: number) => {
     if (plan.isEnterprise) {
       window.location.href = 'mailto:sales@globalsolutions.com?subject=Enterprise%20pricing%20inquiry'
+      return
+    }
+
+    if (!session) {
+      router.push('/auth')
+      return
+    }
+
+    const planAudience = (plan as { audience?: string }).audience ?? 'business'
+    const isBusinessPlan = planAudience === 'business'
+    if (isBusinessPlan && !hasOrganization) {
+      setShowCreateOrgModal(true)
       return
     }
 
@@ -75,11 +100,6 @@ export default function PricingPage() {
       userEmail: session?.user?.email,
       userId: session?.user?.id
     })
-
-    if (!session) {
-      router.push('/auth')
-      return
-    }
 
     setLoading(plan.planId)
     try {
@@ -220,6 +240,43 @@ export default function PricingPage() {
         </div>
       </div>
 
+      {/* Individual user on Business plans: must create organisation first */}
+      {needsOrgForBusiness && (
+        <div className="bg-amber-50 border-b border-amber-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 rounded-xl bg-white border-2 border-amber-200 shadow-sm">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-6 w-6 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-semibold text-gray-900">Create an organisation first</h3>
+                  <p className="text-gray-600 text-sm mt-1">
+                    Team and business plans are billed per organisation. Create an organisation to choose seats and complete billing.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={goToCreateOrganization}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                >
+                  <Building2 className="h-4 w-4" />
+                  Create organisation
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAudience('individual')}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                >
+                  <User className="h-4 w-4" />
+                  Continue with individual plans
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Billing Period Toggle */}
       <div className="bg-white py-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -299,6 +356,43 @@ export default function PricingPage() {
           </div>
         </div>
       </div>
+
+      {/* Modal: Create organisation before purchasing team plan */}
+      {showCreateOrgModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" role="dialog" aria-modal="true" aria-labelledby="create-org-modal-title">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="p-2 rounded-full bg-amber-100">
+                <AlertCircle className="h-6 w-6 text-amber-600" />
+              </div>
+              <div>
+                <h2 id="create-org-modal-title" className="text-lg font-semibold text-gray-900">Organisation required</h2>
+                <p className="text-gray-600 text-sm mt-1">
+                  Team plans are billed per organisation. Create an organisation first, then return here to choose your plan and number of seats.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col-reverse sm:flex-row gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => setShowCreateOrgModal(false)}
+                className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={goToCreateOrganization}
+                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700"
+              >
+                <Building2 className="h-4 w-4" />
+                Go to Create organisation
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* FAQ Section */}
       <motion.div

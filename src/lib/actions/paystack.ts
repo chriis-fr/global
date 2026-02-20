@@ -58,6 +58,15 @@ export async function initializePaystackSubscription(
       };
     }
 
+    // Business/team plans require an organisation (billing is per organisation)
+    const planAudience = (plan as { audience?: string }).audience;
+    if (planAudience === 'business' && !session.user.organizationId) {
+      return {
+        success: false,
+        error: 'Create an organisation first to purchase team plans. Go to Settings → Organization, then return to Pricing.'
+      };
+    }
+
     // Handle free plan - update database directly, no Paystack needed
     if (planId === 'receivables-free') {
       console.log('✅ [PaystackAction] Free plan selected, updating database directly');

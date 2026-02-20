@@ -1,12 +1,12 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Building2, Users, Edit, User, Plus, Image, Crown, Settings, ChevronDown, Search } from 'lucide-react';
+import { Building2, Users, Edit, User, Plus, Image, Crown, Settings, ChevronDown, Search, ArrowLeft } from 'lucide-react';
 import { countries } from '@/data/countries';
 import { LogoManager } from '@/components/LogoManager';
 import { LogoDisplay } from '@/components/LogoDisplay';
 import { ApprovalSettingsComponent } from '@/components/settings/ApprovalSettings';
 import { useSubscription } from '@/lib/contexts/SubscriptionContext';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 interface OrganizationAddress {
   street: string;
@@ -73,6 +73,8 @@ interface Logo {
 export default function OrganizationSettingsPage() {
   const { subscription } = useSubscription();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromPricing = searchParams?.get('from') === 'pricing';
   const [orgInfo, setOrgInfo] = useState<OrganizationInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -143,8 +145,11 @@ export default function OrganizationSettingsPage() {
         setMessage({ type: 'success', text: 'Organization created successfully! You can now collaborate with team members.' });
         setShowCreateForm(false);
         setShowCountryDropdown(false);
-        // Refresh organization data
         await fetchOrganizationData();
+        if (fromPricing) {
+          router.push('/pricing');
+          return;
+        }
       } else {
         setMessage({ type: 'error', text: data.message || 'Failed to create organization' });
       }
@@ -265,6 +270,16 @@ export default function OrganizationSettingsPage() {
     return (
       <div className="max-w-4xl mx-auto w-full">
         <div className="mb-8">
+          {fromPricing && (
+            <button
+              type="button"
+              onClick={() => router.push('/pricing')}
+              className="inline-flex items-center gap-2 text-blue-300 hover:text-white text-sm mb-4"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to pricing
+            </button>
+          )}
           <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Organization Settings</h1>
           <p className="text-blue-200">Manage your organization information and business details.</p>
         </div>
@@ -329,11 +344,23 @@ export default function OrganizationSettingsPage() {
   return (
     <div className="max-w-4xl mx-auto w-full">
       <div className="mb-8">
+        {fromPricing && (
+          <button
+            type="button"
+            onClick={() => router.push('/pricing')}
+            className="inline-flex items-center gap-2 text-blue-300 hover:text-white text-sm mb-4"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to pricing
+          </button>
+        )}
         <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Organization Settings</h1>
         <p className="text-blue-200">
           {orgInfo?.hasOrganization 
             ? 'Manage your organization information and team members.'
-            : 'Create an organization or manage your personal business information.'
+            : fromPricing
+              ? 'Create an organisation to choose team plans and seats on the pricing page.'
+              : 'Create an organization or manage your personal business information.'
           }
         </p>
       </div>
