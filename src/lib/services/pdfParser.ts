@@ -355,10 +355,10 @@ function isMarkdownTableSeparator(line: string): boolean {
 
 /**
  * Parse markdown table blocks from lines (e.g. from ClickUp doc content).
- * First line with | = header; following | lines = data rows. Produces TableField[] with table_data keyed by header names.
+ * Rows with the same Deliverable Description are merged into one line: description + chapters, qty = number of chapters.
  */
 function parseMarkdownTableFromLines(lines: LayoutField[]): TableField[] {
-  const tableFields: TableField[] = [];
+  const rows: { description: string; deliverableNum: string; lineObj: LayoutField; rowIndex: number }[] = [];
   let headerCells: string[] = [];
   let tableStartIndex = 0;
 
@@ -384,36 +384,57 @@ function parseMarkdownTableFromLines(lines: LayoutField[]): TableField[] {
       rowData[h] = cells[idx] ?? '';
     });
     const description =
-      rowData['Deliverable Description'] ??
-      rowData['Deliverable description'] ??
-      rowData['Description'] ??
-      rowData['description'] ??
-      rowData['label'] ??
-      cells.join(' ').trim();
+      (rowData['Deliverable Description'] ??
+        rowData['Deliverable description'] ??
+        rowData['Description'] ??
+        rowData['description'] ??
+        rowData['label'] ??
+        cells.join(' ').trim()
+      ).trim();
     if (!description && cells.every((c) => !c)) continue;
-    rowData['label'] = description;
-    // Look for explicit quantity columns (Quantity, Qty, etc.) - NOT "Deliverable #" which is just an identifier
-    const quantityKeys = Object.keys(rowData).filter(
-      (k) => k.toLowerCase().includes('quantity') || k.toLowerCase().includes('qty')
-    );
-    let quantity = 1;
-    if (quantityKeys.length > 0) {
-      const qtyVal = quantityKeys.map((k) => rowData[k]).find((v) => v && v.trim());
-      if (qtyVal) {
-        const parsed = parseInt(String(qtyVal).replace(/,/g, ''), 10);
-        if (!Number.isNaN(parsed) && parsed > 0) quantity = parsed;
-      }
-    }
-    rowData['quantity'] = String(quantity);
+    const deliverableNum = (rowData['Deliverable #'] ?? '').trim();
+    rows.push({
+      description,
+      deliverableNum,
+      lineObj,
+      rowIndex: i - tableStartIndex - 1,
+    });
+  }
+
+  // Group by description (same description = one line; chapters combined, qty = number of chapters)
+  const byDesc = new Map<string, string[]>();
+  for (const r of rows) {
+    const key = r.description.toLowerCase().trim();
+    if (!byDesc.has(key)) byDesc.set(key, []);
+    if (r.deliverableNum) byDesc.get(key)!.push(r.deliverableNum);
+  }
+
+  const tableFields: TableField[] = [];
+  const firstLineObj = rows[0]?.lineObj ?? { value: '', page: 1, position: { x: 0, y: 0 }, confidence: 0.9, source: 'table' };
+  let rowIdx = 0;
+  for (const r of rows) {
+    const key = r.description.toLowerCase().trim();
+    const chapters = byDesc.get(key);
+    if (!chapters || chapters.length === 0) continue;
+    byDesc.delete(key); // emit once per description
+    const chaptersStr = [...new Set(chapters)].join(', ');
+    const label = chaptersStr ? `${r.description} ${chaptersStr}` : r.description;
+    const quantity = chapters.length;
+    const rowData: Record<string, string> = {
+      label,
+      quantity: String(quantity),
+      description: r.description,
+    };
     tableFields.push({
-      ...lineObj,
-      value: description || cells.join(' | '),
-      position: { ...lineObj.position, width: 0, height: 0 },
+      ...firstLineObj,
+      value: label,
+      position: { x: 0, y: rowIdx, width: 0, height: 0 },
       source: 'table',
       table_data: rowData,
       table_index: 0,
-      row_index: i - tableStartIndex - 1,
+      row_index: rowIdx,
     });
+    rowIdx++;
   }
   return tableFields;
 }
@@ -504,7 +525,7 @@ function buildDocumentAst(
 
   for (const lineObj of layoutFields) {
     const line = (lineObj.value ?? '').trim();
-    if (line.length > 2 && !/^(deliverable|#|date)/i.test(line)) {
+    if (line.length > 2 && !/^(deliverable|#|date)/i.test(line) && !line.startsWith('|')) {
       meta.title = line;
       break;
     }
@@ -540,7 +561,9 @@ function buildDocumentAst(
       if (kl === 'label' || kl.includes('desc')) {
         const val = String(v ?? '').trim();
         if (val) {
-          const cleaned = stripPipeDateStatus(stripTrailingDateAndComplete(stripTrailingDateOrdinal(val)));
+          const useLabel = (k !== 'label' && k !== 'Label') && (td['label'] ?? td['Label']);
+          const source = useLabel ? String(td['label'] ?? td['Label'] ?? '').trim() : val;
+          const cleaned = stripPipeDateStatus(stripTrailingDateAndComplete(stripTrailingDateOrdinal(source)));
           if (!isDateStatusJunkOnly(cleaned)) row.label = cleaned;
         }
       } else if (kl === 'quantity' || kl.includes('qty') || kl.includes('quantity') || kl === 'index') {

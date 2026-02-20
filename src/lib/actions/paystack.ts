@@ -11,19 +11,23 @@ import { getDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
 import { SubscriptionServicePaystack } from '@/lib/services/subscriptionServicePaystack';
 import { clearSubscriptionCache } from './subscription';
+import { calculatePlanPrice } from '@/lib/pricingEngine';
 
 /**
- * Initialize Paystack subscription (for paid plans only)
- * Free plans are handled directly in the database
+ * Initialize Paystack subscription (for paid plans only).
+ * Free plans are handled directly in the database.
+ * For dynamic-pricing plans, pass seats to compute amount and create a one-off Paystack plan.
  */
 export async function initializePaystackSubscription(
   planId: string,
-  billingPeriod: 'monthly' | 'yearly'
+  billingPeriod: 'monthly' | 'yearly',
+  options?: { seats?: number }
 ): Promise<{ success: boolean; authorizationUrl?: string; error?: string }> {
   try {
     console.log('🚀 [PaystackAction] Starting subscription initialization:', {
       planId,
-      billingPeriod
+      billingPeriod,
+      seats: options?.seats
     });
 
     const session = await getServerSession(authOptions);
@@ -43,6 +47,14 @@ export async function initializePaystackSubscription(
       return {
         success: false,
         error: 'Invalid plan ID'
+      };
+    }
+
+    // Enterprise: no self-serve payment
+    if (plan.isEnterprise) {
+      return {
+        success: false,
+        error: 'Please contact sales for Enterprise pricing.'
       };
     }
 
@@ -96,8 +108,30 @@ export async function initializePaystackSubscription(
       };
     }
 
-    // Get Paystack plan code for paid plans
-    const planCode = PaystackService.getPlanCode(planId, billingPeriod);
+    // Resolve Paystack plan code: fixed plan or dynamic (create on the fly)
+    let planCode: string | null = null;
+    const seats = options?.seats ?? (plan.dynamicPricing?.includedSeats ?? 1);
+
+    if (plan.dynamicPricing) {
+      const calculated = calculatePlanPrice(plan, billingPeriod, seats);
+      const amountUsd = billingPeriod === 'yearly' ? calculated.totalYearly : calculated.totalMonthly;
+      if (amountUsd <= 0) {
+        return { success: false, error: 'Invalid price calculation.' };
+      }
+      const planName = `Global-${plan.name}-${seats}seats-${billingPeriod}`;
+      planCode = await PaystackService.createDynamicPlan(
+        planName,
+        amountUsd,
+        billingPeriod,
+        { planId, seats }
+      );
+      if (!planCode) {
+        return { success: false, error: 'Failed to create payment plan.' };
+      }
+    } else {
+      planCode = PaystackService.getPlanCode(planId, billingPeriod);
+    }
+
     if (!planCode) {
       console.log('❌ [PaystackAction] Paystack plan code not found for plan:', { planId, billingPeriod });
       return {

@@ -8,8 +8,8 @@ import Link from "next/link";
 const SectionA = () => {
 
   return (
-    <section className="container w-full mb-16">
-      <div className="grid place-items-center lg:max-w-screen-xl gap-2 mx-auto ">
+    <section className="container w-full mb-16 overflow-visible" aria-label="Hero - Upgrade your business">
+      <div className="grid place-items-center lg:max-w-screen-xl gap-2 mx-auto">
         {/* Logo at top */}
 
 
@@ -28,9 +28,9 @@ const SectionA = () => {
             </span>
           </Badge>
 
-          {/* Heading - LCP element, render immediately */}
-          <div className="max-w-screen-md mx-auto text-black text-center text-3xl md:text-5xl font-bold">
-            <h1 style={{ contentVisibility: 'auto' }}>
+          {/* Heading - LCP element, always visible (no content-visibility to avoid mobile disappear) */}
+          <div className="max-w-screen-md mx-auto text-black text-center text-3xl md:text-5xl font-bold min-h-[4.5rem] md:min-h-[5rem]">
+            <h1>
               Upgrade Your Business with
               <span className="text-transparent px-2 bg-gradient-to-r from-[#D247BF] to-primary bg-clip-text">
                 The-all-in-one
@@ -97,18 +97,19 @@ const SectionA = () => {
             />
           </div>
 
-          {/* Mobile image - shown on mobile devices (below md breakpoint) */}
-          <div className="block md:hidden">
+          {/* Mobile image - shown on mobile devices (below md breakpoint). Reserve space to prevent layout shift. */}
+          <div className="block md:hidden min-h-[280px] w-full relative">
             <Image
               width={600}
               height={1200}
-              className="w-full mx-auto rounded-lg relative leading-none flex items- border-secondary border-t-primary/30"
+              className="w-full mx-auto rounded-lg relative leading-none border-secondary border-t-primary/30"
               priority
               fetchPriority="high"
               src="/leftmobile.png"
               alt="ChainsERP Dashboard - Mobile View"
               loading="eager"
               decoding="async"
+              sizes="100vw"
             />
           </div>
 

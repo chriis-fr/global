@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { getServices, getUserServiceData, toggleService, updateUserPlan } from '@/lib/actions/services';
 import { BILLING_PLANS } from '@/data/billingPlans';
+import { getPlanPriceLabel } from '@/lib/pricingEngine';
 import type { ToggleServiceResult } from '@/lib/actions/services';
 
 interface ServiceDefinition {
@@ -520,7 +521,7 @@ export default function ServicesPage() {
                   </p>
                   {BILLING_PLANS.find(p => p.planId === upgradeModal.recommendedPlan) && (
                     <p className="text-sm text-blue-700 mt-1">
-                      ${BILLING_PLANS.find(p => p.planId === upgradeModal.recommendedPlan)?.monthlyPrice}/month
+                      {getPlanPriceLabel(BILLING_PLANS.find(p => p.planId === upgradeModal.recommendedPlan)!)}
                     </p>
                   )}
                 </div>

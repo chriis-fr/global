@@ -19,22 +19,58 @@ export interface BillingLimits {
   overageFee?: number;
 }
 
+/** Dynamic pricing: seat + usage + volume. When set, total = basePrice + (seats * seatPrice) + overages. */
+export interface DynamicPricing {
+  basePrice: number;
+  seatPrice: number;
+  includedSeats: number;
+  /** Invoices per month included (-1 = unlimited) */
+  invoiceLimit: number;
+  /** Price per block of extra invoices (e.g. 10 per 100) */
+  invoiceOveragePrice?: number;
+  invoiceOverageBlock?: number; // e.g. 100
+  /** Volume threshold in USD */
+  volumeThreshold: number;
+  /** Overage fee as decimal (e.g. 0.005 = 0.5%) */
+  volumeFee: number;
+}
+
 export interface BillingPlan {
   planId: string;
   type: PlanType;
-  tier: 'free' | 'basic' | 'pro' | 'premium';
+  tier: 'free' | 'basic' | 'pro' | 'premium' | 'starter' | 'growth' | 'scale' | 'enterprise';
   name: string;
   description: string;
   monthlyPrice: number;
   yearlyPrice: number;
-  monthlyPaystackPlanCode?: string | null; // Paystack plan code (null for free plans)
-  yearlyPaystackPlanCode?: string | null; // Paystack plan code (null for free plans)
+  /** When set, plan uses dynamic pricing; monthlyPrice/yearlyPrice used as "from" display only */
+  dynamicPricing?: DynamicPricing;
+  /** Enterprise plans: no fixed price, show "Contact Sales" */
+  isEnterprise?: boolean;
+  monthlyPaystackPlanCode?: string | null; // Paystack plan code (null for free/enterprise/dynamic)
+  yearlyPaystackPlanCode?: string | null; // Paystack plan code (null for free/enterprise/dynamic)
   currency: string;
   features: BillingFeature[];
   limits: BillingLimits;
   popular?: boolean;
+  /** Who this plan is for: individual (solo), business (teams/orgs), or both */
+  audience?: 'individual' | 'business' | 'both';
   ctaText: string;
   ctaVariant: 'primary' | 'secondary' | 'outline';
+}
+
+/** Result of pricing engine for display and checkout */
+export interface CalculatedPrice {
+  totalCents: number;
+  totalMonthly: number;
+  totalYearly: number;
+  breakdown: {
+    base: number;
+    seats: number;
+    seatCount: number;
+    invoiceOverage?: number;
+    volumeOverage?: number;
+  };
 }
 
 export interface UserSubscription {

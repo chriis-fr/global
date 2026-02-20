@@ -39,6 +39,26 @@ interface ClickUpDoc {
   pagePreviews?: Record<string, string>;
 }
 
+/** Turn ClickUp page API response into a short, non-technical summary for the preview area. */
+function formatPagePreviewForDisplay(page: unknown): string {
+  if (page == null) return '';
+  if (typeof page === 'string') return page.slice(0, 400).trim();
+  const p = page as Record<string, unknown>;
+  const name = typeof p.name === 'string' ? p.name.trim() : '';
+  const content = typeof p.content === 'string' ? p.content : '';
+  const parts: string[] = [];
+  if (name) parts.push(name);
+  const lines = content.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const tableLines = lines.filter((l) => l.startsWith('|') && l.includes('|', 1));
+  const isSeparator = (l: string) =>
+    l.replace(/\s/g, '').split('|').every((c) => c === '' || /^-+$/.test(c));
+  const dataRowCount = Math.max(0, tableLines.filter((l) => !isSeparator(l)).length - 1); // minus header
+  const firstNonTable = lines.find((l) => !l.startsWith('|'));
+  if (firstNonTable) parts.push(firstNonTable);
+  if (dataRowCount > 0) parts.push(`${dataRowCount} deliverable${dataRowCount !== 1 ? 's' : ''}`);
+  return parts.join(' · ');
+}
+
 export default function IntegrationAppPage() {
   const params = useParams();
   const router = useRouter();
@@ -427,9 +447,7 @@ export default function IntegrationAppPage() {
                                                               const preview =
                                                                 json.page == null
                                                                   ? ''
-                                                                  : typeof json.page === 'string'
-                                                                    ? String(json.page).slice(0, 2000)
-                                                                    : JSON.stringify(json.page, null, 2).slice(0, 2000);
+                                                                  : formatPagePreviewForDisplay(json.page);
                                                               setClickUpDocs((prev) =>
                                                                 prev.map((d) =>
                                                                   d.id === doc.id
@@ -531,9 +549,7 @@ export default function IntegrationAppPage() {
                                                                             const preview =
                                                                               json.page == null
                                                                                 ? ''
-                                                                                : typeof json.page === 'string'
-                                                                                  ? String(json.page).slice(0, 2000)
-                                                                                  : JSON.stringify(json.page, null, 2).slice(0, 2000);
+                                                                                : formatPagePreviewForDisplay(json.page);
                                                                             setClickUpDocs((prev) =>
                                                                               prev.map((d) =>
                                                                                 d.id === doc.id
@@ -588,7 +604,7 @@ export default function IntegrationAppPage() {
                                                                 <div className="font-semibold text-[11px]">
                                                                   Selected page preview:
                                                                 </div>
-                                                                <div className="whitespace-pre-wrap break-words max-h-40 overflow-auto">
+                                                                <div className="text-blue-100/90 text-[11px]">
                                                                   {doc.pagePreviews[doc.selectedPageId]}
                                                                 </div>
                                                                 <div className="mt-2 flex items-center gap-2">
@@ -888,9 +904,7 @@ export default function IntegrationAppPage() {
                                                                                     const preview =
                                                                                       json.page == null
                                                                                         ? ''
-                                                                                        : typeof json.page === 'string'
-                                                                                          ? String(json.page).slice(0, 2000)
-                                                                                          : JSON.stringify(json.page, null, 2).slice(0, 2000);
+                                                                                        : formatPagePreviewForDisplay(json.page);
                                                                                     setClickUpDocs((prev) =>
                                                                                       prev.map((d) =>
                                                                                         d.id === doc.id
@@ -946,7 +960,7 @@ export default function IntegrationAppPage() {
                                                                           <div className="font-semibold text-[11px]">
                                                                             Selected page preview:
                                                                           </div>
-                                                                          <div className="whitespace-pre-wrap break-words max-h-40 overflow-auto">
+                                                                          <div className="text-blue-100/90 text-[11px]">
                                                                             {doc.pagePreviews[doc.selectedPageId]}
                                                                           </div>
                                                                           <div className="mt-2 flex items-center gap-2">

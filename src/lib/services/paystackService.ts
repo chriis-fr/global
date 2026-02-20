@@ -173,6 +173,49 @@ export class PaystackService {
     }
   }
 
+  /**
+   * Create a one-off subscription plan in Paystack with custom amount (for dynamic pricing).
+   * Amount in USD dollars; converted to cents for Paystack.
+   */
+  static async createDynamicPlan(
+    name: string,
+    amountUsd: number,
+    interval: 'monthly' | 'yearly',
+    metadata?: { planId: string; seats?: number }
+  ): Promise<string | null> {
+    if (!PAYSTACK_SECRET_KEY || PAYSTACK_SECRET_KEY.trim() === '') {
+      throw new Error('Paystack API key is not configured.');
+    }
+    const amountCents = Math.round(amountUsd * 100); // USD to cents
+    const paystackInterval = interval === 'yearly' ? 'annually' : 'monthly';
+    try {
+      const response = await fetch(`${PAYSTACK_BASE_URL}/plan`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: name.substring(0, 255),
+          amount: amountCents,
+          interval: paystackInterval,
+          currency: 'USD',
+          description: metadata ? `Plan: ${metadata.planId}${metadata.seats != null ? `, ${metadata.seats} seats` : ''}` : undefined,
+        }),
+      });
+      const data = await response.json();
+      if (!data.status || !data.data?.plan_code) {
+        console.error('❌ [PaystackService] Create plan failed:', data);
+        throw new Error(data.message || 'Failed to create plan');
+      }
+      console.log('✅ [PaystackService] Dynamic plan created:', data.data.plan_code);
+      return data.data.plan_code;
+    } catch (error) {
+      console.error('❌ [PaystackService] Error creating dynamic plan:', error);
+      throw error;
+    }
+  }
+
   // Initialize subscription (returns authorization URL)
   // Uses Transaction Initialize API with plan code - this automatically creates subscription on payment
   static async initializeSubscription(
