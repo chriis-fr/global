@@ -34,14 +34,15 @@ export default function DashboardPage() {
   }, []);
 
   // When landing from subscription success: run once, refetch, then strip query param to avoid repeated POSTs/loops
+  const fromSubscriptionSuccess = searchParams?.get('from') === 'subscription-success';
   useEffect(() => {
-    if (searchParams?.get('from') !== 'subscription-success' || !session?.user?.id) return;
+    if (!fromSubscriptionSuccess || !session?.user?.id) return;
     if (subscriptionSuccessHandledRef.current) return;
     subscriptionSuccessHandledRef.current = true;
     clearCache?.();
     refetch();
     router.replace('/dashboard', { scroll: false });
-  }, [searchParams?.get('from'), session?.user?.id, refetch, clearCache, router]);
+  }, [fromSubscriptionSuccess, session?.user?.id, refetch, clearCache, router, searchParams]);
 
   // After onboarding redirect, session can have stale services; refresh once so services show (both individual and org users)
   useEffect(() => {
@@ -52,11 +53,11 @@ export default function DashboardPage() {
 
   // Refresh subscription on mount (unless we just did from=subscription-success)
   useEffect(() => {
-    if (session?.user?.id && searchParams?.get('from') !== 'subscription-success') {
+    if (session?.user?.id && !fromSubscriptionSuccess) {
       const timer = setTimeout(() => refetch(), 1000);
       return () => clearTimeout(timer);
     }
-  }, [session?.user?.id, refetch, searchParams?.get('from')]);
+  }, [session?.user?.id, refetch, fromSubscriptionSuccess, searchParams]);
 
   // Fetch user data in background - don't block render
   useEffect(() => {

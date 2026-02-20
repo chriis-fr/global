@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
 // This route has been deprecated - use server actions instead
 // GET /api/organization - Use getOrganizationData() server action

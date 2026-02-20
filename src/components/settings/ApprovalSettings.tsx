@@ -69,7 +69,7 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
         membersResponse.json()
       ]);
       
-      const orgData = orgDataResult.success ? { success: true, data: orgDataResult.data } : { success: false };
+      const orgData = orgDataResult.success ? { success: true as const, data: orgDataResult.data } : { success: false as const, error: orgDataResult.error };
 
       if (settingsData.success) {
         setSettings(settingsData.data);
@@ -77,21 +77,21 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
         setError(settingsData.message || 'Failed to fetch approval settings');
       }
 
-      if (orgData.success) {
+      if (orgData.success && orgData.data) {
         setOrganizationData(orgData.data);
-        
+        const org = orgData.data.organization;
         // Always set primary email from organization data
-        if (orgData.data.billingEmail) {
+        if (org?.billingEmail) {
           setSettings(prev => ({
             ...prev,
             emailSettings: {
               ...prev.emailSettings,
-              primaryEmail: orgData.data.billingEmail
+              primaryEmail: org.billingEmail
             }
           }));
         }
       } else {
-        console.error('Failed to fetch organization data:', orgData.message);
+        console.error('Failed to fetch organization data:', orgData.error);
       }
 
       if (membersData.success) {
@@ -99,8 +99,9 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
       } else {
         console.error('Failed to fetch members data:', membersData.message);
         // Fallback to organization data members if members API fails
-        if (orgData.success && orgData.data.members) {
-          setOrganizationMembers(orgData.data.members);
+        const org = orgData.success && orgData.data ? orgData.data.organization : undefined;
+        if (org?.members) {
+          setOrganizationMembers(org.members);
         }
       }
     } catch (err) {

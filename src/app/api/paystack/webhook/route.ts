@@ -145,6 +145,7 @@ export async function POST(request: NextRequest) {
         subscription_code?: string;
         plan?: {
           plan_code?: string;
+          name?: string;
         };
         customer?: {
           customer_code?: string;
@@ -152,6 +153,7 @@ export async function POST(request: NextRequest) {
         metadata?: {
           planId?: string;
           billingPeriod?: string;
+          seats?: number;
         };
       };
       customer?: {
@@ -160,11 +162,18 @@ export async function POST(request: NextRequest) {
       metadata?: {
         planId?: string;
         billingPeriod?: string;
+        seats?: number;
       };
       plan?: {
         plan_code?: string;
+        name?: string;
       };
       subscription_code?: string;
+      authorization?: {
+        metadata?: {
+          seats?: number;
+        };
+      };
       [key: string]: unknown;
     };
   }
@@ -424,7 +433,8 @@ export async function POST(request: NextRequest) {
 
                 if (planId && billingPeriod) {
                   const planCode = String(subscription.plan.plan_code);
-                  const seats = subscription.metadata?.seats;
+                  const meta = subscription.metadata as { planId?: string; billingPeriod?: string; seats?: number } | undefined;
+                  const seats = meta?.seats;
                   console.log('💾 [PaystackWebhook] Activating subscription after successful charge:', user.email);
                   
                   await SubscriptionServicePaystack.subscribeToPlan(

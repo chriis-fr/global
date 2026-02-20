@@ -91,6 +91,7 @@ export interface User {
   name: string;
   password?: string; // Optional for OAuth users
   avatar?: string;
+  phone?: string;
   role: 'user' | 'admin';
   adminTag?: boolean; // Special admin tag for system admin access (separate from role)
   organizationId?: ObjectId;
@@ -170,6 +171,11 @@ export interface User {
       paymentNotifications: boolean;
     };
   };
+
+  // Profile / business
+  industry?: string;
+  address?: Address;
+  taxId?: string;
 }
 
 export interface CreateUserInput {

@@ -484,7 +484,7 @@ export async function getOrganizationSeatInfo(): Promise<{
     const plan = BILLING_PLANS.find(p => p.planId === planId);
     
     let paidSeats = 1;
-    let planName = plan?.name || 'Free Plan';
+    const planName = plan?.name || 'Free Plan';
     
     if (plan?.dynamicPricing) {
       // Get seats from subscription (stored when they paid) or default to included seats
@@ -524,20 +524,20 @@ export async function getOrganizationSeatInfo(): Promise<{
         try {
           const { PaystackService } = await import('@/lib/services/paystackService');
           const paystackSub = await PaystackService.getSubscription(subscription.paystackSubscriptionCode);
-          
+          const subMeta = paystackSub?.metadata as { seats?: number } | undefined;
           // Check metadata first (most reliable)
-          if (paystackSub?.metadata?.seats) {
-            const metadataSeats = typeof paystackSub.metadata.seats === 'number' 
-              ? paystackSub.metadata.seats 
-              : parseInt(String(paystackSub.metadata.seats), 10);
+          if (subMeta?.seats) {
+            const metadataSeats = typeof subMeta.seats === 'number' 
+              ? subMeta.seats 
+              : parseInt(String(subMeta.seats), 10);
             if (!isNaN(metadataSeats) && metadataSeats > 0) {
               subscriptionSeats = metadataSeats;
               console.log('📊 [getOrganizationSeatInfo] Found seats in Paystack metadata:', subscriptionSeats);
             }
           }
           // Check plan name as fallback
-          else if (paystackSub?.plan?.name) {
-            const planNameStr = String(paystackSub.plan.name);
+          else if ((paystackSub?.plan as { name?: string } | undefined)?.name) {
+            const planNameStr = String((paystackSub?.plan as { name?: string })?.name ?? '');
             const planNameSeats = planNameStr.match(/(\d+)\s*seat/i);
             if (planNameSeats) {
               subscriptionSeats = parseInt(planNameSeats[1], 10);
@@ -743,18 +743,19 @@ export async function syncSeatsFromPaystack(): Promise<{
     try {
       const { PaystackService } = await import('@/lib/services/paystackService');
       const paystackSub = await PaystackService.getSubscription(subscription.paystackSubscriptionCode);
-      
+      const subMeta2 = paystackSub?.metadata as { seats?: number } | undefined;
+      const subPlan = paystackSub?.plan as { name?: string } | undefined;
       let foundSeats: number | null = null;
       
       // Check metadata first
-      if (paystackSub?.metadata?.seats) {
-        foundSeats = typeof paystackSub.metadata.seats === 'number' 
-          ? paystackSub.metadata.seats 
-          : parseInt(String(paystackSub.metadata.seats), 10);
+      if (subMeta2?.seats) {
+        foundSeats = typeof subMeta2.seats === 'number' 
+          ? subMeta2.seats 
+          : parseInt(String(subMeta2.seats), 10);
       }
       // Check plan name
-      else if (paystackSub?.plan?.name) {
-        const planNameStr = String(paystackSub.plan.name);
+      else if (subPlan?.name) {
+        const planNameStr = String(subPlan.name);
         const planNameSeats = planNameStr.match(/(\d+)\s*seat/i);
         if (planNameSeats) {
           foundSeats = parseInt(planNameSeats[1], 10);

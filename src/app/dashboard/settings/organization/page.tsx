@@ -227,7 +227,8 @@ export default function OrganizationSettingsPage() {
         
         // User has paid plan or trial and pending org data - create organization
         setCreating(true);
-        const { timestamp, ...orgFormData } = pendingData;
+        const orgFormData = { ...pendingData };
+        delete (orgFormData as Record<string, unknown>).timestamp;
         // Ensure billing email is always from user's account, not from pending data
         const finalFormData = {
           ...orgFormData,
@@ -235,7 +236,16 @@ export default function OrganizationSettingsPage() {
         };
         setFormData(finalFormData);
         
-        const result = await createOrganization(finalFormData);
+        const payload = {
+          ...finalFormData,
+          primaryContact: {
+            name: session?.user?.name ?? (finalFormData as { name?: string }).name ?? '',
+            email: finalFormData.billingEmail,
+            phone: (finalFormData as { phone?: string }).phone ?? '',
+            role: 'Owner',
+          },
+        };
+        const result = await createOrganization(payload);
 
         if (result.success) {
           localStorage.removeItem('pending_organization_data');
@@ -262,7 +272,7 @@ export default function OrganizationSettingsPage() {
     };
 
     checkPendingOrganization();
-  }, [subscription, loading, fromSubscriptionSuccess, router]);
+  }, [subscription, loading, fromSubscriptionSuccess, router, session?.user?.email, session?.user?.name]);
 
   // Refetch organization data (using server action for faster loading)
   const fetchOrganizationData = async () => {
@@ -310,7 +320,15 @@ export default function OrganizationSettingsPage() {
     // User has paid plan or trial - proceed with creation using server action
     setCreating(true);
     try {
-      const result = await createOrganization(formData);
+      const result = await createOrganization({
+        ...formData,
+        primaryContact: {
+          name: session?.user?.name ?? formData.name,
+          email: formData.billingEmail,
+          phone: formData.phone,
+          role: 'Owner',
+        },
+      });
 
       if (result.success) {
         const isTrial = subscription?.isTrialActive && subscription?.plan?.planId === 'trial-premium';
@@ -418,16 +436,16 @@ export default function OrganizationSettingsPage() {
 
   // Get current plan name for display
   const getCurrentPlanName = () => {
-    if (!subscription?.plan?.planId) return 'Free Plan';
-    const plan = BILLING_PLANS.find(p => p.planId === subscription.plan.planId);
-    return plan?.name || subscription.plan.planId;
+    const planId = subscription?.plan?.planId;
+    if (!planId) return 'Free Plan';
+    const plan = BILLING_PLANS.find(p => p.planId === planId);
+    return plan?.name || planId;
   };
 
   // Check if user has organization access (paid plans, trial users, or organization membership)
   // Trial users can create organizations but will be downgraded if they don't pay
   const hasOrganizationAccess = subscription?.canCreateOrganization || (orgInfo?.hasOrganization && orgInfo?.organization);
   const isTrialUser = subscription?.isTrialActive && subscription?.plan?.planId === 'trial-premium';
-  const isFreePlan = subscription?.plan?.planId === 'receivables-free';
 
   if (loading) {
     return (
@@ -633,7 +651,7 @@ export default function OrganizationSettingsPage() {
                     <div className="flex-1">
                       <h4 className="text-yellow-300 font-medium mb-1">Free Trial Active</h4>
                       <p className="text-yellow-200 text-sm">
-                        You can create an organization during your free trial. However, if you don't upgrade to a paid plan before your trial ends ({subscription?.trialDaysRemaining || 0} {subscription?.trialDaysRemaining === 1 ? 'day' : 'days'} remaining), your account will be downgraded to the free plan and you may lose access to organization features.
+                        You can create an organization during your free trial. However, if you don&apos;t upgrade to a paid plan before your trial ends ({subscription?.trialDaysRemaining || 0} {subscription?.trialDaysRemaining === 1 ? 'day' : 'days'} remaining), your account will be downgraded to the free plan and you may lose access to organization features.
                       </p>
                     </div>
                   </div>

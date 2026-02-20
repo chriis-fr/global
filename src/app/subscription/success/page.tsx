@@ -54,7 +54,9 @@ export default function SubscriptionSuccessPage() {
             try {
               if (typeof updateNextAuth === 'function') await updateNextAuth({})
               await updateOurSession?.()
-            } catch (_) {}
+            } catch {
+              // Non-fatal; session will refresh on next request via subscriptionJustUpdatedAt
+            }
             
             await new Promise(resolve => setTimeout(resolve, 400))
             
@@ -75,7 +77,12 @@ export default function SubscriptionSuccessPage() {
             console.log('⚠️ [SubscriptionSuccess] Still attempting to refresh in case webhook processed it')
             await new Promise(resolve => setTimeout(resolve, 2000))
             await refetch()
-            try { await updateNextAuth?.({}); await updateOurSession?.(); } catch (_) {}
+            try {
+              await updateNextAuth?.({});
+              await updateOurSession?.();
+            } catch {
+              // Non-fatal
+            }
             
             // Check for pending organization data
             let redirectPath = '/dashboard';
@@ -91,7 +98,12 @@ export default function SubscriptionSuccessPage() {
           // No reference found, but still try to refresh (might be webhook-activated)
           console.log('⚠️ [SubscriptionSuccess] No reference found in URL, refreshing subscription data')
           await refetch()
-          try { await updateNextAuth?.({}); await updateOurSession?.(); } catch (_) {}
+          try {
+            await updateNextAuth?.({});
+            await updateOurSession?.();
+          } catch {
+            // Non-fatal
+          }
           
           // Check for pending organization data
           let redirectPath = '/dashboard';
@@ -112,7 +124,12 @@ export default function SubscriptionSuccessPage() {
         try {
           console.log('🔄 [SubscriptionSuccess] Attempting recovery refetch...')
           await refetch()
-          try { await updateNextAuth?.({}); await updateOurSession?.(); } catch (_) {}
+          try {
+            await updateNextAuth?.({});
+            await updateOurSession?.();
+          } catch {
+            // Non-fatal
+          }
           
           // Check for pending organization data
           let redirectPath = '/dashboard';
