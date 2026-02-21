@@ -6,6 +6,7 @@ import { fiatCurrencies } from '@/data/currencies';
 import { BILLING_PLANS } from '@/data/billingPlans';
 import { useCurrency } from '@/lib/contexts/CurrencyContext';
 import { useSubscription } from '@/lib/contexts/SubscriptionContext';
+import { useSession } from '@/lib/auth-client';
 import { useRouter } from 'next/navigation';
 
 /** Resolve plan display info from planId (matches billingPlans.ts) */
@@ -58,6 +59,7 @@ interface ProfileData {
 export default function ProfileSettingsPage() {
   const router = useRouter();
   const { subscription } = useSubscription();
+  const { update: updateSession } = useSession();
   const [formData, setFormData] = useState<ProfileData>({
     name: '',
     email: '',
@@ -197,6 +199,7 @@ export default function ProfileSettingsPage() {
       if (data.success) {
         setProfilePhoto(data.data.profilePhoto);
         setMessage({ type: 'success', text: 'Profile photo updated successfully!' });
+        await updateSession?.();
       } else {
         setMessage({ type: 'error', text: data.message || 'Failed to update profile photo' });
       }
@@ -220,6 +223,7 @@ export default function ProfileSettingsPage() {
       if (data.success) {
         setProfilePhoto('');
         setMessage({ type: 'success', text: 'Profile photo removed successfully!' });
+        await updateSession?.();
       } else {
         setMessage({ type: 'error', text: data.message || 'Failed to remove profile photo' });
       }

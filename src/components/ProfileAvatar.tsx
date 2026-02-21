@@ -51,7 +51,7 @@ export function ProfileAvatar({
   if (src && !imageError) {
     return (
       <div
-        className={`relative ${sizeClasses[size]} ${className}`}
+        className={`relative shrink-0 overflow-hidden rounded-full aspect-square ${sizeClasses[size]} ${className}`}
         style={{
           willChange: 'transform',
           transform: 'translateZ(0)',
@@ -63,9 +63,9 @@ export function ProfileAvatar({
         <Image
           src={src}
           alt={alt}
-          width={numericSize}
-          height={numericSize}
-          className="rounded-full object-cover"
+          fill
+          sizes={`${numericSize}px`}
+          className="object-cover"
           onError={() => setImageError(true)}
           priority={highPriority}
           draggable={false}

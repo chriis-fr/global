@@ -20,7 +20,9 @@ import {
   Receipt,
   Plus,
   Loader2,
-  Plug
+  Plug,
+  Crown,
+  ChevronUp
 } from 'lucide-react';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import Image from 'next/image';
@@ -38,7 +40,6 @@ const ADMIN_LINKS = [
 ];
 
 const SETTINGS_LINKS = [
-  { key: 'profile', label: 'Profile Settings', icon: User, href: '/dashboard/settings/profile' },
   { key: 'organization', label: 'Organization', icon: Building2, href: '/dashboard/settings/organization' },
   { key: 'logos', label: 'Logo Management', icon: ImageIcon, href: '/dashboard/settings/logos' },
   { key: 'payment-methods', label: 'Payment Methods', icon: CreditCard, href: '/dashboard/settings/payment-methods' },
@@ -59,12 +60,14 @@ function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isAutoHidden, setIsAutoHidden] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
   const [isMobile, setIsMobile] = useState(false);
   const [sidebarReady, setSidebarReady] = useState(false);
 
   const sidebarRef = useRef<HTMLDivElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -81,7 +84,20 @@ function Sidebar() {
   useEffect(() => {
     setIsMobileMenuOpen(false);
     setIsSettingsOpen(false);
+    setIsProfileOpen(false);
   }, [pathname]);
+
+  // Close profile popover on outside click
+  useEffect(() => {
+    if (!isProfileOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+        setIsProfileOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isProfileOpen]);
 
   useEffect(() => {
     if (window.innerWidth < 1024) return;
@@ -466,50 +482,92 @@ function Sidebar() {
             </div>
           )}
 
-          <div className="flex items-center space-x-3 mb-3">
-            <ProfileAvatar
-              src={session?.user?.image}
-              alt={session?.user?.name || 'User'}
-              size="sm"
-              type="user"
-              highPriority
+          <div className="relative" ref={profileRef}>
+            <button
+              type="button"
+              onClick={() => setIsProfileOpen((v) => !v)}
+              className="flex w-full items-center space-x-3 rounded-lg p-2 -m-2 hover:bg-blue-900/50 text-left transition-colors"
               style={{ touchAction: 'manipulation' }}
-            />
-            {(!isCollapsed || isAutoHidden) && (
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white truncate">
-                  {session?.user?.name || 'User'}
-                </p>
-                <p className="text-xs text-white/50 truncate">
-                  {session?.user?.email}
-                </p>
+              aria-expanded={isProfileOpen}
+              aria-haspopup="true"
+            >
+              <ProfileAvatar
+                src={session?.user?.image}
+                alt={session?.user?.name || 'User'}
+                size="sm"
+                type="user"
+                highPriority
+                style={{ touchAction: 'manipulation' }}
+              />
+              {(!isCollapsed || isAutoHidden) && (
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-white truncate">
+                    {session?.user?.name || 'User'}
+                  </p>
+                  <p className="text-xs text-white/50 truncate">
+                    {session?.user?.email}
+                  </p>
+                </div>
+              )}
+              {(!isCollapsed || isAutoHidden) && (
+                <ChevronUp
+                  className={`h-4 w-4 shrink-0 text-white/60 transition-transform duration-200 ${isProfileOpen ? '' : 'rotate-180'}`}
+                />
+              )}
+            </button>
+
+            {isProfileOpen && (
+              <div
+                className="absolute left-0 right-0 bottom-full mb-2 min-w-[11rem] rounded-xl bg-blue-900/95 backdrop-blur-sm border border-white/20 shadow-xl py-2 z-50 transition-opacity duration-200"
+                role="menu"
+              >
+                <Link
+                  href="/dashboard/settings/profile"
+                  onClick={() => { setIsProfileOpen(false); closeMobileMenu(); }}
+                  className="flex items-center px-4 py-2.5 text-sm text-white/90 hover:bg-white/10 transition-colors"
+                  role="menuitem"
+                >
+                  <User className="h-4 w-4 mr-3 shrink-0" />
+                  Profile Settings
+                </Link>
+                <Link
+                  href="/pricing"
+                  onClick={() => { setIsProfileOpen(false); closeMobileMenu(); }}
+                  className="flex items-center px-4 py-2.5 text-sm text-white/90 hover:bg-white/10 transition-colors"
+                  role="menuitem"
+                >
+                  <Crown className="h-4 w-4 mr-3 shrink-0 text-amber-400" />
+                  Unlock More
+                </Link>
+                <div className="border-t border-white/10 my-1" />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (isSigningOut) return;
+                    setIsSigningOut(true);
+                    setIsProfileOpen(false);
+                    try {
+                      clearOnboarding();
+                      await signOut({ callbackUrl: '/auth' });
+                    } catch (error) {
+                      console.error('Error signing out:', error);
+                      setIsSigningOut(false);
+                    }
+                  }}
+                  disabled={isSigningOut}
+                  className="flex w-full items-center px-4 py-2.5 text-sm text-white/90 hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  role="menuitem"
+                >
+                  {isSigningOut ? (
+                    <Loader2 className="h-4 w-4 mr-3 shrink-0 animate-spin" />
+                  ) : (
+                    <LogOut className="h-4 w-4 mr-3 shrink-0" />
+                  )}
+                  {isSigningOut ? 'Signing Out...' : 'Sign Out'}
+                </button>
               </div>
             )}
           </div>
-
-          <button
-            onClick={async () => {
-              if (isSigningOut) return;
-              setIsSigningOut(true);
-              try {
-                clearOnboarding();
-                await signOut({ callbackUrl: '/auth' });
-              } catch (error) {
-                console.error('Error signing out:', error);
-                setIsSigningOut(false);
-              }
-            }}
-            disabled={isSigningOut}
-            className="flex w-full items-center px-3 py-3 rounded-lg hover:bg-blue-900/50 text-white/80 disabled:opacity-50 disabled:cursor-not-allowed"
-            type="button"
-          >
-            {isSigningOut ? (
-              <Loader2 className="h-4 w-4 mr-3 animate-spin" />
-            ) : (
-              <LogOut className="h-4 w-4 mr-3" />
-            )}
-            {(!isCollapsed || isAutoHidden) && (isSigningOut ? 'Signing Out...' : 'Sign Out')}
-          </button>
         </div>
       </>
     );
