@@ -31,8 +31,8 @@ interface SafeInfo {
 export default function SafePayPage() {
     const searchParams = useSearchParams();
     const router = useRouter();
-    const payableId = searchParams.get("payableId");
-    const invoiceId = searchParams.get("invoiceId");
+    const payableId = searchParams?.get("payableId");
+    const invoiceId = searchParams?.get("invoiceId");
     
     const [safeInfo, setSafeInfo] = useState<SafeInfo | null>(null);
     const [appsSdk, setAppsSdk] = useState<SafeAppsSDK | null>(null);

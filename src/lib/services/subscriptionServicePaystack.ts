@@ -64,10 +64,10 @@ export class SubscriptionServicePaystack {
       }
     });
 
-    // Update user services in database
+    // Update user services in database and set a short-lived flag so the next session load picks up new services immediately
     await db.collection('users').updateOne(
       { _id: userId },
-      { $set: { services: updatedServices } }
+      { $set: { services: updatedServices, subscriptionJustUpdatedAt: new Date() } }
     );
 
     console.log('✅ [SubscriptionServicePaystack] Services updated for plan:', {
@@ -83,7 +83,8 @@ export class SubscriptionServicePaystack {
     planId: string, 
     billingPeriod: 'monthly' | 'yearly',
     paystackSubscriptionCode: string,
-    paystackPlanCode: string
+    paystackPlanCode: string,
+    options?: { seats?: number }
   ): Promise<void> {
     console.log('🔄 [SubscriptionServicePaystack] Subscribing user to plan:', {
       userId: userId.toString(),
@@ -100,7 +101,7 @@ export class SubscriptionServicePaystack {
 
     // IMPORTANT: Only update Paystack-specific fields
     // This preserves existing Stripe subscription data for backward compatibility
-    const updateData = {
+    const updateData: Record<string, unknown> = {
       'subscription.planId': planId,
       'subscription.status': 'active',
       'subscription.currentPeriodStart': currentPeriodStart,
@@ -108,14 +109,19 @@ export class SubscriptionServicePaystack {
       'subscription.billingPeriod': billingPeriod,
       'subscription.paystackSubscriptionCode': paystackSubscriptionCode,
       'subscription.paystackPlanCode': paystackPlanCode,
-      'subscription.updatedAt': new Date()
-      // NOTE: We intentionally do NOT update stripeSubscriptionId or stripePriceId
-      // to preserve existing Stripe subscriptions
+      'subscription.updatedAt': new Date(),
+      ...(options?.seats ? { 'subscription.seats': options.seats } : {})
+    };
+    // Clear payment-failed state and trial fields when they pay (user is now a paying customer)
+    const unsetData: Record<string, 1> = { 
+      'subscription.paymentFailedAt': 1,
+      'subscription.trialStartDate': 1,
+      'subscription.trialEndDate': 1,
+      'subscription.trialActivatedAt': 1
     };
 
     console.log('💾 [SubscriptionServicePaystack] Updating database with:', JSON.stringify(updateData, null, 2));
 
-    // Get current user subscription before update (for logging)
     const userBefore = await db.collection('users').findOne({ _id: userId });
     console.log('📋 [SubscriptionServicePaystack] Current subscription before update:', {
       planId: userBefore?.subscription?.planId,
@@ -125,7 +131,7 @@ export class SubscriptionServicePaystack {
 
     const result = await db.collection('users').updateOne(
       { _id: userId },
-      { $set: updateData }
+      { $set: updateData, $unset: unsetData }
     );
 
     console.log('📊 [SubscriptionServicePaystack] Database update result:', {

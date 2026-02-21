@@ -119,7 +119,7 @@ export const authOptions: NextAuthOptions = {
               lastLoginAt: new Date()
             })
             
-            // Check if existing user should get 30-day trial
+            // Check if existing user should get 15-day trial
             const { activate30DayTrial } = await import('@/lib/actions/subscription');
             const hasProSubscription = existingUser.subscription && existingUser.subscription.planId !== 'receivables-free' && existingUser.subscription.status === 'active';
             const hasUsedTrial = existingUser.subscription?.hasUsedTrial;
@@ -235,7 +235,9 @@ export const authOptions: NextAuthOptions = {
         token.onboarding = user.onboarding
         token.services = user.services || createDefaultServices()
         token.organizationId = user.organizationId
-        
+        token.picture = (user as { image?: string }).image ?? token.picture
+        token.name = user.name ?? token.name
+
         // For OAuth users, we need to get the MongoDB ObjectId from the database
         if (user.email && !token.mongoId) {
           try {
@@ -253,10 +255,23 @@ export const authOptions: NextAuthOptions = {
       // 1. Token doesn't have mongoId yet (first time)
       // 2. Explicitly triggered (e.g., session update)
       // 3. Token is older than 5 minutes (reduce DB calls by 95%)
-      const shouldRefresh = !token.mongoId || 
+      // 4. User's subscription/services were just updated (subscriptionJustUpdatedAt set) so dashboard shows Pay etc. immediately
+      let shouldRefresh = !token.mongoId || 
                            trigger === 'update' || 
                            !token.lastRefresh ||
                            (token.lastRefresh && Date.now() - (token.lastRefresh as number) > 5 * 60 * 1000);
+
+      if (token.email && !shouldRefresh) {
+        try {
+          const recentUser = await UserService.getUserByEmail(token.email as string)
+          const u = recentUser as { subscriptionJustUpdatedAt?: Date; profilePhotoUpdatedAt?: Date }
+          const justSub = u?.subscriptionJustUpdatedAt && Date.now() - new Date(u.subscriptionJustUpdatedAt).getTime() < 90 * 1000
+          const justPhoto = u?.profilePhotoUpdatedAt && Date.now() - new Date(u.profilePhotoUpdatedAt).getTime() < 90 * 1000
+          if (justSub || justPhoto) shouldRefresh = true
+        } catch {
+          // non-blocking
+        }
+      }
       
       if (token.email && shouldRefresh) {
         try {
@@ -327,7 +342,19 @@ export const authOptions: NextAuthOptions = {
             }
             token.mongoId = dbUser._id?.toString()
             token.adminTag = dbUser.adminTag || false
+            token.name = dbUser.name ?? token.name
+            token.picture = dbUser.avatar ?? (token.picture as string | undefined)
             token.lastRefresh = Date.now() // Track when we last refreshed
+            // Clear short-lived flags so we don't force refresh on every request
+            const u = dbUser as { subscriptionJustUpdatedAt?: Date; profilePhotoUpdatedAt?: Date }
+            if ((u.subscriptionJustUpdatedAt || u.profilePhotoUpdatedAt) && dbUser._id) {
+              getDatabase().then((db) => {
+                db.collection('users').updateOne(
+                  { _id: dbUser._id },
+                  { $unset: { subscriptionJustUpdatedAt: 1, profilePhotoUpdatedAt: 1 } }
+                ).catch(() => {})
+              })
+            }
           }
         } catch {
           // Error fetching latest user data for JWT

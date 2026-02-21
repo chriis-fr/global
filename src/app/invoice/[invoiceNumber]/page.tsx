@@ -85,7 +85,13 @@ export default function InvoiceLinkPage() {
   const [error, setError] = useState<string | null>(null);
   const [showPaymentDetails, setShowPaymentDetails] = useState(false);
 
-  const invoiceNumber = params.invoiceNumber as string;
+  const invoiceNumberRaw = (params as unknown as { invoiceNumber?: string | string[] } | null)?.invoiceNumber;
+  const invoiceNumber =
+    typeof invoiceNumberRaw === 'string'
+      ? invoiceNumberRaw
+      : Array.isArray(invoiceNumberRaw)
+        ? invoiceNumberRaw[0] ?? ''
+        : '';
 
   const loadInvoiceData = useCallback(async () => {
     try {

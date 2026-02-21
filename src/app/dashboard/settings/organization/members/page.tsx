@@ -1,11 +1,10 @@
 'use client';
 import { useState, useEffect, useCallback, Fragment } from 'react';
-import { Users, Plus, Mail, Clock, Shield } from 'lucide-react';
-import DashboardFloatingButton from '@/components/DashboardFloatingButton';
+import { Users, Plus, Mail, Clock, Shield, CheckCircle } from 'lucide-react';
 import RoleSelector from '@/components/organization/RoleSelector';
 import MemberCard from '@/components/organization/MemberCard';
 import { type OrganizationMember } from '@/models/Organization';
-import { getOrganizationData, getOrganizationMembers } from '@/lib/actions/organization';
+import { getOrganizationData, getOrganizationMembers, getOrganizationSeatInfo } from '@/lib/actions/organization';
 import { sendInvitation, getPendingInvitations, resendInvitation, deleteInvitation } from '@/lib/actions/invitation';
 import { type RoleKey } from '@/lib/utils/roles';
 
@@ -29,10 +28,28 @@ export default function OrganizationMembersPage() {
   const [updating, setUpdating] = useState(false);
   const [resending, setResending] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [seatInfo, setSeatInfo] = useState<{
+    paidSeats: number;
+    currentMembers: number;
+    pendingInvitations: number;
+    availableSeats: number;
+    planName?: string;
+  } | null>(null);
   const [formData, setFormData] = useState({
     email: '',
     role: 'financeManager' as RoleKey
   });
+
+  const fetchSeatInfo = async () => {
+    try {
+      const result = await getOrganizationSeatInfo();
+      if (result.success && result.data) {
+        setSeatInfo(result.data);
+      }
+    } catch (error) {
+      console.error('Error fetching seat info:', error);
+    }
+  };
 
   const fetchOrganizationData = useCallback(async () => {
     try {
@@ -41,8 +58,11 @@ export default function OrganizationMembersPage() {
       if (result.success && result.data) {
         setOrgInfo(result.data as unknown as OrganizationInfo);
         if (result.data.hasOrganization) {
-          await fetchMembers();
-          await fetchPendingInvitations();
+          await Promise.all([
+            fetchMembers(),
+            fetchPendingInvitations(),
+            fetchSeatInfo()
+          ]);
         }
       } else {
         setMessage({ type: 'error', text: result.error || 'Failed to load organization data' });
@@ -125,6 +145,12 @@ export default function OrganizationMembersPage() {
       return;
     }
 
+    // Check seat limit before sending invitation
+    if (seatInfo && seatInfo.availableSeats <= 0) {
+      setMessage({ type: 'error', text: `You have reached your seat limit of ${seatInfo.paidSeats}. You currently have ${seatInfo.currentMembers} member${seatInfo.currentMembers === 1 ? '' : 's'} and ${seatInfo.pendingInvitations} pending invitation${seatInfo.pendingInvitations === 1 ? '' : 's'}. Please upgrade your plan to add more members.` });
+      return;
+    }
+
     console.log('📧 [Members Page] Starting invitation process...');
     console.log('📧 [Members Page] Email:', formData.email);
     console.log('📧 [Members Page] Role:', formData.role);
@@ -140,14 +166,22 @@ export default function OrganizationMembersPage() {
         setMessage({ type: 'success', text: `Invitation sent to ${formData.email}! They will receive an email with instructions to join.` });
         setShowAddForm(false);
         setFormData({ email: '', role: 'financeManager' });
-        await fetchPendingInvitations();
+        // Refresh both invitations and seat info to sync the page
+        await Promise.all([
+          fetchPendingInvitations(),
+          fetchSeatInfo()
+        ]);
       } else {
         console.log('❌ [Members Page] Invitation failed:', result.error);
         setMessage({ type: 'error', text: result.error || 'Failed to send invitation' });
+        // Refresh seat info even on error to ensure UI is synced
+        await fetchSeatInfo();
       }
     } catch (error) {
       console.error('❌ [Members Page] Error sending invitation:', error);
       setMessage({ type: 'error', text: 'Failed to send invitation. Please try again.' });
+      // Refresh seat info on error
+      await fetchSeatInfo();
     } finally {
       setAdding(false);
     }
@@ -163,6 +197,15 @@ export default function OrganizationMembersPage() {
         },
         body: JSON.stringify({ userId, role: newRole }),
       });
+
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('Non-JSON response received:', text.substring(0, 200));
+        setMessage({ type: 'error', text: 'Server returned an invalid response. Please try again.' });
+        return;
+      }
 
       const data = await response.json();
 
@@ -191,11 +234,23 @@ export default function OrganizationMembersPage() {
         method: 'DELETE',
       });
 
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('Non-JSON response received:', text.substring(0, 200));
+        setMessage({ type: 'error', text: 'Server returned an invalid response. Please try again.' });
+        return;
+      }
+
       const data = await response.json();
 
       if (data.success) {
         setMessage({ type: 'success', text: 'Member removed successfully!' });
-        await fetchMembers();
+        await Promise.all([
+          fetchMembers(),
+          fetchSeatInfo()
+        ]);
       } else {
         setMessage({ type: 'error', text: data.message || 'Failed to remove member' });
       }
@@ -234,7 +289,10 @@ export default function OrganizationMembersPage() {
 
       if (result.success) {
         setMessage({ type: 'success', text: 'Invitation deleted successfully!' });
-        await fetchPendingInvitations();
+        await Promise.all([
+          fetchPendingInvitations(),
+          fetchSeatInfo()
+        ]);
       } else {
         setMessage({ type: 'error', text: result.error || 'Failed to delete invitation' });
       }
@@ -261,7 +319,6 @@ export default function OrganizationMembersPage() {
             <div className="h-10 bg-white/20 rounded mb-6"></div>
           </div>
         </div>
-        <DashboardFloatingButton />
       </div>
     );
   }
@@ -280,7 +337,6 @@ export default function OrganizationMembersPage() {
             You need to create an organization first to manage members.
           </p>
         </div>
-        <DashboardFloatingButton />
       </div>
     );
   }
@@ -306,6 +362,55 @@ export default function OrganizationMembersPage() {
         </div>
       )}
 
+      {/* Seat Limit Information */}
+      {seatInfo && (
+        <div className={`mb-6 p-4 rounded-lg border ${
+          seatInfo.availableSeats > 0
+            ? 'bg-blue-600/20 border-blue-500/50'
+            : 'bg-blue-600/20 border-blue-500/50'
+        }`}>
+          <div className="flex items-start space-x-3">
+            {seatInfo.availableSeats > 0 ? (
+              <CheckCircle className="h-5 w-5 text-blue-400 mt-0.5 flex-shrink-0" />
+            ) : (
+              <Users className="h-5 w-5 text-blue-400 mt-0.5 flex-shrink-0" />
+            )}
+            <div className="flex-1">
+              <h3 className="text-white font-semibold mb-2">
+                {seatInfo.availableSeats > 0 
+                  ? `You can add ${seatInfo.availableSeats} more member${seatInfo.availableSeats === 1 ? '' : 's'}`
+                  : `Your ${seatInfo.planName || 'current'} plan includes ${seatInfo.paidSeats} seat${seatInfo.paidSeats === 1 ? '' : 's'}`
+                }
+              </h3>
+              <div className="space-y-1 text-blue-200 text-sm">
+                <p>
+                  <strong>Current plan:</strong> {seatInfo.planName || 'Unknown'} • 
+                  <strong> Total seats:</strong> {seatInfo.paidSeats} • 
+                  <strong> Active members:</strong> {seatInfo.currentMembers} {seatInfo.currentMembers === 1 ? 'member' : 'members'}
+                  {seatInfo.pendingInvitations > 0 && (
+                    <> • <strong>Pending invitations:</strong> {seatInfo.pendingInvitations}</>
+                  )}
+                </p>
+                {seatInfo.availableSeats > 0 ? (
+                  <p className="text-blue-300">
+                    You have {seatInfo.availableSeats} seat{seatInfo.availableSeats === 1 ? '' : 's'} available to invite new team members.
+                  </p>
+                ) : (
+                  <div className="space-y-2 mt-2">
+                    <p className="text-blue-300">
+                      You&apos;re currently using all {seatInfo.paidSeats} seat{seatInfo.paidSeats === 1 ? '' : 's'} included in your plan.
+                    </p>
+                    <p className="text-blue-200">
+                      To add more team members, you can upgrade your plan to include additional seats. Visit the <a href="/pricing" className="text-blue-400 hover:text-blue-300 underline">pricing page</a> to see available options.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-6">
          {/* Add Member Section */}
          {isAdmin && (
@@ -324,7 +429,12 @@ export default function OrganizationMembersPage() {
                  {!showAddForm && (
                    <button
                      onClick={() => setShowAddForm(true)}
-                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+                     disabled={seatInfo !== null && seatInfo.availableSeats <= 0}
+                     className={`px-4 py-2 rounded-lg transition-colors flex items-center space-x-2 ${
+                       seatInfo !== null && seatInfo.availableSeats <= 0
+                         ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                         : 'bg-blue-600 text-white hover:bg-blue-700'
+                     }`}
                    >
                      <Plus className="h-4 w-4" />
                      <span>Add Member</span>
@@ -371,8 +481,12 @@ export default function OrganizationMembersPage() {
                    </button>
                    <button
                      onClick={handleAddMember}
-                     disabled={adding}
-                     className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 disabled:opacity-50"
+                     disabled={adding || (seatInfo !== null && seatInfo.availableSeats <= 0)}
+                     className={`px-6 py-2 rounded-lg transition-colors flex items-center space-x-2 ${
+                       seatInfo !== null && seatInfo.availableSeats <= 0
+                         ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                         : 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50'
+                     }`}
                    >
                      {adding ? (
                        <>
@@ -514,7 +628,6 @@ export default function OrganizationMembersPage() {
         </div>
       </div>
 
-      <DashboardFloatingButton />
     </div>
   );
 } 

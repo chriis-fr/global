@@ -47,22 +47,21 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
   // Only fetch data when on the dashboard page
   const isOnDashboardPage = pathname === '/dashboard';
 
-  // Sync init from cache (any cache, even stale) so returning to dashboard shows data immediately
-  const [stats, setStats] = useState<DashboardStats>(() => {
-    const { data } = readCache();
-    return data || {
-      totalReceivables: 0,
-      totalPaidRevenue: 0,
-      totalExpenses: 0,
-      pendingInvoices: 0,
-      paidInvoices: 0,
-      totalClients: 0,
-      netBalance: 0,
-      totalPayables: 0,
-      overdueCount: 0
-    };
-  });
-  const [loading, setLoading] = useState(() => !readCache().data); // No loading if we have any cache to show
+  // Initial state must match server (no localStorage on server) to avoid hydration mismatch.
+  // Cache is applied in useEffect after mount so client and server first paint identically.
+  const defaultStats: DashboardStats = {
+    totalReceivables: 0,
+    totalPaidRevenue: 0,
+    totalExpenses: 0,
+    pendingInvoices: 0,
+    paidInvoices: 0,
+    totalClients: 0,
+    netBalance: 0,
+    totalPayables: 0,
+    overdueCount: 0
+  };
+  const [stats, setStats] = useState<DashboardStats>(defaultStats);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const hasInitialized = useRef(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -98,12 +97,19 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
       return;
     }
 
+    // Client-only: apply cache immediately so we can hide loading if we have cached data (avoids flash after hydration)
+    const { data: cachedData } = readCache();
+    if (cachedData) {
+      setStats(cachedData);
+      setLoading(false);
+    }
+
     const loadStats = async () => {
-      const { data: cachedData } = readCache();
+      const { data: cachedDataInLoad } = readCache();
 
       // If we have cache (valid or stale), show it and don't show loading; revalidate in background
-      if (cachedData) {
-        setStats(cachedData);
+      if (cachedDataInLoad) {
+        setStats(cachedDataInLoad);
         setLoading(false);
         hasInitialized.current = true;
         getDashboardStats().then((result) => {

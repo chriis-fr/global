@@ -41,7 +41,7 @@ export class UserService {
         planId: 'trial-premium',
         status: 'trial',
         trialStartDate: now,
-        trialEndDate: new Date(now.getTime() + (30 * 24 * 60 * 60 * 1000)), // 30 days from now
+        trialEndDate: new Date(now.getTime() + (15 * 24 * 60 * 60 * 1000)), // 15 days from sign up
         hasUsedTrial: true,
         trialActivatedAt: now,
         billingPeriod: 'monthly',

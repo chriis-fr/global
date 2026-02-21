@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Check, X, Star, Zap, Building2, CreditCard } from 'lucide-react';
 import { BILLING_PLANS } from '@/data/billingPlans';
 import { BillingPlan, PlanType, BillingPeriod } from '@/models/Billing';
+import { getPlanPriceLabel, calculatePlanPrice } from '@/lib/pricingEngine';
 
 export default function BillingPage() {
   const [selectedType, setSelectedType] = useState<PlanType>('receivables');
@@ -118,8 +119,12 @@ export default function BillingPage() {
 }
 
 function PlanCard({ plan, billingPeriod }: { plan: BillingPlan; billingPeriod: BillingPeriod }) {
-  const price = billingPeriod === 'yearly' ? plan.yearlyPrice : plan.monthlyPrice;
-  const monthlyEquivalent = billingPeriod === 'yearly' ? plan.yearlyPrice / 12 : plan.monthlyPrice;
+  const isEnterprise = plan.isEnterprise;
+  const seats = plan.dynamicPricing?.includedSeats ?? 1;
+  const calculated = !isEnterprise ? calculatePlanPrice(plan, billingPeriod, seats) : null;
+  const priceLabel = isEnterprise ? 'Contact Sales' : calculated
+    ? (billingPeriod === 'yearly' ? `$${calculated.totalYearly.toFixed(0)}/year` : `$${calculated.totalMonthly.toFixed(2)}/month`)
+    : getPlanPriceLabel(plan);
 
   return (
     <div className={`relative bg-white/10 backdrop-blur-sm rounded-2xl p-8 border-2 transition-all hover:scale-105 ${
@@ -139,13 +144,10 @@ function PlanCard({ plan, billingPeriod }: { plan: BillingPlan; billingPeriod: B
         <p className="text-blue-200 mb-4">{plan.description}</p>
         
         <div className="mb-4">
-          <span className="text-4xl font-bold text-white">${price}</span>
-          <span className="text-blue-200 ml-2">
-            /{billingPeriod === 'yearly' ? 'year' : 'month'}
-          </span>
-          {billingPeriod === 'yearly' && (
+          <span className="text-4xl font-bold text-white">{priceLabel}</span>
+          {billingPeriod === 'yearly' && calculated && !isEnterprise && (
             <div className="text-sm text-green-400 mt-1">
-              ${monthlyEquivalent.toFixed(2)}/month
+              ${(calculated.totalYearly / 12).toFixed(2)}/mo billed yearly
             </div>
           )}
         </div>
@@ -171,17 +173,27 @@ function PlanCard({ plan, billingPeriod }: { plan: BillingPlan; billingPeriod: B
         ))}
       </div>
 
-      <button
-        className={`w-full py-3 px-6 rounded-xl font-semibold transition-all ${
-          plan.ctaVariant === 'primary'
-            ? 'bg-yellow-400 text-yellow-900 hover:bg-yellow-300'
-            : plan.ctaVariant === 'secondary'
-            ? 'bg-blue-600 text-white hover:bg-blue-500'
-            : 'border-2 border-white text-white hover:bg-white hover:text-blue-900'
-        }`}
-      >
-        {plan.ctaText}
-      </button>
+      {plan.isEnterprise ? (
+        <a
+          href="mailto:sales@globalsolutions.com?subject=Enterprise%20pricing%20inquiry"
+          className="w-full py-3 px-6 rounded-xl font-semibold border-2 border-white text-white hover:bg-white hover:text-blue-900 transition-all flex items-center justify-center"
+        >
+          {plan.ctaText}
+        </a>
+      ) : (
+        <a
+          href="/pricing"
+          className={`w-full py-3 px-6 rounded-xl font-semibold transition-all flex items-center justify-center ${
+            plan.ctaVariant === 'primary'
+              ? 'bg-yellow-400 text-yellow-900 hover:bg-yellow-300'
+              : plan.ctaVariant === 'secondary'
+              ? 'bg-blue-600 text-white hover:bg-blue-500'
+              : 'border-2 border-white text-white hover:bg-white hover:text-blue-900'
+          }`}
+        >
+          {plan.ctaText}
+        </a>
+      )}
     </div>
   );
 }

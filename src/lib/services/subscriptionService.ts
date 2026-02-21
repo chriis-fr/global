@@ -31,12 +31,12 @@ interface UserData {
 }
 
 export class SubscriptionService {
-  // Initialize 30-day trial for new users (full access)
+  // Initialize 15-day trial for new users (full access)
   static async initializeTrial(userId: ObjectId): Promise<void> {
-    console.log('🔄 [SubscriptionService] Initializing 30-day trial for user:', userId);
+    console.log('🔄 [SubscriptionService] Initializing 15-day trial for user:', userId);
     const db = await getDatabase();
     const now = new Date();
-    const trialEndDate = new Date(now.getTime() + (30 * 24 * 60 * 60 * 1000)); // 30 days from now
+    const trialEndDate = new Date(now.getTime() + (15 * 24 * 60 * 60 * 1000)); // 15 days from now
 
     await db.collection('users').updateOne(
       { _id: userId },

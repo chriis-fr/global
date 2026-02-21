@@ -1,5 +1,6 @@
 import { UserServices } from '@/models';
 import { BILLING_PLANS } from '@/data/billingPlans';
+import { getMinimumMonthlyPrice } from '@/lib/pricingEngine';
 
 // Service definitions with their keys, metadata, and subscription requirements
 export const SERVICE_DEFINITIONS = {
@@ -12,7 +13,7 @@ export const SERVICE_DEFINITIONS = {
     icon: 'FileText',
     ready: true,
     subscriptionRequired: {
-      plans: ['receivables-free', 'receivables-pro', 'combined-basic', 'combined-pro'] as string[],
+      plans: ['receivables-free', 'receivables-growth-individual', 'receivables-pro', 'receivables-scale', 'receivables-enterprise', 'combined-basic', 'combined-pro', 'combined-enterprise'] as string[],
       minTier: 'free'
     }
   },
@@ -25,7 +26,7 @@ export const SERVICE_DEFINITIONS = {
     icon: 'ArrowRight',
     ready: true,
     subscriptionRequired: {
-      plans: ['receivables-free', 'receivables-pro', 'combined-basic', 'combined-pro'] as string[],
+      plans: ['receivables-free', 'receivables-growth-individual', 'receivables-pro', 'receivables-scale', 'receivables-enterprise', 'combined-basic', 'combined-pro', 'combined-enterprise'] as string[],
       minTier: 'free'
     }
   },
@@ -38,7 +39,7 @@ export const SERVICE_DEFINITIONS = {
     icon: 'Receipt',
     ready: true,
     subscriptionRequired: {
-      plans: ['payables-basic', 'payables-pro', 'combined-basic', 'combined-pro'] as string[],
+      plans: ['payables-basic', 'payables-pro', 'payables-enterprise', 'combined-basic', 'combined-pro', 'combined-enterprise'] as string[],
       minTier: 'basic'
     }
   },
@@ -52,7 +53,7 @@ export const SERVICE_DEFINITIONS = {
     icon: 'Receipt',
     ready: false,
     subscriptionRequired: {
-      plans: ['combined-basic', 'combined-pro'] as string[],
+      plans: ['combined-basic', 'combined-pro', 'combined-enterprise'] as string[],
       minTier: 'basic'
     }
   },
@@ -65,7 +66,7 @@ export const SERVICE_DEFINITIONS = {
     icon: 'Users',
     ready: false,
     subscriptionRequired: {
-      plans: ['combined-basic', 'combined-pro'] as string[],
+      plans: ['combined-basic', 'combined-pro', 'combined-enterprise'] as string[],
       minTier: 'basic'
     }
   },
@@ -79,7 +80,7 @@ export const SERVICE_DEFINITIONS = {
     icon: 'LockKeyhole',
     ready: false,
     subscriptionRequired: {
-      plans: ['receivables-pro', 'payables-pro', 'combined-basic', 'combined-pro'] as string[],
+      plans: ['receivables-pro', 'receivables-scale', 'receivables-enterprise', 'payables-pro', 'payables-enterprise', 'combined-basic', 'combined-pro', 'combined-enterprise'] as string[],
       minTier: 'pro'
     }
   },
@@ -92,7 +93,7 @@ export const SERVICE_DEFINITIONS = {
     icon: 'History',
     ready: false,
     subscriptionRequired: {
-      plans: ['receivables-pro', 'payables-pro', 'combined-basic', 'combined-pro'] as string[],
+      plans: ['receivables-pro', 'receivables-scale', 'receivables-enterprise', 'payables-pro', 'payables-enterprise', 'combined-basic', 'combined-pro', 'combined-enterprise'] as string[],
       minTier: 'pro'
     }
   },
@@ -105,7 +106,7 @@ export const SERVICE_DEFINITIONS = {
     icon: 'Banknote',
     ready: false,
     subscriptionRequired: {
-      plans: ['payables-pro', 'combined-pro'] as string[],
+      plans: ['payables-pro', 'payables-enterprise', 'combined-pro', 'combined-enterprise'] as string[],
       minTier: 'pro'
     }
   },
@@ -118,7 +119,7 @@ export const SERVICE_DEFINITIONS = {
     icon: 'ShieldCheck',
     ready: false,
     subscriptionRequired: {
-      plans: ['receivables-pro', 'payables-pro', 'combined-basic', 'combined-pro'] as string[],
+      plans: ['receivables-pro', 'receivables-scale', 'receivables-enterprise', 'payables-pro', 'payables-enterprise', 'combined-basic', 'combined-pro', 'combined-enterprise'] as string[],
       minTier: 'pro'
     }
   },
@@ -132,7 +133,7 @@ export const SERVICE_DEFINITIONS = {
     icon: 'Calculator',
     ready: false,
     subscriptionRequired: {
-      plans: ['receivables-pro', 'payables-pro', 'combined-basic', 'combined-pro'] as string[],
+      plans: ['receivables-pro', 'receivables-scale', 'receivables-enterprise', 'payables-pro', 'payables-enterprise', 'combined-basic', 'combined-pro', 'combined-enterprise'] as string[],
       minTier: 'pro'
     }
   },
@@ -145,7 +146,7 @@ export const SERVICE_DEFINITIONS = {
     icon: 'Code',
     ready: false,
     subscriptionRequired: {
-      plans: ['combined-pro'] as string[],
+      plans: ['combined-pro', 'combined-enterprise'] as string[],
       minTier: 'pro'
     }
   },
@@ -158,7 +159,7 @@ export const SERVICE_DEFINITIONS = {
     icon: 'Coins',
     ready: false,
     subscriptionRequired: {
-      plans: ['payables-basic', 'payables-pro', 'combined-basic', 'combined-pro'] as string[],
+      plans: ['payables-basic', 'payables-pro', 'payables-enterprise', 'combined-basic', 'combined-pro', 'combined-enterprise'] as string[],
       minTier: 'basic'
     }
   },
@@ -171,7 +172,7 @@ export const SERVICE_DEFINITIONS = {
     icon: 'Globe2',
     ready: false,
     subscriptionRequired: {
-      plans: ['combined-pro'] as string[],
+      plans: ['combined-pro', 'combined-enterprise'] as string[],
       minTier: 'pro'
     }
   }
@@ -182,7 +183,7 @@ export type ServiceKey = keyof typeof SERVICE_DEFINITIONS;
 // Create default services object with all services disabled
 // Services will only be enabled after user completes onboarding and selects them
 export function createDefaultServices(): UserServices {
-  console.log(' [ServiceManager] Creating default services (all disabled until onboarding)...');
+  // Removed console.log to reduce noise - this function is called frequently
   return {
     // Core Invoicing & Payments - ALL disabled until onboarding
     smartInvoicing: false, // Will be enabled during onboarding if user selects it
@@ -342,7 +343,7 @@ export function canAccessServiceWithSubscription(
     
     // Find the cheapest required plan
     const cheapestRequired = requiredPlans.reduce((cheapest, current) => {
-      return current.monthlyPrice < cheapest.monthlyPrice ? current : cheapest;
+      return getMinimumMonthlyPrice(current) < getMinimumMonthlyPrice(cheapest) ? current : cheapest;
     });
 
     return {
@@ -384,16 +385,16 @@ export function getRecommendedPlan(desiredServices: ServiceKey[]): string | null
   // Check if all services are available in combined plans
   const combinedPlans = BILLING_PLANS.filter(plan => plan.type === 'combined');
   
-  for (const plan of combinedPlans) {
-    const canAccessAll = desiredServices.every(serviceKey => {
-      const accessCheck = canAccessServiceWithSubscription(serviceKey, plan.planId);
-      return accessCheck.canAccess;
-    });
-    
-    if (canAccessAll) {
-      // Return the cheapest combined plan that covers all services
-      return plan.planId;
-    }
+  const plansCoveringAll = combinedPlans.filter(plan =>
+    desiredServices.every(serviceKey =>
+      canAccessServiceWithSubscription(serviceKey, plan.planId).canAccess
+    )
+  );
+  if (plansCoveringAll.length > 0) {
+    const cheapest = plansCoveringAll.reduce((a, b) =>
+      getMinimumMonthlyPrice(a) < getMinimumMonthlyPrice(b) ? a : b
+    );
+    return cheapest.planId;
   }
 
   // If not all services are in combined plans, find the plan that covers the most services

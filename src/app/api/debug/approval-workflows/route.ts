@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { connectToDatabase } from '@/lib/database';
+import { getDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
 
 export async function GET() {
@@ -15,7 +15,7 @@ export async function GET() {
       );
     }
 
-    const db = await connectToDatabase();
+    const db = await getDatabase();
     
     // Get user
     const user = await db.collection('users').findOne({

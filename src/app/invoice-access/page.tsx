@@ -81,7 +81,7 @@ function InvoiceAccessContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const token = searchParams.get('token');
+  const token = searchParams?.get('token');
 
   // Redirect to dedicated pay-invoice page so users can pay without signing up
   useEffect(() => {

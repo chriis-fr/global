@@ -3,13 +3,17 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { CheckCircle, Loader2 } from 'lucide-react'
+import { useSession as useNextAuthSession } from 'next-auth/react'
 import { useSubscription } from '@/lib/contexts/SubscriptionContext'
+import { useSession } from '@/lib/auth-client'
 import { verifyAndActivateSubscription } from '@/lib/actions/paystack'
 
 export default function SubscriptionSuccessPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { refetch } = useSubscription()
+  const { update: updateNextAuth } = useNextAuthSession()
+  const { update: updateOurSession } = useSession()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -18,11 +22,11 @@ export default function SubscriptionSuccessPage() {
   useEffect(() => {
     const handleSuccess = async () => {
       // Get reference again inside useEffect to ensure we have the latest value
-      const ref = searchParams.get('trxref') || searchParams.get('reference') || searchParams.get('session_id')
+      const ref = searchParams?.get('trxref') || searchParams?.get('reference') || searchParams?.get('session_id')
       const cleanRef = ref && ref.trim() !== '' ? ref.trim() : null
       
       console.log('🔔 [SubscriptionSuccess] Success page loaded, reference:', cleanRef, 'raw reference:', ref)
-      console.log('📋 [SubscriptionSuccess] All search params:', Object.fromEntries(searchParams.entries()))
+      console.log('📋 [SubscriptionSuccess] All search params:', Object.fromEntries(searchParams?.entries?.() ?? []))
       
       try {
         if (cleanRef) {
@@ -39,47 +43,77 @@ export default function SubscriptionSuccessPage() {
           if (result.success) {
             console.log('✅ [SubscriptionSuccess] Subscription activated successfully')
             
-            // Force clear cache and wait a bit for database to update
-            await new Promise(resolve => setTimeout(resolve, 1000))
+            // Short wait for DB to settle (user.services + subscriptionJustUpdatedAt are set by verifyAndActivateSubscription)
+            await new Promise(resolve => setTimeout(resolve, 300))
             
-            // Clear cache and refresh subscription data immediately
-            console.log('🔄 [SubscriptionSuccess] First refetch...')
+            // Refresh subscription (clears cache and fetches so sidebar/dashboard show only paid-for services)
+            console.log('🔄 [SubscriptionSuccess] Refetching subscription...')
             await refetch()
             
-            // Wait a bit more and refetch again to ensure we have the latest data
-            await new Promise(resolve => setTimeout(resolve, 1500))
-            console.log('🔄 [SubscriptionSuccess] Second refetch...')
-            await refetch()
+            // Trigger session refresh so next getSession gets fresh JWT (subscriptionJustUpdatedAt forces JWT callback to refresh)
+            try {
+              if (typeof updateNextAuth === 'function') await updateNextAuth({})
+              await updateOurSession?.()
+            } catch {
+              // Non-fatal; session will refresh on next request via subscriptionJustUpdatedAt
+            }
             
-            console.log('✅ [SubscriptionSuccess] Subscription data refreshed, redirecting to dashboard')
+            await new Promise(resolve => setTimeout(resolve, 400))
             
-            // Redirect to dashboard after a short delay
-            setTimeout(() => {
-              router.push('/dashboard')
-            }, 1000)
+            // Check for pending organization data
+            let redirectPath = '/dashboard?from=subscription-success';
+            if (typeof window !== 'undefined') {
+              const pendingOrgData = localStorage.getItem('pending_organization_data');
+              if (pendingOrgData) {
+                // Redirect to organization settings to complete org creation
+                redirectPath = '/dashboard/settings/organization?from=subscription-success';
+              }
+            }
+            
+            console.log('✅ [SubscriptionSuccess] Redirecting to', redirectPath)
+            router.push(redirectPath)
           } else {
             console.error('❌ [SubscriptionSuccess] Verification failed:', result.error)
             console.log('⚠️ [SubscriptionSuccess] Still attempting to refresh in case webhook processed it')
-            // Still try to refetch in case webhook already processed it
             await new Promise(resolve => setTimeout(resolve, 2000))
             await refetch()
-            setTimeout(() => {
-              router.push('/dashboard')
-            }, 2000)
+            try {
+              await updateNextAuth?.({});
+              await updateOurSession?.();
+            } catch {
+              // Non-fatal
+            }
+            
+            // Check for pending organization data
+            let redirectPath = '/dashboard';
+            if (typeof window !== 'undefined') {
+              const pendingOrgData = localStorage.getItem('pending_organization_data');
+              if (pendingOrgData) {
+                redirectPath = '/dashboard/settings/organization?from=subscription-success';
+              }
+            }
+            router.push(redirectPath)
           }
         } else {
           // No reference found, but still try to refresh (might be webhook-activated)
           console.log('⚠️ [SubscriptionSuccess] No reference found in URL, refreshing subscription data')
-          console.log('📋 [SubscriptionSuccess] Search params:', {
-            trxref: searchParams.get('trxref'),
-            reference: searchParams.get('reference'),
-            session_id: searchParams.get('session_id'),
-            allParams: Object.fromEntries(searchParams.entries())
-          })
           await refetch()
-          setTimeout(() => {
-            router.push('/dashboard')
-          }, 2000)
+          try {
+            await updateNextAuth?.({});
+            await updateOurSession?.();
+          } catch {
+            // Non-fatal
+          }
+          
+          // Check for pending organization data
+          let redirectPath = '/dashboard';
+          if (typeof window !== 'undefined') {
+            const pendingOrgData = localStorage.getItem('pending_organization_data');
+            if (pendingOrgData) {
+              redirectPath = '/dashboard/settings/organization?from=subscription-success';
+            }
+          }
+          router.push(redirectPath)
         }
       } catch (err) {
         console.error('❌ [SubscriptionSuccess] Error handling subscription success:', err)
@@ -87,13 +121,25 @@ export default function SubscriptionSuccessPage() {
           message: err instanceof Error ? err.message : 'Unknown error',
           stack: err instanceof Error ? err.stack : undefined
         })
-        // Still try to refresh subscription in case webhook processed it
         try {
           console.log('🔄 [SubscriptionSuccess] Attempting recovery refetch...')
           await refetch()
-          setTimeout(() => {
-            router.push('/dashboard')
-          }, 2000)
+          try {
+            await updateNextAuth?.({});
+            await updateOurSession?.();
+          } catch {
+            // Non-fatal
+          }
+          
+          // Check for pending organization data
+          let redirectPath = '/dashboard';
+          if (typeof window !== 'undefined') {
+            const pendingOrgData = localStorage.getItem('pending_organization_data');
+            if (pendingOrgData) {
+              redirectPath = '/dashboard/settings/organization?from=subscription-success';
+            }
+          }
+          router.push(redirectPath)
         } catch (refetchError) {
           console.error('❌ [SubscriptionSuccess] Recovery refetch also failed:', refetchError)
           setError('Failed to process subscription. Please check your dashboard or contact support.')
@@ -104,7 +150,7 @@ export default function SubscriptionSuccessPage() {
     }
 
     handleSuccess()
-  }, [refetch, router, searchParams])
+  }, [refetch, router, searchParams, updateNextAuth, updateOurSession])
 
   if (loading) {
     return (

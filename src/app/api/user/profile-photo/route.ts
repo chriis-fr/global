@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { UserService } from '@/lib/services/userService';
+import { getDatabase } from '@/lib/database';
 import { writeFile, unlink } from 'fs/promises';
 import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
@@ -84,10 +85,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Update user record
-    await UserService.updateUser(user._id!.toString(), {
-      avatar: profilePhotoUrl
-    });
+    // Update user record and set flag so sidebar session picks up new avatar on next refresh
+    const db = await getDatabase();
+    await db.collection('users').updateOne(
+      { _id: user._id },
+      { $set: { avatar: profilePhotoUrl, profilePhotoUpdatedAt: new Date(), updatedAt: new Date() } }
+    );
 
     return NextResponse.json({
       success: true,
@@ -143,10 +146,12 @@ export async function DELETE() {
       }
     }
 
-    // Update user record to remove profile photo
-    await UserService.updateUser(user._id!.toString(), {
-      avatar: undefined
-    });
+    // Update user record to remove profile photo and set flag so sidebar session refreshes
+    const db = await getDatabase();
+    await db.collection('users').updateOne(
+      { _id: user._id },
+      { $unset: { avatar: 1 }, $set: { profilePhotoUpdatedAt: new Date(), updatedAt: new Date() } }
+    );
 
     return NextResponse.json({
       success: true,

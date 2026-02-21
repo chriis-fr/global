@@ -24,7 +24,9 @@ import {
   ArrowRightCircle,
   Settings,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Clock,
+  Crown
 } from 'lucide-react';
 import Image from 'next/image';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
@@ -534,7 +536,7 @@ export default function OnboardingPage() {
               className="text-center"
             >
               <h2 className="text-2xl lg:text-3xl font-bold text-white mb-4">
-                Welcome to Chains ERP!
+                Welcome to Global Finance.
               </h2>
               <p className="text-lg lg:text-xl text-blue-200 mb-8 max-w-2xl mx-auto px-4">
                 You&apos;re about to set up your business management system. 
@@ -550,6 +552,26 @@ export default function OnboardingPage() {
                   <div>
                     <p className="text-blue-200 text-sm">Email</p>
                     <p className="text-white font-medium break-all">{user.email}</p>
+                  </div>
+                </div>
+              </div>
+              {/* Subscription info only – no logic changes */}
+              <div className="bg-blue-500/10 border border-blue-400/30 backdrop-blur-sm rounded-xl p-4 lg:p-5 mb-8 mx-4 text-left">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-lg bg-blue-500/20 shrink-0">
+                    <Clock className="h-5 w-5 text-blue-300" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-semibold text-white mb-2 flex items-center gap-2">
+                      <Crown className="h-4 w-4 text-blue-300" />
+                      Your subscription
+                    </h3>
+                    <p className="text-blue-200 text-sm mb-2">
+                      You have a <strong className="text-white">15-day free trial</strong> with full access to the services you enable. After the trial, your account moves to the free plan (5 invoices per month, low volume) unless you upgrade.
+                    </p>
+                    <p className="text-blue-200 text-sm">
+                      You can <strong className="text-white">upgrade now</strong> or anytime from your dashboard. If you prefer to start a paid plan immediately, visit <a href="/pricing" className="text-blue-300 underline hover:text-blue-200">Pricing</a> after setup.
+                    </p>
                   </div>
                 </div>
               </div>

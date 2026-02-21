@@ -962,9 +962,9 @@ export default function CreateInvoicePage() {
   const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<string>('');
 
   // Check if we're editing an existing invoice
-  const invoiceId = searchParams.get('id');
-  const fromPdfDraftId = searchParams.get('fromPdfDraft');
-  const fromClickUp = searchParams.get('fromClickUp') === '1';
+  const invoiceId = searchParams?.get('id');
+  const fromPdfDraftId = searchParams?.get('fromPdfDraft');
+  const fromClickUp = searchParams?.get('fromClickUp') === '1';
   const pdfDraftLoadDone = useRef(false);
   const lastLoadedPdfDraftId = useRef<string | null>(null);
   const clickUpLoadDone = useRef(false);

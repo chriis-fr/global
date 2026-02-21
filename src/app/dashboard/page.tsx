@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useRef, Suspense, startTransition } from 'react';
 import { useSession } from '@/lib/auth-client';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { 
   FileText, 
   Users,
@@ -19,17 +19,30 @@ import { getUserSettings } from '@/app/actions/user-actions';
 
 export default function DashboardPage() {
   const { data: session, update: updateSession } = useSession();
-  const { subscription, refetch } = useSubscription(); // Don't block on loading
+  const { subscription, refetch, clearCache } = useSubscription();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [userName, setUserName] = useState<string>('');
   const [organizationName, setOrganizationName] = useState<string>('');
   const [mounted, setMounted] = useState(false);
   const sessionRefreshDoneRef = useRef(false);
+  const subscriptionSuccessHandledRef = useRef(false);
 
   // Avoid hydration mismatch: isPaidUser depends on client-loaded subscription
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // When landing from subscription success: run once, refetch, then strip query param to avoid repeated POSTs/loops
+  const fromSubscriptionSuccess = searchParams?.get('from') === 'subscription-success';
+  useEffect(() => {
+    if (!fromSubscriptionSuccess || !session?.user?.id) return;
+    if (subscriptionSuccessHandledRef.current) return;
+    subscriptionSuccessHandledRef.current = true;
+    clearCache?.();
+    refetch();
+    router.replace('/dashboard', { scroll: false });
+  }, [fromSubscriptionSuccess, session?.user?.id, refetch, clearCache, router, searchParams]);
 
   // After onboarding redirect, session can have stale services; refresh once so services show (both individual and org users)
   useEffect(() => {
@@ -38,18 +51,13 @@ export default function DashboardPage() {
     updateSession?.().catch(() => {});
   }, [session?.user?.id, session?.user, updateSession]);
 
-  // Refresh subscription on mount to ensure we have the latest data
+  // Refresh subscription on mount (unless we just did from=subscription-success)
   useEffect(() => {
-    if (session?.user?.id) {
-      // Refresh subscription data when dashboard loads to ensure it's up to date
-      // This is especially important after plan changes
-      const timer = setTimeout(() => {
-        refetch();
-      }, 1000); // Small delay to avoid blocking initial render
-      
+    if (session?.user?.id && !fromSubscriptionSuccess) {
+      const timer = setTimeout(() => refetch(), 1000);
       return () => clearTimeout(timer);
     }
-  }, [session?.user?.id, refetch]);
+  }, [session?.user?.id, refetch, fromSubscriptionSuccess, searchParams]);
 
   // Fetch user data in background - don't block render
   useEffect(() => {
@@ -173,11 +181,55 @@ export default function DashboardPage() {
               <p className="text-blue-200">Welcome back, {displayName}!</p>
             </div>
         </div>
+        {/* Trial indicator - top right on desktop, fixed beside menu button on mobile */}
+        {mounted && subscription?.isTrialActive && (
+          <>
+            {/* Mobile: Fixed position to the left of menu button */}
+            <div className="lg:hidden fixed top-4 right-[4.5rem] z-[60] flex items-center gap-1.5 px-2 py-1.5 bg-blue-500/20 border border-blue-400/30 rounded-lg">
+              <Clock className="h-3.5 w-3.5 text-blue-300 shrink-0" />
+              <div className="flex flex-col leading-tight">
+                <span className="text-xs font-medium text-blue-200">
+                  {subscription.trialDaysRemaining} {subscription.trialDaysRemaining === 1 ? 'day' : 'days'}
+                </span>
+                <span className="text-[10px] text-blue-300/80">Trial</span>
+              </div>
+            </div>
+            {/* Desktop: In header flow */}
+            <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-blue-500/20 border border-blue-400/30 rounded-lg shrink-0">
+              <Clock className="h-3.5 w-3.5 text-blue-300 shrink-0" />
+              <div className="flex flex-col leading-tight">
+                <span className="text-xs font-medium text-blue-200">
+                  {subscription.trialDaysRemaining} {subscription.trialDaysRemaining === 1 ? 'day' : 'days'} left
+                </span>
+                <span className="text-[10px] text-blue-300/80">Free trial</span>
+              </div>
+            </div>
+          </>
+        )}
         {/* <div className="text-right">
             <p className="text-sm text-blue-300">Last updated</p>
             <p className="text-sm text-white">{new Date().toLocaleDateString()}</p>
         </div> */}
       </div>
+
+      {/* Past due: payment failed – block access until they pay (data is preserved) */}
+      {mounted && subscription?.status === 'past_due' && (
+        <div className="mb-4 rounded-xl border-2 border-amber-500/50 bg-amber-500/20 p-4 md:p-5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h3 className="font-semibold text-amber-200">Payment overdue</h3>
+              <p className="text-sm text-amber-200/90 mt-1">Your subscription payment failed. Your data is safe. Pay to restore access.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => router.push('/pricing')}
+              className="shrink-0 px-4 py-2 rounded-lg bg-amber-500 text-white font-medium hover:bg-amber-600 transition-colors"
+            >
+              Pay now
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Plan Status Banner - Only show for receivables free users (defer until mounted to avoid hydration mismatch) */}
       {mounted && subscription && subscription.plan?.planId === 'receivables-free' && hasReceivablesAccess && (

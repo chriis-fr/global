@@ -13,7 +13,7 @@ export default function Breadcrumb() {
   const pathname = usePathname();
   
   const generateBreadcrumbs = (): BreadcrumbItem[] => {
-    const segments = pathname.split('/').filter(Boolean);
+    const segments = (pathname ?? '').split('/').filter(Boolean);
     const breadcrumbs: BreadcrumbItem[] = [
       { label: 'Dashboard', href: '/dashboard' }
     ];

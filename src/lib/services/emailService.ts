@@ -905,6 +905,177 @@ export const sendTestEmail = async (toEmail: string) => {
 };
 
 // Send password reset email
+// Send payment reminder email (3 days before due date)
+export const sendPaymentReminderEmail = async (
+  userEmail: string,
+  userName: string,
+  data: {
+    planName: string;
+    amount: number;
+    currency: string;
+    dueDate: string;
+    billingPeriod: 'monthly' | 'yearly';
+    hasOrganization: boolean;
+  }
+) => {
+  const frontendUrl = getFrontendUrl();
+  const pricingUrl = `${frontendUrl}/pricing`;
+  
+  const mailOptions: nodemailer.SendMailOptions = {
+    from: `"Chains ERP-Global" <${emailConfig.auth.user}>`,
+    to: userEmail,
+    subject: `Payment Reminder: Your subscription payment is due soon`,
+    headers: getEmailHeaders(),
+    html: `
+      <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+      </style>
+      <div style="font-family: 'Plus Jakarta Sans', 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #1a1a2e;">
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 24px; border-radius: 10px 10px 0 0; display: flex; align-items: center; gap: 28px; text-align: left;">
+          <img src="https://global.chains-erp.com/chainsnobg.png"
+            alt="Chains ERP-Global Logo"
+            style="max-width: 80px; height: auto; border-radius: 8px; flex-shrink: 0;">
+          <div style="flex: 1;">
+            <h1 style="margin: 0; font-size: 28px; font-weight: 700;">Payment Reminder</h1>
+            <p style="margin: 10px 0 0 0; opacity: 0.95; font-size: 16px;">Your subscription payment is due soon</p>
+          </div>
+        </div>
+
+        <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
+          <p style="color: #1a1a2e; font-size: 16px; margin: 0 0 20px 0; line-height: 1.6;">
+            Hi ${userName},
+          </p>
+          
+          <p style="color: #4a5568; font-size: 15px; margin: 0 0 20px 0; line-height: 1.6;">
+            This is a friendly reminder that your ${data.planName} subscription payment is due in 3 days.
+          </p>
+
+          <div style="background: white; padding: 22px; border-radius: 8px; margin: 0 0 24px 0; border-left: 4px solid #667eea;">
+            <p style="color: #1a1a2e; margin: 0 0 12px 0; font-size: 15px;"><strong>Plan:</strong> ${data.planName}</p>
+            <p style="color: #1a1a2e; margin: 0 0 12px 0; font-size: 15px;"><strong>Amount Due:</strong> ${data.currency} ${data.amount.toFixed(2)}</p>
+            <p style="color: #1a1a2e; margin: 0 0 12px 0; font-size: 15px;"><strong>Due Date:</strong> ${data.dueDate}</p>
+            <p style="color: #1a1a2e; margin: 0; font-size: 15px;"><strong>Billing Period:</strong> ${data.billingPeriod === 'yearly' ? 'Yearly' : 'Monthly'}</p>
+          </div>
+
+          ${data.hasOrganization ? `
+          <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; padding: 16px; margin: 0 0 24px 0;">
+            <p style="color: #856404; margin: 0; font-size: 14px; font-weight: 600;">⚠️ Organization Account</p>
+            <p style="color: #856404; margin: 8px 0 0 0; font-size: 14px; line-height: 1.5;">
+              Your organization's services will be suspended if payment is not received on time. Please ensure payment is processed before the due date to avoid service disruption.
+            </p>
+          </div>
+          ` : ''}
+
+          <div style="text-align: center; margin: 28px 0;">
+            <a href="${pricingUrl}" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-size: 16px; font-weight: 600;">Update Payment Method</a>
+          </div>
+
+          <p style="color: #718096; font-size: 13px; margin: 24px 0 0 0; line-height: 1.5; text-align: center;">
+            Payment will be automatically processed on the due date. If you need to update your payment method, please do so before then.
+          </p>
+        </div>
+      </div>
+    `,
+  };
+
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log('✅ Payment reminder email sent successfully');
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('❌ Failed to send payment reminder email:', error);
+    return { success: false, error: error as Error };
+  }
+};
+
+// Send payment failed email (when payment fails or after X days)
+export const sendPaymentFailedEmail = async (
+  userEmail: string,
+  userName: string,
+  data: {
+    planName: string;
+    amount: number;
+    currency: string;
+    daysSinceFailure: number;
+    hasOrganization: boolean;
+  }
+) => {
+  const frontendUrl = getFrontendUrl();
+  const pricingUrl = `${frontendUrl}/pricing`;
+  
+  const mailOptions: nodemailer.SendMailOptions = {
+    from: `"Chains ERP-Global" <${emailConfig.auth.user}>`,
+    to: userEmail,
+    subject: `Action Required: Payment Failed - Restore Your ${data.hasOrganization ? 'Organization' : 'Account'} Access`,
+    headers: getEmailHeaders(),
+    html: `
+      <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+      </style>
+      <div style="font-family: 'Plus Jakarta Sans', 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #1a1a2e;">
+        <div style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; padding: 24px; border-radius: 10px 10px 0 0; display: flex; align-items: center; gap: 28px; text-align: left;">
+          <img src="https://global.chains-erp.com/chainsnobg.png"
+            alt="Chains ERP-Global Logo"
+            style="max-width: 80px; height: auto; border-radius: 8px; flex-shrink: 0;">
+          <div style="flex: 1;">
+            <h1 style="margin: 0; font-size: 28px; font-weight: 700;">Payment Failed</h1>
+            <p style="margin: 10px 0 0 0; opacity: 0.95; font-size: 16px;">Action Required</p>
+          </div>
+        </div>
+
+        <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
+          <p style="color: #1a1a2e; font-size: 16px; margin: 0 0 20px 0; line-height: 1.6;">
+            Hi ${userName},
+          </p>
+          
+          <p style="color: #4a5568; font-size: 15px; margin: 0 0 20px 0; line-height: 1.6;">
+            We were unable to process your ${data.planName} subscription payment. Your account access has been suspended until payment is received.
+          </p>
+
+          <div style="background: white; padding: 22px; border-radius: 8px; margin: 0 0 24px 0; border-left: 4px solid #dc3545;">
+            <p style="color: #1a1a2e; margin: 0 0 12px 0; font-size: 15px;"><strong>Plan:</strong> ${data.planName}</p>
+            <p style="color: #1a1a2e; margin: 0 0 12px 0; font-size: 15px;"><strong>Amount Due:</strong> ${data.currency} ${data.amount.toFixed(2)}</p>
+            <p style="color: #1a1a2e; margin: 0; font-size: 15px;"><strong>Days Since Failure:</strong> ${data.daysSinceFailure} day${data.daysSinceFailure === 1 ? '' : 's'}</p>
+          </div>
+
+          ${data.hasOrganization ? `
+          <div style="background: #f8d7da; border: 1px solid #dc3545; border-radius: 8px; padding: 16px; margin: 0 0 24px 0;">
+            <p style="color: #721c24; margin: 0; font-size: 14px; font-weight: 600;">🚨 Organization Services Suspended</p>
+            <p style="color: #721c24; margin: 8px 0 0 0; font-size: 14px; line-height: 1.5;">
+              Your organization's services are currently suspended. All team members have lost access to paid features. Please update your payment method and pay immediately to restore access for your entire organization.
+            </p>
+          </div>
+          ` : `
+          <div style="background: #f8d7da; border: 1px solid #dc3545; border-radius: 8px; padding: 16px; margin: 0 0 24px 0;">
+            <p style="color: #721c24; margin: 0; font-size: 14px; font-weight: 600;">⚠️ Account Access Suspended</p>
+            <p style="color: #721c24; margin: 8px 0 0 0; font-size: 14px; line-height: 1.5;">
+              Your account access has been suspended. Please update your payment method and pay immediately to restore access. Your data is safe and will be restored once payment is received.
+            </p>
+          </div>
+          `}
+
+          <div style="text-align: center; margin: 28px 0;">
+            <a href="${pricingUrl}" style="display: inline-block; background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-size: 16px; font-weight: 600;">Pay Now & Restore Access</a>
+          </div>
+
+          <p style="color: #718096; font-size: 13px; margin: 24px 0 0 0; line-height: 1.5; text-align: center;">
+            Your data is safe and will be restored immediately once payment is received. If you have questions, please contact support.
+          </p>
+        </div>
+      </div>
+    `,
+  };
+
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log('✅ Payment failed email sent successfully');
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('❌ Failed to send payment failed email:', error);
+    return { success: false, error: error as Error };
+  }
+};
+
 export const sendPasswordResetEmail = async (
   userEmail: string,
   userName: string,

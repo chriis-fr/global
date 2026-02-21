@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { ApprovalSettings } from '@/types/approval';
 import { SettingsGuard } from '@/components/PermissionGuard';
 import { OrganizationMember } from '@/models/Organization';
+import { getOrganizationData } from '@/lib/actions/organization';
 interface ApprovalSettingsProps {
   onSave?: (settings: ApprovalSettings) => void;
 }
@@ -56,17 +57,19 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
       setError(null);
 
       // Fetch approval settings, organization data, and members in parallel
-      const [settingsResponse, orgResponse, membersResponse] = await Promise.all([
+      const [settingsResponse, orgDataResult, membersResponse] = await Promise.all([
         fetch('/api/organization/approval-settings'),
-        fetch('/api/organization'),
+        getOrganizationData(),
         fetch('/api/organization/members')
       ]);
 
-      const [settingsData, orgData, membersData] = await Promise.all([
+      const [settingsData, , membersData] = await Promise.all([
         settingsResponse.json(),
-        orgResponse.json(),
+        Promise.resolve(orgDataResult), // orgData is already resolved from server action
         membersResponse.json()
       ]);
+      
+      const orgData = orgDataResult.success ? { success: true as const, data: orgDataResult.data } : { success: false as const, error: orgDataResult.error };
 
       if (settingsData.success) {
         setSettings(settingsData.data);
@@ -74,21 +77,21 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
         setError(settingsData.message || 'Failed to fetch approval settings');
       }
 
-      if (orgData.success) {
+      if (orgData.success && orgData.data) {
         setOrganizationData(orgData.data);
-        
+        const org = orgData.data.organization;
         // Always set primary email from organization data
-        if (orgData.data.billingEmail) {
+        if (org?.billingEmail) {
           setSettings(prev => ({
             ...prev,
             emailSettings: {
               ...prev.emailSettings,
-              primaryEmail: orgData.data.billingEmail
+              primaryEmail: org.billingEmail
             }
           }));
         }
       } else {
-        console.error('Failed to fetch organization data:', orgData.message);
+        console.error('Failed to fetch organization data:', orgData.error);
       }
 
       if (membersData.success) {
@@ -96,8 +99,9 @@ export function ApprovalSettingsComponent({ onSave }: ApprovalSettingsProps) {
       } else {
         console.error('Failed to fetch members data:', membersData.message);
         // Fallback to organization data members if members API fails
-        if (orgData.success && orgData.data.members) {
-          setOrganizationMembers(orgData.data.members);
+        const org = orgData.success && orgData.data ? orgData.data.organization : undefined;
+        if (org?.members) {
+          setOrganizationMembers(org.members);
         }
       }
     } catch (err) {

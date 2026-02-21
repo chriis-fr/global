@@ -16,6 +16,10 @@ export interface SubscriptionData {
   status: string;
   isTrialActive: boolean;
   trialDaysRemaining: number;
+  /** Next payment due date (for paid plans); show "Pay by X" in UI */
+  currentPeriodEnd?: Date | null;
+  /** When payment failed; used for past_due and reminders */
+  paymentFailedAt?: Date | null;
   usage: {
     invoicesThisMonth: number;
     monthlyVolume: number;
@@ -94,8 +98,8 @@ export async function clearSubscriptionCache(userId?: string): Promise<void> {
 }
 
 /**
- * Activate 30-day trial for a user
- * This gives them access to all features for 30 days
+ * Activate 15-day trial for a user
+ * Gives full access for 15 days; after that they move to free plan (5 invoices, low volume).
  */
 export async function activate30DayTrial(userId: string): Promise<{ success: boolean; error?: string }> {
   try {
@@ -118,9 +122,9 @@ export async function activate30DayTrial(userId: string): Promise<{ success: boo
       return { success: false, error: 'Trial already used' };
     }
     
-    // Calculate trial dates
+    // 15-day trial from sign up
     const now = new Date();
-    const trialEndDate = new Date(now.getTime() + (30 * 24 * 60 * 60 * 1000)); // 30 days from now
+    const trialEndDate = new Date(now.getTime() + (15 * 24 * 60 * 60 * 1000)); // 15 days from now
     
     // Update user with trial subscription
     await db.collection('users').updateOne(
@@ -274,9 +278,20 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
         const trialDaysRemaining = trialEndDate ? Math.max(0, Math.ceil((trialEndDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24))) : 0;
         
         // Feature access based on organization subscription
-        // For combined plans, allow access even if status is not explicitly 'active' (for old accounts)
+        const isPastDue = orgSubscription.status === 'past_due';
         const isPaidPlan = planId !== 'receivables-free' && planId !== 'trial-premium';
-        const isActiveOrCombined = orgSubscription.status === 'active' || (isPaidPlan && planId.includes('combined'));
+        
+        // GRACE PERIOD FOR RENEWALS: Same logic as individual subscriptions
+        const orgCurrentPeriodEnd = orgSubscription.currentPeriodEnd ? new Date(orgSubscription.currentPeriodEnd) : null;
+        const orgGracePeriodDays = 3; // 3 days grace period for renewals
+        const orgGracePeriodEnd = orgCurrentPeriodEnd ? new Date(orgCurrentPeriodEnd.getTime() + (orgGracePeriodDays * 24 * 60 * 60 * 1000)) : null;
+        const orgIsWithinGracePeriod = orgCurrentPeriodEnd && orgGracePeriodEnd && currentDate < orgGracePeriodEnd && orgSubscription.status === 'active' && isPaidPlan;
+        
+        // Only check grace period if we have a Paystack subscription (active subscriptions that auto-renew)
+        const orgHasPaystackSubscription = !!orgSubscription.paystackSubscriptionCode;
+        const orgIsSubscriptionActive = orgSubscription.status === 'active' && (orgHasPaystackSubscription ? (orgIsWithinGracePeriod || !orgCurrentPeriodEnd || currentDate < orgCurrentPeriodEnd) : true);
+        
+        const isActiveOrCombined = !isPastDue && (orgIsSubscriptionActive || (isPaidPlan && planId.includes('combined')));
         
         const canCreateOrganization = false; // Members can't create organizations
         const canAccessPayables = Boolean(
@@ -284,14 +299,12 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
           ((planId.includes('payables') || planId.includes('combined')) && isActiveOrCombined)
         );
         
-        // Get organization's current month invoice count (use organization's usage, not individual)
         const currentMonthInvoiceCount = orgSubscription.usage?.invoicesThisMonth || 0;
         
-        // CRITICAL: Check if organization can create invoice
-        // Trial-premium organizations ALWAYS get unlimited invoices
         let canCreateInvoice = false;
-        if (isTrialPremiumPlan) {
-          // Trial-premium organizations get unlimited invoices - ALWAYS TRUE
+        if (isPastDue) {
+          canCreateInvoice = false;
+        } else if (isTrialPremiumPlan) {
           canCreateInvoice = true;
           console.log('✅ [getUserSubscription] Organization on trial-premium - unlimited invoice creation allowed');
         } else if (planId === 'receivables-free') {
@@ -300,7 +313,7 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
           canCreateInvoice = orgSubscription.status === 'active';
         }
         
-        const canUseAdvancedFeatures = Boolean(isTrialPremiumPlan || (planId !== 'receivables-free' && orgSubscription.status === 'active'));
+        const canUseAdvancedFeatures = Boolean(isTrialPremiumPlan || (planId !== 'receivables-free' && orgSubscription.status === 'active' && !isPastDue));
         
         const subscriptionData = {
           plan: plan ? {
@@ -311,6 +324,8 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
           status: orgSubscription.status || 'inactive',
           isTrialActive,
           trialDaysRemaining,
+          currentPeriodEnd: orgSubscription.currentPeriodEnd ? new Date(orgSubscription.currentPeriodEnd) : null,
+          paymentFailedAt: orgSubscription.paymentFailedAt ? new Date(orgSubscription.paymentFailedAt) : null,
           usage: {
             invoicesThisMonth: currentMonthInvoiceCount,
             monthlyVolume: orgSubscription.usage?.monthlyVolume || 0,
@@ -351,7 +366,7 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
         return null; // Return null to indicate no subscription yet (will be set after invitation completion)
       }
       
-      // Activate 30-day trial for new users
+      // Activate 15-day trial for new users
       const trialResult = await activate30DayTrial(session.user.id);
       if (!trialResult.success) {
         await db.collection('users').updateOne(
@@ -390,9 +405,12 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
     const currentDate = new Date();
     const trialEndDate = subscription.trialEndDate ? new Date(subscription.trialEndDate) : null;
     // CRITICAL: If planId is trial-premium, user is on trial regardless of status field
+    // BUT: If user has paid (status is 'active' and planId is NOT trial-premium), they are NOT on trial
     const isTrialPremiumPlan = planId === 'trial-premium';
-    const isTrialActive = !!(isTrialPremiumPlan && trialEndDate && currentDate < trialEndDate);
-    const trialDaysRemaining = trialEndDate ? Math.max(0, Math.ceil((trialEndDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24))) : 0;
+    const isPaidPlan = planId !== 'receivables-free' && planId !== 'trial-premium';
+    // User is only on trial if they have trial-premium plan AND trial hasn't expired AND they haven't paid
+    const isTrialActive = !!(isTrialPremiumPlan && trialEndDate && currentDate < trialEndDate && !isPaidPlan);
+    const trialDaysRemaining = isTrialActive && trialEndDate ? Math.max(0, Math.ceil((trialEndDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24))) : 0;
     
     // If trial has expired, downgrade to free plan (only if it's actually expired)
     if (isTrialPremiumPlan && trialEndDate && currentDate >= trialEndDate) {
@@ -412,9 +430,36 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
     }
     
     // Feature access (trial users get full access)
-    // For combined plans, allow access even if status is not explicitly 'active' (for old accounts)
-    const isPaidPlan = planId !== 'receivables-free' && planId !== 'trial-premium';
-    const isActiveOrCombined = subscription.status === 'active' || (isPaidPlan && planId.includes('combined'));
+    // past_due = payment failed; block access until they pay (data is kept)
+    const isPastDue = subscription.status === 'past_due';
+    
+    // GRACE PERIOD FOR RENEWALS: If currentPeriodEnd has passed but status is still 'active',
+    // give a 3-day grace period to account for Paystack automatic renewal timing and webhook delays.
+    // Paystack automatically charges users at the end of their billing period, but:
+    // 1. Paystack may charge slightly before currentPeriodEnd
+    // 2. Webhooks can be delayed by network issues
+    // 3. The charge.success webhook updates currentPeriodEnd, but there's a window where it hasn't arrived yet
+    // This grace period prevents downtime for users who pay on time, allowing them to continue using
+    // the app while the webhook processes in the background. The webhook will eventually sync the
+    // subscription status and update currentPeriodEnd to the new billing period.
+    const currentPeriodEnd = subscription.currentPeriodEnd ? new Date(subscription.currentPeriodEnd) : null;
+    const gracePeriodDays = 3; // 3 days grace period for renewals (matches the 3-day grace period for payment failures)
+    const gracePeriodEnd = currentPeriodEnd ? new Date(currentPeriodEnd.getTime() + (gracePeriodDays * 24 * 60 * 60 * 1000)) : null;
+    const hasPaystackSubscription = !!subscription.paystackSubscriptionCode;
+    const isPeriodExpired = currentPeriodEnd && currentDate >= currentPeriodEnd;
+    const isWithinGracePeriod = isPeriodExpired && gracePeriodEnd && currentDate < gracePeriodEnd && subscription.status === 'active' && isPaidPlan && hasPaystackSubscription;
+    
+    // Subscription is active if:
+    // 1. Status is 'active' AND (period hasn't expired OR we're within grace period)
+    // 2. For Paystack subscriptions, we check grace period; for others, just check status
+    const isSubscriptionActive = subscription.status === 'active' && (
+      hasPaystackSubscription 
+        ? (!isPeriodExpired || isWithinGracePeriod || !currentPeriodEnd)
+        : true
+    );
+    
+    // isPaidPlan already declared above (line 399)
+    const isActiveOrCombined = !isPastDue && (isSubscriptionActive || (isPaidPlan && planId.includes('combined')));
     const isTrialOrPro = isTrialPremiumPlan || (isPaidPlan && isActiveOrCombined);
     const canCreateOrganization = Boolean(isTrialOrPro);
     const canAccessPayables = Boolean(
@@ -426,19 +471,19 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
     const currentMonthInvoiceCount = await getCurrentMonthInvoiceCount(session.user.id);
     
     // CRITICAL: Check if user can create invoice based on plan and usage limits
-    // Trial users ALWAYS get unlimited invoices - no checks needed
+    // past_due: no access until they pay
     let canCreateInvoice = false;
     
-    // PRIORITY: Trial-premium users ALWAYS get unlimited invoices
-    if (isTrialPremiumPlan) {
-      // Trial users get unlimited invoices - ALWAYS TRUE (even if trialEndDate is missing, they're on trial)
+    if (isPastDue) {
+      canCreateInvoice = false;
+    } else if (isTrialPremiumPlan) {
       canCreateInvoice = true;
       console.log('✅ [getUserSubscription] Trial-premium user - unlimited invoice creation allowed');
     } else if (planId === 'receivables-free') {
-      // Free plan users can create invoices only if they haven't reached the monthly limit
-      canCreateInvoice = currentMonthInvoiceCount < 5;
+      const volumeLimit = plan?.limits?.monthlyVolume ?? 2000;
+      const currentVolume = user.usage?.monthlyVolume ?? 0;
+      canCreateInvoice = currentMonthInvoiceCount < 5 && (volumeLimit <= 0 || currentVolume < volumeLimit);
     } else {
-      // Paid plan users can create invoices based on their plan limits
       const planLimit = plan?.limits?.invoicesPerMonth || -1;
       canCreateInvoice = planLimit === -1 || currentMonthInvoiceCount < planLimit;
     }
@@ -461,6 +506,8 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
       status: subscription.status || 'active',
       isTrialActive,
       trialDaysRemaining,
+      currentPeriodEnd: subscription.currentPeriodEnd ? new Date(subscription.currentPeriodEnd) : null,
+      paymentFailedAt: subscription.paymentFailedAt ? new Date(subscription.paymentFailedAt) : null,
       usage: {
         invoicesThisMonth: currentMonthInvoiceCount,
         monthlyVolume: user.usage?.monthlyVolume || 0,
@@ -493,7 +540,10 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
   }
 }
 
-export async function canCreateInvoice(): Promise<{
+/**
+ * Check if the user can create an invoice. Optionally pass the invoice total to enforce volume limit.
+ */
+export async function canCreateInvoice(proposedVolumeAmount?: number): Promise<{
   allowed: boolean;
   reason?: string;
   requiresUpgrade?: boolean;
@@ -510,18 +560,40 @@ export async function canCreateInvoice(): Promise<{
       };
     }
     
-    // Check if user has reached their monthly limit
+    // Check if user has reached their monthly invoice count limit
     if (!subscription.canCreateInvoice) {
       if (subscription.plan?.planId === 'receivables-free') {
+        const volLimit = subscription.limits.monthlyVolume;
+        const volUsed = subscription.usage.monthlyVolume ?? 0;
+        if (volLimit > 0 && volUsed >= volLimit) {
+          return {
+            allowed: false,
+            reason: `You have reached your monthly volume limit ($${volLimit.toLocaleString()}). Upgrade to issue more.`,
+            requiresUpgrade: true
+          };
+        }
         return {
           allowed: false,
-          reason: `You have reached your monthly limit of 5 invoices. Upgrade to create more invoices.`,
+          reason: 'You have reached your monthly limit of 5 invoices. Upgrade to create more invoices.',
           requiresUpgrade: true
         };
       } else {
         return {
           allowed: false,
           reason: `You have reached your monthly limit of ${subscription.limits.invoicesPerMonth} invoices. Upgrade to create more invoices.`,
+          requiresUpgrade: true
+        };
+      }
+    }
+    
+    // Enforce volume limit when creating a new invoice (e.g. free plan $2,000/month)
+    const volumeLimit = subscription.limits.monthlyVolume;
+    if (volumeLimit > 0 && typeof proposedVolumeAmount === 'number' && proposedVolumeAmount >= 0) {
+      const currentVolume = subscription.usage.monthlyVolume ?? 0;
+      if (currentVolume + proposedVolumeAmount > volumeLimit) {
+        return {
+          allowed: false,
+          reason: `This invoice would exceed your monthly volume limit ($${volumeLimit.toLocaleString()}). Current: $${currentVolume.toLocaleString()}. Upgrade for higher limits.`,
           requiresUpgrade: true
         };
       }

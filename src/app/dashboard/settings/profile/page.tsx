@@ -1,12 +1,40 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { ChevronDown, Crown, ArrowRight, Upload, User } from 'lucide-react';
+import { ChevronDown, Crown, ArrowRight, Upload, User, FileText, Calendar, Zap } from 'lucide-react';
 import NextImage from 'next/image';
-import DashboardFloatingButton from '@/components/DashboardFloatingButton';
 import { fiatCurrencies } from '@/data/currencies';
+import { BILLING_PLANS } from '@/data/billingPlans';
 import { useCurrency } from '@/lib/contexts/CurrencyContext';
 import { useSubscription } from '@/lib/contexts/SubscriptionContext';
+import { useSession } from '@/lib/auth-client';
 import { useRouter } from 'next/navigation';
+
+/** Resolve plan display info from planId (matches billingPlans.ts) */
+function getPlanDetails(planId: string | undefined) {
+  if (!planId) return { name: 'Free Plan', description: 'Starter plan', type: 'Receivables', tier: 'Starter' };
+  const plan = BILLING_PLANS.find(p => p.planId === planId);
+  if (plan) {
+    const type = plan.type === 'receivables' ? 'Receivables' : plan.type === 'payables' ? 'Payables' : plan.type === 'combined' ? 'Combined' : 'Trial';
+    const tier = plan.tier ? plan.tier.charAt(0).toUpperCase() + plan.tier.slice(1) : '';
+    return {
+      name: plan.name,
+      description: plan.description,
+      type,
+      tier,
+      isEnterprise: (plan as { isEnterprise?: boolean }).isEnterprise ?? false,
+    };
+  }
+  const typeMap: Record<string, string> = {
+    receivables: 'Receivables',
+    payables: 'Payables',
+    combined: 'Combined',
+    trial: 'Trial',
+  };
+  const parts = planId.split('-');
+  const type = typeMap[parts[0]] ?? parts[0];
+  const tier = parts[1] ? parts[1].charAt(0).toUpperCase() + parts[1].slice(1) : '';
+  return { name: `${type} ${tier}`, description: '', type, tier, isEnterprise: false };
+}
 
 interface ProfileData {
   name: string;
@@ -31,6 +59,7 @@ interface ProfileData {
 export default function ProfileSettingsPage() {
   const router = useRouter();
   const { subscription } = useSubscription();
+  const { update: updateSession } = useSession();
   const [formData, setFormData] = useState<ProfileData>({
     name: '',
     email: '',
@@ -132,22 +161,6 @@ export default function ProfileSettingsPage() {
     }
   };
 
-  // Get plan display name
-  const getPlanDisplayName = () => {
-    if (!subscription?.plan) return 'Free Plan';
-    
-    const planId = subscription.plan.planId;
-    if (planId === 'receivables-free') return 'Receivables Free';
-    if (planId === 'receivables-basic') return 'Receivables Basic';
-    if (planId === 'receivables-pro') return 'Receivables Pro';
-    if (planId === 'payables-basic') return 'Payables Basic';
-    if (planId === 'payables-pro') return 'Payables Pro';
-    if (planId === 'combined-basic') return 'Combined Basic';
-    if (planId === 'combined-pro') return 'Combined Pro';
-    
-    return 'Pro Plan';
-  };
-
   // Handle upgrade
   const handleUpgrade = () => {
     router.push('/pricing');
@@ -186,6 +199,7 @@ export default function ProfileSettingsPage() {
       if (data.success) {
         setProfilePhoto(data.data.profilePhoto);
         setMessage({ type: 'success', text: 'Profile photo updated successfully!' });
+        await updateSession?.();
       } else {
         setMessage({ type: 'error', text: data.message || 'Failed to update profile photo' });
       }
@@ -209,6 +223,7 @@ export default function ProfileSettingsPage() {
       if (data.success) {
         setProfilePhoto('');
         setMessage({ type: 'success', text: 'Profile photo removed successfully!' });
+        await updateSession?.();
       } else {
         setMessage({ type: 'error', text: data.message || 'Failed to remove profile photo' });
       }
@@ -234,7 +249,6 @@ export default function ProfileSettingsPage() {
             <div className="h-10 bg-white/20 rounded mb-6"></div>
           </div>
         </div>
-        <DashboardFloatingButton />
       </div>
     );
   }
@@ -458,39 +472,124 @@ export default function ProfileSettingsPage() {
 
       {/* Subscription Plan Section */}
       <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 mb-8">
-        <div className="flex items-center space-x-3 mb-6">
-          <Crown className="h-6 w-6 text-blue-400" />
-          <h2 className="text-xl font-semibold text-white">Subscription Plan</h2>
-        </div>
-        
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-blue-500/20 rounded-lg">
-              <Crown className="h-5 w-5 text-blue-400" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-white text-sm sm:text-base">Current Plan</h3>
-              <p className="text-blue-200 text-xs sm:text-sm">{getPlanDisplayName()}</p>
-              {subscription?.plan?.planId === 'receivables-free' && (
-                <p className="text-blue-300 text-xs mt-1">
-                  {subscription.isTrialActive 
-                    ? `${subscription.trialDaysRemaining} days left in trial`
-                    : 'Trial expired'
-                  }
-                </p>
-              )}
-            </div>
+            <Crown className="h-6 w-6 text-blue-400" />
+            <h2 className="text-xl font-semibold text-white">Subscription Plan</h2>
           </div>
-          
           <button
             onClick={handleUpgrade}
-            className="flex items-center space-x-2 px-4 py-2 sm:px-6 sm:py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all shadow-sm font-medium"
+            className="flex items-center space-x-2 px-4 py-2 sm:px-5 sm:py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all shadow-sm font-medium text-sm"
           >
-            <Crown className="h-4 w-4" />
-            <span>Upgrade Plan</span>
+            <span>Change plan</span>
             <ArrowRight className="h-4 w-4" />
           </button>
         </div>
+
+        {subscription?.plan ? (
+          <>
+            {(() => {
+              const planId = subscription.plan.planId;
+              const details = getPlanDetails(planId);
+              const limits = subscription.limits;
+              const usage = subscription.usage;
+              const invoiceLimit = limits?.invoicesPerMonth ?? 0;
+              const invoiceUsage = usage?.invoicesThisMonth ?? 0;
+              const isUnlimited = invoiceLimit === -1;
+              const status = subscription.status;
+              const isPastDue = status === 'past_due';
+              const isTrial = planId === 'trial-premium' || planId === 'receivables-free';
+            return (
+              <div className="space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+                  <div className="p-3 bg-blue-500/20 rounded-xl">
+                    <Crown className="h-8 w-8 text-blue-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-white text-lg">{details.name}</h3>
+                    <p className="text-blue-200 text-sm mt-0.5">
+                      {details.type}{details.tier ? ` · ${details.tier}` : ''}
+                      {details.description ? ` — ${details.description}` : ''}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        isPastDue
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                          : isTrial && subscription.isTrialActive
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                            : 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
+                      }`}>
+                        {isPastDue ? 'Payment overdue' : subscription.isTrialActive ? `Trial — ${subscription.trialDaysRemaining} days left` : status === 'active' ? 'Active' : status}
+                      </span>
+                      {details.isEnterprise && (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-white/10 text-blue-200 border border-white/20">
+                          Contact Sales
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-white/10">
+                  {!details.isEnterprise && (
+                    <>
+                      <div className="flex items-start gap-3 p-3 bg-white/5 rounded-lg border border-white/10">
+                        <FileText className="h-5 w-5 text-blue-400 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs font-medium text-blue-200 uppercase tracking-wider">Invoices this month</p>
+                          <p className="text-white font-medium mt-0.5">
+                            {isUnlimited ? `${invoiceUsage} used (unlimited)` : `${invoiceUsage} / ${invoiceLimit}`}
+                          </p>
+                          {!isUnlimited && limits?.invoicesPerMonth !== undefined && (
+                            <p className="text-blue-300 text-xs mt-1">{Math.max(0, invoiceLimit - invoiceUsage)} remaining</p>
+                          )}
+                        </div>
+                      </div>
+                      {subscription.currentPeriodEnd && !isTrial && (
+                        <div className="flex items-start gap-3 p-3 bg-white/5 rounded-lg border border-white/10">
+                          <Calendar className="h-5 w-5 text-blue-400 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-xs font-medium text-blue-200 uppercase tracking-wider">Next billing</p>
+                            <p className="text-white font-medium mt-0.5">
+                              {new Date(subscription.currentPeriodEnd).toLocaleDateString(undefined, { dateStyle: 'medium' })}
+                            </p>
+                            <p className="text-blue-300 text-xs mt-1">Renews automatically</p>
+                          </div>
+                        </div>
+                      )}
+                      {isTrial && subscription.isTrialActive && (
+                        <div className="flex items-start gap-3 p-3 bg-white/5 rounded-lg border border-white/10">
+                          <Zap className="h-5 w-5 text-blue-400 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-xs font-medium text-blue-200 uppercase tracking-wider">Trial</p>
+                            <p className="text-white font-medium mt-0.5">{subscription.trialDaysRemaining} days remaining</p>
+                            <p className="text-blue-300 text-xs mt-1">Upgrade to keep access after trial</p>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+            })()}
+          </>
+        ) : (
+          <div className="flex items-center gap-3 p-4 bg-white/5 rounded-lg border border-white/10">
+            <Crown className="h-5 w-5 text-blue-400" />
+            <div>
+              <p className="text-white font-medium">No active plan</p>
+              <p className="text-blue-200 text-sm">Choose a plan to get started.</p>
+            </div>
+            <button
+              onClick={handleUpgrade}
+              className="ml-auto flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+            >
+              View plans
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Profile Photo Section */}
@@ -571,8 +670,6 @@ export default function ProfileSettingsPage() {
           </p>
         </div>
       )}
-
-      <DashboardFloatingButton />
     </div>
   );
 } 

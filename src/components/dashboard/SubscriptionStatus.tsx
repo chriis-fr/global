@@ -27,6 +27,9 @@ export default function SubscriptionStatus() {
     if (subscription.isTrialActive) {
       return <Clock className="h-5 w-5 text-blue-400" />;
     }
+    if (subscription.status === 'past_due') {
+      return <AlertTriangle className="h-5 w-5 text-amber-400" />;
+    }
     if (subscription.status === 'active') {
       return <CheckCircle className="h-5 w-5 text-green-400" />;
     }
@@ -36,6 +39,9 @@ export default function SubscriptionStatus() {
   const getStatusText = () => {
     if (subscription.isTrialActive) {
       return `${subscription.trialDaysRemaining} days left in trial`;
+    }
+    if (subscription.status === 'past_due') {
+      return 'Payment overdue – pay to restore access';
     }
     if (subscription.status === 'active') {
       return 'Active subscription';
@@ -47,11 +53,18 @@ export default function SubscriptionStatus() {
     if (subscription.isTrialActive) {
       return 'text-blue-400 bg-blue-500/20 border-blue-500/30';
     }
+    if (subscription.status === 'past_due') {
+      return 'text-amber-400 bg-amber-500/20 border-amber-500/30';
+    }
     if (subscription.status === 'active') {
       return 'text-green-400 bg-green-500/20 border-green-500/30';
     }
     return 'text-yellow-400 bg-yellow-500/20 border-yellow-500/30';
   };
+
+  const nextPaymentDue = subscription.currentPeriodEnd
+    ? new Date(subscription.currentPeriodEnd).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+    : null;
 
   const getPlanDisplayName = () => {
     if (!subscription.plan) return 'No Plan';
@@ -87,6 +100,26 @@ export default function SubscriptionStatus() {
             {getStatusText()}
           </span>
         </div>
+
+        {nextPaymentDue && subscription.plan && subscription.plan.planId !== 'receivables-free' && subscription.status === 'active' && (
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-blue-200">Next payment due:</span>
+            <span className="font-medium text-white">{nextPaymentDue}</span>
+          </div>
+        )}
+
+        {subscription.status === 'past_due' && (
+          <div className="mt-2 p-2 rounded-lg bg-amber-500/20 border border-amber-500/30">
+            <p className="text-sm text-amber-200">Your data is safe. Pay your subscription to restore access.</p>
+            <button
+              type="button"
+              onClick={() => router.push('/pricing')}
+              className="mt-2 text-sm font-medium text-amber-300 hover:text-amber-200 underline"
+            >
+              Pay now
+            </button>
+          </div>
+        )}
 
         {subscription.plan && (
           <div className="flex items-center justify-between">

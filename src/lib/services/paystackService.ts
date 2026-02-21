@@ -3,6 +3,11 @@ import { BILLING_PLANS } from '@/data/billingPlans';
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || '';
 const PAYSTACK_BASE_URL = 'https://api.paystack.co';
 
+/** Paystack currency – depends on your account (e.g. KES, NGN, GHS). Check Paystack Dashboard. */
+const PAYSTACK_CURRENCY = (process.env.PAYSTACK_CURRENCY || 'KES').toUpperCase();
+/** Convert USD to local: amount_local = amountUsd * this rate (e.g. 130 for KES) */
+const PAYSTACK_USD_TO_LOCAL_RATE = Number(process.env.PAYSTACK_USD_TO_LOCAL_RATE || '132') || 132;
+
 // Paystack Plan Codes mapping (for paid plans only - free plan has null)
 // These will be populated from billingPlans.ts or set directly here after creating plans in Paystack
 export const PAYSTACK_PLAN_CODES = {
@@ -173,6 +178,54 @@ export class PaystackService {
     }
   }
 
+  /**
+   * Create a one-off subscription plan in Paystack with custom amount (for dynamic pricing).
+   * amountUsd: price in USD (from billing plans). Converted to local currency via PAYSTACK_USD_TO_LOCAL_RATE.
+   * Currency from PAYSTACK_CURRENCY (e.g. NGN, GHS). Paystack often does not support USD.
+   */
+  static async createDynamicPlan(
+    name: string,
+    amountUsd: number,
+    interval: 'monthly' | 'yearly',
+    metadata?: { planId: string; seats?: number }
+  ): Promise<string | null> {
+    if (!PAYSTACK_SECRET_KEY || PAYSTACK_SECRET_KEY.trim() === '') {
+      throw new Error('Paystack API key is not configured.');
+    }
+    const paystackInterval = interval === 'yearly' ? 'annually' : 'monthly';
+    // Amount in smallest unit: NGN = kobo (×100), GHS = pesewas (×100), ZAR = cents (×100)
+    const amountInSubunit =
+      PAYSTACK_CURRENCY === 'USD'
+        ? Math.round(amountUsd * 100)
+        : Math.round(amountUsd * PAYSTACK_USD_TO_LOCAL_RATE * 100);
+    try {
+      const response = await fetch(`${PAYSTACK_BASE_URL}/plan`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: name.substring(0, 255),
+          amount: amountInSubunit,
+          interval: paystackInterval,
+          currency: PAYSTACK_CURRENCY,
+          description: metadata ? `Plan: ${metadata.planId}${metadata.seats != null ? `, ${metadata.seats} seats` : ''}` : undefined,
+        }),
+      });
+      const data = await response.json();
+      if (!data.status || !data.data?.plan_code) {
+        console.error('❌ [PaystackService] Create plan failed:', data);
+        throw new Error(data.message || 'Failed to create plan');
+      }
+      console.log('✅ [PaystackService] Dynamic plan created:', data.data.plan_code, { currency: PAYSTACK_CURRENCY, amountInSubunit });
+      return data.data.plan_code;
+    } catch (error) {
+      console.error('❌ [PaystackService] Error creating dynamic plan:', error);
+      throw error;
+    }
+  }
+
   // Initialize subscription (returns authorization URL)
   // Uses Transaction Initialize API with plan code - this automatically creates subscription on payment
   static async initializeSubscription(
@@ -181,7 +234,8 @@ export class PaystackService {
     planId: string,
     billingPeriod: 'monthly' | 'yearly',
     successUrl: string,
-    cancelUrl: string
+    cancelUrl: string,
+    options?: { seats?: number }
   ): Promise<string> {
     console.log('💳 [PaystackService] Initializing subscription transaction:', {
       customerCode,
@@ -246,6 +300,7 @@ export class PaystackService {
           planId: string;
           billingPeriod: string;
           customerCode: string;
+          seats?: number;
         };
       } = {
         email: customerEmail,
@@ -256,6 +311,7 @@ export class PaystackService {
           planId,
           billingPeriod,
           customerCode,
+          ...(options?.seats ? { seats: options.seats } : {})
         },
       };
 

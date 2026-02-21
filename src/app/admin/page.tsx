@@ -21,6 +21,7 @@ import {
   Link2
 } from 'lucide-react';
 import { BILLING_PLANS } from '@/data/billingPlans';
+import { getPlanPriceLabel } from '@/lib/pricingEngine';
 import { getAdminStats, type AdminStats } from '@/lib/actions/admin-stats';
 import { getExplorerUrl } from '@/lib/utils/blockchain';
 import { formatDateReadable } from '@/lib/utils/dateFormat';
@@ -494,7 +495,7 @@ export default function AdminDashboard() {
               >
                 {BILLING_PLANS.map((plan) => (
                   <option key={plan.planId} value={plan.planId}>
-                    {plan.name} ({plan.type} - {plan.tier}) - ${plan.monthlyPrice}/month
+                    {plan.name} ({plan.type} - {plan.tier}) - {getPlanPriceLabel(plan)}
                   </option>
                 ))}
               </select>
@@ -623,7 +624,7 @@ export default function AdminDashboard() {
                     >
                       {BILLING_PLANS.map((plan) => (
                         <option key={plan.planId} value={plan.planId}>
-                          {plan.name} ({plan.type} - {plan.tier}) - ${plan.monthlyPrice}/month
+                          {plan.name} ({plan.type} - {plan.tier}) - {getPlanPriceLabel(plan)}
                         </option>
                       ))}
                     </select>

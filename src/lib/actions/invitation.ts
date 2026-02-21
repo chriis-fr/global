@@ -93,6 +93,69 @@ export async function sendInvitation(email: string, role: RoleKey): Promise<{
 
     console.log('✅ [Invitation] Email is not already a member');
 
+    // Check seat limit: Get organization owner's subscription to see how many seats they paid for
+    // Find organization owner to get their subscription
+    const ownerMember = organization.members.find((m: { role: string }) => m.role === 'owner');
+    if (ownerMember) {
+      const ownerUserId = ownerMember.userId;
+      const ownerUserDoc = await db.collection('users').findOne({ _id: ownerUserId });
+      
+      if (ownerUserDoc?.subscription) {
+        const subscription = ownerUserDoc.subscription;
+        const planId = subscription.planId;
+        
+        // Get plan details to check if it has dynamic pricing
+        const { BILLING_PLANS } = await import('@/data/billingPlans');
+        const plan = BILLING_PLANS.find(p => p.planId === planId);
+        
+        if (plan?.dynamicPricing) {
+          // Get seats from subscription (stored when they paid) - handle both string and number
+          let paidSeats: number;
+          if (subscription.seats !== null && subscription.seats !== undefined) {
+            if (typeof subscription.seats === 'number' && subscription.seats > 0) {
+              paidSeats = subscription.seats;
+            } else if (typeof subscription.seats === 'string') {
+              const parsed = parseInt(subscription.seats, 10);
+              paidSeats = (!isNaN(parsed) && parsed > 0) ? parsed : (plan.dynamicPricing.includedSeats || 1);
+            } else {
+              paidSeats = plan.dynamicPricing.includedSeats || 1;
+            }
+          } else {
+            paidSeats = plan.dynamicPricing.includedSeats || 1;
+          }
+          
+          // Count current members (including owner)
+          const currentMemberCount = organization.members?.length || 0;
+          
+          // Count pending invitations
+          const pendingInvitations = await db.collection('invitation_tokens').countDocuments({
+            organizationId: new ObjectId(user.organizationId.toString()),
+            expiresAt: { $gt: new Date() }
+          });
+          
+          const totalMembersAndInvitations = currentMemberCount + pendingInvitations;
+          
+          console.log('📊 [Invitation] Seat limit check:', {
+            rawSeats: subscription.seats,
+            seatsType: typeof subscription.seats,
+            paidSeats,
+            currentMemberCount,
+            pendingInvitations,
+            totalMembersAndInvitations,
+            canAddMore: totalMembersAndInvitations < paidSeats
+          });
+          
+          if (totalMembersAndInvitations >= paidSeats) {
+            console.log('❌ [Invitation] Seat limit reached');
+            return { 
+              success: false, 
+              error: `You have reached your seat limit of ${paidSeats}. You currently have ${currentMemberCount} member${currentMemberCount === 1 ? '' : 's'} and ${pendingInvitations} pending invitation${pendingInvitations === 1 ? '' : 's'}. Please upgrade your plan to add more members.` 
+            };
+          }
+        }
+      }
+    }
+
     // Generate secure token
     const token = randomBytes(32).toString('hex');
     const expiresAt = new Date();
