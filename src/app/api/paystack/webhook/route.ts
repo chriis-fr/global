@@ -1,9 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { ObjectId } from 'mongodb';
 import { SubscriptionServicePaystack } from '@/lib/services/subscriptionServicePaystack';
 import { clearSubscriptionCache } from '@/lib/actions/subscription';
 import { getDatabase } from '@/lib/database';
 import { PaystackService } from '@/lib/services/paystackService';
+
+/** When the payer is an org admin (or owner), apply subscription to the org owner so the org gets it. */
+async function getBillingTargetUserId(
+  db: Awaited<ReturnType<typeof getDatabase>>,
+  payer: { _id: ObjectId; organizationId?: ObjectId | string | null }
+): Promise<ObjectId> {
+  if (!payer.organizationId) return payer._id;
+  const orgId = payer.organizationId instanceof ObjectId ? payer.organizationId : new ObjectId(String(payer.organizationId));
+  const org = await db.collection('organizations').findOne({ _id: orgId });
+  if (!org || !Array.isArray(org.members)) return payer._id;
+  const members = org.members as Array<{ userId: ObjectId; role: string }>;
+  const payerMember = members.find((m) => String(m.userId) === String(payer._id));
+  if (!payerMember || (payerMember.role !== 'owner' && payerMember.role !== 'admin')) return payer._id;
+  const ownerMember = members.find((m) => m.role === 'owner');
+  if (!ownerMember) return payer._id;
+  return ownerMember.userId instanceof ObjectId ? ownerMember.userId : new ObjectId(String(ownerMember.userId));
+}
 
 const PAYSTACK_WEBHOOK_SECRET = process.env.PAYSTACK_WEBHOOK_SECRET || '';
 
@@ -234,10 +252,12 @@ export async function POST(request: NextRequest) {
             if (planId && billingPeriod && newSubscription.subscription_code && newSubscription.plan?.plan_code) {
               const subscriptionCode = String(newSubscription.subscription_code);
               const planCode = String(newSubscription.plan.plan_code);
+              const targetUserId = await getBillingTargetUserId(db, user);
               
               console.log('💾 [PaystackWebhook] Activating subscription for user:', {
                 email: user.email,
-                userId: user._id.toString(),
+                payerId: user._id.toString(),
+                targetUserId: targetUserId.toString(),
                 planId,
                 billingPeriod,
                 subscriptionCode,
@@ -245,7 +265,7 @@ export async function POST(request: NextRequest) {
               });
               
               await SubscriptionServicePaystack.subscribeToPlan(
-                user._id,
+                targetUserId,
                 planId,
                 billingPeriod,
                 subscriptionCode,
@@ -253,10 +273,26 @@ export async function POST(request: NextRequest) {
                 seats ? { seats: typeof seats === 'number' ? seats : parseInt(String(seats), 10) } : undefined
               );
 
-              // Clear subscription cache
-              await clearSubscriptionCache(user._id.toString());
+              // Sync organization subscription when target is org owner
+              const organizations = await db.collection('organizations').find({
+                'members.userId': targetUserId,
+                'members.role': 'owner'
+              }).toArray();
+              if (organizations.length > 0) {
+                const updatedUser = await db.collection('users').findOne({ _id: targetUserId });
+                if (updatedUser?.subscription) {
+                  for (const org of organizations) {
+                    await db.collection('organizations').updateOne(
+                      { _id: org._id },
+                      { $set: { subscription: updatedUser.subscription, updatedAt: new Date() } }
+                    );
+                  }
+                }
+              }
 
-              console.log(`✅ [PaystackWebhook] User ${user._id} successfully subscribed to ${planId} (${billingPeriod})`);
+              await clearSubscriptionCache(targetUserId.toString());
+
+              console.log(`✅ [PaystackWebhook] User ${targetUserId} successfully subscribed to ${planId} (${billingPeriod})`);
             } else {
               console.error('❌ [PaystackWebhook] Missing planId or billingPeriod in metadata:', {
                 planId,
@@ -299,11 +335,12 @@ export async function POST(request: NextRequest) {
               const subscriptionCode = String(updatedSubscription.subscription_code);
               const planCode = String(updatedSubscription.plan.plan_code);
               const seats = updatedSubscription.metadata?.seats;
+              const targetUserId = await getBillingTargetUserId(db, user);
               
-              console.log('💾 [PaystackWebhook] Updating subscription for user:', user.email);
+              console.log('💾 [PaystackWebhook] Updating subscription for user:', user.email, 'targetUserId:', targetUserId.toString());
               
               await SubscriptionServicePaystack.subscribeToPlan(
-                user._id,
+                targetUserId,
                 planId,
                 billingPeriod,
                 subscriptionCode,
@@ -311,14 +348,14 @@ export async function POST(request: NextRequest) {
                 seats ? { seats } : undefined
               );
 
-              // Update organization subscription if user is an organization owner
+              // Update organization subscription when target is org owner
               const organizations = await db.collection('organizations').find({
-                'members.userId': user._id,
+                'members.userId': targetUserId,
                 'members.role': 'owner'
               }).toArray();
 
               if (organizations.length > 0) {
-                const updatedUser = await db.collection('users').findOne({ _id: user._id });
+                const updatedUser = await db.collection('users').findOne({ _id: targetUserId });
                 if (updatedUser && updatedUser.subscription) {
                   for (const org of organizations) {
                     await db.collection('organizations').updateOne(
@@ -334,8 +371,8 @@ export async function POST(request: NextRequest) {
                 }
               }
 
-              await clearSubscriptionCache(user._id.toString());
-              console.log(`✅ [PaystackWebhook] User ${user._id} subscription updated to ${planId}`);
+              await clearSubscriptionCache(targetUserId.toString());
+              console.log(`✅ [PaystackWebhook] User ${targetUserId} subscription updated to ${planId}`);
             }
           }
         } catch (error) {
@@ -356,10 +393,11 @@ export async function POST(request: NextRequest) {
           });
 
           if (user && user._id) {
-            console.log('💾 [PaystackWebhook] Cancelling subscription for user:', user.email);
+            const targetUserId = await getBillingTargetUserId(db, user);
+            console.log('💾 [PaystackWebhook] Cancelling subscription for user:', user.email, 'targetUserId:', targetUserId.toString());
             
             await db.collection('users').updateOne(
-              { _id: user._id },
+              { _id: targetUserId },
               {
                 $set: {
                   'subscription.status': 'cancelled',
@@ -368,14 +406,14 @@ export async function POST(request: NextRequest) {
               }
             );
 
-            // Update organization subscription if user is an organization owner
+            // Update organization subscription when target is org owner
             const organizations = await db.collection('organizations').find({
-              'members.userId': user._id,
+              'members.userId': targetUserId,
               'members.role': 'owner'
             }).toArray();
 
             if (organizations.length > 0) {
-              const updatedUser = await db.collection('users').findOne({ _id: user._id });
+              const updatedUser = await db.collection('users').findOne({ _id: targetUserId });
               if (updatedUser && updatedUser.subscription) {
                 for (const org of organizations) {
                   await db.collection('organizations').updateOne(
@@ -391,8 +429,8 @@ export async function POST(request: NextRequest) {
               }
             }
 
-            await clearSubscriptionCache(user._id.toString());
-            console.log(`✅ [PaystackWebhook] User ${user._id} subscription cancelled`);
+            await clearSubscriptionCache(targetUserId.toString());
+            console.log(`✅ [PaystackWebhook] User ${targetUserId} subscription cancelled`);
           }
         } catch (error) {
           console.error('❌ [PaystackWebhook] Error processing subscription.disable:', error);
@@ -435,10 +473,11 @@ export async function POST(request: NextRequest) {
                   const planCode = String(subscription.plan.plan_code);
                   const meta = subscription.metadata as { planId?: string; billingPeriod?: string; seats?: number } | undefined;
                   const seats = meta?.seats;
-                  console.log('💾 [PaystackWebhook] Activating subscription after successful charge:', user.email);
+                  const targetUserId = await getBillingTargetUserId(db, user);
+                  console.log('💾 [PaystackWebhook] Activating subscription after successful charge:', user.email, 'targetUserId:', targetUserId.toString());
                   
                   await SubscriptionServicePaystack.subscribeToPlan(
-                    user._id,
+                    targetUserId,
                     planId,
                     billingPeriod,
                     subscriptionCode,
@@ -446,8 +485,25 @@ export async function POST(request: NextRequest) {
                     seats ? { seats } : undefined
                   );
 
-                  await clearSubscriptionCache(user._id.toString());
-                  console.log(`✅ [PaystackWebhook] Subscription activated for user ${user._id}`);
+                  // Sync organization subscription when target is org owner
+                  const organizations = await db.collection('organizations').find({
+                    'members.userId': targetUserId,
+                    'members.role': 'owner'
+                  }).toArray();
+                  if (organizations.length > 0) {
+                    const updatedUser = await db.collection('users').findOne({ _id: targetUserId });
+                    if (updatedUser?.subscription) {
+                      for (const org of organizations) {
+                        await db.collection('organizations').updateOne(
+                          { _id: org._id },
+                          { $set: { subscription: updatedUser.subscription, updatedAt: new Date() } }
+                        );
+                      }
+                    }
+                  }
+
+                  await clearSubscriptionCache(targetUserId.toString());
+                  console.log(`✅ [PaystackWebhook] Subscription activated for user ${targetUserId}`);
                 }
               }
             }
@@ -467,7 +523,11 @@ export async function POST(request: NextRequest) {
           const user = await db.collection('users').findOne({
             paystackCustomerCode: failedCharge.customer.customer_code
           });
-          if (user && user._id && user.subscription?.planId && user.subscription.planId !== 'receivables-free') {
+          const targetUserId = user && user._id ? await getBillingTargetUserId(db, user) : null;
+          const targetUser = targetUserId ? await db.collection('users').findOne({ _id: targetUserId }) : null;
+          if (!targetUserId || !user || !user._id || !targetUser?.subscription?.planId || targetUser.subscription.planId === 'receivables-free') {
+            // skip: no target user or no paid plan to mark past_due
+          } else {
             const now = new Date();
             const updatePayload = {
               'subscription.status': 'past_due',
@@ -475,13 +535,13 @@ export async function POST(request: NextRequest) {
               'subscription.updatedAt': now
             };
             await db.collection('users').updateOne(
-              { _id: user._id },
+              { _id: targetUserId },
               { $set: updatePayload }
             );
-            const updatedUser = await db.collection('users').findOne({ _id: user._id });
+            const updatedUser = await db.collection('users').findOne({ _id: targetUserId });
             if (updatedUser?.subscription) {
               const orgs = await db.collection('organizations').find({
-                'members.userId': user._id,
+                'members.userId': targetUserId,
                 'members.role': 'owner'
               }).toArray();
               for (const org of orgs) {
@@ -491,8 +551,8 @@ export async function POST(request: NextRequest) {
                 );
               }
             }
-            await clearSubscriptionCache(user._id.toString());
-            console.log(`✅ [PaystackWebhook] User ${user._id} set to past_due after payment failure`);
+            await clearSubscriptionCache(targetUserId.toString());
+            console.log(`✅ [PaystackWebhook] User ${targetUserId} set to past_due after payment failure`);
 
             // Send immediate payment failed notification email
             try {

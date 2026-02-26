@@ -87,7 +87,7 @@ function Sidebar() {
     setIsProfileOpen(false);
   }, [pathname]);
 
-  // Close profile popover on outside click
+  // Close profile popover on outside click (use 'click' not 'mousedown' so menu item clicks run first)
   useEffect(() => {
     if (!isProfileOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
@@ -95,8 +95,8 @@ function Sidebar() {
         setIsProfileOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
   }, [isProfileOpen]);
 
   useEffect(() => {
@@ -181,6 +181,9 @@ function Sidebar() {
   }, []);
 
   const handleMobileNavigation = useCallback((href: string) => {
+    setIsProfileOpen(false);
+    setIsSettingsOpen(false);
+    setIsMobileMenuOpen(false);
     router.push(href);
   }, [router]);
 
@@ -309,7 +312,11 @@ function Sidebar() {
                     key={link.key}
                     role="button"
                     tabIndex={0}
-                    onClick={() => handleMobileNavigation(link.href)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleMobileNavigation(link.href);
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
@@ -373,7 +380,11 @@ function Sidebar() {
                       key={link.key}
                       role="button"
                       tabIndex={0}
-                      onClick={() => handleMobileNavigation(link.href)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleMobileNavigation(link.href);
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault();
@@ -448,7 +459,11 @@ function Sidebar() {
                       key={link.key}
                       role="button"
                       tabIndex={0}
-                      onClick={() => handleMobileNavigation(link.href)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleMobileNavigation(link.href);
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault();
@@ -521,24 +536,45 @@ function Sidebar() {
                 className="absolute left-0 right-0 bottom-full mb-2 min-w-[11rem] rounded-xl bg-blue-900/95 backdrop-blur-sm border border-white/20 shadow-xl py-2 z-50 transition-opacity duration-200"
                 role="menu"
               >
-                <Link
-                  href="/dashboard/settings/profile"
-                  onClick={() => { setIsProfileOpen(false); closeMobileMenu(); }}
-                  className="flex items-center px-4 py-2.5 text-sm text-white/90 hover:bg-white/10 transition-colors"
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleMobileNavigation('/dashboard/settings/profile');
+                  }}
+                  className="flex w-full items-center px-4 py-2.5 text-sm text-white/90 hover:bg-white/10 transition-colors text-left"
                   role="menuitem"
                 >
                   <User className="h-4 w-4 mr-3 shrink-0" />
                   Profile Settings
-                </Link>
-                <Link
-                  href="/pricing"
-                  onClick={() => { setIsProfileOpen(false); closeMobileMenu(); }}
-                  className="flex items-center px-4 py-2.5 text-sm text-white/90 hover:bg-white/10 transition-colors"
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleMobileNavigation('/dashboard/settings/integrations');
+                  }}
+                  className="flex w-full items-center px-4 py-2.5 text-sm text-white/90 hover:bg-white/10 transition-colors text-left"
+                  role="menuitem"
+                >
+                  <Plug className="h-4 w-4 mr-3 shrink-0" />
+                  Integrations
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleMobileNavigation('/pricing');
+                  }}
+                  className="flex w-full items-center px-4 py-2.5 text-sm text-white/90 hover:bg-white/10 transition-colors text-left"
                   role="menuitem"
                 >
                   <Crown className="h-4 w-4 mr-3 shrink-0 text-amber-400" />
                   Unlock More
-                </Link>
+                </button>
                 <div className="border-t border-white/10 my-1" />
                 <button
                   type="button"
@@ -642,16 +678,17 @@ function Sidebar() {
 </button>
 
 
-      {/* Overlay */}
+      {/* Overlay: only covers area right of sidebar (left-80 = 20rem) so sidebar taps never hit overlay */}
       {isMobileMenuOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          className="fixed top-0 right-0 bottom-0 left-80 bg-black/50 z-40 lg:hidden"
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
             closeMobileMenu();
           }}
           style={{ touchAction: 'manipulation', pointerEvents: 'auto' }}
+          aria-hidden="true"
         />
       )}
 

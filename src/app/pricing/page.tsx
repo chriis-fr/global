@@ -48,6 +48,8 @@ export default function PricingPage() {
   const [showCreateOrgModal, setShowCreateOrgModal] = useState(false)
   const [hasPendingOrgData, setHasPendingOrgData] = useState(false)
   const [currentPlanSeats, setCurrentPlanSeats] = useState<number | null>(null)
+  // When org was created in trial, members exist; upgrade must cover at least this many seats (add-only).
+  const [minSeatsFromMembers, setMinSeatsFromMembers] = useState<number | null>(null)
 
   const needsOrgForBusiness = audience === 'business' && session && !hasOrganization
 
@@ -66,24 +68,31 @@ export default function PricingPage() {
     }
   }, []);
 
-  // Fetch current plan seats if user has organization
+  // Fetch current plan seats and member count when user has organization (trial or paid)
   useEffect(() => {
-    const fetchCurrentSeats = async () => {
-      if (hasOrganization && subscription?.plan?.planId) {
-        try {
-          const result = await getOrganizationSeatInfo();
-          if (result.success && result.data) {
-            setCurrentPlanSeats(result.data.paidSeats);
-          }
-        } catch (error) {
-          console.error('Error fetching current plan seats:', error);
-        }
-      } else {
+    const fetchSeatInfo = async () => {
+      if (!hasOrganization) {
         setCurrentPlanSeats(null);
+        setMinSeatsFromMembers(null);
+        return;
+      }
+      try {
+        const result = await getOrganizationSeatInfo();
+        if (result.success && result.data) {
+          setCurrentPlanSeats(result.data.paidSeats);
+          setMinSeatsFromMembers(result.data.currentMembers ?? null);
+        } else {
+          setCurrentPlanSeats(null);
+          setMinSeatsFromMembers(null);
+        }
+      } catch (error) {
+        console.error('Error fetching organization seat info:', error);
+        setCurrentPlanSeats(null);
+        setMinSeatsFromMembers(null);
       }
     };
 
-    fetchCurrentSeats();
+    fetchSeatInfo();
   }, [hasOrganization, subscription?.plan?.planId]);
 
   // Clear pending org data if user navigates away without paying (cleanup on unmount or when they cancel)
@@ -127,16 +136,21 @@ export default function PricingPage() {
 
   const getSeatsForPlan = (plan: BillingPlan) => {
     if (plan.dynamicPricing) {
-      // If this is the current plan, default to current seats, otherwise use plan defaults
       const isCurrentPlan = session && subscription?.plan?.planId === plan.planId;
-      if (isCurrentPlan && currentPlanSeats) {
-        // Use current seats as default, but allow user to change
-        return seatsByPlanId[plan.planId] ?? currentPlanSeats;
+      const minSeats = effectiveAudience === 'business' && minSeatsFromMembers != null ? Math.max(1, minSeatsFromMembers) : 1;
+      if (isCurrentPlan && currentPlanSeats != null) {
+        const base = Math.max(currentPlanSeats, minSeats);
+        return seatsByPlanId[plan.planId] ?? base;
       }
-      const defaultSeats = effectiveAudience === 'individual' ? 1 : (plan.dynamicPricing.includedSeats || 1)
-      return seatsByPlanId[plan.planId] ?? defaultSeats
+      const defaultSeats = effectiveAudience === 'individual' ? 1 : Math.max(plan.dynamicPricing.includedSeats || 1, minSeats);
+      return seatsByPlanId[plan.planId] ?? defaultSeats;
     }
-    return 1
+    return 1;
+  }
+
+  const setSeatsForPlan = (planId: string, seats: number) => {
+    const minSeats = effectiveAudience === 'business' && minSeatsFromMembers != null ? Math.max(1, minSeatsFromMembers) : 1;
+    setSeatsByPlanId(prev => ({ ...prev, [planId]: Math.max(minSeats, Math.min(50, seats)) }));
   }
 
   // Individual users should have single seat (no seat selector) for:
@@ -157,10 +171,6 @@ export default function PricingPage() {
     }
     
     return false;
-  }
-
-  const setSeatsForPlan = (planId: string, seats: number) => {
-    setSeatsByPlanId(prev => ({ ...prev, [planId]: Math.max(1, Math.min(50, seats)) }))
   }
 
   const goToCreateOrganization = () => {
@@ -480,6 +490,11 @@ export default function PricingPage() {
               Invoicing for you — one seat, full features. Upgrade to Growth for real-time reconciliation, API access, and more.
             </p>
           )}
+          {effectiveAudience === 'business' && minSeatsFromMembers != null && minSeatsFromMembers > 0 && (
+            <p className="text-center text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-8 max-w-2xl mx-auto text-sm">
+              Your organisation has <strong>{minSeatsFromMembers} member{minSeatsFromMembers === 1 ? '' : 's'}</strong>. When upgrading, select at least {minSeatsFromMembers} seat{minSeatsFromMembers === 1 ? '' : 's'} to cover everyone (you can add more, but not fewer).
+            </p>
+          )}
           <div className={`grid gap-6 mx-auto ${effectiveAudience === 'individual' ? 'grid-cols-1 sm:grid-cols-2 max-w-2xl' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-5xl'}`}>
             {filteredPlans.map((plan) => {
               const isCurrentPlan = session && subscription?.plan?.planId === plan.planId;
@@ -496,6 +511,7 @@ export default function PricingPage() {
                   hideSeatSelector={isIndividualSingleSeat(plan)}
                   currentPlanSeats={isCurrentPlan ? currentPlanSeats : undefined}
                   allowSeatUpgrade={isCurrentPlan && plan.dynamicPricing ? true : undefined}
+                  minSeats={effectiveAudience === 'business' && minSeatsFromMembers != null ? minSeatsFromMembers : undefined}
                 />
               );
             })}
@@ -583,7 +599,8 @@ function PlanCard({
   isCurrentPlan,
   hideSeatSelector = false,
   currentPlanSeats,
-  allowSeatUpgrade
+  allowSeatUpgrade,
+  minSeats
 }: {
   plan: BillingPlan
   billingPeriod: BillingPeriod
@@ -595,6 +612,8 @@ function PlanCard({
   hideSeatSelector?: boolean
   currentPlanSeats?: number | null
   allowSeatUpgrade?: boolean
+  /** When set (e.g. org member count), user can only add seats, not go below this. */
+  minSeats?: number
 }) {
   const isEnterprise = plan.isEnterprise
   const calculated = useMemo(() => {
@@ -644,12 +663,20 @@ function PlanCard({
             <span className="text-sm text-gray-600">Seats:</span>
             <input
               type="number"
-              min={1}
+              min={minSeats ?? 1}
               max={50}
               value={seats}
-              onChange={(e) => onSeatsChange?.(parseInt(e.target.value, 10) || 1)}
-              className="w-14 rounded border border-gray-300 px-2 py-1 text-center text-sm"
+              onChange={(e) => {
+                const raw = parseInt(e.target.value, 10);
+                const min = minSeats ?? 1;
+                const next = isNaN(raw) ? min : Math.max(min, Math.min(50, raw));
+                onSeatsChange?.(next);
+              }}
+              className="w-14 rounded border border-gray-300 px-2 py-1 text-center text-sm text-black font-medium"
             />
+            {minSeats != null && minSeats > 1 && (
+              <span className="text-xs text-amber-600 font-medium">min {minSeats}</span>
+            )}
             {isCurrentPlan && currentPlanSeats && seats > currentPlanSeats && (
               <span className="text-xs text-blue-600 font-medium">+{seats - currentPlanSeats} more</span>
             )}

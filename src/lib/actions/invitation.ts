@@ -108,9 +108,12 @@ export async function sendInvitation(email: string, role: RoleKey): Promise<{
         const { BILLING_PLANS } = await import('@/data/billingPlans');
         const plan = BILLING_PLANS.find(p => p.planId === planId);
         
-        if (plan?.dynamicPricing) {
-          // Get seats from subscription (stored when they paid) - handle both string and number
-          let paidSeats: number;
+        // Organisation trial: up to 4 seats
+        const isTrialOrg = planId === 'trial-premium';
+        let paidSeats: number | null = null;
+        if (isTrialOrg) {
+          paidSeats = 4;
+        } else if (plan?.dynamicPricing) {
           if (subscription.seats !== null && subscription.seats !== undefined) {
             if (typeof subscription.seats === 'number' && subscription.seats > 0) {
               paidSeats = subscription.seats;
@@ -123,33 +126,27 @@ export async function sendInvitation(email: string, role: RoleKey): Promise<{
           } else {
             paidSeats = plan.dynamicPricing.includedSeats || 1;
           }
-          
-          // Count current members (including owner)
+        }
+        if (paidSeats != null) {
           const currentMemberCount = organization.members?.length || 0;
-          
-          // Count pending invitations
           const pendingInvitations = await db.collection('invitation_tokens').countDocuments({
             organizationId: new ObjectId(user.organizationId.toString()),
             expiresAt: { $gt: new Date() }
           });
-          
           const totalMembersAndInvitations = currentMemberCount + pendingInvitations;
-          
           console.log('📊 [Invitation] Seat limit check:', {
-            rawSeats: subscription.seats,
-            seatsType: typeof subscription.seats,
+            planId,
             paidSeats,
             currentMemberCount,
             pendingInvitations,
             totalMembersAndInvitations,
             canAddMore: totalMembersAndInvitations < paidSeats
           });
-          
           if (totalMembersAndInvitations >= paidSeats) {
             console.log('❌ [Invitation] Seat limit reached');
-            return { 
-              success: false, 
-              error: `You have reached your seat limit of ${paidSeats}. You currently have ${currentMemberCount} member${currentMemberCount === 1 ? '' : 's'} and ${pendingInvitations} pending invitation${pendingInvitations === 1 ? '' : 's'}. Please upgrade your plan to add more members.` 
+            return {
+              success: false,
+              error: `You have reached your seat limit of ${paidSeats}. You currently have ${currentMemberCount} member${currentMemberCount === 1 ? '' : 's'} and ${pendingInvitations} pending invitation${pendingInvitations === 1 ? '' : 's'}.${isTrialOrg ? ' Upgrade to a paid plan to add more members.' : ' Please upgrade your plan to add more members.'}`
             };
           }
         }

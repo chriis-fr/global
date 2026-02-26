@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth';
 import { WhatsAppService, type WhatsAppInvoiceData } from '@/lib/services/whatsappService';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
+import crypto from 'crypto';
 
 interface SendInvoiceWhatsAppResult {
   success: boolean;
@@ -106,21 +107,52 @@ export async function sendInvoiceWhatsApp(
       companyName: invoice.companyDetails?.name || invoice.companyName
     });
 
-    // Step 5: Prepare WhatsApp data
-    console.log(`${logPrefix} [Step 5] Preparing WhatsApp invoice data...`);
+    // Step 5: Generate access token (same structure as email). WhatsApp template uses .../pay-invoice?token={{1}}; we inject ctaToken as {{1}}.
+    console.log(`${logPrefix} [Step 5] Generating access token for CTA buttons...`);
+    const recipientEmail = invoice.clientDetails?.email || invoice.clientEmail || '';
+    let ctaToken: string | undefined;
+
+    try {
+      const accessTokensCollection = db.collection('invoice_access_tokens');
+      const token = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours, same as email
+      const isObjectId = /^[0-9a-fA-F]{24}$/.test(session.user.id);
+      const createdBy = isObjectId ? new ObjectId(session.user.id) : session.user.id;
+
+      await accessTokensCollection.insertOne({
+        token,
+        invoiceId: new ObjectId(invoice._id as unknown as string),
+        recipientEmail: recipientEmail || undefined,
+        createdBy,
+        createdAt: new Date(),
+        expiresAt,
+        used: false,
+        usedAt: null,
+        usedBy: null
+      });
+      ctaToken = token;
+      console.log(`${logPrefix} [Step 5] ✅ Access token generated (inject as {{1}} in template)`);
+    } catch (tokenErr) {
+      console.error(`${logPrefix} [Step 5] ❌ Token generation failed (CTA buttons will be omitted):`, tokenErr);
+    }
+
     const whatsappData: WhatsAppInvoiceData = {
       clientName: invoice.clientDetails?.name || invoice.clientName || 'Client',
       senderName: invoice.companyDetails?.name || invoice.companyName || 'Your Company',
+      appName: 'Chains- Global Finance',
       invoiceNumber: invoice.invoiceNumber || 'N/A',
       pdfBuffer: pdfBuffer,
-      clientPhone: clientPhone
+      clientPhone: clientPhone,
+      ctaToken: ctaToken ?? undefined
     };
     console.log(`${logPrefix} [Step 5] ✅ WhatsApp data prepared:`, {
       clientName: whatsappData.clientName,
       senderName: whatsappData.senderName,
+      appName: whatsappData.appName,
       invoiceNumber: whatsappData.invoiceNumber,
       phone: whatsappData.clientPhone,
-      pdfBufferSize: whatsappData.pdfBuffer?.length || 0
+      pdfBufferSize: whatsappData.pdfBuffer?.length || 0,
+      hasPayButton: !!whatsappData.ctaToken
     });
 
     // Step 6: Send via WhatsApp service

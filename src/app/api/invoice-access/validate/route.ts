@@ -85,13 +85,17 @@ export async function POST(request: NextRequest) {
             logo: (invoice as { companyLogo?: string }).companyLogo,
             taxNumber: companyDetails?.taxNumber || (invoice as { companyTaxNumber?: string }).companyTaxNumber
           },
-          clientDetails: {
-            name: invoice.clientDetails?.name || invoice.clientName,
-            email: invoice.clientDetails?.email || invoice.clientEmail,
-            phone: invoice.clientDetails?.phone || invoice.clientPhone,
-            companyName: invoice.clientDetails?.companyName || invoice.clientCompany,
-            address: invoice.clientDetails?.address || invoice.clientAddress
-          },
+          clientDetails: (() => {
+            const cd = invoice.clientDetails as { name?: string; firstName?: string; lastName?: string; companyName?: string; email?: string; phone?: string; address?: unknown } | undefined;
+            const fullName = cd?.name || [cd?.firstName, cd?.lastName].filter(Boolean).join(' ').trim() || invoice.clientName;
+            return {
+              name: fullName || undefined,
+              email: cd?.email ?? invoice.clientEmail,
+              phone: cd?.phone ?? invoice.clientPhone,
+              companyName: (cd?.companyName ?? invoice.clientCompany) || undefined,
+              address: cd?.address ?? invoice.clientAddress
+            };
+          })(),
           currency: invoice.currency,
           paymentMethod: invoice.paymentMethod,
           paymentNetwork: invoice.paymentNetwork ?? paymentSettings?.cryptoNetwork,
@@ -115,9 +119,11 @@ export async function POST(request: NextRequest) {
           status: invoice.status,
           createdAt: invoice.createdAt,
           updatedAt: invoice.updatedAt,
-          paidAt: (invoice as { paidAt?: string }).paidAt
+          paidAt: (invoice as { paidAt?: string }).paidAt,
+          sentVia: (invoice as { sentVia?: string }).sentVia
         },
-        recipientEmail: tokenData.recipientEmail,
+        recipientEmail: tokenData.recipientEmail ?? '',
+        sentVia: (invoice as { sentVia?: string }).sentVia,
         isRegistered,
         requiresSignup: !isRegistered
       }

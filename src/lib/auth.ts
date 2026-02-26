@@ -51,12 +51,11 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" }
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials.password) {
+        if (!credentials?.email || !credentials?.password) {
           return null
         }
 
         try {
-          // Get user from database
           const user = await UserService.getUserByEmail(credentials.email)
           if (!user) {
             return null
@@ -67,7 +66,6 @@ export const authOptions: NextAuthOptions = {
             return null
           }
 
-          // Verify password
           const isValidPassword = await bcrypt.compare(credentials.password, user.password)
           if (!isValidPassword) {
             return null
