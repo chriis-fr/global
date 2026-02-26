@@ -486,7 +486,10 @@ export async function getOrganizationSeatInfo(): Promise<{
     let paidSeats = 1;
     const planName = plan?.name || 'Free Plan';
     
-    if (plan?.dynamicPricing) {
+    // Organisation trial: up to 4 seats (not unlimited); after trial they upgrade to paid seats
+    if (planId === 'trial-premium') {
+      paidSeats = 4;
+    } else if (plan?.dynamicPricing) {
       // Get seats from subscription (stored when they paid) or default to included seats
       // Handle both number and string types (MongoDB might store as string)
       let subscriptionSeats: number | null = null;
