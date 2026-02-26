@@ -1,10 +1,17 @@
 
 interface WhatsAppInvoiceData {
+  /** Client name → {{name}} in template */
   clientName: string;
+  /** Sender/company name → {{sender}} in template */
   senderName: string;
+  /** App name → {{app_name}} in template */
+  appName: string;
+  /** Invoice number → {{inv_number}} in template */
   invoiceNumber: string;
   pdfBuffer: string;
   clientPhone: string;
+  /** Access token for Pay online URL button (same as email); builds /pay-invoice?token=... */
+  ctaToken?: string;
 }
 
 interface WhatsAppResponse {
@@ -31,6 +38,7 @@ class WhatsAppService {
     console.log(`${logPrefix} Input data:`, {
       clientName: data.clientName,
       senderName: data.senderName,
+      appName: data.appName,
       invoiceNumber: data.invoiceNumber,
       phone: data.clientPhone,
       hasPdf: !!data.pdfBuffer,
@@ -107,6 +115,53 @@ class WhatsAppService {
       }
       
       // Step 5: Prepare request body
+      // Meta requires parameter_name for each body parameter and rejects empty values
+      const bodyName = (data.clientName || '').trim() || 'Client';
+      const bodySender = (data.senderName || '').trim() || 'Sender';
+      const bodyAppName = (data.appName || '').trim() || 'Chains- Global Finance';
+      const bodyInvNumber = (data.invoiceNumber || '').trim() || 'N/A';
+
+      // Pay online URL for button (same token as email; recipient gets unique link)
+      const baseUrl = (() => {
+        const u = process.env.FRONTEND_URL || process.env.APP_URL || process.env.NEXTAUTH_URL || 'http://localhost:3000';
+        return u.startsWith('http') ? u : `https://${u}`;
+      })();
+      const payOnlineUrl = data.ctaToken ? `${baseUrl}/pay-invoice?token=${data.ctaToken}` : undefined;
+
+      const components: Array<{ type: string; parameters?: unknown[]; sub_type?: string; index?: string }> = [
+        {
+          type: 'header',
+          parameters: [
+            {
+              type: 'document',
+              document: {
+                id: mediaId,
+                filename: `Invoice_${bodyInvNumber}.pdf`
+              }
+            }
+          ]
+        },
+        {
+          type: 'body',
+          parameters: [
+            { type: 'text', parameter_name: 'name', text: bodyName },
+            { type: 'text', parameter_name: 'sender', text: bodySender },
+            { type: 'text', parameter_name: 'app_name', text: bodyAppName },
+            { type: 'text', parameter_name: 'inv_number', text: bodyInvNumber }
+          ]
+        }
+      ];
+
+      // Template has a URL button "Pay online" that requires the link parameter
+      if (payOnlineUrl) {
+        components.push({
+          type: 'button',
+          sub_type: 'url',
+          index: '0',
+          parameters: [{ type: 'text', text: payOnlineUrl }]
+        });
+      }
+
       console.log(`${logPrefix} [Step 5] Preparing API request body...`);
       const requestBody = {
         messaging_product: 'whatsapp',
@@ -118,40 +173,7 @@ class WhatsAppService {
             code: 'en',
             policy: 'deterministic'
           },
-          components: [
-            {
-              type: 'header',
-              parameters: [
-                {
-                  type: 'document',
-                  document: {
-                    id: mediaId,
-                    filename: `Invoice_${data.invoiceNumber}.pdf`
-                  }
-                }
-              ]
-            },
-            {
-              type: 'body',
-              parameters: [
-                {
-                  type: 'text',
-                  parameter_name: 'client_name',
-                  text: data.clientName
-                },
-                {
-                  type: 'text',
-                  parameter_name: 'sender_name',
-                  text: data.senderName
-                },
-                {
-                  type: 'text',
-                  parameter_name: 'inv_number',
-                  text: data.invoiceNumber
-                }
-              ]
-            }
-          ]
+          components
         }
       };
       console.log(`${logPrefix} [Step 5] ✅ Request body prepared:`, {
@@ -160,8 +182,8 @@ class WhatsAppService {
         templateLanguage: requestBody.template.language.code,
         headerComponent: requestBody.template.components[0]?.type,
         bodyComponent: requestBody.template.components[1]?.type,
-        bodyParameters: requestBody.template.components[1]?.parameters?.map(p => 
-          'parameter_name' in p ? p.parameter_name : p.type
+        bodyParameters: requestBody.template.components[1]?.parameters?.map((_, i) =>
+          ['name', 'sender', 'app_name', 'inv_number'][i]
         ),
         fullRequestBody: JSON.stringify(requestBody, null, 2)
       });

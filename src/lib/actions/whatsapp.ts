@@ -139,18 +139,20 @@ export async function sendInvoiceWhatsApp(
     const whatsappData: WhatsAppInvoiceData = {
       clientName: invoice.clientDetails?.name || invoice.clientName || 'Client',
       senderName: invoice.companyDetails?.name || invoice.companyName || 'Your Company',
+      appName: 'Chains- Global Finance',
       invoiceNumber: invoice.invoiceNumber || 'N/A',
       pdfBuffer: pdfBuffer,
       clientPhone: clientPhone,
-      ctaToken
+      ctaToken: ctaToken ?? undefined
     };
     console.log(`${logPrefix} [Step 5] ✅ WhatsApp data prepared:`, {
       clientName: whatsappData.clientName,
       senderName: whatsappData.senderName,
+      appName: whatsappData.appName,
       invoiceNumber: whatsappData.invoiceNumber,
       phone: whatsappData.clientPhone,
       pdfBufferSize: whatsappData.pdfBuffer?.length || 0,
-      hasCtaToken: !!whatsappData.ctaToken
+      hasPayButton: !!whatsappData.ctaToken
     });
 
     // Step 6: Send via WhatsApp service

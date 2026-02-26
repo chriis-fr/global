@@ -1708,12 +1708,7 @@ export default function CreateInvoicePage() {
       }
     }));
 
-    // Auto-detect best sending method after client selection
-    // WhatsApp is disabled, so always use email
-    setTimeout(() => {
-      // Force email mode since WhatsApp is disabled
-      setFormData(prev => ({ ...prev, sendViaWhatsapp: false }));
-    }, 100);
+    // Auto-detect best sending method after client selection (preserve user's choice or infer from client data)
     setShowClientSelector(false);
   };
 
@@ -2087,9 +2082,7 @@ export default function CreateInvoicePage() {
 
       let result: { success: boolean; messageId?: string; error?: string; message?: string; requiresApproval?: boolean; status?: string };
 
-      // WhatsApp is disabled - force email mode
-      // TODO: Remove this check when re-enabling WhatsApp
-      if (false && formData.sendViaWhatsapp) {
+      if (formData.sendViaWhatsapp) {
         // Send via WhatsApp
         console.log('📱 [WhatsApp Sending] ========== STARTING WHATSAPP SEND FROM FRONTEND ==========');
         console.log('📱 [WhatsApp Sending] Input parameters:', {
@@ -2358,9 +2351,7 @@ export default function CreateInvoicePage() {
       errors.push('At least one contact method (email or phone) is required');
     } else {
       // Validate based on selected sending method
-      // WhatsApp is disabled - always validate email
-      // TODO: Re-enable WhatsApp validation when WhatsApp is re-enabled
-      if (false && formData.sendViaWhatsapp) {
+      if (formData.sendViaWhatsapp) {
         // WhatsApp mode: phone number is required and must be valid format
         if (!hasPhone) {
           errors.push('Phone number is required for WhatsApp sending');
@@ -3082,9 +3073,8 @@ export default function CreateInvoicePage() {
                     Bill To
                   </h3>
                   <div className="flex items-center space-x-2">
-                    {/* WhatsApp Toggle Button - DISABLED FOR NOW */}
-                    {/* TODO: Re-enable WhatsApp functionality after configuration */}
-                    {false && (
+                    {/* WhatsApp Toggle Button */}
+                    {(
                       <button
                         onClick={() => {
                           const newWhatsAppMode = !formData.sendViaWhatsapp;
