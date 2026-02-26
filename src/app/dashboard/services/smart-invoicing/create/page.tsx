@@ -436,6 +436,11 @@ export default function CreateInvoicePage() {
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [sendingInvoice, setSendingInvoice] = useState(false);
   const [creatingClient, setCreatingClient] = useState(false);
+  const [logoMounted, setLogoMounted] = useState(false);
+
+  useEffect(() => {
+    setLogoMounted(true);
+  }, []);
 
   // Scroll to validation errors when they appear (e.g. after clicking Send Invoice / Download PDF)
   useEffect(() => {
@@ -2936,7 +2941,7 @@ export default function CreateInvoicePage() {
                     onClick={handleOpenCompanyModal}
                     className="w-20 h-20 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors cursor-pointer flex-shrink-0 group relative overflow-hidden self-end"
                   >
-                    {formData.companyLogo ? (
+                    {logoMounted && formData.companyLogo ? (
                       <>
                         <Image 
                           src={formData.companyLogo} 
@@ -2989,7 +2994,7 @@ export default function CreateInvoicePage() {
                     onClick={handleOpenCompanyModal}
                     className="w-20 h-20 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors cursor-pointer flex-shrink-0 group relative overflow-hidden"
                   >
-                    {formData.companyLogo ? (
+                    {logoMounted && formData.companyLogo ? (
                       <>
                         <Image 
                           src={formData.companyLogo} 
@@ -4654,14 +4659,6 @@ export default function CreateInvoicePage() {
                   setFormData={setFormData}
                   onSubmit={(updatedData) => {
                     setFormData(prev => ({ ...prev, ...updatedData }));
-                    
-                    // Auto-detect best sending method after client edit
-                    // WhatsApp is disabled, so always use email
-                    setTimeout(() => {
-                      // Force email mode since WhatsApp is disabled
-                      setFormData(prev => ({ ...prev, sendViaWhatsapp: false }));
-                    }, 100);
-                    
                     setShowClientEditModal(false);
                   }}
                   onCancel={() => setShowClientEditModal(false)}
@@ -5215,6 +5212,16 @@ function ClientEditForm({
   onSubmit: (updatedData: Partial<InvoiceFormData>) => void;
   onCancel: () => void;
 }) {
+  // When WhatsApp is selected and phone has country code: prefill country only if not already set (flexible for email flow)
+  const detectedCountryFromPhone =
+    formData.sendViaWhatsapp && formData.clientPhone?.trim().startsWith('+')
+      ? extractCountryCodeFromPhone(formData.clientPhone)
+      : null;
+  const initialCountry =
+    !formData.clientAddress.country && detectedCountryFromPhone
+      ? detectedCountryFromPhone
+      : formData.clientAddress.country;
+
   const [editData, setEditData] = useState({
     clientName: formData.clientName,
     clientCompany: formData.clientCompany,
@@ -5225,7 +5232,7 @@ function ClientEditForm({
       city: formData.clientAddress.city,
       state: formData.clientAddress.state,
       zipCode: formData.clientAddress.zipCode,
-      country: formData.clientAddress.country
+      country: initialCountry
     }
   });
   const [showCountryDropdown, setShowCountryDropdown] = useState(false);
@@ -5314,12 +5321,18 @@ function ClientEditForm({
                 value = formatPhoneForWhatsApp(value);
               }
               
-              // Auto-detect country from phone number with country code
+              // When WhatsApp is selected: prefill country from phone country code (user can still change it)
               if (value && value.startsWith('+')) {
                 const detectedCountry = extractCountryCodeFromPhone(value);
                 if (detectedCountry) {
-                  // Update the country in the form data
                   setFormData(prev => ({
+                    ...prev,
+                    clientAddress: {
+                      ...prev.clientAddress,
+                      country: detectedCountry
+                    }
+                  }));
+                  setEditData(prev => ({
                     ...prev,
                     clientAddress: {
                       ...prev.clientAddress,

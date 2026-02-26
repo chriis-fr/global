@@ -72,6 +72,8 @@ interface Invoice {
   status: string;
   paidAt?: string;
   updatedAt?: string;
+  /** When 'whatsapp', invoice was sent via WhatsApp (no email link; hide "View in app"). */
+  sentVia?: 'email' | 'whatsapp';
 }
 
 interface TokenData {
@@ -80,6 +82,8 @@ interface TokenData {
   recipientEmail: string;
   isRegistered: boolean;
   requiresSignup: boolean;
+  /** When 'whatsapp', payment link came from WhatsApp (no "View in app"). */
+  sentVia?: 'email' | 'whatsapp';
 }
 
 function formatCountry(addr: Invoice['companyDetails']['address']): string {
@@ -237,11 +241,45 @@ function PayInvoiceContent() {
             {/* To */}
             <div>
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">To</p>
-              <p className="font-semibold text-gray-900 text-sm truncate">
-                {invoice?.clientDetails?.companyName || invoice?.clientDetails?.name || data.recipientEmail || '—'}
-              </p>
-              {invoice?.clientDetails?.email && (
-                <p className="text-xs text-gray-600 truncate">{invoice.clientDetails.email}</p>
+              {/* When sent via WhatsApp: show company and contact person so recipient can verify. Email flow: company/name or email. */}
+              {invoice?.sentVia === 'whatsapp' ? (
+                <>
+                  {invoice.clientDetails?.companyName && (
+                    <p className="font-semibold text-gray-900 text-sm truncate">{invoice.clientDetails.companyName}</p>
+                  )}
+                  {invoice.clientDetails?.name && (
+                    <p className={`text-sm text-gray-700 ${invoice.clientDetails?.companyName ? 'mt-0.5' : ''}`}>
+                      {invoice.clientDetails.companyName ? 'Attn: ' : 'Contact: '}{invoice.clientDetails.name}
+                    </p>
+                  )}
+                  {!invoice.clientDetails?.companyName && !invoice.clientDetails?.name && (
+                    <p className="font-semibold text-gray-900 text-sm truncate">{data.recipientEmail || '—'}</p>
+                  )}
+                  {invoice.clientDetails?.email && (
+                    <p className="text-xs text-gray-600 truncate mt-0.5">{invoice.clientDetails.email}</p>
+                  )}
+                </>
+              ) : (
+                <>
+                  {(invoice?.clientDetails?.companyName || invoice?.clientDetails?.name) && (
+                    <>
+                      <p className="font-semibold text-gray-900 text-sm truncate">
+                        {invoice.clientDetails.companyName || invoice.clientDetails.name || '—'}
+                      </p>
+                      {invoice.clientDetails.companyName && invoice.clientDetails.name && (
+                        <p className="text-xs text-gray-600 mt-0.5">Attn: {invoice.clientDetails.name}</p>
+                      )}
+                    </>
+                  )}
+                  {!invoice?.clientDetails?.companyName && !invoice?.clientDetails?.name && (
+                    <p className="font-semibold text-gray-900 text-sm truncate">
+                      {data.recipientEmail || '—'}
+                    </p>
+                  )}
+                  {invoice?.clientDetails?.email && (
+                    <p className="text-xs text-gray-600 truncate mt-0.5">{invoice.clientDetails.email}</p>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -435,16 +473,18 @@ function PayInvoiceContent() {
             )}
           </div>
 
-          {/* Constant link: view invoice inside the app (sign in or sign up) */}
-          <p className="text-center text-sm text-gray-500 pt-2 border-t border-gray-100">
-            <Link
-              href={`/auth?invoiceToken=${token}&email=${encodeURIComponent(data.recipientEmail)}`}
-              className="text-blue-600 hover:underline font-medium"
-            >
-              View this invoice in the app
-            </Link>
-            {' '}— sign in or create an account
-          </p>
+          {/* View in app: only when sent via email (tied to email). WhatsApp links are not tied to an account. */}
+          {invoice?.sentVia !== 'whatsapp' && data.recipientEmail && (
+            <p className="text-center text-sm text-gray-500 pt-2 border-t border-gray-100">
+              <Link
+                href={`/auth?invoiceToken=${token}&email=${encodeURIComponent(data.recipientEmail)}`}
+                className="text-blue-600 hover:underline font-medium"
+              >
+                View this invoice in the app
+              </Link>
+              {' '}— sign in or create an account
+            </p>
+          )}
         </div>
 
         {/* Footer – Powered by */}
