@@ -121,13 +121,7 @@ class WhatsAppService {
       const bodyAppName = (data.appName || '').trim() || 'Chains- Global Finance';
       const bodyInvNumber = (data.invoiceNumber || '').trim() || 'N/A';
 
-      // Pay online URL for button (same token as email; recipient gets unique link)
-      const baseUrl = (() => {
-        const u = process.env.FRONTEND_URL || process.env.APP_URL || process.env.NEXTAUTH_URL || 'http://localhost:3000';
-        return u.startsWith('http') ? u : `https://${u}`;
-      })();
-      const payOnlineUrl = data.ctaToken ? `${baseUrl}/pay-invoice?token=${data.ctaToken}` : undefined;
-
+      // Pay online button: template already has base URL (e.g. .../pay-invoice?token=); we send only the token value
       const components: Array<{ type: string; parameters?: unknown[]; sub_type?: string; index?: string }> = [
         {
           type: 'header',
@@ -152,13 +146,13 @@ class WhatsAppService {
         }
       ];
 
-      // Template has a URL button "Pay online" that requires the link parameter
-      if (payOnlineUrl) {
+      // Template URL button expects only the token (value after ?token=), not the full URL
+      if (data.ctaToken) {
         components.push({
           type: 'button',
           sub_type: 'url',
           index: '0',
-          parameters: [{ type: 'text', text: payOnlineUrl }]
+          parameters: [{ type: 'text', text: data.ctaToken }]
         });
       }
 
