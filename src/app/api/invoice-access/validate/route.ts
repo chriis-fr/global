@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
               name: fullName || undefined,
               email: cd?.email ?? invoice.clientEmail,
               phone: cd?.phone ?? invoice.clientPhone,
-              companyName: cd?.companyName ?? invoice.clientCompany || undefined,
+              companyName: (cd?.companyName ?? invoice.clientCompany) || undefined,
               address: cd?.address ?? invoice.clientAddress
             };
           })(),

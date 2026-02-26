@@ -525,7 +525,9 @@ export async function POST(request: NextRequest) {
           });
           const targetUserId = user && user._id ? await getBillingTargetUserId(db, user) : null;
           const targetUser = targetUserId ? await db.collection('users').findOne({ _id: targetUserId }) : null;
-          if (user && user._id && targetUser?.subscription?.planId && targetUser.subscription.planId !== 'receivables-free') {
+          if (!targetUserId || !user || !user._id || !targetUser?.subscription?.planId || targetUser.subscription.planId === 'receivables-free') {
+            // skip: no target user or no paid plan to mark past_due
+          } else {
             const now = new Date();
             const updatePayload = {
               'subscription.status': 'past_due',
