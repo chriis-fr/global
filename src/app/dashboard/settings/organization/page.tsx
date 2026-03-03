@@ -447,6 +447,10 @@ export default function OrganizationSettingsPage() {
   const hasOrganizationAccess = subscription?.canCreateOrganization || (orgInfo?.hasOrganization && orgInfo?.organization);
   const isTrialUser = subscription?.isTrialActive && subscription?.plan?.planId === 'trial-premium';
 
+  // Finance Controls is reserved for Scale and Enterprise plans only (not Growth, Individual, or Free)
+  const billingPlan = subscription?.plan?.planId ? BILLING_PLANS.find(p => p.planId === subscription.plan!.planId) : undefined;
+  const hasFinanceControlsPlan = !!billingPlan && (billingPlan.tier === 'scale' || billingPlan.isEnterprise === true);
+
   if (loading) {
     return (
       <div className="max-w-4xl mx-auto">
@@ -546,8 +550,8 @@ export default function OrganizationSettingsPage() {
 
   return (
     <div className="max-w-4xl mx-auto w-full">
-      <div className="mb-8 flex items-start justify-between gap-4">
-        <div>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+        <div className="flex-1 min-w-0">
           {fromPricing && (
             <button
               type="button"
@@ -568,7 +572,7 @@ export default function OrganizationSettingsPage() {
             }
           </p>
         </div>
-        {orgInfo?.hasOrganization && (
+        {orgInfo?.hasOrganization && hasFinanceControlsPlan && (
           <button
             type="button"
             onClick={() => router.push('/dashboard/settings/finance-controls')}
@@ -579,6 +583,26 @@ export default function OrganizationSettingsPage() {
           </button>
         )}
       </div>
+
+      {/* Compact plan line – informative only, ~50% less space */}
+      {subscription && (
+        <div className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-blue-200/90">
+          <span className="font-medium text-blue-100">
+            {subscription.plan?.name || getCurrentPlanName()}
+          </span>
+          <span className="text-blue-200/70">
+            {subscription.isTrialActive
+              ? `Trial · ${subscription.trialDaysRemaining ?? 0} ${subscription.trialDaysRemaining === 1 ? 'day' : 'days'} left`
+              : (subscription.status === 'active' ? 'Active' : subscription.status ?? '')}
+          </span>
+          {subscription.plan && (
+            <span className="text-blue-200/70">
+              Invoices: {subscription.usage.invoicesThisMonth}
+              {subscription.limits.invoicesPerMonth < 0 ? ' (unlimited)' : ` / ${subscription.limits.invoicesPerMonth}`}
+            </span>
+          )}
+        </div>
+      )}
       
       {message && (
         <div className={`mb-6 p-4 rounded-lg relative ${

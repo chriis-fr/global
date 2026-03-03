@@ -45,7 +45,7 @@ const SETTINGS_LINKS = [
   { key: 'payment-methods', label: 'Payment Methods', icon: CreditCard, href: '/dashboard/settings/payment-methods' },
   {
     key: 'finance-controls',
-    label: 'Controls',
+    label: 'Finance Controls',
     icon: Crown,
     href: '/dashboard/settings/finance-controls'
   },
@@ -449,10 +449,9 @@ function Sidebar() {
                 if (link.key === 'integrations') {
                   return session?.user?.adminTag === true;
                 }
-                // Finance Controls in Settings dropdown is only for true individual accounts
-                // (no organization attached). Organizations access it from Organization Settings.
+                // Finance Controls: available in profile/settings for admin accounts (adminTag)
                 if (link.key === 'finance-controls') {
-                  return session?.user?.userType === 'individual' && !session.user.organizationId;
+                  return session?.user?.adminTag === true;
                 }
                 return true;
               }).map(link => {

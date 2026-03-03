@@ -869,6 +869,85 @@ function invoiceBaseQueryForOrg(organizationId: string | unknown): Record<string
     : { organizationId: orgId };
 }
 
+export type FinanceControlsInvoiceListItem = {
+  _id: string;
+  invoiceNumber: string;
+  clientName: string;
+  total: number;
+  currency: string;
+  status: string;
+  issueDate?: string;
+  dueDate?: string;
+};
+
+/** List invoices for finance controls (for picking invoices in UI). Unpaid by default, filtered by issue date range. */
+export async function listInvoicesForFinanceControls(params?: {
+  startDate?: Date;
+  endDate?: Date;
+  includePaid?: boolean;
+}): Promise<{ success: boolean; data?: FinanceControlsInvoiceListItem[]; error?: string }> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) return { success: false, error: 'Unauthorized' };
+
+    const db = await getDatabase();
+    const ctx = await getOrgIdAndMember(db, session.user.id!, session.user.email);
+    if (!ctx) return { success: false, error: 'Organization not found' };
+
+    const baseQuery = invoiceBaseQueryForOrg(session.user.organizationId);
+    const unpaidStatuses = ['sent', 'pending', 'overdue', 'approved'];
+
+    const match: Record<string, unknown> = {
+      ...baseQuery,
+      status: params?.includePaid ? { $ne: 'draft' } : { $in: unpaidStatuses },
+    };
+
+    const start = params?.startDate ? new Date(params.startDate) : undefined;
+    const end = params?.endDate ? new Date(params.endDate) : undefined;
+    if (start || end) {
+      (match.issueDate as Record<string, unknown>) = {};
+      if (start) (match.issueDate as Record<string, unknown>).$gte = start;
+      if (end) (match.issueDate as Record<string, unknown>).$lte = end;
+    }
+
+    const invoices = await db
+      .collection(COLL.INVOICES)
+      .find(match, {
+        projection: {
+          _id: 1,
+          invoiceNumber: 1,
+          'clientDetails.name': 1,
+          'clientDetails.companyName': 1,
+          total: 1,
+          totalAmount: 1,
+          currency: 1,
+          status: 1,
+          issueDate: 1,
+          dueDate: 1,
+        },
+      })
+      .sort({ issueDate: -1 })
+      .limit(200)
+      .toArray();
+
+    const data: FinanceControlsInvoiceListItem[] = invoices.map((inv) => ({
+      _id: inv._id.toString(),
+      invoiceNumber: inv.invoiceNumber || 'Invoice',
+      clientName: inv.clientDetails?.companyName || inv.clientDetails?.name || 'Client',
+      total: inv.total ?? inv.totalAmount ?? 0,
+      currency: inv.currency || 'USD',
+      status: inv.status || 'draft',
+      issueDate: inv.issueDate ? new Date(inv.issueDate).toISOString() : undefined,
+      dueDate: inv.dueDate ? new Date(inv.dueDate).toISOString() : undefined,
+    }));
+
+    return { success: true, data };
+  } catch (e) {
+    console.error('[finance-controls] listInvoicesForFinanceControls:', e);
+    return { success: false, error: 'Failed to list invoices' };
+  }
+}
+
 /** Financial insights (AR aging, payment velocity, overdue count, volume trend) — calculated from existing data, no new API. */
 export async function getFinancialInsights(periodStart?: Date, periodEnd?: Date): Promise<{
   success: boolean;

@@ -154,7 +154,7 @@ export const BILLING_PLANS: BillingPlan[] = [
       { id: 'unlimited-invoices', name: 'Unlimited invoices', description: 'No invoice cap', included: true },
       { id: 'volume', name: '$100k volume included', description: '0.4% over threshold', included: true },
       { id: 'approval', name: 'Approval workflows', description: 'Multi-step approvals', included: true },
-      { id: 'multi-entity', name: 'Multi-entity support', description: 'Multiple entities', included: true },
+      { id: 'finance-controls', name: 'Finance Controls', description: "Period locking, record payments, write-offs, carry forward & audit log", included: true },
     ],
     limits: {
       invoicesPerMonth: -1,
@@ -184,6 +184,7 @@ export const BILLING_PLANS: BillingPlan[] = [
       { id: 'sla', name: 'SLA', description: 'Guaranteed uptime', included: true },
       { id: 'dedicated-support', name: 'Dedicated support', description: 'Priority assistance', included: true },
       { id: 'custom-token', name: 'Custom token & blockchain', description: 'Custom infrastructure', included: true },
+      { id: 'finance-controls', name: 'Finance Controls', description: "Period locking, payments, write-offs, carry forward & audit", included: true },
     ],
     limits: {
       invoicesPerMonth: -1,
@@ -249,6 +250,7 @@ export const BILLING_PLANS: BillingPlan[] = [
       { id: 'seats', name: '5 seats included', description: 'Add more at $19/seat', included: true },
       { id: 'lower-fees', name: '0.5% fee', description: 'Lower transaction fees', included: true },
       { id: 'payroll', name: 'Payroll', description: 'Team payments', included: true },
+      { id: 'finance-controls', name: 'Finance Controls', description: "Period locking, payments, write-offs, carry forward & audit", included: true },
     ],
     limits: {
       monthlyVolume: 150000,
@@ -275,6 +277,7 @@ export const BILLING_PLANS: BillingPlan[] = [
     features: [
       { id: 'custom-rate', name: 'Custom rate', description: 'Tailored pricing', included: true },
       { id: 'dedicated-support', name: 'Dedicated support', description: 'Priority assistance', included: true },
+      { id: 'finance-controls', name: 'Finance Controls', description: "Period locking, payments, write-offs, carry forward & audit", included: true },
     ],
     limits: {
       monthlyVolume: -1,
@@ -342,6 +345,7 @@ export const BILLING_PLANS: BillingPlan[] = [
       { id: 'unlimited-invoices', name: 'Unlimited invoices', description: 'No cap', included: true },
       { id: 'integrations', name: 'ClickUp & integrations', description: 'Connect your team tools', included: true },
       { id: 'volume', name: '$250k volume', description: '0.4% overage', included: true },
+      { id: 'finance-controls', name: 'Finance Controls', description: "Period locking, payments, write-offs, carry forward & audit", included: true },
     ],
     limits: {
       invoicesPerMonth: -1,
@@ -370,6 +374,7 @@ export const BILLING_PLANS: BillingPlan[] = [
       { id: 'custom-seats', name: 'Custom seat pricing', description: 'Tailored to your size', included: true },
       { id: 'custom-volume', name: 'Custom volume', description: 'Flexible limits', included: true },
       { id: 'custom-fees', name: 'Custom fees', description: 'Volume discounts', included: true },
+      { id: 'finance-controls', name: 'Finance Controls', description: "Period locking, payments, write-offs, carry forward & audit", included: true },
     ],
     limits: {
       invoicesPerMonth: -1,

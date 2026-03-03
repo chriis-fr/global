@@ -1,7 +1,8 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { ChevronDown, Crown, ArrowRight, Upload, User, FileText, Calendar, Zap } from 'lucide-react';
+import { ChevronDown, Crown, ArrowRight, Upload, User, FileText, Calendar, Zap, ShieldCheck } from 'lucide-react';
 import NextImage from 'next/image';
+import Link from 'next/link';
 import { fiatCurrencies } from '@/data/currencies';
 import { BILLING_PLANS } from '@/data/billingPlans';
 import { useCurrency } from '@/lib/contexts/CurrencyContext';
@@ -58,8 +59,10 @@ interface ProfileData {
 
 export default function ProfileSettingsPage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const { subscription } = useSubscription();
   const { update: updateSession } = useSession();
+  const isAdmin = session?.user?.adminTag === true;
   const [formData, setFormData] = useState<ProfileData>({
     name: '',
     email: '',
@@ -255,9 +258,20 @@ export default function ProfileSettingsPage() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Profile Settings</h1>
-        <p className="text-blue-200">Manage your personal information and account settings.</p>
+      <div className="mb-8 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Profile Settings</h1>
+          <p className="text-blue-200">Manage your personal information and account settings.</p>
+        </div>
+        {isAdmin && (
+          <Link
+            href="/dashboard/settings/finance-controls"
+            className="inline-flex items-center gap-2 rounded-lg border border-blue-400/60 bg-blue-500/10 px-3 py-2 text-xs font-semibold text-blue-100 hover:bg-blue-500/20 hover:border-blue-300 transition-colors shrink-0"
+          >
+            <ShieldCheck className="h-4 w-4 text-blue-300" />
+            <span>Finance Controls</span>
+          </Link>
+        )}
       </div>
       
       {message && (

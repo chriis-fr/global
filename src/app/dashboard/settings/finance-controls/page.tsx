@@ -15,9 +15,12 @@ import {
   RefreshCw,
   AlertCircle,
 } from 'lucide-react';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { usePermissions } from '@/lib/contexts/PermissionContext';
 import { useSession } from '@/lib/auth-client';
+import { useSubscription } from '@/lib/contexts/SubscriptionContext';
+import { BILLING_PLANS } from '@/data/billingPlans';
+import Link from 'next/link';
 import {
   getFinanceControlsSettings,
   setFinanceControlsSettings,
@@ -31,6 +34,8 @@ import {
   createAdjustment,
   carryForward,
   getFinanceAuditLog,
+  listInvoicesForFinanceControls,
+  type FinanceControlsInvoiceListItem,
 } from '@/lib/actions/finance-controls';
 
 type PeriodRow = {
@@ -61,7 +66,14 @@ function formatPeriodName(start: Date, end: Date): string {
 
 export default function FinanceControlsSettingsPage() {
   const { data: session } = useSession();
+  const { subscription } = useSubscription();
   const { permissions, member } = usePermissions();
+
+  // Admin accounts (adminTag) always get Finance Controls; others need Scale/Enterprise plan
+  const isAdmin = session?.user?.adminTag === true;
+  const billingPlan = subscription?.plan?.planId ? BILLING_PLANS.find(p => p.planId === subscription.plan!.planId) : undefined;
+  const hasFinanceControlsPlan = !!billingPlan && (billingPlan.tier === 'scale' || billingPlan.isEnterprise === true);
+  const canAccessFinanceControls = isAdmin || hasFinanceControlsPlan;
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState<{
     periodLocking: boolean;
@@ -87,6 +99,7 @@ export default function FinanceControlsSettingsPage() {
   const [reopenReason, setReopenReason] = useState('');
   const [reopenPeriodId, setReopenPeriodId] = useState<string | null>(null);
   const [paymentInvoiceId, setPaymentInvoiceId] = useState('');
+  const [paymentInvoiceSummary, setPaymentInvoiceSummary] = useState<{ invoiceNumber: string; clientName: string } | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
   const [paymentMethod, setPaymentMethod] = useState('bank_transfer');
@@ -99,6 +112,57 @@ export default function FinanceControlsSettingsPage() {
   const [carryFromPeriodId, setCarryFromPeriodId] = useState('');
   const [carryToStart, setCarryToStart] = useState('');
   const [carryToEnd, setCarryToEnd] = useState('');
+  const [showInvoicePicker, setShowInvoicePicker] = useState(false);
+  const [invoiceFilterStart, setInvoiceFilterStart] = useState('');
+  const [invoiceFilterEnd, setInvoiceFilterEnd] = useState('');
+  const [invoiceOptions, setInvoiceOptions] = useState<FinanceControlsInvoiceListItem[]>([]);
+  const [invoiceOptionsLoading, setInvoiceOptionsLoading] = useState(false);
+  const [invoiceOptionsError, setInvoiceOptionsError] = useState<string | null>(null);
+  const scrollPositionRef = useRef(0);
+
+  // Lock body/main scroll when invoice picker modal is open (same pattern as create invoice page)
+  useEffect(() => {
+    if (showInvoicePicker) {
+      scrollPositionRef.current = typeof window !== 'undefined' ? window.scrollY : 0;
+      window.scrollTo(0, 0);
+      document.body.style.cssText = `
+        position: fixed !important;
+        top: 0px !important;
+        left: 0px !important;
+        width: 100% !important;
+        overflow: hidden !important;
+      `;
+      document.documentElement.style.cssText = `
+        overflow: hidden !important;
+        position: fixed !important;
+        top: 0px !important;
+        left: 0px !important;
+        width: 100% !important;
+      `;
+      const main = document.querySelector('main');
+      if (main) {
+        (main as HTMLElement).style.cssText = 'overflow: hidden !important;';
+      }
+    } else {
+      document.body.style.cssText = '';
+      document.documentElement.style.cssText = '';
+      const main = document.querySelector('main');
+      if (main) {
+        (main as HTMLElement).style.overflow = '';
+      }
+      if (typeof window !== 'undefined') {
+        window.scrollTo(0, scrollPositionRef.current);
+      }
+    }
+    return () => {
+      document.body.style.cssText = '';
+      document.documentElement.style.cssText = '';
+      const main = document.querySelector('main');
+      if (main) {
+        (main as HTMLElement).style.overflow = '';
+      }
+    };
+  }, [showInvoicePicker]);
 
   const loadAll = useCallback(async () => {
     if (!session?.user?.organizationId) return;
@@ -259,7 +323,7 @@ export default function FinanceControlsSettingsPage() {
   const handlePaymentEntry = async () => {
     const amount = parseFloat(paymentAmount);
     if (!paymentInvoiceId.trim() || !Number.isFinite(amount) || amount <= 0) {
-      setError('Enter a valid invoice ID and amount.');
+      setError('Select an invoice and enter amount.');
       return;
     }
     setSaving(true);
@@ -275,6 +339,7 @@ export default function FinanceControlsSettingsPage() {
     if (res.success) {
       setSuccess('Payment recorded.');
       setPaymentInvoiceId('');
+      setPaymentInvoiceSummary(null);
       setPaymentAmount('');
       setPaymentReference('');
       loadAll();
@@ -336,7 +401,27 @@ export default function FinanceControlsSettingsPage() {
     }
   };
 
-  if (!session?.user?.organizationId) {
+  const loadInvoiceOptions = async () => {
+    setInvoiceOptionsError(null);
+    setInvoiceOptionsLoading(true);
+    try {
+      const res = await listInvoicesForFinanceControls({
+        startDate: invoiceFilterStart ? new Date(invoiceFilterStart) : undefined,
+        endDate: invoiceFilterEnd ? new Date(invoiceFilterEnd) : undefined,
+      });
+      if (res.success && res.data) {
+        setInvoiceOptions(res.data);
+      } else {
+        setInvoiceOptionsError(res.error ?? 'Failed to load invoices');
+      }
+    } catch {
+      setInvoiceOptionsError('Failed to load invoices');
+    } finally {
+      setInvoiceOptionsLoading(false);
+    }
+  };
+
+  if (!session?.user?.organizationId && !isAdmin) {
     return (
       <div className="max-w-3xl mx-auto space-y-6">
         <h1 className="text-2xl font-bold text-white flex items-center gap-3">
@@ -350,7 +435,44 @@ export default function FinanceControlsSettingsPage() {
     );
   }
 
-  if (!hasAccess) {
+  if (!session?.user?.organizationId && isAdmin) {
+    return (
+      <div className="max-w-3xl mx-auto space-y-6">
+        <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+          <ShieldCheck className="h-7 w-7 text-blue-400" />
+          Financial Controls
+        </h1>
+        <div className="rounded-xl border border-blue-500/40 bg-blue-500/10 px-4 py-3 text-sm text-blue-100">
+          Create or join an organization to use Finance Controls. Actions are scoped to an organization.
+        </div>
+      </div>
+    );
+  }
+
+  if (!canAccessFinanceControls) {
+    return (
+      <div className="max-w-3xl mx-auto space-y-6">
+        <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+          <ShieldCheck className="h-7 w-7 text-blue-400" />
+          Financial Controls
+        </h1>
+        <div className="rounded-xl border border-blue-500/40 bg-blue-500/10 px-4 py-4 text-sm text-blue-100 space-y-3">
+          <p className="font-medium">Finance Controls is available on Scale and Enterprise plans.</p>
+          <p className="text-blue-200/90">
+            Period locking, record payments, write-offs, carry forward, and audit log are included with Scale. Upgrade to access.
+          </p>
+          <Link
+            href="/pricing"
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            View plans
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (!hasAccess && !isAdmin) {
     return (
       <div className="max-w-3xl mx-auto space-y-6">
         <h1 className="text-2xl font-bold text-white flex items-center gap-3">
@@ -454,7 +576,7 @@ export default function FinanceControlsSettingsPage() {
             <select
               value={periodForm}
               onChange={(e) => setPeriodForm(e.target.value as 'monthly' | 'quarterly' | 'annual' | 'custom')}
-              className="rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2"
+              className="rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/70"
             >
               <option value="monthly">This month</option>
               <option value="quarterly">This quarter</option>
@@ -467,13 +589,13 @@ export default function FinanceControlsSettingsPage() {
                   type="date"
                   value={customStart}
                   onChange={(e) => setCustomStart(e.target.value)}
-                  className="rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2"
+                  className="rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2 placeholder:text-blue-200/70 focus:outline-none focus:ring-2 focus:ring-blue-500/70"
                 />
                 <input
                   type="date"
                   value={customEnd}
                   onChange={(e) => setCustomEnd(e.target.value)}
-                  className="rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2"
+                  className="rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2 placeholder:text-blue-200/70 focus:outline-none focus:ring-2 focus:ring-blue-500/70"
                 />
               </>
             )}
@@ -610,60 +732,105 @@ export default function FinanceControlsSettingsPage() {
 
       {/* 2. Manual payment entry */}
       <section className="rounded-xl border border-white/10 bg-white/5 p-5">
-        <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+        <h2 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
           <DollarSign className="h-5 w-5 text-blue-300" />
           Record payment
         </h2>
         <p className="text-xs text-blue-200/80 mb-4">Add a payment against an invoice. Invoice status updates from the sum of payments.</p>
-        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
-          <input
-            type="text"
-            value={paymentInvoiceId}
-            onChange={(e) => setPaymentInvoiceId(e.target.value)}
-            placeholder="Invoice ID"
-            className="rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2"
-          />
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            value={paymentAmount}
-            onChange={(e) => setPaymentAmount(e.target.value)}
-            placeholder="Amount"
-            className="rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2"
-          />
-          <input
-            type="date"
-            value={paymentDate}
-            onChange={(e) => setPaymentDate(e.target.value)}
-            className="rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2"
-          />
-          <select
-            value={paymentMethod}
-            onChange={(e) => setPaymentMethod(e.target.value)}
-            className="rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2"
+
+        <div className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="sm:col-span-2 lg:col-span-1">
+              <label className="mb-1.5 block text-xs font-medium text-blue-200/90">Invoice</label>
+              {paymentInvoiceId ? (
+                <div className="flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-3 py-2">
+                  <span className="min-w-0 flex-1 truncate text-sm text-white">
+                    {paymentInvoiceSummary ? `${paymentInvoiceSummary.invoiceNumber} – ${paymentInvoiceSummary.clientName}` : 'Invoice selected'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowInvoicePicker(true);
+                      if (invoiceOptions.length === 0 && !invoiceOptionsLoading) {
+                        void loadInvoiceOptions();
+                      }
+                    }}
+                    className="shrink-0 text-xs font-medium text-blue-300 hover:text-blue-200"
+                  >
+                    Change
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowInvoicePicker(true);
+                    if (invoiceOptions.length === 0 && !invoiceOptionsLoading) {
+                      void loadInvoiceOptions();
+                    }
+                  }}
+                  className="w-full rounded-lg border border-blue-400/50 bg-blue-500/20 px-3 py-2 text-sm font-medium text-blue-100 hover:bg-blue-500/30"
+                >
+                  Pick invoice
+                </button>
+              )}
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-blue-200/90">Amount</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(e.target.value)}
+                placeholder="0.00"
+                className="w-full rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2 placeholder:text-blue-200/50 focus:outline-none focus:ring-2 focus:ring-blue-500/70"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-blue-200/90">Date</label>
+              <input
+                type="date"
+                value={paymentDate}
+                onChange={(e) => setPaymentDate(e.target.value)}
+                className="w-full rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/70"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-blue-200/90">Payment method</label>
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                className="w-full rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/70"
+              >
+                <option value="bank_transfer">Bank transfer</option>
+                <option value="cash">Cash</option>
+                <option value="crypto">Crypto</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="max-w-md">
+            <label className="mb-1.5 block text-xs font-medium text-blue-200/90">Reference (optional)</label>
+            <input
+              type="text"
+              value={paymentReference}
+              onChange={(e) => setPaymentReference(e.target.value)}
+              placeholder="Payment reference"
+              className="w-full rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2 placeholder:text-blue-200/50 focus:outline-none focus:ring-2 focus:ring-blue-500/70"
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={handlePaymentEntry}
+            disabled={saving}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >
-            <option value="bank_transfer">Bank transfer</option>
-            <option value="cash">Cash</option>
-            <option value="crypto">Crypto</option>
-            <option value="other">Other</option>
-          </select>
+            Record payment
+          </button>
         </div>
-        <input
-          type="text"
-          value={paymentReference}
-          onChange={(e) => setPaymentReference(e.target.value)}
-          placeholder="Reference (optional)"
-          className="mt-2 w-full max-w-md rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2"
-        />
-        <button
-          type="button"
-          onClick={handlePaymentEntry}
-          disabled={saving}
-          className="mt-3 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-        >
-          Record payment
-        </button>
       </section>
 
       {/* 3. Write-off / adjustment */}
@@ -677,7 +844,7 @@ export default function FinanceControlsSettingsPage() {
             <select
               value={adjustmentEntityType}
               onChange={(e) => setAdjustmentEntityType(e.target.value as 'invoice' | 'payable')}
-              className="rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2"
+              className="rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/70"
             >
               <option value="invoice">Invoice</option>
               <option value="payable">Payable</option>
@@ -687,12 +854,12 @@ export default function FinanceControlsSettingsPage() {
               value={adjustmentEntityId}
               onChange={(e) => setAdjustmentEntityId(e.target.value)}
               placeholder="Entity ID"
-              className="rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2"
+              className="rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2 placeholder:text-blue-200/70 focus:outline-none focus:ring-2 focus:ring-blue-500/70"
             />
             <select
               value={adjustmentType}
               onChange={(e) => setAdjustmentType(e.target.value as 'WRITE_OFF' | 'CREDIT' | 'CORRECTION')}
-              className="rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2"
+              className="rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/70"
             >
               <option value="WRITE_OFF">Write-off</option>
               <option value="CREDIT">Credit</option>
@@ -705,7 +872,7 @@ export default function FinanceControlsSettingsPage() {
               value={adjustmentAmount}
               onChange={(e) => setAdjustmentAmount(e.target.value)}
               placeholder="Amount"
-              className="rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2"
+              className="rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2 placeholder:text-blue-200/70 focus:outline-none focus:ring-2 focus:ring-blue-500/70"
             />
           </div>
           <input
@@ -713,7 +880,7 @@ export default function FinanceControlsSettingsPage() {
             value={adjustmentReason}
             onChange={(e) => setAdjustmentReason(e.target.value)}
             placeholder="Reason (required)"
-            className="mt-2 w-full max-w-md rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2"
+            className="mt-2 w-full max-w-md rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2 placeholder:text-blue-200/70 focus:outline-none focus:ring-2 focus:ring-blue-500/70"
           />
           <button
             type="button"
@@ -738,7 +905,7 @@ export default function FinanceControlsSettingsPage() {
             <select
               value={carryFromPeriodId}
               onChange={(e) => setCarryFromPeriodId(e.target.value)}
-              className="rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2"
+              className="rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/70"
             >
               <option value="">Select closed period</option>
               {periods.filter((p) => p.status === 'CLOSED' || p.status === 'LOCKED').map((p) => (
@@ -752,14 +919,14 @@ export default function FinanceControlsSettingsPage() {
               value={carryToStart}
               onChange={(e) => setCarryToStart(e.target.value)}
               placeholder="To period start"
-              className="rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2"
+              className="rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2 placeholder:text-blue-200/70 focus:outline-none focus:ring-2 focus:ring-blue-500/70"
             />
             <input
               type="date"
               value={carryToEnd}
               onChange={(e) => setCarryToEnd(e.target.value)}
               placeholder="To period end"
-              className="rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2"
+              className="rounded-lg border border-white/20 bg-white/5 text-white text-sm px-3 py-2 placeholder:text-blue-200/70 focus:outline-none focus:ring-2 focus:ring-blue-500/70"
             />
             <button
               type="button"
@@ -861,6 +1028,138 @@ export default function FinanceControlsSettingsPage() {
             </table>
           </div>
         </section>
+      )}
+
+      {showInvoicePicker && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 overflow-hidden">
+          <div className="w-full max-w-3xl max-h-[90vh] rounded-2xl bg-slate-950 border border-white/15 shadow-2xl flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <DollarSign className="h-4 w-4 text-blue-300" />
+                <h3 className="text-sm md:text-base font-semibold text-white">Pick invoice for payment</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowInvoicePicker(false)}
+                className="rounded-full border border-white/20 px-2 py-1 text-xs text-blue-100 hover:bg-white/10"
+              >
+                Close
+              </button>
+            </div>
+            <div className="px-4 py-3 space-y-3 overflow-y-auto">
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="flex flex-col">
+                  <span className="text-[11px] text-blue-200/80 mb-1">Issue date from</span>
+                  <input
+                    type="date"
+                    value={invoiceFilterStart}
+                    onChange={(e) => setInvoiceFilterStart(e.target.value)}
+                    className="rounded-lg border border-white/25 bg-white/5 text-white text-sm md:text-[15px] font-medium px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/80"
+                  />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[11px] text-blue-200/80 mb-1">Issue date to</span>
+                  <input
+                    type="date"
+                    value={invoiceFilterEnd}
+                    onChange={(e) => setInvoiceFilterEnd(e.target.value)}
+                    className="rounded-lg border border-white/25 bg-white/5 text-white text-sm md:text-[15px] font-medium px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/80"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={loadInvoiceOptions}
+                  disabled={invoiceOptionsLoading}
+                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs md:text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {invoiceOptionsLoading && <Loader2 className="h-3 w-3 animate-spin" />}
+                  Apply filter
+                </button>
+                <span className="text-[11px] text-blue-200/70">
+                  Showing unpaid invoices by default. Use filters to narrow by period.
+                </span>
+              </div>
+              {invoiceOptionsError && (
+                <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-100 flex items-center gap-2">
+                  <AlertCircle className="h-3 w-3" />
+                  {invoiceOptionsError}
+                </div>
+              )}
+              <div className="max-h-80 overflow-y-auto rounded-lg border border-white/10 bg-black/30">
+                <table className="w-full text-xs md:text-sm">
+                  <thead>
+                    <tr className="border-b border-white/10 text-blue-200/80">
+                      <th className="px-3 py-2 text-left">Invoice</th>
+                      <th className="px-3 py-2 text-left">Client</th>
+                      <th className="px-3 py-2 text-left">Issue date</th>
+                      <th className="px-3 py-2 text-left">Due date</th>
+                      <th className="px-3 py-2 text-left">Amount</th>
+                      <th className="px-3 py-2 text-left">Status</th>
+                      <th className="px-3 py-2" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invoiceOptionsLoading && invoiceOptions.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="px-3 py-4 text-center text-blue-200/80">
+                          Loading invoices…
+                        </td>
+                      </tr>
+                    )}
+                    {!invoiceOptionsLoading && invoiceOptions.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="px-3 py-4 text-center text-blue-200/80">
+                          No invoices match this filter.
+                        </td>
+                      </tr>
+                    )}
+                    {invoiceOptions.map((inv) => (
+                      <tr key={inv._id} className="border-t border-white/5">
+                        <td className="px-3 py-2 text-white">
+                          <div className="flex flex-col">
+                            <span className="font-medium">{inv.invoiceNumber}</span>
+                            <span className="text-[11px] text-blue-200/80 truncate max-w-[140px]">
+                              ID: {inv._id}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-blue-100">{inv.clientName}</td>
+                        <td className="px-3 py-2 text-blue-100/80">
+                          {inv.issueDate ? new Date(inv.issueDate).toLocaleDateString() : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-blue-100/80">
+                          {inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-blue-100">
+                          {inv.total.toLocaleString(undefined, { maximumFractionDigits: 2 })}{' '}
+                          <span className="text-blue-300/80">{inv.currency}</span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className="inline-flex rounded-full bg-white/10 px-2 py-0.5 text-[11px] uppercase tracking-wide text-blue-100">
+                            {inv.status}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPaymentInvoiceId(inv._id);
+                              setPaymentInvoiceSummary({ invoiceNumber: inv.invoiceNumber, clientName: inv.clientName });
+                              setShowInvoicePicker(false);
+                            }}
+                            className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                          >
+                            Use for payment
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
