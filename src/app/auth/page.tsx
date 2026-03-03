@@ -192,7 +192,6 @@ function AuthContent() {
               // Only set if not already set (still default)
               if (prev.country === defaultCountry.code) {
                 countryDetectedRef.current = true
-                console.log('🌍 [Auth] Auto-detected country:', country.name)
                 return {
                   ...prev,
                   country: country.code
@@ -203,7 +202,6 @@ function AuthContent() {
           }
         }
       } catch (error) {
-        console.error('❌ [Auth] Failed to detect country:', error)
         // Mark as detected even on error to prevent re-running
         countryDetectedRef.current = true
       } finally {
@@ -257,7 +255,6 @@ function AuthContent() {
     if (invitationData) {
       try {
         const data = JSON.parse(invitationData)
-        console.log('📧 [Auth] Invitation data found:', data)
         
         // Pre-fill all organization data since they're joining an existing company
         setFormData(prev => ({
@@ -279,14 +276,7 @@ function AuthContent() {
         }))
         setIsLogin(false) // Switch to signup mode
         setIsEmailLocked(true) // Lock the email field
-        
-        console.log('✅ [Auth] Pre-filled form with organization invitation data:', {
-          email: data.email,
-          companyName: data.organizationName,
-          industry: data.organizationIndustry
-        })
       } catch (error) {
-        console.error('❌ [Auth] Error parsing invitation data:', error)
         localStorage.removeItem('invitationData') // Clean up invalid data
       }
     }
@@ -310,7 +300,6 @@ function AuthContent() {
     
     // Remove all spaces and ensure proper format
     const cleaned = phone.replace(/\s+/g, '')
-    console.log('📞 [Auth] Phone number cleaned:', { original: phone, cleaned })
     return cleaned
   }
 
@@ -370,7 +359,6 @@ function AuthContent() {
       if (phoneCode) {
         const matchingCountry = countries.find(country => country.phoneCode === phoneCode)
         if (matchingCountry) {
-          console.log('📞 [Auth] Auto-selecting country based on phone code:', matchingCountry.name)
           handleCountryChange(matchingCountry.code)
         }
       }
@@ -405,7 +393,6 @@ function AuthContent() {
           ...prev,
           phone: newPhoneNumber
         }))
-        console.log('📞 [Auth] Updated phone number format for new country:', newPhoneNumber)
       }
     }
   }
@@ -416,7 +403,6 @@ function AuthContent() {
 
   // Handle Google sign in
   const handleGoogleSignIn = async () => {
-    console.log('🔐 [Auth] Initiating Google sign-in...')
     setLoading(true)
     setError('')
     
@@ -427,7 +413,6 @@ function AuthContent() {
       })
       
       if (result?.error) {
-        console.error('❌ [Auth] Google sign-in error:', result.error)
         setError('Google sign-in failed. Please try again.')
         
         // Clear error after 5 seconds
@@ -439,11 +424,9 @@ function AuthContent() {
           errorTimeoutRef.current = null
         }, 5000)
       } else if (result?.ok) {
-        console.log('✅ [Auth] Google sign-in successful, refreshing session...')
         await refreshSession()
       }
     } catch (error) {
-      console.error('❌ [Auth] Google sign-in error:', error)
       setError('An error occurred during Google sign-in.')
       
       // Clear error after 5 seconds
@@ -509,7 +492,6 @@ function AuthContent() {
         setForgotPasswordMessage(result.message || 'An error occurred. Please try again.')
       }
     } catch (error) {
-      console.error('❌ [Auth] Forgot password error:', error)
       setForgotPasswordMessage('An error occurred. Please try again.')
     } finally {
       setForgotPasswordLoading(false)
@@ -555,7 +537,6 @@ function AuthContent() {
         setResetPasswordError(result.message || 'Failed to reset password. Please try again.')
       }
     } catch (error) {
-      console.error('❌ [Auth] Reset password error:', error)
       setResetPasswordError('An error occurred. Please try again.')
     } finally {
       setResetPasswordLoading(false)
@@ -564,21 +545,12 @@ function AuthContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log('🚀 [Auth] Form submitted, mode:', isLogin ? 'login' : 'signup')
-    console.log('📋 [Auth] Form data:', {
-      email: formData.email,
-      name: formData.fullName,
-      userType: formData.userType,
-      hasPassword: !!formData.password,
-      hasAddress: !!formData.address
-    })
     setLoading(true)
     setError('')
 
     try {
       if (isLogin) {
         // Handle login using NextAuth credentials
-        console.log('🔐 [Auth] Attempting login with credentials...')
         const loginResult = await signIn('credentials', {
           email: formData.email,
           password: formData.password,
@@ -586,7 +558,6 @@ function AuthContent() {
         })
         
         if (loginResult?.error) {
-          console.error('❌ [Auth] Login failed:', loginResult.error)
           setError('Invalid email or password')
           
           // Clear error after 5 seconds
@@ -598,13 +569,10 @@ function AuthContent() {
             errorTimeoutRef.current = null
           }, 5000)
         } else if (loginResult?.ok) {
-          console.log('✅ [Auth] Login successful, refreshing session...')
           await refreshSession()
         }
       } else {
         // Handle signup
-        console.log('📝 [Auth] Preparing signup data...')
-        
         // Validate password match
         if (formData.password !== formData.confirmPassword) {
           setError('Passwords do not match. Please ensure both password fields match.')
@@ -671,14 +639,6 @@ function AuthContent() {
           // Add invitation flag if this is an organization invitation
           isInvitationSignup
         }
-        console.log('📤 [Auth] Sending signup request with data:', {
-          email: signupData.email,
-          name: signupData.name,
-          userType: signupData.userType,
-          phone: signupData.phone,
-          hasPassword: !!signupData.password,
-          hasAddress: !!signupData.address
-        })
 
         const response = await fetch('/api/auth/signup', {
           method: 'POST',
@@ -688,17 +648,12 @@ function AuthContent() {
           body: JSON.stringify(signupData),
         })
 
-        console.log('📥 [Auth] Received signup response, status:', response.status)
         const data = await response.json()
-        console.log('📋 [Auth] Response data:', data)
         
         if (data.success) {
-          console.log('✅ [Auth] Signup successful, attempting automatic login...')
-          
           // Automatically log in the user using NextAuth credentials
           if (data.autoLogin) {
             try {
-              console.log('🔐 [Auth] Initiating automatic login with credentials...')
               const loginResult = await signIn('credentials', {
                 email: data.autoLogin.email,
                 password: data.autoLogin.password,
@@ -706,7 +661,6 @@ function AuthContent() {
               })
               
               if (loginResult?.error) {
-                console.error('❌ [Auth] Automatic login failed:', loginResult.error)
                 // Fallback: store user data and redirect anyway
                 localStorage.setItem('user', JSON.stringify(data.data))
                 // If this was an organization invitation, go to dashboard
@@ -716,12 +670,10 @@ function AuthContent() {
                   window.location.href = '/onboarding'
                 }
               } else if (loginResult?.ok) {
-                console.log('✅ [Auth] Automatic login successful, refreshing session...')
                 await refreshSession()
                 // Check if this signup was triggered by an invoice token
                 const invoiceToken = searchParams?.get('invoiceToken')
                 if (invoiceToken) {
-                  console.log('🔗 [Auth] Processing invoice token:', invoiceToken)
                   try {
                     // Process the invoice token to create payable
                     const invoiceResponse = await fetch('/api/invoice-access/process-signup', {
@@ -737,16 +689,13 @@ function AuthContent() {
                     
                     const invoiceData = await invoiceResponse.json()
                     if (invoiceData.success) {
-                      console.log('✅ [Auth] Invoice payable created successfully')
                       // Redirect to payables page to show the invoice
                       window.location.href = '/dashboard/services/payables'
                     } else {
-                      console.log('⚠️ [Auth] Failed to create invoice payable:', invoiceData.message)
                       // Still redirect to onboarding
                       window.location.href = '/onboarding'
                     }
                   } catch (invoiceError) {
-                    console.error('❌ [Auth] Error processing invoice token:', invoiceError)
                     // Fallback to onboarding
                     window.location.href = '/onboarding'
                   }
@@ -754,7 +703,6 @@ function AuthContent() {
                   // Check if this signup was triggered by an organization invitation
                   const invitationData = localStorage.getItem('invitationData')
                   if (invitationData) {
-                    console.log('🔗 [Auth] Processing organization invitation...')
                     try {
                       const invitation = JSON.parse(invitationData)
                       
@@ -772,7 +720,6 @@ function AuthContent() {
                       
                       const invitationResult = await invitationResponse.json()
                       if (invitationResult.success) {
-                        console.log('✅ [Auth] Organization invitation completed successfully')
                         localStorage.removeItem('invitationData')
                         // Force JWT refresh from DB (NextAuth update) then sync our session context
                         try {
@@ -783,13 +730,11 @@ function AuthContent() {
                         }
                         window.location.href = '/dashboard'
                       } else {
-                        console.log('⚠️ [Auth] Failed to complete organization invitation:', invitationResult.message)
                         // Clean up invitation data and redirect to dashboard (skip onboarding for org members)
                         localStorage.removeItem('invitationData')
                         window.location.href = '/dashboard'
                       }
                     } catch (invitationError) {
-                      console.error('❌ [Auth] Error processing organization invitation:', invitationError)
                       // Clean up invitation data and fallback to dashboard
                       localStorage.removeItem('invitationData')
                       window.location.href = '/dashboard'
@@ -810,7 +755,6 @@ function AuthContent() {
                 }
               }
             } catch (loginError) {
-              console.error('❌ [Auth] Error during automatic login:', loginError)
               // Fallback: store user data and redirect anyway
               localStorage.setItem('user', JSON.stringify(data.data))
               if (!!localStorage.getItem('invitationData')) {
@@ -821,7 +765,6 @@ function AuthContent() {
             }
           } else {
             // Fallback if no autoLogin data
-            console.log('⚠️ [Auth] No autoLogin data, using fallback...')
             localStorage.setItem('user', JSON.stringify(data.data))
             if (!!localStorage.getItem('invitationData')) {
               window.location.href = '/dashboard'
@@ -840,7 +783,6 @@ function AuthContent() {
             }
           }
         } else {
-          console.log('❌ [Auth] Signup failed:', data.message)
           setError(data.message)
           
           // Clear error after 5 seconds
@@ -854,12 +796,6 @@ function AuthContent() {
         }
       }
       } catch (error) {
-        console.error('❌ [Auth] Auth error:', error)
-        console.error('🔍 [Auth] Error details:', {
-          name: error instanceof Error ? error.name : 'Unknown',
-          message: error instanceof Error ? error.message : 'Unknown error',
-          stack: error instanceof Error ? error.stack : 'No stack trace'
-        })
         setError('An error occurred. Please try again.')
         
         // Clear error after 5 seconds
@@ -871,7 +807,6 @@ function AuthContent() {
           errorTimeoutRef.current = null
         }, 5000)
     } finally {
-      console.log('🏁 [Auth] Auth process completed')
       setLoading(false)
     }
   }
