@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 
 const BAR_HEIGHT = 2;
@@ -37,14 +37,14 @@ export function RouteProgress() {
   const loadingTarget = useRef<HTMLElement | null>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
-  const clearLoadingState = () => {
+  const clearLoadingState = useCallback(() => {
     if (loadingTarget.current) {
       loadingTarget.current.removeAttribute('data-route-loading');
       loadingTarget.current = null;
     }
-  };
+  }, []);
 
-  const startProgress = (target: HTMLElement | null) => {
+  const startProgress = useCallback((target: HTMLElement | null) => {
     timers.current.forEach((t) => clearTimeout(t));
     timers.current = [];
     clearLoadingState();
@@ -57,9 +57,9 @@ export function RouteProgress() {
     requestAnimationFrame(() => {
       setPercent(70);
     });
-  };
+  }, [clearLoadingState]);
 
-  const finishProgress = () => {
+  const finishProgress = useCallback(() => {
     setPercent(100);
     timers.current.push(
       setTimeout(() => {
@@ -68,14 +68,14 @@ export function RouteProgress() {
         clearLoadingState();
       }, DURATION_FINISH)
     );
-  };
+  }, [clearLoadingState]);
 
   useEffect(() => {
     if (prevPathname.current !== pathname) {
       finishProgress();
       prevPathname.current = pathname;
     }
-  }, [pathname]);
+  }, [pathname, finishProgress]);
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
@@ -91,7 +91,7 @@ export function RouteProgress() {
       timers.current.forEach((t) => clearTimeout(t));
       clearLoadingState();
     };
-  }, []);
+  }, [startProgress, clearLoadingState]);
 
   if (!visible) return null;
 

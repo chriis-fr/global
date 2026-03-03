@@ -201,7 +201,7 @@ function AuthContent() {
             })
           }
         }
-      } catch (error) {
+      } catch {
         // Mark as detected even on error to prevent re-running
         countryDetectedRef.current = true
       } finally {
@@ -276,7 +276,7 @@ function AuthContent() {
         }))
         setIsLogin(false) // Switch to signup mode
         setIsEmailLocked(true) // Lock the email field
-      } catch (error) {
+      } catch {
         localStorage.removeItem('invitationData') // Clean up invalid data
       }
     }
@@ -426,7 +426,7 @@ function AuthContent() {
       } else if (result?.ok) {
         await refreshSession()
       }
-    } catch (error) {
+    } catch {
       setError('An error occurred during Google sign-in.')
       
       // Clear error after 5 seconds
@@ -491,7 +491,7 @@ function AuthContent() {
       } else {
         setForgotPasswordMessage(result.message || 'An error occurred. Please try again.')
       }
-    } catch (error) {
+    } catch {
       setForgotPasswordMessage('An error occurred. Please try again.')
     } finally {
       setForgotPasswordLoading(false)
@@ -536,7 +536,7 @@ function AuthContent() {
       } else {
         setResetPasswordError(result.message || 'Failed to reset password. Please try again.')
       }
-    } catch (error) {
+    } catch {
       setResetPasswordError('An error occurred. Please try again.')
     } finally {
       setResetPasswordLoading(false)
@@ -695,7 +695,7 @@ function AuthContent() {
                       // Still redirect to onboarding
                       window.location.href = '/onboarding'
                     }
-                  } catch (invoiceError) {
+                  } catch {
                     // Fallback to onboarding
                     window.location.href = '/onboarding'
                   }
@@ -734,7 +734,7 @@ function AuthContent() {
                         localStorage.removeItem('invitationData')
                         window.location.href = '/dashboard'
                       }
-                    } catch (invitationError) {
+                    } catch {
                       // Clean up invitation data and fallback to dashboard
                       localStorage.removeItem('invitationData')
                       window.location.href = '/dashboard'
@@ -754,7 +754,7 @@ function AuthContent() {
                   }
                 }
               }
-            } catch (loginError) {
+            } catch {
               // Fallback: store user data and redirect anyway
               localStorage.setItem('user', JSON.stringify(data.data))
               if (!!localStorage.getItem('invitationData')) {
@@ -795,7 +795,7 @@ function AuthContent() {
           }, 5000)
         }
       }
-      } catch (error) {
+      } catch {
         setError('An error occurred. Please try again.')
         
         // Clear error after 5 seconds

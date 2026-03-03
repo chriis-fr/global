@@ -306,7 +306,7 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
         // Organization read-only when trial ended (add-on: view-only until they pay)
         const orgReadOnlyDueToTrialEnd = isTrialPremiumPlan && !isTrialActive;
         // Organization read-only when subscription overdue: past_due OR period ended and 3+ days past grace
-        const orgSubscriptionOverdue = isPastDue || (orgHasPaystackSubscription && orgCurrentPeriodEnd && currentDate > orgGracePeriodEnd);
+        const orgSubscriptionOverdue = isPastDue || (orgHasPaystackSubscription && orgCurrentPeriodEnd && orgGracePeriodEnd != null && currentDate > orgGracePeriodEnd);
         const orgReadOnlyDueToOverdue = isPaidPlan && orgSubscriptionOverdue;
         
         const orgReadOnly = orgReadOnlyDueToTrialEnd || orgReadOnlyDueToOverdue;
