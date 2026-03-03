@@ -16,6 +16,11 @@ interface PermissionContextType {
     canViewFinancialData: boolean;
     canExportData: boolean;
     canMarkInvoiceAsPaid: boolean;
+    canClosePeriod: boolean;
+    canReopenPeriod: boolean;
+    canWriteOff: boolean;
+    canBulkUpdate: boolean;
+    canViewAudit: boolean;
   };
   member: OrganizationMember | null;
   loading: boolean;
@@ -41,6 +46,11 @@ export function PermissionProvider({ children }: PermissionProviderProps) {
     canViewFinancialData: false,
     canExportData: false,
     canMarkInvoiceAsPaid: false,
+    canClosePeriod: false,
+    canReopenPeriod: false,
+    canWriteOff: false,
+    canBulkUpdate: false,
+    canViewAudit: false,
   });
   const [member, setMember] = useState<OrganizationMember | null>(null);
   const [loading, setLoading] = useState(true);
@@ -134,6 +144,11 @@ export function PermissionProvider({ children }: PermissionProviderProps) {
         canViewFinancialData: false,
         canExportData: false,
         canMarkInvoiceAsPaid: false,
+        canClosePeriod: false,
+        canReopenPeriod: false,
+        canWriteOff: false,
+        canBulkUpdate: false,
+        canViewAudit: false,
       });
       setMember(null);
     }

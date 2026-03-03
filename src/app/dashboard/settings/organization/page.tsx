@@ -447,6 +447,10 @@ export default function OrganizationSettingsPage() {
   const hasOrganizationAccess = subscription?.canCreateOrganization || (orgInfo?.hasOrganization && orgInfo?.organization);
   const isTrialUser = subscription?.isTrialActive && subscription?.plan?.planId === 'trial-premium';
 
+  // Finance Controls is reserved for Scale and Enterprise plans only (not Growth, Individual, or Free)
+  const billingPlan = subscription?.plan?.planId ? BILLING_PLANS.find(p => p.planId === subscription.plan!.planId) : undefined;
+  const hasFinanceControlsPlan = !!billingPlan && (billingPlan.tier === 'scale' || billingPlan.isEnterprise === true);
+
   if (loading) {
     return (
       <div className="max-w-4xl mx-auto">
@@ -546,27 +550,61 @@ export default function OrganizationSettingsPage() {
 
   return (
     <div className="max-w-4xl mx-auto w-full">
-      <div className="mb-8">
-        {fromPricing && (
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+        <div className="flex-1 min-w-0">
+          {fromPricing && (
+            <button
+              type="button"
+              onClick={() => router.push('/pricing')}
+              className="inline-flex items-center gap-2 text-blue-300 hover:text-white text-sm mb-4"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to pricing
+            </button>
+          )}
+          <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Organization Settings</h1>
+          <p className="text-blue-200">
+            {orgInfo?.hasOrganization 
+              ? 'Manage your organization information and team members.'
+              : fromPricing
+                ? 'Create an organisation to choose team plans and seats on the pricing page.'
+                : 'Create an organization or manage your personal business information.'
+            }
+          </p>
+        </div>
+        {orgInfo?.hasOrganization && hasFinanceControlsPlan && (
           <button
             type="button"
-            onClick={() => router.push('/pricing')}
-            className="inline-flex items-center gap-2 text-blue-300 hover:text-white text-sm mb-4"
+            onClick={() => router.push('/dashboard/settings/finance-controls')}
+            className="inline-flex items-center gap-2 rounded-lg border border-blue-400/60 bg-blue-500/10 px-3 py-2 text-xs font-semibold text-blue-100 hover:bg-blue-500/20 hover:border-blue-300 transition-colors"
           >
-            <ArrowLeft className="h-4 w-4" />
-            Back to pricing
+            <Crown className="h-4 w-4 text-blue-300" />
+            <span>Finance Controls</span>
           </button>
         )}
-        <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Organization Settings</h1>
-        <p className="text-blue-200">
-          {orgInfo?.hasOrganization 
-            ? 'Manage your organization information and team members.'
-            : fromPricing
-              ? 'Create an organisation to choose team plans and seats on the pricing page.'
-              : 'Create an organization or manage your personal business information.'
-          }
-        </p>
       </div>
+
+      {/* Compact plan line – informative only, ~50% less space */}
+      {subscription && (
+        <div className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-blue-200/90">
+          <span className="font-medium text-blue-100">
+            {getCurrentPlanName()}
+          </span>
+          <span className="text-blue-200/70">
+            {subscription.plan?.planId === 'trial-premium' && !subscription.isTrialActive
+              ? 'Trial ended — upgrade to continue'
+              : subscription.isTrialActive
+                ? `Trial · ${subscription.trialDaysRemaining ?? 0} ${subscription.trialDaysRemaining === 1 ? 'day' : 'days'} left`
+                : (subscription.status === 'active' ? 'Active' : subscription.status ?? '')}
+          </span>
+          {subscription.plan && (
+            <span className="text-blue-200/70">
+              Invoices: {subscription.usage.invoicesThisMonth}
+              {subscription.limits.invoicesPerMonth < 0 ? ' (unlimited)' : ` / ${subscription.limits.invoicesPerMonth}`}
+            </span>
+          )}
+        </div>
+      )}
       
       {message && (
         <div className={`mb-6 p-4 rounded-lg relative ${
@@ -1276,7 +1314,7 @@ export default function OrganizationSettingsPage() {
             ? 'invoices'
             : 'bills';
         return (
-          <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
+          <div id="approval-settings" className="bg-white/10 backdrop-blur-sm rounded-xl p-6 scroll-mt-4">
             <div className="flex items-center space-x-3 mb-6">
               <Settings className="h-6 w-6 text-blue-400" />
               <h2 className="text-xl font-semibold text-white">Approval Settings</h2>

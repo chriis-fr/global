@@ -60,7 +60,13 @@ export class RBACService {
         
         // Audit and Compliance
         { action: 'read', resource: 'audit_log' },
-        { action: 'export', resource: 'audit_log' }
+        { action: 'export', resource: 'audit_log' },
+        // Finance Controls Add-On
+        { action: 'close', resource: 'accounting_period' },
+        { action: 'reopen', resource: 'accounting_period' },
+        { action: 'write_off', resource: 'adjustment' },
+        { action: 'bulk_update', resource: 'invoice' },
+        { action: 'read', resource: 'finance_audit' }
       ],
       restrictions: []
     },
@@ -110,7 +116,13 @@ export class RBACService {
         
         // Audit and Compliance
         { action: 'read', resource: 'audit_log' },
-        { action: 'export', resource: 'audit_log' }
+        { action: 'export', resource: 'audit_log' },
+        // Finance Controls Add-On
+        { action: 'close', resource: 'accounting_period' },
+        { action: 'reopen', resource: 'accounting_period' },
+        { action: 'write_off', resource: 'adjustment' },
+        { action: 'bulk_update', resource: 'invoice' },
+        { action: 'read', resource: 'finance_audit' }
       ],
       restrictions: []
     },
@@ -132,7 +144,11 @@ export class RBACService {
         
         // Limited organization access
         { action: 'read', resource: 'organization' },
-        { action: 'read', resource: 'member' }
+        { action: 'read', resource: 'member' },
+        // Finance Controls Add-On (no close/reopen; can write-off and bulk)
+        { action: 'write_off', resource: 'adjustment' },
+        { action: 'bulk_update', resource: 'invoice' },
+        { action: 'read', resource: 'finance_audit' }
       ],
       restrictions: [
         // Cannot manage treasury
@@ -223,7 +239,9 @@ export class RBACService {
         
         // Audit access
         { action: 'read', resource: 'audit_log' },
-        { action: 'export', resource: 'audit_log' }
+        { action: 'export', resource: 'audit_log' },
+        // Finance Controls Add-On (view only)
+        { action: 'read', resource: 'finance_audit' }
       ],
       restrictions: [
         // Cannot create or manage bills
@@ -335,6 +353,23 @@ export class RBACService {
   // Check if user can mark invoices as paid
   static canMarkInvoiceAsPaid(member: OrganizationMember): boolean {
     return this.hasPermission(member, 'mark_paid', 'invoice');
+  }
+
+  // Finance Controls Add-On
+  static canClosePeriod(member: OrganizationMember): boolean {
+    return this.hasPermission(member, 'close', 'accounting_period');
+  }
+  static canReopenPeriod(member: OrganizationMember): boolean {
+    return this.hasPermission(member, 'reopen', 'accounting_period');
+  }
+  static canWriteOff(member: OrganizationMember): boolean {
+    return this.hasPermission(member, 'write_off', 'adjustment');
+  }
+  static canBulkUpdate(member: OrganizationMember): boolean {
+    return this.hasPermission(member, 'bulk_update', 'invoice');
+  }
+  static canViewFinanceAudit(member: OrganizationMember): boolean {
+    return this.hasPermission(member, 'read', 'finance_audit');
   }
 
   // Get approval limits for a user
