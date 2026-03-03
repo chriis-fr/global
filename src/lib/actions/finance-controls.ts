@@ -371,6 +371,99 @@ export async function lockPeriod(periodId: string): Promise<{ success: boolean; 
   }
 }
 
+/** List all accounting periods for the org (for table view). */
+export async function listPeriods(): Promise<{
+  success: boolean;
+    data?: Array<{
+    _id: string;
+    organizationId: ObjectId;
+    startDate: Date;
+    endDate: Date;
+    status: 'OPEN' | 'CLOSED' | 'LOCKED';
+    closedAt?: Date;
+    closedBy?: ObjectId;
+    createdAt: Date;
+    updatedAt: Date;
+    closedAtISO?: string;
+    closedByUserId?: string;
+  }>;
+  error?: string;
+}> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) return { success: false, error: 'Unauthorized' };
+
+    const db = await getDatabase();
+    const ctx = await getOrgIdAndMember(db, session.user.id!, session.user.email);
+    if (!ctx) return { success: false, error: 'Organization not found' };
+
+    const rows = await db
+      .collection<AccountingPeriod>(COLL.PERIODS)
+      .find({ organizationId: ctx.organizationId })
+      .sort({ endDate: -1 })
+      .limit(100)
+      .toArray();
+
+    const data = rows.map((p) => {
+      const doc = p as AccountingPeriod & { _id?: ObjectId; closedAt?: Date; closedBy?: ObjectId };
+      return {
+        ...doc,
+        _id: doc._id?.toString() ?? '',
+        closedAtISO: doc.closedAt?.toISOString?.(),
+        closedByUserId: doc.closedBy?.toString?.(),
+      };
+    });
+    return { success: true, data };
+  } catch (e) {
+    console.error('[finance-controls] listPeriods:', e);
+    return { success: false, error: 'Failed to list periods' };
+  }
+}
+
+/** Reopen a closed or locked period (permission required; reason logged in audit). */
+export async function reopenPeriod(periodId: string, reason: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) return { success: false, error: 'Unauthorized' };
+
+    const db = await getDatabase();
+    const ctx = await getOrgIdAndMember(db, session.user.id!, session.user.email);
+    if (!ctx) return { success: false, error: 'Organization not found' };
+
+    if (!RBACService.canReopenPeriod(ctx.member))
+      return { success: false, error: 'Insufficient permission to reopen period' };
+
+    const pid = new ObjectId(periodId);
+    const period = await db.collection<AccountingPeriod>(COLL.PERIODS).findOne({
+      _id: pid,
+      organizationId: ctx.organizationId,
+    });
+    if (!period) return { success: false, error: 'Period not found' };
+    if (period.status === 'OPEN') return { success: true };
+
+    const previousStatus = period.status;
+    const settings = await getFinanceSettings(db, ctx.organizationId);
+    const userId = session.user.id ? new ObjectId(session.user.id) : undefined;
+
+    await db.collection(COLL.PERIODS).updateOne(
+      { _id: pid, organizationId: ctx.organizationId },
+      {
+        $set: { status: 'OPEN', updatedAt: new Date() },
+        $unset: { closedAt: '', closedBy: '' },
+      }
+    );
+
+    if (settings?.auditLog && userId) {
+      await appendAudit(db, ctx.organizationId, userId, 'accounting_period', pid, 'REOPEN', { status: previousStatus, reason }, { status: 'OPEN' });
+    }
+
+    return { success: true };
+  } catch (e) {
+    console.error('[finance-controls] reopenPeriod:', e);
+    return { success: false, error: 'Failed to reopen period' };
+  }
+}
+
 /** Sum of payment entries for an invoice. */
 async function sumPaymentsForInvoice(
   db: Awaited<ReturnType<typeof getDatabase>>,
@@ -766,6 +859,16 @@ export async function getFinanceAuditLog(options?: {
   }
 }
 
+/** Build invoice base query for org so it matches dashboard/smart invoicing (string or ObjectId organizationId). */
+function invoiceBaseQueryForOrg(organizationId: string | unknown): Record<string, unknown> {
+  const orgId = organizationId as string | undefined;
+  if (!orgId) return {};
+  const isOrgObjectId = typeof orgId === 'string' && /^[0-9a-fA-F]{24}$/.test(orgId);
+  return isOrgObjectId
+    ? { $or: [{ organizationId: orgId }, { organizationId: new ObjectId(orgId) }] }
+    : { organizationId: orgId };
+}
+
 /** Financial insights (AR aging, payment velocity, overdue count, volume trend) — calculated from existing data, no new API. */
 export async function getFinancialInsights(periodStart?: Date, periodEnd?: Date): Promise<{
   success: boolean;
@@ -786,6 +889,10 @@ export async function getFinancialInsights(periodStart?: Date, periodEnd?: Date)
     const ctx = await getOrgIdAndMember(db, session.user.id!, session.user.email);
     if (!ctx) return { success: false, error: 'Organization not found' };
 
+    // Use same base query as dashboard so numbers match (string or ObjectId organizationId)
+    const baseQuery = invoiceBaseQueryForOrg(session.user.organizationId);
+    const unpaidStatuses = ['sent', 'pending', 'overdue', 'approved'];
+
     const now = new Date();
     const start = periodStart ? new Date(periodStart) : new Date(now.getFullYear(), now.getMonth(), 1);
     const end = periodEnd ? new Date(periodEnd) : now;
@@ -793,9 +900,8 @@ export async function getFinancialInsights(periodStart?: Date, periodEnd?: Date)
     const unpaidInvoices = await db
       .collection(COLL.INVOICES)
       .find({
-        organizationId: ctx.organizationId,
-        status: { $in: ['sent', 'pending', 'overdue'] },
-        total: { $gt: 0 },
+        ...baseQuery,
+        status: { $in: unpaidStatuses },
       })
       .toArray();
 
@@ -815,8 +921,9 @@ export async function getFinancialInsights(periodStart?: Date, periodEnd?: Date)
       else days90Plus += amt;
     }
 
+    const paymentBaseQuery = invoiceBaseQueryForOrg(session.user.organizationId);
     const paidInPeriodRaw = await db.collection(COLL.PAYMENTS).find({
-      organizationId: ctx.organizationId,
+      ...paymentBaseQuery,
       paymentDate: { $gte: start, $lte: end },
     }).toArray();
     const paidInPeriod = paidInPeriodRaw as Array<{ invoiceId?: ObjectId }>;
@@ -832,7 +939,7 @@ export async function getFinancialInsights(periodStart?: Date, periodEnd?: Date)
     for (const invId of paidInvIds) {
       const inv = await db.collection(COLL.INVOICES).findOne({
         _id: new ObjectId(invId),
-        organizationId: ctx.organizationId,
+        ...baseQuery,
         status: 'paid',
       });
       if (inv?.issueDate && inv?.updatedAt) {
@@ -844,20 +951,20 @@ export async function getFinancialInsights(periodStart?: Date, periodEnd?: Date)
     const paymentVelocity = countPaid > 0 ? sumDaysToPay / countPaid : 0;
 
     const overdueCount = await db.collection(COLL.INVOICES).countDocuments({
-      organizationId: ctx.organizationId,
-      status: { $in: ['sent', 'pending', 'overdue'] },
+      ...baseQuery,
+      status: { $in: unpaidStatuses },
       dueDate: { $lt: now },
     });
 
     const volumeTrend = await db.collection(COLL.INVOICES).aggregate([
       {
         $match: {
-          organizationId: ctx.organizationId,
+          ...baseQuery,
           issueDate: { $gte: start, $lte: end },
           status: { $ne: 'draft' },
         },
       },
-      { $group: { _id: null, total: { $sum: '$total' } } },
+      { $group: { _id: null, total: { $sum: { $ifNull: ['$totalAmount', '$total', 0] } } } },
     ]).toArray();
     const volume = (volumeTrend[0] as { total?: number } | undefined)?.total ?? 0;
 

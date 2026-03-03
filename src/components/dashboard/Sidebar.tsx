@@ -449,10 +449,10 @@ function Sidebar() {
                 if (link.key === 'integrations') {
                   return session?.user?.adminTag === true;
                 }
-                // Finance Controls button in Settings is only for individual accounts;
-                // organizations access it from the Organization Settings page.
+                // Finance Controls in Settings dropdown is only for true individual accounts
+                // (no organization attached). Organizations access it from Organization Settings.
                 if (link.key === 'finance-controls') {
-                  return !session?.user?.organizationId;
+                  return session?.user?.userType === 'individual' && !session.user.organizationId;
                 }
                 return true;
               }).map(link => {
