@@ -10,6 +10,7 @@ import { SubscriptionProvider } from "@/lib/contexts/SubscriptionContext";
 import { PermissionProvider } from "@/lib/contexts/PermissionContext";
 import { PayablesProvider } from "@/lib/contexts/PayablesContext";
 import CursorManager from "@/components/CursorManager";
+import { RouteProgress } from "@/components/RouteProgress";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import type { SubscriptionData } from '@/lib/actions/subscription';
 import type { PreferredCurrencyResult } from '@/lib/actions/currency';
@@ -45,6 +46,7 @@ export function ProvidersWrapper({
                       <PayablesProvider>
                         <ErrorBoundary>
                           <CursorManager />
+                          <RouteProgress />
                         </ErrorBoundary>
                         {children}
                         <Toaster 

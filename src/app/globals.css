@@ -173,6 +173,14 @@ html[data-landing-page="true"] {
   cursor: none !important;
 }
 
+/* Route progress: instant feedback on nav link/button click (< 100ms) */
+[data-route-loading] {
+  opacity: 0.85;
+  cursor: wait !important;
+  pointer-events: none;
+  transition: opacity 0.08s ease-out;
+}
+
 /* Ensure cursor is ALWAYS visible on all pages except landing page */
 /* This is critical to override any cursor: none styles */
 body:not([data-landing-page="true"]),
