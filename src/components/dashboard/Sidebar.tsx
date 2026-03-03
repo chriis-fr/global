@@ -43,6 +43,12 @@ const SETTINGS_LINKS = [
   { key: 'organization', label: 'Organization', icon: Building2, href: '/dashboard/settings/organization' },
   { key: 'logos', label: 'Logo Management', icon: ImageIcon, href: '/dashboard/settings/logos' },
   { key: 'payment-methods', label: 'Payment Methods', icon: CreditCard, href: '/dashboard/settings/payment-methods' },
+  {
+    key: 'finance-controls',
+    label: 'Controls',
+    icon: Crown,
+    href: '/dashboard/settings/finance-controls'
+  },
   { key: 'integrations', label: 'Integrations', icon: Plug, href: '/dashboard/settings/integrations' },
   // { key: 'notifications', label: 'Notifications', icon: Bell, href: '/dashboard/settings/notifications' },
   { key: 'help', label: 'Help & Support', icon: HelpCircle, href: '/dashboard/settings/help' },
@@ -290,16 +296,16 @@ function Sidebar() {
 
             {(sidebarReady
               ? SERVICE_LINKS.filter(link => {
-                  const isServiceEnabled = session?.user?.services?.[link.key] || false;
-                  if (link.key === 'accountsPayable') {
-                    return (subscription?.canAccessPayables || false) && isServiceEnabled;
-                  }
-                  if (link.key === 'smartInvoicing') {
-                    const isPayablesOnly = subscription?.plan?.type === 'payables';
-                    return !isPayablesOnly && isServiceEnabled;
-                  }
-                  return isServiceEnabled;
-                })
+                const isServiceEnabled = session?.user?.services?.[link.key] || false;
+                if (link.key === 'accountsPayable') {
+                  return (subscription?.canAccessPayables || false) && isServiceEnabled;
+                }
+                if (link.key === 'smartInvoicing') {
+                  const isPayablesOnly = subscription?.plan?.type === 'payables';
+                  return !isPayablesOnly && isServiceEnabled;
+                }
+                return isServiceEnabled;
+              })
               : []
             ).map(link => {
               const active = (pathname ?? '').startsWith(link.href);
@@ -323,11 +329,9 @@ function Sidebar() {
                         handleMobileNavigation(link.href);
                       }
                     }}
-                    className={`flex items-center rounded-lg text-sm font-medium cursor-pointer ${
-                      collapsed ? 'p-1.5 justify-center' : 'px-3 py-3'
-                    } ${
-                      active ? 'bg-blue-600 text-white' : 'text-white/70 hover:bg-white/10'
-                    }`}
+                    className={`flex items-center rounded-lg text-sm font-medium cursor-pointer ${collapsed ? 'p-1.5 justify-center' : 'px-3 py-3'
+                      } ${active ? 'bg-blue-600 text-white' : 'text-white/70 hover:bg-white/10'
+                      }`}
                     style={{ touchAction: 'manipulation' }}
                   >
                     <link.icon className={`${collapsed ? 'h-11 w-11 shrink-0' : 'h-5 w-5 mr-3'}`} />
@@ -340,11 +344,9 @@ function Sidebar() {
                 <Link
                   key={link.key}
                   href={link.href}
-                  className={`flex items-center rounded-lg text-sm font-medium ${
-                    collapsed ? 'p-2 justify-center' : 'px-3 py-3'
-                  } ${
-                    active ? 'bg-blue-600 text-white' : 'text-white/70 hover:bg-white/10'
-                  }`}
+                  className={`flex items-center rounded-lg text-sm font-medium ${collapsed ? 'p-2 justify-center' : 'px-3 py-3'
+                    } ${active ? 'bg-blue-600 text-white' : 'text-white/70 hover:bg-white/10'
+                    }`}
                 >
                   <link.icon className={`${collapsed ? 'h-11 w-11 shrink-0' : 'h-5 w-5 mr-3'}`} />
                   {(!isCollapsed || isAutoHidden) && link.label}
@@ -391,9 +393,8 @@ function Sidebar() {
                           handleMobileNavigation(link.href);
                         }
                       }}
-                      className={`flex items-center px-3 py-3 rounded-lg text-sm font-medium cursor-pointer ${
-                        active ? 'bg-blue-800 text-white' : 'text-white/80 hover:bg-blue-900/50'
-                      }`}
+                      className={`flex items-center px-3 py-3 rounded-lg text-sm font-medium cursor-pointer ${active ? 'bg-blue-800 text-white' : 'text-white/80 hover:bg-blue-900/50'
+                        }`}
                       style={{ touchAction: 'manipulation' }}
                     >
                       <link.icon className="h-4 w-4 mr-3" />
@@ -410,9 +411,8 @@ function Sidebar() {
                   <Link
                     key={link.key}
                     href={link.href}
-                    className={`flex items-center px-3 py-3 rounded-lg text-sm font-medium ${
-                      active ? 'bg-blue-800 text-white' : 'text-white/80 hover:bg-blue-900/50'
-                    }`}
+                    className={`flex items-center px-3 py-3 rounded-lg text-sm font-medium ${active ? 'bg-blue-800 text-white' : 'text-white/80 hover:bg-blue-900/50'
+                      }`}
                   >
                     <link.icon className="h-4 w-4 mr-3" />
                     {(!isCollapsed || isAutoHidden) && link.label}
@@ -439,7 +439,7 @@ function Sidebar() {
               <User className="h-5 w-5 mr-3" />
               {(!isCollapsed || isAutoHidden) && 'Settings'}
             </span>
-            <ChevronRight  className={`h-4 w-4 text-white transition-transform duration-200 ${isSettingsOpen ? 'rotate-90' : ''}`} />
+            <ChevronRight className={`h-4 w-4 text-white transition-transform duration-200 ${isSettingsOpen ? 'rotate-90' : ''}`} />
           </button>
 
           {isSettingsOpen && (
@@ -448,6 +448,11 @@ function Sidebar() {
                 // Only show integrations for admin accounts (adminTag)
                 if (link.key === 'integrations') {
                   return session?.user?.adminTag === true;
+                }
+                // Finance Controls button in Settings is only for individual accounts;
+                // organizations access it from the Organization Settings page.
+                if (link.key === 'finance-controls') {
+                  return !session?.user?.organizationId;
                 }
                 return true;
               }).map(link => {
@@ -470,9 +475,8 @@ function Sidebar() {
                           handleMobileNavigation(link.href);
                         }
                       }}
-                      className={`flex items-center px-3 py-3 rounded-lg text-sm font-medium cursor-pointer ${
-                        active ? 'bg-blue-800 text-white' : 'text-white/80 hover:bg-blue-900/50'
-                      }`}
+                      className={`flex items-center px-3 py-3 rounded-lg text-sm font-medium cursor-pointer ${active ? 'bg-blue-800 text-white' : 'text-white/80 hover:bg-blue-900/50'
+                        }`}
                       style={{ touchAction: 'manipulation' }}
                     >
                       <link.icon className="h-5 w-5 mr-3" />
@@ -485,9 +489,8 @@ function Sidebar() {
                   <Link
                     key={link.key}
                     href={link.href}
-                    className={`flex items-center px-3 py-3 rounded-lg text-sm font-medium ${
-                      active ? 'bg-blue-800 text-white' : 'text-white/80 hover:bg-blue-900/50'
-                    }`}
+                    className={`flex items-center px-3 py-3 rounded-lg text-sm font-medium ${active ? 'bg-blue-800 text-white' : 'text-white/80 hover:bg-blue-900/50'
+                      }`}
                   >
                     <link.icon className="h-5 w-5 mr-3" />
                     {link.label}
@@ -554,19 +557,6 @@ function Sidebar() {
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    handleMobileNavigation('/dashboard/settings/integrations');
-                  }}
-                  className="flex w-full items-center px-4 py-2.5 text-sm text-white/90 hover:bg-white/10 transition-colors text-left"
-                  role="menuitem"
-                >
-                  <Plug className="h-4 w-4 mr-3 shrink-0" />
-                  Integrations
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
                     handleMobileNavigation('/pricing');
                   }}
                   className="flex w-full items-center px-4 py-2.5 text-sm text-white/90 hover:bg-white/10 transition-colors text-left"
@@ -614,9 +604,8 @@ function Sidebar() {
       {/* Desktop */}
       <aside
         ref={sidebarRef}
-        className={`hidden lg:flex flex-col h-screen bg-blue-950 border-r border-white/10 transition-all ${
-          isCollapsed && !isAutoHidden ? 'w-16' : 'w-64'
-        }`}
+        className={`hidden lg:flex flex-col h-screen bg-blue-950 border-r border-white/10 transition-all ${isCollapsed && !isAutoHidden ? 'w-16' : 'w-64'
+          }`}
         style={{ willChange: 'width' }}
       >
         <SidebarContent />
@@ -635,13 +624,13 @@ function Sidebar() {
 
       {/* Mobile button */}
       <button
-  onClick={(e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    toggleMobileMenu();
-  }}
-  type="button"
-  className={`lg:hidden top-4 right-4 z-50
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleMobileMenu();
+        }}
+        type="button"
+        className={`lg:hidden top-4 right-4 z-50
     fixed
     p-3
     rounded-2xl
@@ -652,30 +641,29 @@ function Sidebar() {
     transition-all duration-200 ease-out
     active:scale-95
     hover:bg-white/15
-    ${
-      isMobileMenuOpen ? 'hidden' : 'block'
-    }`}
-  style={{
-    touchAction: 'manipulation',
-    WebkitBackdropFilter: 'blur(16px)',
-    backdropFilter: 'blur(16px)',
-  }}
->
-  {/* Subtle glass light reflection */}
-  <span className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/25 via-white/10 to-transparent pointer-events-none" />
+    ${isMobileMenuOpen ? 'hidden' : 'block'
+          }`}
+        style={{
+          touchAction: 'manipulation',
+          WebkitBackdropFilter: 'blur(16px)',
+          backdropFilter: 'blur(16px)',
+        }}
+      >
+        {/* Subtle glass light reflection */}
+        <span className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/25 via-white/10 to-transparent pointer-events-none" />
 
-  {/* Ultra-fine noise for real glass feel */}
-  <span
-    className="absolute inset-0 rounded-2xl opacity-[0.04] pointer-events-none"
-    style={{
-      backgroundImage:
-        'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.8\' numOctaves=\'3\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")',
-    }}
-  />
+        {/* Ultra-fine noise for real glass feel */}
+        <span
+          className="absolute inset-0 rounded-2xl opacity-[0.04] pointer-events-none"
+          style={{
+            backgroundImage:
+              'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.8\' numOctaves=\'3\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")',
+          }}
+        />
 
-  {/* Icon */}
-  <Menu className="relative h-5 w-5 text-white" />
-</button>
+        {/* Icon */}
+        <Menu className="relative h-5 w-5 text-white" />
+      </button>
 
 
       {/* Overlay: only covers area right of sidebar (left-80 = 20rem) so sidebar taps never hit overlay */}
@@ -694,9 +682,8 @@ function Sidebar() {
 
       {/* Mobile sidebar */}
       <aside
-        className={`fixed top-0 left-0 h-full w-80 bg-blue-950 z-50 flex flex-col justify-between transform transition-transform lg:hidden ${
-          isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        className={`fixed top-0 left-0 h-full w-80 bg-blue-950 z-50 flex flex-col justify-between transform transition-transform lg:hidden ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
         style={{
           willChange: 'transform',
           touchAction: 'manipulation',

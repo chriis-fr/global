@@ -17,6 +17,12 @@ export type PermissionsResult = {
     canViewFinancialData: boolean;
     canExportData: boolean;
     canMarkInvoiceAsPaid: boolean;
+    // Finance Controls Add-On
+    canClosePeriod: boolean;
+    canReopenPeriod: boolean;
+    canWriteOff: boolean;
+    canBulkUpdate: boolean;
+    canViewAudit: boolean;
   };
   member: (OrganizationMember & { approvalLimits?: { maxAmount: number; requiresDualApproval: boolean } }) | null;
 } | null;
@@ -49,6 +55,11 @@ export async function getPermissions(): Promise<PermissionsResult> {
           canViewFinancialData: true,
           canExportData: true,
           canMarkInvoiceAsPaid: true,
+          canClosePeriod: true,
+          canReopenPeriod: true,
+          canWriteOff: true,
+          canBulkUpdate: true,
+          canViewAudit: true,
         },
         member: null,
       };
@@ -75,6 +86,11 @@ export async function getPermissions(): Promise<PermissionsResult> {
       canViewFinancialData: RBACService.hasPermission(member, 'read', 'transaction'),
       canExportData: RBACService.hasPermission(member, 'export', 'report'),
       canMarkInvoiceAsPaid: RBACService.canMarkInvoiceAsPaid(member),
+      canClosePeriod: RBACService.canClosePeriod(member),
+      canReopenPeriod: RBACService.canReopenPeriod(member),
+      canWriteOff: RBACService.canWriteOff(member),
+      canBulkUpdate: RBACService.canBulkUpdate(member),
+      canViewAudit: RBACService.canViewFinanceAudit(member),
     };
 
     const approvalLimits = RBACService.getApprovalLimits(member);

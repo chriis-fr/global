@@ -26,7 +26,12 @@ export const REQUEST_FINANCE_ROLES = {
       canReconcileTransactions: true,
       canManageAccounting: true,
       canApproveDocuments: true,
-      canManageApprovalPolicies: true
+      canManageApprovalPolicies: true,
+      canClosePeriod: true,
+      canReopenPeriod: true,
+      canWriteOff: true,
+      canBulkUpdate: true,
+      canViewAudit: true
     }
   },
   
@@ -54,7 +59,12 @@ export const REQUEST_FINANCE_ROLES = {
       canReconcileTransactions: true,
       canManageAccounting: true,
       canApproveDocuments: true,
-      canManageApprovalPolicies: true
+      canManageApprovalPolicies: true,
+      canClosePeriod: true,
+      canReopenPeriod: true,
+      canWriteOff: true,
+      canBulkUpdate: true,
+      canViewAudit: true
     }
   },
   
@@ -82,7 +92,12 @@ export const REQUEST_FINANCE_ROLES = {
       canReconcileTransactions: true,
       canManageAccounting: true,
       canApproveDocuments: true,
-      canManageApprovalPolicies: true
+      canManageApprovalPolicies: true,
+      canClosePeriod: false,
+      canReopenPeriod: false,
+      canWriteOff: false,
+      canBulkUpdate: false,
+      canViewAudit: true
     }
   },
   
@@ -110,7 +125,12 @@ export const REQUEST_FINANCE_ROLES = {
       canReconcileTransactions: true,
       canManageAccounting: true,
       canApproveDocuments: false,
-      canManageApprovalPolicies: false
+      canManageApprovalPolicies: false,
+      canClosePeriod: false,
+      canReopenPeriod: false,
+      canWriteOff: false,
+      canBulkUpdate: false,
+      canViewAudit: true
     }
   },
   
@@ -138,7 +158,12 @@ export const REQUEST_FINANCE_ROLES = {
       canReconcileTransactions: false,
       canManageAccounting: false,
       canApproveDocuments: true,
-      canManageApprovalPolicies: false
+      canManageApprovalPolicies: false,
+      canClosePeriod: false,
+      canReopenPeriod: false,
+      canWriteOff: false,
+      canBulkUpdate: false,
+      canViewAudit: false
     }
   }
 } as const;

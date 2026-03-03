@@ -254,7 +254,13 @@ export async function POST(request: NextRequest) {
         // Additional required fields
         canManageAccounting: role === 'admin' || role === 'financeManager' || role === 'accountant',
         canApproveDocuments: role === 'admin' || role === 'approver',
-        canManageApprovalPolicies: role === 'admin'
+        canManageApprovalPolicies: role === 'admin',
+        // Finance Controls Add-On
+        canClosePeriod: role === 'admin' || role === 'owner',
+        canReopenPeriod: role === 'admin' || role === 'owner',
+        canWriteOff: role === 'admin' || role === 'owner' || role === 'financeManager',
+        canBulkUpdate: role === 'admin' || role === 'owner' || role === 'financeManager',
+        canViewAudit: role === 'admin' || role === 'owner' || role === 'financeManager' || role === 'accountant'
       } as PermissionSet,
       status: 'active',
       joinedAt: new Date()

@@ -546,26 +546,38 @@ export default function OrganizationSettingsPage() {
 
   return (
     <div className="max-w-4xl mx-auto w-full">
-      <div className="mb-8">
-        {fromPricing && (
+      <div className="mb-8 flex items-start justify-between gap-4">
+        <div>
+          {fromPricing && (
+            <button
+              type="button"
+              onClick={() => router.push('/pricing')}
+              className="inline-flex items-center gap-2 text-blue-300 hover:text-white text-sm mb-4"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to pricing
+            </button>
+          )}
+          <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Organization Settings</h1>
+          <p className="text-blue-200">
+            {orgInfo?.hasOrganization 
+              ? 'Manage your organization information and team members.'
+              : fromPricing
+                ? 'Create an organisation to choose team plans and seats on the pricing page.'
+                : 'Create an organization or manage your personal business information.'
+            }
+          </p>
+        </div>
+        {orgInfo?.hasOrganization && (
           <button
             type="button"
-            onClick={() => router.push('/pricing')}
-            className="inline-flex items-center gap-2 text-blue-300 hover:text-white text-sm mb-4"
+            onClick={() => router.push('/dashboard/settings/finance-controls')}
+            className="inline-flex items-center gap-2 rounded-lg border border-blue-400/60 bg-blue-500/10 px-3 py-2 text-xs font-semibold text-blue-100 hover:bg-blue-500/20 hover:border-blue-300 transition-colors"
           >
-            <ArrowLeft className="h-4 w-4" />
-            Back to pricing
+            <Crown className="h-4 w-4 text-blue-300" />
+            <span>Finance Controls</span>
           </button>
         )}
-        <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Organization Settings</h1>
-        <p className="text-blue-200">
-          {orgInfo?.hasOrganization 
-            ? 'Manage your organization information and team members.'
-            : fromPricing
-              ? 'Create an organisation to choose team plans and seats on the pricing page.'
-              : 'Create an organization or manage your personal business information.'
-          }
-        </p>
       </div>
       
       {message && (

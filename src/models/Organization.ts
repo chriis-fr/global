@@ -64,6 +64,13 @@ export interface PermissionSet {
   // Approval Workflow
   canApproveDocuments: boolean;
   canManageApprovalPolicies: boolean;
+
+  // Finance Controls Add-On (when org.settings.financeControls enabled)
+  canClosePeriod: boolean;
+  canReopenPeriod: boolean;
+  canWriteOff: boolean;
+  canBulkUpdate: boolean;
+  canViewAudit: boolean;
 }
 
 export interface Organization {
@@ -135,6 +142,16 @@ export interface Organization {
   safeOwners?: string[]; // Array of owner addresses (for primary Safe)
   safeThreshold?: number; // Number of signatures required (e.g., 2 of 3)
   connectedSafeWallets?: ObjectId[]; // Array of PaymentMethod IDs for connected Safe wallets
+
+  // Finance Controls Add-On (feature-flag based; no UI change when disabled)
+  settings?: {
+    financeControls?: {
+      periodLocking: boolean;
+      bulkActions: boolean;
+      carryForward: boolean;
+      auditLog: boolean;
+    };
+  };
   
   // Timestamps
   createdAt: Date;
@@ -187,6 +204,14 @@ export interface UpdateOrganizationInput {
   };
   status?: 'pending' | 'active' | 'suspended';
   verified?: boolean;
+  settings?: {
+    financeControls?: {
+      periodLocking?: boolean;
+      bulkActions?: boolean;
+      carryForward?: boolean;
+      auditLog?: boolean;
+    };
+  };
 }
 
 // New models for Request Finance pattern

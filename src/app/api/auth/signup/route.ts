@@ -233,7 +233,12 @@ export async function POST(request: NextRequest) {
             canReconcileTransactions: true,
             canManageAccounting: true,
             canApproveDocuments: true,
-            canManageApprovalPolicies: true
+            canManageApprovalPolicies: true,
+            canClosePeriod: true,
+            canReopenPeriod: true,
+            canWriteOff: true,
+            canBulkUpdate: true,
+            canViewAudit: true
           },
           status: 'active',
           invitedBy: new ObjectId(newUser._id),
@@ -303,7 +308,12 @@ export async function POST(request: NextRequest) {
                 canReconcileTransactions: true,
                 canManageAccounting: true,
                 canApproveDocuments: true,
-                canManageApprovalPolicies: true
+                canManageApprovalPolicies: true,
+                canClosePeriod: true,
+                canReopenPeriod: true,
+                canWriteOff: true,
+                canBulkUpdate: true,
+                canViewAudit: true
               },
               updatedAt: new Date()
             }

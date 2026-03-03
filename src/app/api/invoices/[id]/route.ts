@@ -164,6 +164,29 @@ export async function PUT(
       );
     }
 
+    // Finance Controls Add-On: when period locking is on, block edits to invoices in a LOCKED period
+    if (isOrganization && session.user.organizationId) {
+      const orgDoc = await db.collection('organizations').findOne(
+        { _id: new ObjectId(session.user.organizationId) },
+        { projection: { 'settings.financeControls': 1 } }
+      );
+      const periodLocking = orgDoc?.settings?.financeControls?.periodLocking;
+      if (periodLocking && existingInvoice.issueDate) {
+        const lockedPeriod = await db.collection('accounting_periods').findOne({
+          organizationId: new ObjectId(session.user.organizationId),
+          startDate: { $lte: new Date(existingInvoice.issueDate) },
+          endDate: { $gte: new Date(existingInvoice.issueDate) },
+          status: 'LOCKED'
+        });
+        if (lockedPeriod) {
+          return NextResponse.json(
+            { success: false, message: 'This invoice is in a locked accounting period. Edits are not allowed.' },
+            { status: 403 }
+          );
+        }
+      }
+    }
+
     // Check permissions for status updates
     if (body.status === 'paid') {
       // Individual users can always mark their own invoices as paid
@@ -300,6 +323,34 @@ export async function PUT(
           }
         } catch (ledgerError) {
           console.error('⚠️ [Invoice Update] Failed to update financial ledger:', ledgerError);
+        }
+
+        // Finance Controls Add-On: record a payment entry when marking as paid (ledger layer)
+        if (isOrganization && session.user.organizationId && session.user.id) {
+          try {
+            const orgDoc = await db.collection('organizations').findOne(
+              { _id: new ObjectId(session.user.organizationId) },
+              { projection: { 'settings.financeControls': 1 } }
+            );
+            if (orgDoc?.settings?.financeControls?.auditLog || orgDoc?.settings?.financeControls?.bulkActions) {
+              const total = existingInvoice.total ?? existingInvoice.totalAmount ?? 0;
+              if (total > 0) {
+                await db.collection('invoice_payment_entries').insertOne({
+                  organizationId: new ObjectId(session.user.organizationId),
+                  invoiceId: new ObjectId(id),
+                  amount: total,
+                  currency: existingInvoice.currency ?? 'USD',
+                  paymentDate: new Date(),
+                  method: 'api_mark_paid',
+                  reference: 'Marked as paid via invoice update',
+                  createdBy: new ObjectId(session.user.id),
+                  createdAt: new Date()
+                });
+              }
+            }
+          } catch (paymentEntryErr) {
+            console.error('⚠️ [Invoice Update] Failed to record payment entry (finance controls):', paymentEntryErr);
+          }
         }
       } catch (payableUpdateError) {
         console.error('⚠️ [Invoice Update] Failed to update related payable:', payableUpdateError);
