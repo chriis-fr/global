@@ -591,9 +591,11 @@ export default function OrganizationSettingsPage() {
             {subscription.plan?.name || getCurrentPlanName()}
           </span>
           <span className="text-blue-200/70">
-            {subscription.isTrialActive
-              ? `Trial · ${subscription.trialDaysRemaining ?? 0} ${subscription.trialDaysRemaining === 1 ? 'day' : 'days'} left`
-              : (subscription.status === 'active' ? 'Active' : subscription.status ?? '')}
+            {subscription.plan?.planId === 'trial-premium' && !subscription.isTrialActive
+              ? 'Trial ended — upgrade to continue'
+              : subscription.isTrialActive
+                ? `Trial · ${subscription.trialDaysRemaining ?? 0} ${subscription.trialDaysRemaining === 1 ? 'day' : 'days'} left`
+                : (subscription.status === 'active' ? 'Active' : subscription.status ?? '')}
           </span>
           {subscription.plan && (
             <span className="text-blue-200/70">

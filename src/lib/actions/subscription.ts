@@ -34,6 +34,10 @@ export interface SubscriptionData {
     monthlyVolume: number;
     cryptoToCryptoFee: number;
   };
+  /** Organization only: trial ended and no paid plan → read-only (view data, no create/edit/delete). */
+  orgReadOnlyDueToTrialEnd?: boolean;
+  /** Organization only: subscription overdue (past_due or 3+ days past period end) → read-only until they update payment. */
+  orgReadOnlyDueToOverdue?: boolean;
 }
 
 export async function getCurrentMonthInvoiceCount(userId: string): Promise<number> {
@@ -171,15 +175,13 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
     const cached = subscriptionCache.get(cacheKey);
     const currentTime = Date.now();
     
-    // Only use cache if it's recent AND the cached data shows trial-premium with canCreateInvoice=true
-    // This ensures we don't serve stale data that shows limits for trial users
+    // Only use cache if it's recent
     if (cached && (currentTime - cached.timestamp) < CACHE_DURATION) {
-      // If cached data is for trial-premium but shows canCreateInvoice=false, refresh
-      if (cached.data.plan?.planId === 'trial-premium' && !cached.data.canCreateInvoice) {
-        console.log('🔄 [getUserSubscription] Cached trial data shows limits - refreshing');
+      // Refresh if trial-premium but canCreateInvoice false without a known read-only reason (avoid stale trial-active state)
+      if (cached.data.plan?.planId === 'trial-premium' && !cached.data.canCreateInvoice && !cached.data.orgReadOnlyDueToTrialEnd) {
         subscriptionCache.delete(cacheKey);
       } else {
-      return cached.data;
+        return cached.data;
       }
     }
     
@@ -301,8 +303,18 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
         
         const currentMonthInvoiceCount = orgSubscription.usage?.invoicesThisMonth || 0;
         
+        // Organization read-only when trial ended (add-on: view-only until they pay)
+        const orgReadOnlyDueToTrialEnd = isTrialPremiumPlan && !isTrialActive;
+        // Organization read-only when subscription overdue: past_due OR period ended and 3+ days past grace
+        const orgSubscriptionOverdue = isPastDue || (orgHasPaystackSubscription && orgCurrentPeriodEnd && currentDate > orgGracePeriodEnd);
+        const orgReadOnlyDueToOverdue = isPaidPlan && orgSubscriptionOverdue;
+        
+        const orgReadOnly = orgReadOnlyDueToTrialEnd || orgReadOnlyDueToOverdue;
+        
         let canCreateInvoice = false;
-        if (isPastDue) {
+        if (orgReadOnly) {
+          canCreateInvoice = false;
+        } else if (isPastDue) {
           canCreateInvoice = false;
         } else if (isTrialPremiumPlan) {
           canCreateInvoice = true;
@@ -313,7 +325,7 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
           canCreateInvoice = orgSubscription.status === 'active';
         }
         
-        const canUseAdvancedFeatures = Boolean(isTrialPremiumPlan || (planId !== 'receivables-free' && orgSubscription.status === 'active' && !isPastDue));
+        const canUseAdvancedFeatures = !orgReadOnly && Boolean(isTrialPremiumPlan || (planId !== 'receivables-free' && orgSubscription.status === 'active' && !isPastDue));
         
         const subscriptionData = {
           plan: plan ? {
@@ -332,14 +344,16 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
             recentInvoiceCount: currentMonthInvoiceCount
           },
           canCreateOrganization,
-          canAccessPayables,
+          canAccessPayables: orgReadOnly ? false : canAccessPayables,
           canCreateInvoice,
           canUseAdvancedFeatures,
           limits: {
             invoicesPerMonth: isTrialPremiumPlan ? -1 : (plan?.limits?.invoicesPerMonth || 5),
             monthlyVolume: isTrialPremiumPlan ? -1 : (plan?.limits?.monthlyVolume || 0),
             cryptoToCryptoFee: plan?.limits?.cryptoToCryptoFee || 0
-          }
+          },
+          orgReadOnlyDueToTrialEnd: orgReadOnlyDueToTrialEnd || undefined,
+          orgReadOnlyDueToOverdue: orgReadOnlyDueToOverdue || undefined,
         };
 
 
@@ -560,6 +574,24 @@ export async function canCreateInvoice(proposedVolumeAmount?: number): Promise<{
       };
     }
     
+    // Organization: trial ended → read-only (view data only until they pay)
+    if (subscription.orgReadOnlyDueToTrialEnd) {
+      return {
+        allowed: false,
+        reason: 'Trial ended. Organization accounts require a paid plan. Upgrade to continue creating and editing.',
+        requiresUpgrade: true
+      };
+    }
+
+    // Organization: subscription overdue (past_due or 3+ days past period) → read-only until they update payment
+    if (subscription.orgReadOnlyDueToOverdue) {
+      return {
+        allowed: false,
+        reason: 'Subscription is overdue. Update your subscription payment to continue creating and editing.',
+        requiresUpgrade: true
+      };
+    }
+
     // Check if user has reached their monthly invoice count limit
     if (!subscription.canCreateInvoice) {
       if (subscription.plan?.planId === 'receivables-free') {
