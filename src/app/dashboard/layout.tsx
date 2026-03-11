@@ -19,6 +19,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const onboardingInitRef = useRef(false);
   const refreshAttemptedRef = useRef(false);
   const delayedRetryRef = useRef(false);
+   const apiStatusCheckedRef = useRef(false);
   const fetchOnboardingRef = useRef(fetchOnboarding);
 
   // Keep ref in sync with fetchOnboarding function
@@ -71,7 +72,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       return;
     }
 
-    // One delayed retry before redirecting (handles slow cookie/session update after onboarding completion)
+    // One delayed retry before checking API/redirecting (handles slow cookie/session update after onboarding completion)
     if (!delayedRetryRef.current) {
       delayedRetryRef.current = true;
       setTimeout(() => {
@@ -80,6 +81,44 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             console.warn('Delayed session refresh failed:', error);
           });
       }, 1200);
+      return;
+    }
+
+    // Final safeguard: trust backend onboarding status API before redirecting to avoid loops
+    if (!apiStatusCheckedRef.current) {
+      apiStatusCheckedRef.current = true;
+      (async () => {
+        try {
+          const res = await fetch('/api/onboarding/status', { credentials: 'include' });
+          if (!res.ok) throw new Error('Failed to fetch onboarding status');
+          const data = await res.json();
+          const apiCompleted = data?.success && data.data?.onboarding?.completed === true;
+          if (apiCompleted) {
+            onboardingInitRef.current = true;
+            // Initialize store from API data so dashboard has accurate onboarding + services
+            if (data.data?.onboarding && data.data?.services) {
+              setOnboarding(
+                {
+                  completed: true,
+                  currentStep: data.data.onboarding.currentStep || 4,
+                  completedSteps: data.data.onboarding.completedSteps || [],
+                  serviceOnboarding: data.data.onboarding.serviceOnboarding || {}
+                },
+                data.data.services as Record<string, boolean>
+              );
+            }
+            // Try to refresh session so JWT/session matches backend onboarding state
+            try {
+              await refreshSession();
+            } catch (error) {
+              console.warn('Session refresh after onboarding-status API failed:', error);
+            }
+            return;
+          }
+        } catch (error) {
+          console.warn('Error checking onboarding status API before redirect:', error);
+        }
+      })();
       return;
     }
 

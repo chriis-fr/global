@@ -86,6 +86,7 @@ export async function getOrganizationData(): Promise<{
           primaryContact: organization.primaryContact,
           services: organization.services,
           onboarding: organization.onboarding,
+          settings: organization.settings,
           status: organization.status,
           verified: organization.verified,
           createdAt: organization.createdAt.toISOString(),

@@ -21,7 +21,7 @@ export interface OrganizationMember {
   userId: ObjectId; // Reference to Users
   email: string;
   name: string;
-  role: 'owner' | 'admin' | 'financeManager' | 'accountant' | 'approver';
+  role: 'owner' | 'admin' | 'financeManager' | 'accountant' | 'approver' | 'waiter';
   permissions: PermissionSet;
   status: 'active' | 'suspended' | 'pending';
   invitedBy?: ObjectId;
@@ -151,6 +151,18 @@ export interface Organization {
       carryForward: boolean;
       auditLog: boolean;
     };
+    mpesa?: {
+      /** When true, this org can use M-Pesa STK waiter flows and related features. */
+      enabled: boolean;
+      /** Encrypted Daraja credentials (consumerKey, consumerSecret, passkey, callbackUrl, environment). Never expose decrypted. */
+      credentialsEncrypted?: string;
+      /** Business shortcode (Paybill or Till number). When set, used for STK instead of payment method. e.g. 174379 for sandbox. */
+      businessShortCode?: string;
+      /** Account reference shown to customer (max 12 chars). Optional; default "Payment". */
+      accountReference?: string;
+      /** CustomerPayBillOnline for Paybill, CustomerBuyGoodsOnline for Till. */
+      transactionType?: 'CustomerPayBillOnline' | 'CustomerBuyGoodsOnline';
+    };
   };
   
   // Timestamps
@@ -220,7 +232,7 @@ export interface InvitationToken {
   token: string;
   organizationId: ObjectId;
   email: string;
-  role: 'admin' | 'financeManager' | 'accountant' | 'approver';
+  role: 'admin' | 'financeManager' | 'accountant' | 'approver' | 'waiter';
   permissions: PermissionSet;
   invitedBy: ObjectId;
   expiresAt: Date;

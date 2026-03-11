@@ -21,6 +21,8 @@ export interface AdminUserListItem {
   onboardingCompleted: boolean;
   onboardingStep: number;
   organizationId?: string;
+  /** Role inside the organization (owner/admin/financeManager/...) when applicable. */
+  organizationRole?: string;
   services: {
     smartInvoicing: boolean;
     accountsReceivable: boolean;
@@ -192,6 +194,21 @@ export async function getAdminUserDetail(
       };
     }
 
+    // Derive organization role/name for clarity in admin UI
+    let organizationRole: string | undefined;
+    let organizationName: string | undefined;
+    if (user.organizationId) {
+      const org = await db.collection('organizations').findOne({ _id: user.organizationId });
+      if (org) {
+        organizationName = org.name as string | undefined;
+        const members = (org.members as Array<{ userId: ObjectId; role: string }> | undefined) || [];
+        const member = members.find((m) => m.userId.toString() === user._id.toString());
+        if (member) {
+          organizationRole = member.role;
+        }
+      }
+    }
+
     const userDetail: AdminUserDetail = {
       id: user._id.toString(),
       email: user.email,
@@ -207,6 +224,7 @@ export async function getAdminUserDetail(
       onboardingCompleted: user.onboarding?.isCompleted || false,
       onboardingStep: user.onboarding?.currentStep || 0,
       organizationId: user.organizationId?.toString(),
+      organizationRole,
       services: {
         smartInvoicing: user.services?.smartInvoicing || false,
         accountsReceivable: user.services?.accountsReceivable || false,

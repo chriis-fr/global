@@ -22,7 +22,8 @@ import {
   Loader2,
   Plug,
   Crown,
-  ChevronUp
+  ChevronUp,
+  Waves
 } from 'lucide-react';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import Image from 'next/image';
@@ -33,6 +34,7 @@ import { useOnboardingStore } from '@/lib/stores/onboardingStore';
 const SERVICE_LINKS = [
   { key: 'smartInvoicing', label: 'Smart Invoicing', icon: FileText, href: '/dashboard/services/smart-invoicing' },
   { key: 'accountsPayable', label: 'Pay', icon: Receipt, href: '/dashboard/services/payables' },
+  { key: 'mpesaPayments', label: 'M-Pesa', icon: Waves, href: '/dashboard/services/mpesa' },
 ];
 
 const ADMIN_LINKS = [
@@ -71,6 +73,8 @@ function Sidebar() {
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
   const [isMobile, setIsMobile] = useState(false);
   const [sidebarReady, setSidebarReady] = useState(false);
+  const [orgRole, setOrgRole] = useState<string | null>(null);
+  const [orgMpesaEnabled, setOrgMpesaEnabled] = useState(false);
 
   const sidebarRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
@@ -86,6 +90,34 @@ function Sidebar() {
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
   }, []);
+
+  // Load organization role + M-Pesa enabled flag for sidebar filtering
+  useEffect(() => {
+    if (!session?.user?.organizationId) {
+      setOrgRole(null);
+      setOrgMpesaEnabled(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { getCurrentOrganizationRole } = await import('@/app/actions/organization-role');
+        const result = await getCurrentOrganizationRole();
+        if (!cancelled && result.success && result.data) {
+          setOrgRole(result.data.role);
+          setOrgMpesaEnabled(result.data.mpesaEnabled);
+        }
+      } catch {
+        if (!cancelled) {
+          setOrgRole(null);
+          setOrgMpesaEnabled(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.organizationId]);
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -271,39 +303,66 @@ function Sidebar() {
             {(!isCollapsed || isAutoHidden) && (
               <div className="flex justify-between items-center mb-2 px-2">
                 <h3 className="text-xs text-white/50 uppercase">Services</h3>
-                {isMobile ? (
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => handleMobileNavigation('/services')}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        handleMobileNavigation('/services');
-                      }
-                    }}
-                    className="p-1 rounded hover:bg-white/10 cursor-pointer"
-                  >
-                    <Plus className="h-4 w-4 text-white/50" />
-                  </div>
-                ) : (
-                  <Link href="/services">
-                    <Plus className="h-4 w-4 text-white/50" />
-                  </Link>
+                {/* Waiters cannot add/manage services, so hide the + button for them */}
+                {orgRole !== 'waiter' && (
+                  <>
+                    {isMobile ? (
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => handleMobileNavigation('/services')}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleMobileNavigation('/services');
+                          }
+                        }}
+                        className="p-1 rounded hover:bg-white/10 cursor-pointer"
+                      >
+                        <Plus className="h-4 w-4 text-white/50" />
+                      </div>
+                    ) : (
+                      <Link href="/services">
+                        <Plus className="h-4 w-4 text-white/50" />
+                      </Link>
+                    )}
+                  </>
                 )}
               </div>
             )}
 
             {(sidebarReady
               ? SERVICE_LINKS.filter(link => {
+                const isSuperAdmin = session?.user?.adminTag === true;
+
+                // Waiter: show ONLY the M-Pesa service when org has it enabled
+                if (orgRole === 'waiter') {
+                  return link.key === 'mpesaPayments' && orgMpesaEnabled;
+                }
+
+                // Super admin (master account): has access to all services regardless of plan/user services flags
+                // and regardless of per-organization M-Pesa enablement.
+                if (isSuperAdmin) {
+                  return true;
+                }
+
                 const isServiceEnabled = session?.user?.services?.[link.key] || false;
+
                 if (link.key === 'accountsPayable') {
-                  return (subscription?.canAccessPayables || false) && isServiceEnabled;
+                  // Treat plan access as the primary gate; user service flag is secondary.
+                  // This ensures payables plans always see the Payables service in the sidebar.
+                  const hasPlanAccess = subscription?.canAccessPayables || false;
+                  return hasPlanAccess;
                 }
                 if (link.key === 'smartInvoicing') {
                   const isPayablesOnly = subscription?.plan?.type === 'payables';
                   return !isPayablesOnly && isServiceEnabled;
                 }
+                if (link.key === 'mpesaPayments') {
+                  // M-Pesa service: only when org has it enabled and user is in an organization
+                  return Boolean(session?.user?.organizationId) && orgMpesaEnabled;
+                }
+
                 return isServiceEnabled;
               })
               : []
@@ -445,6 +504,10 @@ function Sidebar() {
           {isSettingsOpen && (
             <div className="ml-4 space-y-1">
               {SETTINGS_LINKS.filter(link => {
+                // Waiters: only show Help & Support
+                if (orgRole === 'waiter') {
+                  return link.key === 'help';
+                }
                 // Only show integrations for admin accounts (adminTag)
                 if (link.key === 'integrations') {
                   return session?.user?.adminTag === true;
@@ -551,20 +614,25 @@ function Sidebar() {
                   <User className="h-4 w-4 mr-3 shrink-0" />
                   Profile Settings
                 </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handleMobileNavigation('/pricing');
-                  }}
-                  className="flex w-full items-center px-4 py-2.5 text-sm text-white/90 hover:bg-white/10 transition-colors text-left"
-                  role="menuitem"
-                >
-                  <Crown className="h-4 w-4 mr-3 shrink-0 text-amber-400" />
-                  Unlock More
-                </button>
-                <div className="border-t border-white/10 my-1" />
+                {/* For waiters, hide upsell/other items so they only see profile + sign out */}
+                {orgRole !== 'waiter' && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleMobileNavigation('/pricing');
+                      }}
+                      className="flex w-full items-center px-4 py-2.5 text-sm text-white/90 hover:bg-white/10 transition-colors text-left"
+                      role="menuitem"
+                    >
+                      <Crown className="h-4 w-4 mr-3 shrink-0 text-amber-400" />
+                      Unlock More
+                    </button>
+                    <div className="border-t border-white/10 my-1" />
+                  </>
+                )}
                 <button
                   type="button"
                   onClick={async () => {

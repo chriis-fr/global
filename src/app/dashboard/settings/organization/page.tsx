@@ -1301,7 +1301,8 @@ export default function OrganizationSettingsPage() {
             <div className="bg-white/5 backdrop-blur-sm rounded-xl p-6 border border-white/10">
               <h2 className="text-lg font-semibold text-white mb-2">Approval Settings</h2>
               <p className="text-blue-200 text-sm">
-                Approval workflows are available when your organization has <strong>Smart Invoicing</strong> or <strong>Accounts Payable</strong> enabled. Enable these in <a href="/dashboard/services" className="text-blue-400 hover:underline">Services</a> to configure approval for invoices and bills.
+                Approval workflows are available when your organization has <strong>Smart Invoicing</strong> or <strong>Accounts Payable</strong> enabled. Enable these from the{' '}
+                <a href="/services" className="text-blue-400 hover:underline">Services</a> catalog to configure approval for invoices and bills.
               </p>
             </div>
           );

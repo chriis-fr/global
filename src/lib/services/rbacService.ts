@@ -267,6 +267,50 @@ export class RBACService {
         { action: 'update', resource: 'organization' },
         { action: 'manage', resource: 'approval_settings' }
       ]
+    },
+
+    // Waiter: extremely limited role – no access to core ERP objects.
+    // STK prompts and related flows should be guarded separately at the action level.
+    waiter: {
+      role: 'waiter',
+      permissions: [
+        // Read-only organization/member basic info if ever needed
+        { action: 'read', resource: 'organization' },
+        { action: 'read', resource: 'member' }
+      ],
+      restrictions: [
+        // Cannot manage treasury, team, settings, bills, invoices or financial data
+        { action: 'create', resource: 'payment_method' },
+        { action: 'update', resource: 'payment_method' },
+        { action: 'delete', resource: 'payment_method' },
+        { action: 'create', resource: 'member' },
+        { action: 'update', resource: 'member' },
+        { action: 'delete', resource: 'member' },
+        { action: 'invite', resource: 'member' },
+        { action: 'update', resource: 'organization' },
+        { action: 'manage', resource: 'approval_settings' },
+        { action: 'create', resource: 'bill' },
+        { action: 'update', resource: 'bill' },
+        { action: 'delete', resource: 'bill' },
+        { action: 'approve', resource: 'bill' },
+        { action: 'reject', resource: 'bill' },
+        { action: 'pay', resource: 'bill' },
+        { action: 'create', resource: 'invoice' },
+        { action: 'update', resource: 'invoice' },
+        { action: 'delete', resource: 'invoice' },
+        { action: 'mark_paid', resource: 'invoice' },
+        { action: 'read', resource: 'transaction' },
+        { action: 'reconcile', resource: 'transaction' },
+        { action: 'export', resource: 'transaction' },
+        { action: 'export', resource: 'report' },
+        { action: 'read', resource: 'audit_log' },
+        { action: 'export', resource: 'audit_log' },
+        { action: 'close', resource: 'accounting_period' },
+        { action: 'reopen', resource: 'accounting_period' },
+        { action: 'write_off', resource: 'adjustment' },
+        { action: 'bulk_update', resource: 'invoice' },
+        { action: 'read', resource: 'finance_audit' }
+      ]
     }
   };
 

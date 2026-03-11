@@ -9,7 +9,8 @@ import {
   Clock,
   Crown,
   Lock,
-  BarChart3
+  BarChart3,
+  Waves
 } from 'lucide-react';
 import { useSubscription } from '@/lib/contexts/SubscriptionContext';
 import StatsCards from '@/components/dashboard/StatsCards';
@@ -27,11 +28,92 @@ export default function DashboardPage() {
   const [mounted, setMounted] = useState(false);
   const sessionRefreshDoneRef = useRef(false);
   const subscriptionSuccessHandledRef = useRef(false);
+  const [orgRole, setOrgRole] = useState<string | null>(null);
+  const [orgMpesaEnabled, setOrgMpesaEnabled] = useState(false);
+  const isWaiter = orgRole === 'waiter' && orgMpesaEnabled;
+  const [waiterPrompts, setWaiterPrompts] = useState<
+    Array<{
+      id: string;
+      amount: number;
+      status: 'pending' | 'success' | 'failed';
+      phoneNumber: string;
+      tableRef?: string;
+      createdAt: string;
+    }>
+  >([]);
+  const [waiterPromptsLoading, setWaiterPromptsLoading] = useState(false);
+  const [waiterPromptsError, setWaiterPromptsError] = useState<string | null>(null);
 
   // Avoid hydration mismatch: isPaidUser depends on client-loaded subscription
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Load organization role + M-Pesa enabled flag (for waiter dashboards)
+  useEffect(() => {
+    if (!session?.user?.organizationId) {
+      setOrgRole(null);
+      setOrgMpesaEnabled(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { getCurrentOrganizationRole } = await import('@/app/actions/organization-role');
+        const result = await getCurrentOrganizationRole();
+        if (!cancelled && result.success && result.data) {
+          setOrgRole(result.data.role);
+          setOrgMpesaEnabled(result.data.mpesaEnabled);
+        }
+      } catch {
+        if (!cancelled) {
+          setOrgRole(null);
+          setOrgMpesaEnabled(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.organizationId]);
+
+  // Load recent waiter prompts when role/org state is known
+  useEffect(() => {
+    if (!mounted) return;
+    if (!isWaiter) return;
+    if (!session?.user?.id) return;
+
+    let cancelled = false;
+    setWaiterPromptsLoading(true);
+    setWaiterPromptsError(null);
+
+    startTransition(async () => {
+      try {
+        const { getWaiterRecentPrompts } = await import('@/app/actions/mpesa-waiter-stats');
+        const result = await getWaiterRecentPrompts(10);
+        if (!cancelled) {
+          if (result.success && result.data) {
+            setWaiterPrompts(result.data);
+          } else {
+            setWaiterPromptsError(result.error || 'Failed to load recent prompts');
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch waiter prompts:', error);
+        if (!cancelled) {
+          setWaiterPromptsError('Failed to load recent prompts');
+        }
+      } finally {
+        if (!cancelled) {
+          setWaiterPromptsLoading(false);
+        }
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mounted, isWaiter, session?.user?.id]);
 
   // When landing from subscription success: run once, refetch, then strip query param to avoid repeated POSTs/loops
   const fromSubscriptionSuccess = searchParams?.get('from') === 'subscription-success';
@@ -125,7 +207,9 @@ export default function DashboardPage() {
   
   // Check if services are enabled (must be enabled during onboarding)
   const isSmartInvoicingEnabled = session?.user?.services?.smartInvoicing || false;
-  const isAccountsPayableEnabled = session?.user?.services?.accountsPayable || false;
+  // If subscription grants payables, treat Accounts Payable as enabled even if legacy services flag is missing.
+  const isAccountsPayableEnabled =
+    session?.user?.services?.accountsPayable || !!hasPayablesAccess;
   
   // Quick Actions should only show if BOTH subscription access AND service is enabled
   const canShowCreateInvoice = hasReceivablesAccess && isSmartInvoicingEnabled;
@@ -133,7 +217,7 @@ export default function DashboardPage() {
   
   // Check if user is on a paid plan (non-blocking)
   const isPaidUser = subscription?.plan?.planId && subscription.plan.planId !== 'receivables-free';
-
+  
   // Use session data immediately - don't wait for API call
   const displayName = userName || session?.user?.name || 'User';
   const displayOrgName = organizationName || ''; // Will be populated from server action
@@ -294,6 +378,14 @@ export default function DashboardPage() {
                 <div className="flex items-center space-x-3 px-4 py-3 rounded-lg bg-white/5 animate-pulse h-12 w-full max-w-xs" aria-hidden />
                 <div className="flex items-center space-x-3 px-4 py-3 rounded-lg bg-white/5 animate-pulse h-12 w-full max-w-xs" aria-hidden />
               </>
+            ) : isWaiter ? (
+              <button
+                onClick={() => router.push('/dashboard/services/mpesa')}
+                className="flex items-center space-x-3 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Waves className="h-5 w-5" />
+                <span>Prompt Client</span>
+              </button>
             ) : (
               <>
                 {canShowCreateInvoice && (
@@ -330,79 +422,134 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Alerts & Status */}
-        <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Status</h3>
-          <div className="space-y-3">
-            <div className="flex items-center space-x-3 p-3 bg-green-500/20 border border-green-500/30 rounded-lg">
-              <Users className="h-5 w-5 text-blue-400" />
-              <div>
-                <p className="text-blue-400 font-medium">System Active</p>
-                <p className="text-blue-300 text-sm">All services running</p>
+        {/* Alerts & Status (hide for waiters) */}
+        {!isWaiter && (
+          <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
+            <h3 className="text-lg font-semibold text-white mb-4">Status</h3>
+            <div className="space-y-3">
+              <div className="flex items-center space-x-3 p-3 bg-green-500/20 border border-green-500/30 rounded-lg">
+                <Users className="h-5 w-5 text-blue-400" />
+                <div>
+                  <p className="text-blue-400 font-medium">System Active</p>
+                  <p className="text-blue-300 text-sm">All services running</p>
+                </div>
               </div>
-            </div>
-            
-            <button
-              onClick={() => router.push('/dashboard/stats')}
-              className="flex items-center space-x-3 p-3 bg-blue-500/20 border border-blue-500/30 rounded-lg hover:bg-blue-500/30 transition-colors w-full"
-            >
-              <BarChart3 className="h-5 w-5 text-blue-400" />
-              <div className="text-left">
-                <p className="text-blue-400 font-medium">View Statistics</p>
-                <p className="text-blue-300 text-sm">Financial overview & analytics</p>
-              </div>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Recent Activity - Independent Loading with Suspense (gated by mounted to avoid hydration mismatch) */}
-      <div className={`grid gap-6 ${
-        !mounted ? 'grid-cols-1' : (canShowCreateInvoice && canShowCreatePayable ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1')
-      }`}>
-        {!mounted ? (
-          /* Placeholder so server and client first paint match */
-          <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6">
-            <div className="h-6 w-32 bg-white/20 rounded mb-4 animate-pulse" />
-            <div className="space-y-4">
-              {[...Array(3)].map((_, i) => (
-                <div key={i} className="h-16 bg-white/10 rounded-lg animate-pulse" />
-              ))}
+              
+              <button
+                onClick={() => router.push('/dashboard/stats')}
+                className="flex items-center space-x-3 p-3 bg-blue-500/20 border border-blue-500/30 rounded-lg hover:bg-blue-500/30 transition-colors w-full"
+              >
+                <BarChart3 className="h-5 w-5 text-blue-400" />
+                <div className="text-left">
+                  <p className="text-blue-400 font-medium">View Statistics</p>
+                  <p className="text-blue-300 text-sm">Financial overview & analytics</p>
+                </div>
+              </button>
             </div>
           </div>
-        ) : (
-          <>
-            {canShowCreateInvoice && (
-              <Suspense fallback={
-                <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6">
-                  <div className="h-6 w-32 bg-white/20 rounded mb-4 animate-pulse"></div>
-                  <div className="space-y-4">
-                    {[...Array(3)].map((_, i) => (
-                      <div key={i} className="h-16 bg-white/10 rounded-lg animate-pulse"></div>
-                    ))}
-                  </div>
-                </div>
-              }>
-                <RecentInvoices />
-              </Suspense>
-            )}
-            {canShowCreatePayable && (
-              <Suspense fallback={
-                <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6">
-                  <div className="h-6 w-32 bg-white/20 rounded mb-4 animate-pulse"></div>
-                  <div className="space-y-4">
-                    {[...Array(3)].map((_, i) => (
-                      <div key={i} className="h-16 bg-white/10 rounded-lg animate-pulse"></div>
-                    ))}
-                  </div>
-                </div>
-              }>
-                <RecentPayables />
-              </Suspense>
-            )}
-          </>
         )}
       </div>
+
+      {/* Recent Activity / Recent Prompts - Independent Loading with Suspense (gated by mounted to avoid hydration mismatch) */}
+      {isWaiter ? (
+        <div className="grid gap-6 grid-cols-1">
+          <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-6">
+            <h3 className="text-lg font-semibold text-white mb-4">Recent M-Pesa Prompts</h3>
+            {!mounted || waiterPromptsLoading ? (
+              <div className="space-y-3">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="h-16 bg-white/5 rounded-lg animate-pulse" />
+                ))}
+              </div>
+            ) : waiterPromptsError ? (
+              <p className="text-sm text-red-300">{waiterPromptsError}</p>
+            ) : waiterPrompts.length === 0 ? (
+              <p className="text-sm text-blue-200">No prompts yet. Use “Prompt Client” to send your first STK request.</p>
+            ) : (
+              <div className="space-y-3">
+                {waiterPrompts.map((p) => (
+                  <div
+                    key={p.id}
+                    className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10"
+                  >
+                    <div>
+                      <p className="text-sm text-white font-medium">
+                        KES {p.amount.toLocaleString()} • {p.phoneNumber}
+                      </p>
+                      <p className="text-xs text-blue-200">
+                        {p.tableRef ? `${p.tableRef} • ` : ''}
+                        {new Date(p.createdAt).toLocaleString()}
+                      </p>
+                    </div>
+                    <span
+                      className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                        p.status === 'success'
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                          : p.status === 'failed'
+                          ? 'bg-red-500/20 text-red-300 border border-red-500/40'
+                          : 'bg-yellow-500/20 text-yellow-200 border border-yellow-500/40'
+                      }`}
+                    >
+                      {p.status === 'success'
+                        ? 'Success'
+                        : p.status === 'failed'
+                        ? 'Failed'
+                        : 'Pending'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className={`grid gap-6 ${
+          !mounted ? 'grid-cols-1' : (canShowCreateInvoice && canShowCreatePayable ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1')
+        }`}>
+          {!mounted ? (
+            /* Placeholder so server and client first paint match */
+            <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6">
+              <div className="h-6 w-32 bg-white/20 rounded mb-4 animate-pulse" />
+              <div className="space-y-4">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="h-16 bg-white/10 rounded-lg animate-pulse" />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <>
+              {canShowCreateInvoice && (
+                <Suspense fallback={
+                  <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6">
+                    <div className="h-6 w-32 bg-white/20 rounded mb-4 animate-pulse"></div>
+                    <div className="space-y-4">
+                      {[...Array(3)].map((_, i) => (
+                        <div key={i} className="h-16 bg-white/10 rounded-lg animate-pulse"></div>
+                      ))}
+                    </div>
+                  </div>
+                }>
+                  <RecentInvoices />
+                </Suspense>
+              )}
+              {canShowCreatePayable && (
+                <Suspense fallback={
+                  <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6">
+                    <div className="h-6 w-32 bg-white/20 rounded mb-4 animate-pulse"></div>
+                    <div className="space-y-4">
+                      {[...Array(3)].map((_, i) => (
+                        <div key={i} className="h-16 bg-white/10 rounded-lg animate-pulse"></div>
+                      ))}
+                    </div>
+                  </div>
+                }>
+                  <RecentPayables />
+                </Suspense>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -78,7 +78,10 @@ export default function Breadcrumb() {
       // isActive is true for the last segment
       const isActive = index === segments.slice(1).length - 1;
       // /dashboard/settings has no page; link "Settings" to profile as the default settings page
-      const href = currentPath === '/dashboard/settings' ? '/dashboard/settings/profile' : currentPath;
+      // /dashboard/services has no page; link "Services" to the services catalog
+      let href = currentPath;
+      if (currentPath === '/dashboard/settings') href = '/dashboard/settings/profile';
+      else if (currentPath === '/dashboard/services') href = '/dashboard';
       breadcrumbs.push({
         label,
         href,

@@ -204,63 +204,119 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Enforce role constraints, including waiter role only when M-Pesa is enabled
+    const mpesaEnabled = organization?.settings?.mpesa?.enabled === true;
+    const allowedRoles: Array<'owner' | 'admin' | 'financeManager' | 'accountant' | 'approver' | 'waiter'> = [
+      'admin',
+      'financeManager',
+      'accountant',
+      'approver'
+    ];
+    if (mpesaEnabled) {
+      allowedRoles.push('waiter');
+    }
+    if (!allowedRoles.includes(role as any)) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid role for this organization or service configuration' },
+        { status: 400 }
+      );
+    }
+
     // Add member to organization
     const memberData: OrganizationMember = {
       userId: newMember._id!,
       email: newMember.email,
       name: newMember.name,
-      role: role as 'owner' | 'admin' | 'financeManager' | 'accountant' | 'approver',
+      role: role as 'owner' | 'admin' | 'financeManager' | 'accountant' | 'approver' | 'waiter',
       permissions: {
-        // Treasury Control (Admin Only)
-        canAddPaymentMethods: role === 'admin',
-        canModifyPaymentMethods: role === 'admin',
-        canManageTreasury: role === 'admin',
-        
-        // Team Management (Admin Only)
-        canManageTeam: role === 'admin',
-        canInviteMembers: role === 'admin',
-        canRemoveMembers: role === 'admin',
-        
-        // Company Settings (Admin Only)
-        canManageCompanyInfo: role === 'admin',
-        canManageSettings: role === 'admin',
-        
-        // Invoice Management
-        canCreateInvoices: true,
-        canSendInvoices: true,
-        canManageInvoices: role === 'admin' || role === 'financeManager',
-        
-        // Payables Management
-        canCreateBills: true,
-        canApproveBills: role === 'admin' || role === 'approver',
-        canExecutePayments: role === 'admin' || role === 'financeManager',
-        canManagePayables: role === 'admin' || role === 'financeManager',
-        
-        // Accounting & Reporting
-        canViewAllData: role === 'admin' || role === 'financeManager' || role === 'accountant',
-        canExportData: role === 'admin' || role === 'financeManager' || role === 'accountant',
-        canReconcileTransactions: role === 'admin' || role === 'financeManager',
-        
-        // Financial Controls
-        canViewFinancials: role === 'admin' || role === 'financeManager' || role === 'accountant',
-        canManageBudgets: role === 'admin' || role === 'financeManager',
-        canApproveExpenses: role === 'admin' || role === 'approver',
-        
-        // System Access
-        canAccessReports: role === 'admin' || role === 'financeManager' || role === 'accountant',
-        canManageIntegrations: role === 'admin',
-        canViewAuditLogs: role === 'admin',
-        
-        // Additional required fields
-        canManageAccounting: role === 'admin' || role === 'financeManager' || role === 'accountant',
-        canApproveDocuments: role === 'admin' || role === 'approver',
-        canManageApprovalPolicies: role === 'admin',
-        // Finance Controls Add-On
-        canClosePeriod: role === 'admin' || role === 'owner',
-        canReopenPeriod: role === 'admin' || role === 'owner',
-        canWriteOff: role === 'admin' || role === 'owner' || role === 'financeManager',
-        canBulkUpdate: role === 'admin' || role === 'owner' || role === 'financeManager',
-        canViewAudit: role === 'admin' || role === 'owner' || role === 'financeManager' || role === 'accountant'
+        // Waiters have no finance/system permissions – they only use the M-Pesa waiter UI
+        ...(role === 'waiter'
+          ? {
+              canAddPaymentMethods: false,
+              canModifyPaymentMethods: false,
+              canManageTreasury: false,
+              canManageTeam: false,
+              canInviteMembers: false,
+              canRemoveMembers: false,
+              canManageCompanyInfo: false,
+              canManageSettings: false,
+              canCreateInvoices: false,
+              canSendInvoices: false,
+              canManageInvoices: false,
+              canCreateBills: false,
+              canApproveBills: false,
+              canExecutePayments: false,
+              canManagePayables: false,
+              canViewAllData: false,
+              canExportData: false,
+              canReconcileTransactions: false,
+              canViewFinancials: false,
+              canManageBudgets: false,
+              canApproveExpenses: false,
+              canAccessReports: false,
+              canManageIntegrations: false,
+              canViewAuditLogs: false,
+              canManageAccounting: false,
+              canApproveDocuments: false,
+              canManageApprovalPolicies: false,
+              canClosePeriod: false,
+              canReopenPeriod: false,
+              canWriteOff: false,
+              canBulkUpdate: false,
+              canViewAudit: false
+            }
+          : {
+              // Treasury Control (Admin Only)
+              canAddPaymentMethods: role === 'admin',
+              canModifyPaymentMethods: role === 'admin',
+              canManageTreasury: role === 'admin',
+
+              // Team Management (Admin Only)
+              canManageTeam: role === 'admin',
+              canInviteMembers: role === 'admin',
+              canRemoveMembers: role === 'admin',
+
+              // Company Settings (Admin Only)
+              canManageCompanyInfo: role === 'admin',
+              canManageSettings: role === 'admin',
+
+              // Invoice Management
+              canCreateInvoices: true,
+              canSendInvoices: true,
+              canManageInvoices: role === 'admin' || role === 'financeManager',
+
+              // Payables Management
+              canCreateBills: true,
+              canApproveBills: role === 'admin' || role === 'approver',
+              canExecutePayments: role === 'admin' || role === 'financeManager',
+              canManagePayables: role === 'admin' || role === 'financeManager',
+
+              // Accounting & Reporting
+              canViewAllData: role === 'admin' || role === 'financeManager' || role === 'accountant',
+              canExportData: role === 'admin' || role === 'financeManager' || role === 'accountant',
+              canReconcileTransactions: role === 'admin' || role === 'financeManager',
+
+              // Financial Controls
+              canViewFinancials: role === 'admin' || role === 'financeManager' || role === 'accountant',
+              canManageBudgets: role === 'admin' || role === 'financeManager',
+              canApproveExpenses: role === 'admin' || role === 'approver',
+
+              // System Access
+              canAccessReports: role === 'admin' || role === 'financeManager' || role === 'accountant',
+              canManageIntegrations: role === 'admin',
+              canViewAuditLogs: role === 'admin',
+
+              // Additional required fields
+              canManageAccounting: role === 'admin' || role === 'financeManager' || role === 'accountant',
+              canApproveDocuments: role === 'admin' || role === 'approver',
+              canManageApprovalPolicies: role === 'admin',
+              // Finance Controls Add-On
+              canClosePeriod: role === 'admin' || role === 'owner',
+              canReopenPeriod: role === 'admin' || role === 'owner',
+              canWriteOff: role === 'admin' || role === 'owner' || role === 'financeManager',
+              canBulkUpdate: role === 'admin' || role === 'owner' || role === 'financeManager',
+              canViewAudit: role === 'admin' || role === 'owner' || role === 'financeManager' || role === 'accountant'
+            })
       } as PermissionSet,
       status: 'active',
       joinedAt: new Date()
@@ -359,6 +415,25 @@ export async function PUT(request: NextRequest) {
     if (role === 'owner') {
       return NextResponse.json(
         { success: false, message: 'Cannot change user to owner role' },
+        { status: 400 }
+      );
+    }
+
+    // Enforce role constraints on update, including waiter role only when M-Pesa is enabled
+    const organization = await OrganizationService.getOrganizationById(user.organizationId.toString());
+    const mpesaEnabled = organization?.settings?.mpesa?.enabled === true;
+    const allowedRoles: Array<'admin' | 'financeManager' | 'accountant' | 'approver' | 'waiter'> = [
+      'admin',
+      'financeManager',
+      'accountant',
+      'approver'
+    ];
+    if (mpesaEnabled) {
+      allowedRoles.push('waiter');
+    }
+    if (!allowedRoles.includes(role as any)) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid role for this organization or service configuration' },
         { status: 400 }
       );
     }

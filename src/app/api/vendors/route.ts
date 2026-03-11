@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
+import crypto from 'crypto';
 
 export async function GET() {
   try {
@@ -78,6 +79,9 @@ export async function POST(request: NextRequest) {
       taxId,
       notes,
       userId: session.user.email,
+      // One vendor = one reusable submission link
+      paymentLinkToken: crypto.randomBytes(24).toString('hex'),
+      status: 'active',
       createdAt: new Date(),
       updatedAt: new Date()
     };

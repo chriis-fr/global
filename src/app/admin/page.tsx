@@ -91,6 +91,36 @@ export default function AdminDashboard() {
   const [bulkUpdatePlan, setBulkUpdatePlan] = useState<string>('receivables-free');
   const [bulkUpdating, setBulkUpdating] = useState(false);
 
+  // Org-level M-Pesa control
+  const [mpesaOrgQuery, setMpesaOrgQuery] = useState('');
+  const [mpesaOrgResults, setMpesaOrgResults] = useState<Array<{ organizationId: string; organizationName?: string }>>([]);
+  const [mpesaOrgSelected, setMpesaOrgSelected] = useState<{ organizationId: string; organizationName?: string } | null>(null);
+  const [mpesaOrgSearching, setMpesaOrgSearching] = useState(false);
+  const [mpesaOrgDetail, setMpesaOrgDetail] = useState<{
+    mpesaEnabled: boolean;
+    credentialsConfigured?: boolean;
+    businessShortCode?: string;
+    accountReference?: string;
+    transactionType?: 'CustomerPayBillOnline' | 'CustomerBuyGoodsOnline';
+  } | null>(null);
+  const mpesaOrgDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [mpesaToggling, setMpesaToggling] = useState(false);
+  const [mpesaCredentialsSaving, setMpesaCredentialsSaving] = useState(false);
+  const [mpesaCredentialsShowForm, setMpesaCredentialsShowForm] = useState(false);
+  const [mpesaCredentialsForm, setMpesaCredentialsForm] = useState({
+    consumerKey: '',
+    consumerSecret: '',
+    passkey: '',
+    callbackUrl: '',
+    environment: 'sandbox' as 'sandbox' | 'production',
+  });
+  const [mpesaBusinessForm, setMpesaBusinessForm] = useState({
+    businessShortCode: '',
+    accountReference: '',
+    transactionType: 'CustomerPayBillOnline' as 'CustomerPayBillOnline' | 'CustomerBuyGoodsOnline',
+  });
+  const [mpesaBusinessSaving, setMpesaBusinessSaving] = useState(false);
+
   // Org search for "Add to organization"
   useEffect(() => {
     if (addToOrgDebounceRef.current) clearTimeout(addToOrgDebounceRef.current);
@@ -120,6 +150,43 @@ export default function AdminDashboard() {
       if (addToOrgDebounceRef.current) clearTimeout(addToOrgDebounceRef.current);
     };
   }, [addToOrgQuery]);
+
+  // Org search for "M-Pesa control"
+  useEffect(() => {
+    if (mpesaOrgDebounceRef.current) clearTimeout(mpesaOrgDebounceRef.current);
+    const q = mpesaOrgQuery.trim();
+    if (q.length < 1) {
+      setMpesaOrgResults([]);
+      setMpesaOrgSelected(null);
+      setMpesaOrgDetail(null);
+      return;
+    }
+    mpesaOrgDebounceRef.current = setTimeout(async () => {
+      setMpesaOrgSearching(true);
+      try {
+        const { searchOrganizationsForAdmin } = await import('@/lib/actions/pdf-invoice');
+        const result = await searchOrganizationsForAdmin(q);
+        if (result.success && result.data) {
+          setMpesaOrgResults(
+            result.data.map((r) => ({
+              organizationId: r.organizationId,
+              organizationName: r.organizationName,
+            }))
+          );
+        } else {
+          setMpesaOrgResults([]);
+        }
+      } catch {
+        setMpesaOrgResults([]);
+      } finally {
+        setMpesaOrgSearching(false);
+        mpesaOrgDebounceRef.current = null;
+      }
+    }, 300);
+    return () => {
+      if (mpesaOrgDebounceRef.current) clearTimeout(mpesaOrgDebounceRef.current);
+    };
+  }, [mpesaOrgQuery]);
 
   // Load unknown plans count function
   const loadUnknownPlansCount = async () => {
@@ -340,6 +407,111 @@ export default function AdminDashboard() {
       toast.error('Failed to add user to organization');
     } finally {
       setAddingToOrg(false);
+    }
+  };
+
+  const loadMpesaOrgDetail = async (orgId: string) => {
+    setMpesaOrgDetail(null);
+    try {
+      const { getOrganizationMpesaStatus, getOrganizationMpesaCredentialsStatus } = await import('@/app/actions/mpesa-org-actions');
+      const [statusRes, credRes] = await Promise.all([
+        getOrganizationMpesaStatus(orgId),
+        getOrganizationMpesaCredentialsStatus(orgId),
+      ]);
+      if (statusRes.success && statusRes.data) {
+        setMpesaOrgDetail({
+          mpesaEnabled: statusRes.data.mpesaEnabled,
+          credentialsConfigured: credRes.success && credRes.configured === true,
+          businessShortCode: statusRes.data.businessShortCode,
+          accountReference: statusRes.data.accountReference,
+          transactionType: statusRes.data.transactionType,
+        });
+        setMpesaBusinessForm({
+          businessShortCode: statusRes.data.businessShortCode ?? '',
+          accountReference: statusRes.data.accountReference ?? '',
+          transactionType: statusRes.data.transactionType ?? 'CustomerPayBillOnline',
+        });
+      } else if (statusRes.error) {
+        toast.error(statusRes.error);
+      }
+    } catch (error) {
+      console.error('Failed to load org M-Pesa status:', error);
+      toast.error('Failed to load organization M-Pesa status');
+    }
+  };
+
+  const handleToggleOrgMpesa = async () => {
+    if (!mpesaOrgSelected || !mpesaOrgDetail) return;
+    setMpesaToggling(true);
+    try {
+      const { setOrganizationMpesaEnabled } = await import('@/app/actions/mpesa-org-actions');
+      const next = !mpesaOrgDetail.mpesaEnabled;
+      const result = await setOrganizationMpesaEnabled(mpesaOrgSelected.organizationId, next);
+      if (result.success) {
+        setMpesaOrgDetail((prev) => (prev ? { ...prev, mpesaEnabled: next } : { mpesaEnabled: next, credentialsConfigured: false }));
+        toast.success(`M-Pesa ${next ? 'enabled' : 'disabled'} for this organization`);
+      } else if (result.error) {
+        toast.error(result.error);
+      }
+    } catch (error) {
+      console.error('Failed to toggle org M-Pesa:', error);
+      toast.error('Failed to update M-Pesa setting');
+    } finally {
+      setMpesaToggling(false);
+    }
+  };
+
+  const handleSaveMpesaCredentials = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mpesaOrgSelected) return;
+    setMpesaCredentialsSaving(true);
+    try {
+      const { setOrganizationMpesaCredentials } = await import('@/app/actions/mpesa-org-actions');
+      const result = await setOrganizationMpesaCredentials(mpesaOrgSelected.organizationId, {
+        consumerKey: mpesaCredentialsForm.consumerKey,
+        consumerSecret: mpesaCredentialsForm.consumerSecret,
+        passkey: mpesaCredentialsForm.passkey,
+        callbackUrl: mpesaCredentialsForm.callbackUrl,
+        environment: mpesaCredentialsForm.environment,
+      });
+      if (result.success) {
+        await loadMpesaOrgDetail(mpesaOrgSelected.organizationId);
+        setMpesaCredentialsForm({ consumerKey: '', consumerSecret: '', passkey: '', callbackUrl: '', environment: 'sandbox' });
+        setMpesaCredentialsShowForm(false);
+        toast.success('Daraja credentials saved (stored encrypted). They are never shown in the UI.');
+      } else if (result.error) {
+        toast.error(result.error);
+      }
+    } catch (error) {
+      console.error('Failed to save M-Pesa credentials:', error);
+      toast.error('Failed to save credentials');
+    } finally {
+      setMpesaCredentialsSaving(false);
+    }
+  };
+
+  const handleSaveMpesaBusinessConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mpesaOrgSelected) return;
+    setMpesaBusinessSaving(true);
+    try {
+      const { setOrganizationMpesaBusinessConfig } = await import('@/app/actions/mpesa-org-actions');
+      const result = await setOrganizationMpesaBusinessConfig(mpesaOrgSelected.organizationId, {
+        businessShortCode: mpesaBusinessForm.businessShortCode.trim() || undefined,
+        accountReference: mpesaBusinessForm.accountReference.trim() || undefined,
+        transactionType: mpesaBusinessForm.transactionType,
+      });
+      if (result.success) {
+        await loadMpesaOrgDetail(mpesaOrgSelected.organizationId);
+        toast.success('M-Pesa business config saved. Sandbox: use 174379; live: use your Paybill/Till.');
+      } else if (result.error) {
+        toast.error(result.error);
+      }
+    } catch (error) {
+      console.error('Failed to save M-Pesa business config:', error);
+      toast.error('Failed to save business config');
+    } finally {
+      setMpesaBusinessSaving(false);
     }
   };
 
@@ -794,6 +966,252 @@ export default function AdminDashboard() {
           </div>
         </div>
 
+        {/* Organization M-Pesa Control (admin-only, per-organization toggle) */}
+        <div className="bg-white rounded-lg shadow p-6 mb-8">
+          <div className="flex items-center space-x-2 mb-4">
+            <Link2 className="h-5 w-5 text-green-600" />
+            <h2 className="text-xl font-semibold text-gray-900">Organization M-Pesa Control</h2>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Search organization (name or member email)
+              </label>
+              <input
+                type="text"
+                value={mpesaOrgQuery}
+                onChange={(e) => setMpesaOrgQuery(e.target.value)}
+                placeholder="Type to find organization..."
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              {mpesaOrgSearching && (
+                <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Searching...
+                </p>
+              )}
+            </div>
+
+            {mpesaOrgResults.length > 0 && !mpesaOrgSelected && (
+              <div className="border border-gray-200 rounded-lg bg-gray-50 max-h-56 overflow-y-auto">
+                {mpesaOrgResults.map((org) => (
+                  <button
+                    key={org.organizationId}
+                    type="button"
+                    onClick={() => {
+                      setMpesaOrgSelected(org);
+                      setMpesaOrgResults([]);
+                      loadMpesaOrgDetail(org.organizationId);
+                    }}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-blue-50 border-b border-gray-100 last:border-b-0 flex items-center justify-between"
+                  >
+                    <span className="font-medium text-gray-900">
+                      {org.organizationName || org.organizationId}
+                    </span>
+                    <span className="text-xs text-gray-500">Select</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {mpesaOrgSelected && (
+              <div className="mt-2 p-4 border border-gray-200 rounded-lg bg-gray-50 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">
+                      {mpesaOrgSelected.organizationName || mpesaOrgSelected.organizationId}
+                    </p>
+                    <p className="text-xs text-gray-500">ID: {mpesaOrgSelected.organizationId}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMpesaOrgSelected(null);
+                      setMpesaOrgDetail(null);
+                      setMpesaOrgQuery('');
+                    }}
+                    className="text-xs text-blue-600 hover:underline"
+                  >
+                    Change
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between mt-2">
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">M-Pesa Enabled</p>
+                    <p className="text-xs text-gray-500">
+                      Controls whether this organization can use the waiter STK prompts and M-Pesa flows.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleToggleOrgMpesa}
+                    disabled={!mpesaOrgDetail || mpesaToggling}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 ${
+                      mpesaOrgDetail?.mpesaEnabled
+                        ? 'bg-red-600 text-white hover:bg-red-700'
+                        : 'bg-green-600 text-white hover:bg-green-700'
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  >
+                    {mpesaToggling ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : mpesaOrgDetail?.mpesaEnabled ? (
+                      'Disable'
+                    ) : (
+                      'Enable'
+                    )}
+                  </button>
+                </div>
+
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <p className="text-sm font-medium text-gray-700 mb-1">M-Pesa business config (shortcode &amp; account)</p>
+                  <p className="text-xs text-gray-500 mb-2">
+                    When set, STK uses these instead of the org&apos;s Payment Method. Sandbox: shortcode <strong>174379</strong>, account e.g. &quot;Test&quot;. Live: your Paybill or Till number.
+                  </p>
+                  <form onSubmit={handleSaveMpesaBusinessConfig} className="space-y-2 mb-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Business Shortcode</label>
+                        <input
+                          type="text"
+                          value={mpesaBusinessForm.businessShortCode}
+                          onChange={(e) => setMpesaBusinessForm((p) => ({ ...p, businessShortCode: e.target.value }))}
+                          className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm"
+                          placeholder="e.g. 174379 (sandbox)"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Account Reference (max 12)</label>
+                        <input
+                          type="text"
+                          maxLength={12}
+                          value={mpesaBusinessForm.accountReference}
+                          onChange={(e) => setMpesaBusinessForm((p) => ({ ...p, accountReference: e.target.value }))}
+                          className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm"
+                          placeholder="e.g. Test, Sandbox"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Type</label>
+                        <select
+                          value={mpesaBusinessForm.transactionType}
+                          onChange={(e) => setMpesaBusinessForm((p) => ({ ...p, transactionType: e.target.value as 'CustomerPayBillOnline' | 'CustomerBuyGoodsOnline' }))}
+                          className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm"
+                        >
+                          <option value="CustomerPayBillOnline">Paybill</option>
+                          <option value="CustomerBuyGoodsOnline">Till</option>
+                        </select>
+                      </div>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={mpesaBusinessSaving}
+                      className="px-3 py-1.5 bg-gray-700 text-white rounded text-sm hover:bg-gray-800 disabled:opacity-50"
+                    >
+                      {mpesaBusinessSaving ? 'Saving...' : 'Save business config'}
+                    </button>
+                  </form>
+                </div>
+
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <p className="text-sm font-medium text-gray-700 mb-1">Daraja credentials (sandbox/production)</p>
+                  <p className="text-xs text-gray-500 mb-2">
+                    Stored encrypted per organization. Fill only the fields you want to set; save stores those and keeps the rest as-is. Never exposed in the UI.
+                  </p>
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mb-2">
+                    Sandbox: Passkey from Daraja sandbox (e.g. bfb279f9...). Callback = <strong>https://your-public-host/api/mpesa/callback</strong> (HTTPS; use ngrok for local).
+                  </p>
+                  <p className="text-sm text-gray-600 mb-2">
+                    Status: <span className={mpesaOrgDetail?.credentialsConfigured ? 'text-green-600 font-medium' : 'text-amber-600'}>{mpesaOrgDetail?.credentialsConfigured ? 'Configured' : 'Not set'}</span>
+                  </p>
+                  {!mpesaCredentialsShowForm ? (
+                    <button
+                      type="button"
+                      onClick={() => setMpesaCredentialsShowForm(true)}
+                      className="text-sm text-blue-600 hover:underline"
+                    >
+                      {mpesaOrgDetail?.credentialsConfigured ? 'Update credentials' : 'Set credentials'}
+                    </button>
+                  ) : (
+                    <form onSubmit={handleSaveMpesaCredentials} className="space-y-3 mt-2">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Consumer Key</label>
+                        <input
+                          type="text"
+                          value={mpesaCredentialsForm.consumerKey}
+                          onChange={(e) => setMpesaCredentialsForm((p) => ({ ...p, consumerKey: e.target.value }))}
+                          className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm"
+                          placeholder="Daraja consumer key"
+                          autoComplete="off"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Consumer Secret</label>
+                        <input
+                          type="password"
+                          value={mpesaCredentialsForm.consumerSecret}
+                          onChange={(e) => setMpesaCredentialsForm((p) => ({ ...p, consumerSecret: e.target.value }))}
+                          className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm"
+                          placeholder="Daraja consumer secret"
+                          autoComplete="off"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Lipa Na M-Pesa Online Passkey</label>
+                        <input
+                          type="password"
+                          value={mpesaCredentialsForm.passkey}
+                          onChange={(e) => setMpesaCredentialsForm((p) => ({ ...p, passkey: e.target.value }))}
+                          className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm"
+                          placeholder="Passkey"
+                          autoComplete="off"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Callback URL</label>
+                        <input
+                          type="url"
+                          value={mpesaCredentialsForm.callbackUrl}
+                          onChange={(e) => setMpesaCredentialsForm((p) => ({ ...p, callbackUrl: e.target.value }))}
+                          className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm"
+                          placeholder="https://your-domain.com/api/mpesa/callback (must be HTTPS; this app receives at /api/mpesa/callback)"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Environment</label>
+                        <select
+                          value={mpesaCredentialsForm.environment}
+                          onChange={(e) => setMpesaCredentialsForm((p) => ({ ...p, environment: e.target.value as 'sandbox' | 'production' }))}
+                          className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm"
+                        >
+                          <option value="sandbox">Sandbox</option>
+                          <option value="production">Production</option>
+                        </select>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="submit"
+                          disabled={mpesaCredentialsSaving}
+                          className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          {mpesaCredentialsSaving ? 'Saving...' : 'Save credentials'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setMpesaCredentialsShowForm(false); setMpesaCredentialsForm({ consumerKey: '', consumerSecret: '', passkey: '', callbackUrl: '', environment: 'sandbox' }); }}
+                          className="px-3 py-1.5 border border-gray-300 rounded text-sm hover:bg-gray-50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {/* Total Users */}
@@ -811,22 +1229,22 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* Active Users */}
+          {/* Total Organizations */}
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Active Users (30d)</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">{stats.users.active.toLocaleString()}</p>
+                <p className="text-sm font-medium text-gray-600">Total Organizations</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">
+                  {stats.organizations.total.toLocaleString()}
+                </p>
                 <div className="flex items-center mt-2 text-sm">
-                  <UserCheck className="h-4 w-4 text-blue-500 mr-1" />
-                  <span className="text-gray-600">
-                    {stats.users.total > 0 
-                      ? ((stats.users.active / stats.users.total) * 100).toFixed(1) 
-                      : '0.0'}% active
+                  <ArrowUp className="h-4 w-4 text-green-500 mr-1" />
+                  <span className="text-green-600">
+                    {stats.organizations.thisMonth} created this month
                   </span>
                 </div>
               </div>
-              <UserCheck className="h-12 w-12 text-green-500" />
+              <Users className="h-12 w-12 text-indigo-500" />
             </div>
           </div>
 
@@ -1086,6 +1504,7 @@ export default function AdminDashboard() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Account</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Plan</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Onboarding</th>
@@ -1111,6 +1530,17 @@ export default function AdminDashboard() {
                             )}
                           </div>
                         </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        {user.organizationId ? (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            Org member
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            Individual
+                          </span>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{user.email}</td>
                       <td className="px-6 py-4 whitespace-nowrap">
