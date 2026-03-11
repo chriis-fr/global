@@ -295,6 +295,168 @@ export async function getPayablesListPaginated(
 }
 
 /**
+ * Get vendors with payable counts for the current user/org (for payables page Vendors tab).
+ */
+export async function getVendorsWithPayableCounts(): Promise<{
+  success: boolean;
+  error?: string;
+  data?: Array<{
+    vendor: { _id: string; name?: string; email?: string; company?: string };
+    pendingCount: number;
+    paidCount: number;
+    totalCount: number;
+    pendingAmount: number;
+  }>;
+}> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const db = await connectToDatabase();
+    const vendorsCollection = db.collection('vendors');
+    const payablesCollection = db.collection('payables');
+
+    const isOrganization = !!(session.user.organizationId && session.user.organizationId !== session.user.id);
+    const isObjectId = /^[0-9a-fA-F]{24}$/.test(session.user.id);
+    const issuerIdQuery = isObjectId
+      ? { issuerId: new ObjectId(session.user.id) }
+      : { issuerId: session.user.id };
+
+    const vendorQuery: Record<string, unknown> = isOrganization
+      ? { organizationId: session.user.organizationId }
+      : { userId: session.user.email };
+
+    const payableBaseQuery: Record<string, unknown> = isOrganization
+      ? {
+          $or: [
+            { organizationId: session.user.organizationId },
+            { organizationId: new ObjectId(session.user.organizationId) },
+          ],
+        }
+      : {
+          $or: [issuerIdQuery, { userId: session.user.email }],
+        };
+
+    const vendors = await vendorsCollection
+      .find(vendorQuery)
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    if (vendors.length === 0) {
+      return { success: true, data: [] };
+    }
+
+    const vendorIds = vendors.map((v) => v._id);
+    const vendorEmailsLower = (vendors.map((v) => (v.email as string)?.toLowerCase()).filter(Boolean) as string[]);
+
+    // Payables linked by vendorId (e.g. from vendor submission link)
+    const payablesByVendorId = await payablesCollection
+      .find({
+        ...payableBaseQuery,
+        vendorId: { $in: vendorIds },
+      })
+      .toArray();
+
+    // Payables with no vendorId but matching vendor email (e.g. created manually) - case-insensitive
+    const emailRegexList = vendorEmailsLower.length
+      ? vendorEmailsLower.map((e) => ({
+          vendorEmail: new RegExp(`^${e.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
+        }))
+      : [];
+    const payablesByEmail = emailRegexList.length
+      ? await payablesCollection
+          .find({
+            ...payableBaseQuery,
+            $and: [
+              { $or: [{ vendorId: { $exists: false } }, { vendorId: null }, { vendorId: { $nin: vendorIds } }] },
+              { $or: emailRegexList },
+            ],
+          })
+          .toArray()
+      : [];
+
+    const statsByVendorId: Record<
+      string,
+      { pendingCount: number; paidCount: number; totalCount: number; pendingAmount: number }
+    > = {};
+    for (const v of vendors) {
+      const idStr = (v._id as ObjectId).toString();
+      statsByVendorId[idStr] = { pendingCount: 0, paidCount: 0, totalCount: 0, pendingAmount: 0 };
+    }
+
+    const seenPayableIds = new Set<string>();
+
+    for (const p of payablesByVendorId) {
+      const vid = p.vendorId;
+      if (!vid) continue;
+      const idStr = (vid as ObjectId).toString();
+      if (!statsByVendorId[idStr]) continue;
+      const key = (p._id as ObjectId).toString();
+      if (seenPayableIds.has(key)) continue;
+      seenPayableIds.add(key);
+      statsByVendorId[idStr].totalCount += 1;
+      if (p.status === 'paid') {
+        statsByVendorId[idStr].paidCount += 1;
+      } else {
+        statsByVendorId[idStr].pendingCount += 1;
+        statsByVendorId[idStr].pendingAmount += p.total ?? p.amount ?? 0;
+      }
+    }
+
+    const vendorIdByEmail: Record<string, string> = {};
+    for (const v of vendors) {
+      const em = (v.email as string)?.toLowerCase();
+      if (em) vendorIdByEmail[em] = (v._id as ObjectId).toString();
+    }
+    for (const p of payablesByEmail) {
+      const key = (p._id as ObjectId).toString();
+      if (seenPayableIds.has(key)) continue;
+      const em = (p.vendorEmail as string)?.toLowerCase();
+      if (!em || !vendorIdByEmail[em]) continue;
+      const idStr = vendorIdByEmail[em];
+      if (!statsByVendorId[idStr]) continue;
+      seenPayableIds.add(key);
+      statsByVendorId[idStr].totalCount += 1;
+      if (p.status === 'paid') {
+        statsByVendorId[idStr].paidCount += 1;
+      } else {
+        statsByVendorId[idStr].pendingCount += 1;
+        statsByVendorId[idStr].pendingAmount += p.total ?? p.amount ?? 0;
+      }
+    }
+
+    const data = vendors.map((v) => {
+      const idStr = (v._id as ObjectId).toString();
+      const stats = statsByVendorId[idStr] ?? {
+        pendingCount: 0,
+        paidCount: 0,
+        totalCount: 0,
+        pendingAmount: 0,
+      };
+      return {
+        vendor: {
+          _id: idStr,
+          name: v.name,
+          email: v.email,
+          company: v.company,
+        },
+        pendingCount: stats.pendingCount,
+        paidCount: stats.paidCount,
+        totalCount: stats.totalCount,
+        pendingAmount: Math.round(stats.pendingAmount * 100) / 100,
+      };
+    });
+
+    return { success: true, data };
+  } catch (error) {
+    console.error('Error getting vendors with payable counts:', error);
+    return { success: false, error: 'Failed to fetch vendors' };
+  }
+}
+
+/**
  * Get onboarding status for a service - Ultra fast server action
  * Replaces slow API route - no compilation delay
  */

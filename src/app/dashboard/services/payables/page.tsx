@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { 
@@ -10,15 +10,51 @@ import {
   Users,
   Building2,
   ArrowRight,
-  RotateCcw
+  RotateCcw,
+  FileText,
+  CheckCircle,
+  Clock
 } from 'lucide-react';
 import PayableStatCard from '@/components/payables/PayableStatCard';
 import PayablesList from '@/components/payables/PayablesList';
 import PayablesOnboardingStatus from '@/components/payables/PayablesOnboardingStatus';
+import { getVendorsWithPayableCounts } from '@/app/actions/payable-actions';
+
+type VendorWithCounts = {
+  vendor: { _id: string; name?: string; email?: string; company?: string };
+  pendingCount: number;
+  paidCount: number;
+  totalCount: number;
+  pendingAmount: number;
+};
 
 export default function AccountsPayablePage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'bills' | 'direct-payments' | 'vendors'>('bills');
+  const [vendorStats, setVendorStats] = useState<VendorWithCounts[]>([]);
+  const [vendorStatsLoading, setVendorStatsLoading] = useState(false);
+
+  const loadVendorStats = useCallback(async () => {
+    setVendorStatsLoading(true);
+    try {
+      const result = await getVendorsWithPayableCounts();
+      if (result.success && result.data) {
+        setVendorStats(result.data);
+      } else {
+        setVendorStats([]);
+      }
+    } catch {
+      setVendorStats([]);
+    } finally {
+      setVendorStatsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'vendors') {
+      loadVendorStats();
+    }
+  }, [activeTab, loadVendorStats]);
 
   const handleCreatePayable = () => {
     router.push('/dashboard/services/payables/create');
@@ -291,25 +327,87 @@ export default function AccountsPayablePage() {
                   <h3 className="text-lg font-semibold text-white">Vendors</h3>
                   <button
                     onClick={() => router.push('/dashboard/vendors')}
-                    className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                    className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                   >
                     <Plus className="h-4 w-4" />
-                    <span>Add Vendor</span>
+                    <span>Add / Manage Vendors</span>
                   </button>
                 </div>
-                
-                <div className="text-center py-12">
-                  <Users className="h-12 w-12 text-blue-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-white mb-2">Manage Vendors</h3>
-                  <p className="text-blue-200 mb-6">Add and manage your vendor information for easy payments.</p>
-                  <button
-                    onClick={() => router.push('/dashboard/vendors')}
-                    className="inline-flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span>Manage Vendors</span>
-                  </button>
-                </div>
+
+                {vendorStatsLoading ? (
+                  <div className="space-y-4">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="flex items-center justify-between p-4 bg-white/5 rounded-lg animate-pulse">
+                        <div className="h-4 bg-white/20 rounded w-32" />
+                        <div className="h-4 bg-white/20 rounded w-24" />
+                      </div>
+                    ))}
+                  </div>
+                ) : vendorStats.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Users className="h-12 w-12 text-blue-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-white mb-2">No vendors yet</h3>
+                    <p className="text-blue-200 mb-6">Add vendors to see an overview of payables per vendor here.</p>
+                    <button
+                      onClick={() => router.push('/dashboard/vendors')}
+                      className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      <Plus className="h-4 w-4" />
+                      <span>Manage Vendors</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-sm text-blue-200 mb-4">
+                      Overview of each vendor and their payables. Open Manage Vendors to edit details or send submission links.
+                    </p>
+                    {vendorStats.map(({ vendor, pendingCount, paidCount, totalCount, pendingAmount }) => (
+                      <div
+                        key={vendor._id}
+                        className="flex flex-wrap items-center justify-between gap-3 p-4 bg-white/5 rounded-lg hover:bg-white/10 transition-colors"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="font-medium text-white truncate">
+                            {vendor.name || vendor.company || 'Vendor'}
+                          </div>
+                          {(vendor.company || vendor.email) && (
+                            <div className="text-sm text-blue-200 truncate">
+                              {[vendor.company, vendor.email].filter(Boolean).join(' · ')}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-4 text-sm">
+                          <span className="flex items-center gap-1.5 text-blue-200" title="Total payables">
+                            <FileText className="h-4 w-4 text-blue-400" />
+                            <span className="text-white font-medium">{totalCount}</span>
+                            <span>total</span>
+                          </span>
+                          <span className="flex items-center gap-1.5 text-amber-200" title="Pending">
+                            <Clock className="h-4 w-4 text-amber-400" />
+                            <span className="text-white font-medium">{pendingCount}</span>
+                            <span>pending</span>
+                            {pendingAmount > 0 && (
+                              <span className="text-amber-300 font-medium">
+                                ({typeof pendingAmount === 'number' ? pendingAmount.toLocaleString(undefined, { minimumFractionDigits: 2 }) : pendingAmount})
+                              </span>
+                            )}
+                          </span>
+                          <span className="flex items-center gap-1.5 text-green-200" title="Paid">
+                            <CheckCircle className="h-4 w-4 text-green-400" />
+                            <span className="text-white font-medium">{paidCount}</span>
+                            <span>paid</span>
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => router.push('/dashboard/vendors')}
+                          className="text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors"
+                        >
+                          Manage →
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
