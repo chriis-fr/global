@@ -59,20 +59,13 @@ export async function POST(request: NextRequest) {
       notes
     } = body;
 
-    if (!name || !email) {
-      return NextResponse.json(
-        { success: false, message: 'Name and email are required' },
-        { status: 400 }
-      );
-    }
-
     const db = await connectToDatabase();
     const collection = db.collection('vendors');
 
     let query = {};
     const vendorData: Record<string, unknown> = {
-      name,
-      email,
+      name: name ?? '',
+      email: email ?? '',
       phone,
       address,
       company,

@@ -76,13 +76,6 @@ export async function PUT(
       notes
     } = body;
 
-    if (!name || !email) {
-      return NextResponse.json(
-        { success: false, message: 'Name and email are required' },
-        { status: 400 }
-      );
-    }
-
     const db = await connectToDatabase();
     const collection = db.collection('vendors');
 
