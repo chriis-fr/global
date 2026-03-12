@@ -1890,11 +1890,13 @@ export default function CreateInvoicePage() {
         selectClient(data.data);
         setShowNewClientModal(false);
       } else {
-        toast.error(data.message || 'Failed to create client');
+        const reason = data.message || data.error || 'The server rejected this client.';
+        toast.error(`Could not create client. Details: ${reason}`);
       }
     } catch (error) {
       console.error('Failed to create client:', error);
-      toast.error('Failed to create client. Please try again.');
+      const reason = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Could not create client due to a network or server error. Details: ${reason}`);
     } finally {
       setCreatingClient(false);
     }
@@ -2031,8 +2033,8 @@ export default function CreateInvoicePage() {
       const success = response.ok && data?.success;
 
       if (!success) {
-        const message = data?.message || data?.error || `Save failed (${response.status})`;
-        toast.error(message);
+        const message = data?.message || data?.error || `Save failed with status ${response.status}.`;
+        toast.error(`Could not save draft on the server. Details: ${message}`);
         return;
       }
 
@@ -2052,7 +2054,8 @@ export default function CreateInvoicePage() {
       router.replace('/dashboard/services/smart-invoicing');
     } catch (error) {
       console.error('Failed to save draft:', error);
-      toast.error('Failed to save draft. Please try again.');
+      const reason = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Could not save draft due to a network or server error. Details: ${reason}`);
     } finally {
       setLoading(false);
     }
@@ -2606,7 +2609,8 @@ export default function CreateInvoicePage() {
       router.push('/dashboard/services/smart-invoicing/invoices');
     } catch (error) {
       console.error('❌ [Smart Invoicing] Failed to download PDF:', error);
-      toast.error('Failed to download PDF. Please try again.');
+      const reason = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Could not download PDF. Details: ${reason}. If this keeps happening, please share this message with support.`);
     } finally {
       setSendingInvoice(false);
     }
@@ -2755,7 +2759,8 @@ export default function CreateInvoicePage() {
       
     } catch (error) {
       console.error('❌ [Smart Invoicing] Failed to download CSV:', error);
-      toast.error('Failed to download CSV. Please try again.');
+      const reason = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Could not download CSV. Details: ${reason}. If this keeps happening, please share this message with support.`);
     }
   };
 

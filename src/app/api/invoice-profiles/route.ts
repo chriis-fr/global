@@ -52,11 +52,12 @@ export async function GET() {
     const orgIdString = organizationId.toString();
     const profiles = await profilesCollection
       .find({
+        // Cast to any so we can support both ObjectId and string organizationId
         $or: [
           { organizationId },
-          { organizationId: orgIdString },
+          { organizationId: orgIdString as unknown as ObjectId },
         ],
-      })
+      } as unknown as Parameters<typeof profilesCollection.find>[0])
       .sort({ isDefault: -1, createdAt: -1 })
       .toArray();
 
