@@ -66,6 +66,10 @@ export default function AdminDashboard() {
     _id: string;
     email: string;
     name: string;
+    invoiceCount?: number;
+    invoicesThisMonth?: number;
+    invoicesRemainingThisMonth?: number | null;
+    invoiceLimitPerMonth?: number;
     subscription: {
       planId: string;
       status: string;
@@ -325,6 +329,10 @@ export default function AdminDashboard() {
           _id: result.data._id,
           email: result.data.email,
           name: result.data.name,
+          invoiceCount: result.data.invoiceCount,
+          invoicesThisMonth: result.data.invoicesThisMonth,
+          invoicesRemainingThisMonth: result.data.invoicesRemainingThisMonth,
+          invoiceLimitPerMonth: result.data.invoiceLimitPerMonth,
           subscription: result.data.subscription,
           services: result.data.services,
           organizationId: result.data.organizationId,
@@ -777,6 +785,37 @@ export default function AdminDashboard() {
                     <p className="text-sm text-gray-600">Current Plan</p>
                     <p className="text-lg font-semibold text-gray-900">{getPlanName(searchedUser.subscription.planId)}</p>
                     <p className="text-xs text-gray-500 mt-1">{searchedUser.subscription.planId}</p>
+                    <div className="mt-2 space-y-1 text-xs text-gray-500">
+                      {typeof searchedUser.invoiceCount === 'number' && (
+                        <p>
+                          Total invoices (all time):{' '}
+                          <span className="font-semibold">{searchedUser.invoiceCount}</span>
+                        </p>
+                      )}
+                      {typeof searchedUser.invoicesThisMonth === 'number' && (
+                        <p>
+                          This month:{' '}
+                          <span className="font-semibold">
+                            {searchedUser.invoicesThisMonth}
+                            {searchedUser.invoiceLimitPerMonth !== undefined && searchedUser.invoiceLimitPerMonth !== -1 && (
+                              <> / {searchedUser.invoiceLimitPerMonth}</>
+                            )}
+                          </span>
+                        </p>
+                      )}
+                      {searchedUser.invoiceLimitPerMonth !== undefined && searchedUser.invoiceLimitPerMonth === -1 && (
+                        <p>
+                          Monthly invoice limit:{' '}
+                          <span className="font-semibold">Unlimited</span>
+                        </p>
+                      )}
+                      {searchedUser.invoicesRemainingThisMonth !== null && searchedUser.invoicesRemainingThisMonth !== undefined && searchedUser.invoiceLimitPerMonth !== -1 && (
+                        <p>
+                          Invoices left this month:{' '}
+                          <span className="font-semibold">{searchedUser.invoicesRemainingThisMonth}</span>
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
 
