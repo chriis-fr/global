@@ -61,6 +61,32 @@ interface Client {
   notes?: string;
 }
 
+interface InvoiceProfileSummary {
+  _id: string;
+  name: string;
+  businessInfo: {
+    name: string;
+    email: string;
+    phone?: string;
+    taxId?: string;
+    address?: {
+      street?: string;
+      city?: string;
+      state?: string;
+      zipCode?: string;
+      country?: string;
+    };
+    logo?: string;
+  };
+  invoiceSettings?: {
+    defaultCurrency?: string;
+    paymentTerms?: number;
+    showWithholdingTaxOnInvoices?: boolean;
+    withholdingTaxRatePercent?: number;
+  };
+  isDefault?: boolean;
+}
+
 interface InvoiceFormData {
   _id?: string;
   invoiceNumber?: string;
@@ -437,10 +463,18 @@ export default function CreateInvoicePage() {
   const [sendingInvoice, setSendingInvoice] = useState(false);
   const [creatingClient, setCreatingClient] = useState(false);
   const [logoMounted, setLogoMounted] = useState(false);
+  const [invoiceProfiles, setInvoiceProfiles] = useState<InvoiceProfileSummary[]>([]);
+  const [selectedInvoiceProfileId, setSelectedInvoiceProfileId] = useState<string | null>(null);
+  const [showInvoiceProfileSelector, setShowInvoiceProfileSelector] = useState(false);
 
   useEffect(() => {
     setLogoMounted(true);
   }, []);
+
+  // Allow both organization members and platform admins (adminTag) to use invoice profiles,
+  // as long as there is an organization context.
+  const canUseInvoiceProfiles =
+    !!session?.user?.organizationId || session?.user?.adminTag === true;
 
   // Scroll to validation errors when they appear (e.g. after clicking Send Invoice / Download PDF)
   useEffect(() => {
@@ -463,6 +497,80 @@ export default function CreateInvoicePage() {
       document.body.style.overflow = prevBodyOverflow;
     };
   }, [sendingInvoice]);
+
+  // Load invoice profiles for eligible accounts so they can be used in the "From" section
+  useEffect(() => {
+    if (!canUseInvoiceProfiles) return;
+
+    let cancelled = false;
+
+    const loadProfiles = async () => {
+      try {
+        const response = await fetch('/api/invoice-profiles');
+        const data = await response.json();
+        if (!cancelled && data.success && Array.isArray(data.data)) {
+          setInvoiceProfiles(data.data);
+          const defaultProfile = data.data.find((p: InvoiceProfileSummary) => p.isDefault);
+          if (defaultProfile) {
+            setSelectedInvoiceProfileId(defaultProfile._id);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load invoice profiles:', error);
+      }
+    };
+
+    loadProfiles();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canUseInvoiceProfiles]);
+
+  const applyInvoiceProfile = (profile: InvoiceProfileSummary) => {
+    setSelectedInvoiceProfileId(profile._id);
+    setShowInvoiceProfileSelector(false);
+
+    const business = profile.businessInfo || {};
+    const addr = business.address || {};
+    const settings = profile.invoiceSettings || {};
+    const showWithholding = settings.showWithholdingTaxOnInvoices ?? false;
+    const ratePercent = typeof settings.withholdingTaxRatePercent === 'number'
+      ? settings.withholdingTaxRatePercent
+      : 5;
+    const rate = ratePercent / 100;
+
+    setFormData(prev => {
+      const sub = prev.subtotal ?? 0;
+      const tax = prev.totalTax ?? 0;
+      const totalBeforeWithholding = sub + tax;
+      const withholdingAmount = showWithholding ? totalBeforeWithholding * rate : 0;
+      const newTotal = totalBeforeWithholding - withholdingAmount;
+
+      return {
+        ...prev,
+        companyName: business.name || prev.companyName,
+        companyEmail: business.email || prev.companyEmail,
+        companyPhone: business.phone || prev.companyPhone,
+        companyTaxNumber: business.taxId || prev.companyTaxNumber,
+        companyAddress: {
+          street: addr.street || prev.companyAddress.street,
+          city: addr.city || prev.companyAddress.city,
+          state: addr.state || prev.companyAddress.state,
+          zipCode: addr.zipCode || prev.companyAddress.zipCode,
+          country: addr.country || prev.companyAddress.country,
+        },
+        companyLogo: business.logo || prev.companyLogo,
+        currency:
+          !userHasSelectedCurrency && settings.defaultCurrency
+            ? settings.defaultCurrency
+            : prev.currency,
+        withholdingTaxEnabled: showWithholding,
+        withholdingTaxRatePercent: ratePercent,
+        total: showWithholding ? newTotal : prev.total,
+      };
+    });
+  };
 
   // Handler functions that scroll to top before opening modals
   const handleOpenCompanyModal = () => {
@@ -1782,11 +1890,13 @@ export default function CreateInvoicePage() {
         selectClient(data.data);
         setShowNewClientModal(false);
       } else {
-        toast.error(data.message || 'Failed to create client');
+        const reason = data.message || data.error || 'The server rejected this client.';
+        toast.error(`Could not create client. Details: ${reason}`);
       }
     } catch (error) {
       console.error('Failed to create client:', error);
-      toast.error('Failed to create client. Please try again.');
+      const reason = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Could not create client due to a network or server error. Details: ${reason}`);
     } finally {
       setCreatingClient(false);
     }
@@ -1923,8 +2033,8 @@ export default function CreateInvoicePage() {
       const success = response.ok && data?.success;
 
       if (!success) {
-        const message = data?.message || data?.error || `Save failed (${response.status})`;
-        toast.error(message);
+        const message = data?.message || data?.error || `Save failed with status ${response.status}.`;
+        toast.error(`Could not save draft on the server. Details: ${message}`);
         return;
       }
 
@@ -1944,7 +2054,8 @@ export default function CreateInvoicePage() {
       router.replace('/dashboard/services/smart-invoicing');
     } catch (error) {
       console.error('Failed to save draft:', error);
-      toast.error('Failed to save draft. Please try again.');
+      const reason = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Could not save draft due to a network or server error. Details: ${reason}`);
     } finally {
       setLoading(false);
     }
@@ -2498,7 +2609,8 @@ export default function CreateInvoicePage() {
       router.push('/dashboard/services/smart-invoicing/invoices');
     } catch (error) {
       console.error('❌ [Smart Invoicing] Failed to download PDF:', error);
-      toast.error('Failed to download PDF. Please try again.');
+      const reason = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Could not download PDF. Details: ${reason}. If this keeps happening, please share this message with support.`);
     } finally {
       setSendingInvoice(false);
     }
@@ -2647,7 +2759,8 @@ export default function CreateInvoicePage() {
       
     } catch (error) {
       console.error('❌ [Smart Invoicing] Failed to download CSV:', error);
-      toast.error('Failed to download CSV. Please try again.');
+      const reason = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Could not download CSV. Details: ${reason}. If this keeps happening, please share this message with support.`);
     }
   };
 
@@ -3031,12 +3144,100 @@ export default function CreateInvoicePage() {
                     <Building2 className="h-5 w-5 mr-2" />
                     From
                   </div>
-                  <button
-                    onClick={handleOpenCompanyModal}
-                    className="text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    <Edit3 className="h-4 w-4" />
-                  </button>
+                  <div className="flex items-center space-x-3">
+                    {canUseInvoiceProfiles && (
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setShowInvoiceProfileSelector(prev => !prev)}
+                          className="text-sm font-normal text-blue-600 hover:text-blue-800 flex items-center"
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          {selectedInvoiceProfileId
+                            ? 'Change Invoice Profile'
+                            : 'Invoice Profile'}
+                        </button>
+                        {showInvoiceProfileSelector && (
+                          <div className="absolute top-full right-1 z-10 mt-2 border w-72 bg-white rounded-lg shadow-lg">
+                            <div className="p-3">
+                              <div className="flex justify-between items-center mb-2">
+                                <h4 className="text-sm font-normal text-gray-900">Select Invoice Profile</h4>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowInvoiceProfileSelector(false)}
+                                  className="text-gray-400 hover:text-gray-600"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                              {invoiceProfiles.length > 0 ? (
+                                <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                                  {invoiceProfiles.map(profile => (
+                                    <button
+                                      key={profile._id}
+                                      type="button"
+                                      onClick={() => applyInvoiceProfile(profile)}
+                                      className="w-full text-left px-2 py-1.5 hover:bg-gray-100 rounded border text-xs"
+                                    >
+                                      <div className="text-gray-900">
+                                        {profile.businessInfo?.name || profile.name}
+                                      </div>
+                                      {profile.businessInfo?.name &&
+                                        profile.name &&
+                                        profile.businessInfo.name !== profile.name && (
+                                          <div className="text-[11px] text-gray-800">
+                                            {profile.name}
+                                          </div>
+                                        )}
+                                      <div className="text-[11px] text-gray-600">
+                                        {profile.businessInfo?.email}
+                                      </div>
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="text-gray-500 text-center py-3 text-xs space-y-1">
+                                  <p>No invoice profiles yet.</p>
+                                  <p>
+                                    Create them in the{' '}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setShowInvoiceProfileSelector(false);
+                                        router.push('/dashboard/services/smart-invoicing/onboarding?step=2');
+                                      }}
+                                      className="text-blue-600 hover:text-blue-800 underline"
+                                    >
+                                      Smart Invoicing Setup
+                                    </button>{' '}
+                                    so your finance team can quickly reuse From details.
+                                  </p>
+                                </div>
+                              )}
+                              <div className="mt-2 pt-2 border-t">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowInvoiceProfileSelector(false);
+                                    router.push('/dashboard/services/smart-invoicing/onboarding?step=2');
+                                  }}
+                                  className="w-full text-center py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                                >
+                                  Create New Profile
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <button
+                      onClick={handleOpenCompanyModal}
+                      className="text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      <Edit3 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </h3>
                 <div className="flex items-start space-x-4">
                  
@@ -3195,7 +3396,7 @@ export default function CreateInvoicePage() {
                     <div className="relative">
                       <button
                         onClick={() => setShowClientSelector(!showClientSelector)}
-                        className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
+                        className="text-sm font-normal text-blue-600 hover:text-blue-800 flex items-center"
                       >
                         <Plus className="h-4 w-4 mr-1" />
                         {formData.clientName ? 'Change Client' : 'Add Client'}

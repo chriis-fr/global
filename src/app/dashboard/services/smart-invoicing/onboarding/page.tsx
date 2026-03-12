@@ -1,7 +1,8 @@
 'use client';
+/* eslint-disable react-hooks/exhaustive-deps */
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from '@/lib/auth-client';
 import { motion } from 'framer-motion';
 import { 
@@ -53,15 +54,62 @@ interface ServiceOnboardingData {
   invoiceSettings: InvoiceSettings;
 }
 
+interface InvoiceProfileListItem {
+  _id: string;
+  name: string;
+  businessInfo: {
+    name: string;
+    email: string;
+    phone?: string;
+    taxId?: string;
+    address?: {
+      street?: string;
+      city?: string;
+      state?: string;
+      zipCode?: string;
+      country?: string;
+    };
+  };
+  invoiceSettings?: {
+    defaultCurrency?: string;
+    paymentTerms?: number;
+    showWithholdingTaxOnInvoices?: boolean;
+    withholdingTaxRatePercent?: number;
+  };
+  isDefault?: boolean;
+}
+
 export default function SmartInvoicingOnboardingPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session } = useSession();
-  const [currentStep, setCurrentStep] = useState(1);
+  const initialStep = searchParams?.get('step') === '2' ? 2 : 1;
+  const [currentStep, setCurrentStep] = useState(initialStep);
   const [loading, setLoading] = useState(false);
   const [showCountryDropdown, setShowCountryDropdown] = useState(false);
   const [countrySearch, setCountrySearch] = useState('');
   const [showCurrencyDropdown, setShowCurrencyDropdown] = useState(false);
   const [currencySearch, setCurrencySearch] = useState('');
+  const [invoiceProfiles, setInvoiceProfiles] = useState<InvoiceProfileListItem[]>([]);
+  const [profilesLoading, setProfilesLoading] = useState(false);
+  const [profilesSaving, setProfilesSaving] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [showProfileCountryDropdown, setShowProfileCountryDropdown] = useState(false);
+  const [profileCountrySearch, setProfileCountrySearch] = useState('');
+  const [newProfile, setNewProfile] = useState({
+    name: '',
+    businessName: '',
+    email: '',
+    phone: '',
+    website: '',
+    taxId: '',
+    street: '',
+    city: '',
+    state: '',
+    zipCode: '',
+    country: 'US',
+    isDefault: false,
+  });
   const [formData, setFormData] = useState<ServiceOnboardingData>({
     businessInfo: {
       name: '',
@@ -93,6 +141,10 @@ export default function SmartInvoicingOnboardingPage() {
       withholdingTaxRatePercent: 5
     }
   });
+
+  // Allow both organization members and admin-tagged accounts to configure invoice profiles
+  const canManageInvoiceProfiles =
+    !!session?.user?.organizationId || session?.user?.adminTag === true;
 
   // Load existing onboarding data first, then fallback to user profile
   useEffect(() => {
@@ -221,6 +273,30 @@ export default function SmartInvoicingOnboardingPage() {
     }));
   };
 
+  // Auto-detect profile country from phone number using countries phone codes
+  useEffect(() => {
+    if (!newProfile.phone || !newProfile.phone.trim().startsWith('+')) return;
+
+    const digits = newProfile.phone.replace(/[^0-9+]/g, '');
+    if (!digits.startsWith('+')) return;
+
+    // Find the longest matching phoneCode prefix from countries
+    const matches = countries.filter(c => digits.startsWith(c.phoneCode));
+    if (matches.length === 0) return;
+
+    // Prefer the longest code match for more specific detection
+    const bestMatch = matches.reduce((acc, curr) =>
+      curr.phoneCode.length > acc.phoneCode.length ? curr : acc
+    );
+
+    if (bestMatch.code && bestMatch.code !== newProfile.country) {
+      setNewProfile(prev => ({
+        ...prev,
+        country: bestMatch.code,
+      }));
+    }
+  }, [newProfile.phone]);
+
   const addTaxRate = () => {
     setFormData(prev => ({
       ...prev,
@@ -307,6 +383,135 @@ export default function SmartInvoicingOnboardingPage() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Load invoice profiles so they can be managed alongside onboarding (org accounts only)
+  useEffect(() => {
+    if (!canManageInvoiceProfiles) return;
+
+    let cancelled = false;
+    const loadProfiles = async () => {
+      try {
+        setProfilesLoading(true);
+        const res = await fetch('/api/invoice-profiles');
+        const data = await res.json();
+        if (!cancelled && data.success && Array.isArray(data.data)) {
+          setInvoiceProfiles(data.data);
+        }
+      } catch {
+        if (!cancelled) {
+          setInvoiceProfiles([]);
+        }
+      } finally {
+        if (!cancelled) setProfilesLoading(false);
+      }
+    };
+
+    loadProfiles();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canManageInvoiceProfiles]);
+
+  const handleNewProfileChange = (
+    field:
+      | 'name'
+      | 'businessName'
+      | 'email'
+      | 'phone'
+      | 'website'
+      | 'taxId'
+      | 'street'
+      | 'city'
+      | 'state'
+      | 'zipCode'
+      | 'country'
+      | 'isDefault',
+    value: string | boolean
+  ) => {
+    setNewProfile(prev => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const handleCreateInvoiceProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canManageInvoiceProfiles) return;
+
+    setProfileError(null);
+
+    if (!newProfile.name.trim() || !newProfile.businessName.trim() || !newProfile.email.trim()) {
+      setProfileError('Profile name, business name, and email are required.');
+      return;
+    }
+
+    try {
+      setProfilesSaving(true);
+      const res = await fetch('/api/invoice-profiles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newProfile.name,
+          businessInfo: {
+            name: newProfile.businessName,
+            email: newProfile.email,
+            phone: newProfile.phone,
+            website: newProfile.website,
+            taxId: newProfile.taxId,
+            address: {
+              street: newProfile.street,
+              city: newProfile.city,
+              state: newProfile.state,
+              zipCode: newProfile.zipCode,
+              country: newProfile.country || formData.businessInfo.address.country,
+            },
+          },
+          invoiceSettings: {
+            defaultCurrency: formData.invoiceSettings.defaultCurrency,
+            paymentTerms: formData.invoiceSettings.paymentTerms,
+            showWithholdingTaxOnInvoices: formData.invoiceSettings.showWithholdingTaxOnInvoices,
+            withholdingTaxRatePercent: formData.invoiceSettings.withholdingTaxRatePercent,
+          },
+          isDefault: newProfile.isDefault,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setProfileError(data.message || data.error || 'Failed to save invoice profile.');
+        return;
+      }
+
+      setInvoiceProfiles(prev => {
+        const created = data.data as InvoiceProfileListItem;
+        if (created.isDefault) {
+          const cleared = prev.map(p => ({ ...p, isDefault: false }));
+          return [created, ...cleared];
+        }
+        return [created, ...prev];
+      });
+
+      setNewProfile({
+        name: '',
+        businessName: '',
+        email: formData.businessInfo.email || '',
+        phone: formData.businessInfo.phone || '',
+        website: formData.businessInfo.website || '',
+        taxId: formData.businessInfo.taxId || '',
+        street: formData.businessInfo.address.street || '',
+        city: formData.businessInfo.address.city || '',
+        state: formData.businessInfo.address.state || '',
+        zipCode: formData.businessInfo.address.zipCode || '',
+        country: formData.businessInfo.address.country || 'US',
+        isDefault: false,
+      });
+    } catch {
+      setProfileError('Failed to save invoice profile.');
+    } finally {
+      setProfilesSaving(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -699,6 +904,301 @@ export default function SmartInvoicingOnboardingPage() {
                 <p className="text-xs text-gray-400 ml-7">When enabled, invoices will show an optional withholding tax row (deducted from total). You can remove it per invoice with the × button when not needed.</p>
               </div>
             </div>
+
+            {/* Invoice Profiles configuration (organization accounts only) */}
+            {canManageInvoiceProfiles && (
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-blue-400/40">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center space-x-3">
+                    <FileText className="h-5 w-5 text-blue-300" />
+                    <div>
+                      <h3 className="text-lg font-semibold">Invoice Profiles</h3>
+                      <p className="text-xs text-blue-200">
+                        Create reusable &quot;From&quot; profiles for your finance team. These appear as
+                        Invoice Profiles when creating invoices.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Create profile (lightweight) */}
+                  <form onSubmit={handleCreateInvoiceProfile} className="space-y-3">
+                    {profileError && (
+                      <p className="text-xs text-red-300 border border-red-500/40 bg-red-500/10 rounded px-3 py-2">
+                        {profileError}
+                      </p>
+                    )}
+                    <div>
+                      <label className="block text-xs font-medium text-blue-100 mb-1">
+                        Profile Name
+                      </label>
+                      <input
+                        type="text"
+                        value={newProfile.name}
+                        onChange={e => handleNewProfileChange('name', e.target.value)}
+                        className="w-full px-3 py-2 rounded-md bg-white/10 border border-white/20 text-white placeholder-blue-200/70 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="e.g., Main Entity, Kenya Branch"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-blue-100 mb-1">
+                        Business Name
+                      </label>
+                      <input
+                        type="text"
+                        value={newProfile.businessName}
+                        onChange={e => handleNewProfileChange('businessName', e.target.value)}
+                        className="w-full px-3 py-2 rounded-md bg-white/10 border border-white/20 text-white placeholder-blue-200/70 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Legal business name"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-blue-100 mb-1">
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        value={newProfile.email}
+                        onChange={e => handleNewProfileChange('email', e.target.value)}
+                        className="w-full px-3 py-2 rounded-md bg-white/10 border border-white/20 text-white placeholder-blue-200/70 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="billing@company.com"
+                        required
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs font-medium text-blue-100 mb-1">
+                          Phone
+                        </label>
+                        <input
+                          type="text"
+                          value={newProfile.phone}
+                          onChange={e => handleNewProfileChange('phone', e.target.value)}
+                          className="w-full px-3 py-2 rounded-md bg-white/10 border border-white/20 text-white placeholder-blue-200/70 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="+254 700 000000"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-blue-100 mb-1">
+                          Website
+                        </label>
+                        <input
+                          type="text"
+                          value={newProfile.website}
+                          onChange={e => handleNewProfileChange('website', e.target.value)}
+                          className="w-full px-3 py-2 rounded-md bg-white/10 border border-white/20 text-white placeholder-blue-200/70 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="https://yourwebsite.com"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-blue-100 mb-1">
+                        Tax ID
+                      </label>
+                      <input
+                        type="text"
+                        value={newProfile.taxId}
+                        onChange={e => handleNewProfileChange('taxId', e.target.value)}
+                        className="w-full px-3 py-2 rounded-md bg-white/10 border border-white/20 text-white placeholder-blue-200/70 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Tax identification number"
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs font-medium text-blue-100 mb-1">
+                          Street
+                        </label>
+                        <input
+                          type="text"
+                          value={newProfile.street}
+                          onChange={e => handleNewProfileChange('street', e.target.value)}
+                          className="w-full px-3 py-2 rounded-md bg-white/10 border border-white/20 text-white placeholder-blue-200/70 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Street address"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-blue-100 mb-1">
+                          City
+                        </label>
+                        <input
+                          type="text"
+                          value={newProfile.city}
+                          onChange={e => handleNewProfileChange('city', e.target.value)}
+                          className="w-full px-3 py-2 rounded-md bg-white/10 border border-white/20 text-white placeholder-blue-200/70 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="City"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs font-medium text-blue-100 mb-1">
+                          State / Region
+                        </label>
+                        <input
+                          type="text"
+                          value={newProfile.state}
+                          onChange={e => handleNewProfileChange('state', e.target.value)}
+                          className="w-full px-3 py-2 rounded-md bg-white/10 border border-white/20 text-white placeholder-blue-200/70 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="State or region"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-blue-100 mb-1">
+                          ZIP / Postal Code
+                        </label>
+                        <input
+                          type="text"
+                          value={newProfile.zipCode}
+                          onChange={e => handleNewProfileChange('zipCode', e.target.value)}
+                          className="w-full px-3 py-2 rounded-md bg-white/10 border border-white/20 text-white placeholder-blue-200/70 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="ZIP / Postal Code"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-blue-100 mb-1">
+                        Country
+                      </label>
+                      <div className="relative country-dropdown-container">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setShowProfileCountryDropdown(prev => !prev)
+                          }
+                          className="w-full px-3 py-2 rounded-md bg-white/10 border border-white/20 text-white text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <span
+                            className={
+                              newProfile.country ? 'text-white' : 'text-blue-200/70'
+                            }
+                          >
+                            {newProfile.country
+                              ? countries.find(c => c.code === newProfile.country)?.name ||
+                                newProfile.country
+                              : 'Select country'}
+                          </span>
+                          <ChevronDown className="h-4 w-4 text-blue-300" />
+                        </button>
+                        {showProfileCountryDropdown && (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-gray-900 border border-gray-600 rounded-lg max-h-60 overflow-y-auto z-20 shadow-xl">
+                            <div className="p-2 border-b border-gray-600 bg-gray-800">
+                              <div className="relative">
+                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                <input
+                                  type="text"
+                                  value={profileCountrySearch}
+                                  onChange={e => setProfileCountrySearch(e.target.value)}
+                                  placeholder="Search countries..."
+                                  className="w-full pl-10 pr-3 py-2 bg-gray-700 border border-gray-500 rounded text-white placeholder-gray-400 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                              </div>
+                            </div>
+                            <div className="max-h-48 overflow-y-auto">
+                              {countries
+                                .filter(country =>
+                                  country.name
+                                    .toLowerCase()
+                                    .includes(profileCountrySearch.toLowerCase()) ||
+                                  country.phoneCode.includes(profileCountrySearch) ||
+                                  country.code
+                                    .toLowerCase()
+                                    .includes(profileCountrySearch.toLowerCase())
+                                )
+                                .map(country => (
+                                  <button
+                                    key={country.code}
+                                    type="button"
+                                    onClick={() => {
+                                      handleNewProfileChange('country', country.code);
+                                      setShowProfileCountryDropdown(false);
+                                      setProfileCountrySearch('');
+                                    }}
+                                    className="w-full px-3 py-2 text-left text-white hover:bg-gray-700 transition-colors flex items-center justify-between border-b border-gray-700 last:border-b-0"
+                                  >
+                                    <span className="text-xs">{country.name}</span>
+                                    <span className="text-blue-300 text-[10px] font-medium">
+                                      {country.code} • {country.phoneCode}
+                                    </span>
+                                  </button>
+                                ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <label className="inline-flex items-center space-x-2 text-xs text-blue-100 mt-1">
+                      <input
+                        type="checkbox"
+                        checked={newProfile.isDefault}
+                        onChange={e => handleNewProfileChange('isDefault', e.target.checked)}
+                        className="w-4 h-4 rounded border-white/40 bg-transparent text-blue-500 focus:ring-blue-500"
+                      />
+                      <span>Set as default invoice profile</span>
+                    </label>
+                    <div className="pt-2">
+                      <button
+                        type="submit"
+                        disabled={profilesSaving}
+                        className="inline-flex items-center px-3 py-2 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        {profilesSaving ? 'Saving…' : 'Save Profile'}
+                      </button>
+                    </div>
+                  </form>
+
+                  {/* Existing profiles list */}
+                  <div className="space-y-2">
+                    <p className="text-xs text-blue-200 mb-2">Existing Profiles</p>
+                    {profilesLoading ? (
+                      <p className="text-xs text-blue-200">Loading profiles…</p>
+                    ) : invoiceProfiles.length === 0 ? (
+                      <p className="text-xs text-blue-200">
+                        No invoice profiles yet. Create at least one so your team can quickly reuse
+                        From details when sending invoices.
+                      </p>
+                    ) : (
+                      <div className="space-y-2 max-h-52 overflow-y-auto">
+                        {invoiceProfiles.map(profile => (
+                          <div
+                            key={profile._id}
+                            className="border border-white/15 rounded-lg p-3 bg-white/5"
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-medium text-white">
+                                {profile.name}
+                              </span>
+                              {profile.isDefault && (
+                                <span className="px-2 py-0.5 text-[10px] rounded-full bg-blue-500/20 text-blue-100 border border-blue-400/50">
+                                  Default
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-blue-200">
+                              {profile.businessInfo?.name} • {profile.businessInfo?.email}
+                            </p>
+                            <p className="text-[11px] text-blue-300 mt-1">
+                              Currency:{' '}
+                              <span className="font-semibold">
+                                {profile.invoiceSettings?.defaultCurrency || '—'}
+                              </span>{' '}
+                              • Withholding:{' '}
+                              <span className="font-semibold">
+                                {profile.invoiceSettings?.showWithholdingTaxOnInvoices
+                                  ? `${profile.invoiceSettings.withholdingTaxRatePercent ?? 5}%`
+                                  : 'Off'}
+                              </span>
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </motion.div>
         )}
 
