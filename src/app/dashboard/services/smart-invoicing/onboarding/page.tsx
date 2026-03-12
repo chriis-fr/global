@@ -376,6 +376,10 @@ export default function SmartInvoicingOnboardingPage() {
       setShowCurrencyDropdown(false);
       setCurrencySearch('');
     }
+    if (!target.closest('.profile-country-dropdown-container')) {
+      setShowProfileCountryDropdown(false);
+      setProfileCountrySearch('');
+    }
   };
 
   // Add click outside listener
@@ -1062,7 +1066,7 @@ export default function SmartInvoicingOnboardingPage() {
                       <label className="block text-xs font-medium text-blue-100 mb-1">
                         Country
                       </label>
-                      <div className="relative country-dropdown-container">
+                      <div className="relative profile-country-dropdown-container">
                         <button
                           type="button"
                           onClick={() =>

@@ -165,9 +165,16 @@ export async function POST(request: NextRequest) {
     };
 
     // If this profile should be default, clear previous defaults for this org
+    // Match both ObjectId and string organizationId for backward compatibility
     if (profile.isDefault) {
+      const orgIdString = organizationId.toString();
       await profilesCollection.updateMany(
-        { organizationId },
+        {
+          $or: [
+            { organizationId },
+            { organizationId: orgIdString as unknown as ObjectId },
+          ],
+        } as unknown as Parameters<typeof profilesCollection.updateMany>[0],
         { $set: { isDefault: false } }
       );
     }
