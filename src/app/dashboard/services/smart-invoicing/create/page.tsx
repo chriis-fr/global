@@ -546,6 +546,8 @@ export default function CreateInvoicePage() {
       const totalBeforeWithholding = sub + tax;
       const withholdingAmount = showWithholding ? totalBeforeWithholding * rate : 0;
       const newTotal = totalBeforeWithholding - withholdingAmount;
+      // When profile disables withholding, use subtotal+tax so total is not left understated
+      const total = showWithholding ? newTotal : totalBeforeWithholding;
 
       return {
         ...prev,
@@ -567,7 +569,7 @@ export default function CreateInvoicePage() {
             : prev.currency,
         withholdingTaxEnabled: showWithholding,
         withholdingTaxRatePercent: ratePercent,
-        total: showWithholding ? newTotal : prev.total,
+        total,
       };
     });
   };
