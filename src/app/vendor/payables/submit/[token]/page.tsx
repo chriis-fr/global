@@ -232,7 +232,8 @@ export default function VendorPayableSubmitPage() {
       }
       setState({
         loading: false,
-        successMessage: 'Invoice submitted successfully. Our team will process it and you will receive payment per the details below.',
+        successMessage:
+          'Invoice submitted successfully. Your invoice will appear in your history for this link once it is processed.',
       });
       form.reset();
       setItems([
