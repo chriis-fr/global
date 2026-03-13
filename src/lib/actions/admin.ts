@@ -5,7 +5,7 @@ import { authOptions } from '@/lib/auth';
 import { getDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
 import { BILLING_PLANS } from '@/data/billingPlans';
-import { clearSubscriptionCache } from './subscription';
+import { clearSubscriptionCache, getUserSubscription, canCreateInvoice } from './subscription';
 import { createDefaultServices } from '@/lib/services/serviceManager';
 
 export interface AdminUserData {
@@ -26,6 +26,26 @@ export interface AdminUserData {
   };
   services: Record<string, boolean>;
   organizationId?: string;
+}
+
+export interface AdminUserInvoiceDebug {
+  canCreateInvoice: boolean;
+  reason?: string;
+  requiresUpgrade?: boolean;
+  orgReadOnlyDueToTrialEnd?: boolean;
+  orgReadOnlyDueToOverdue?: boolean;
+  limits?: {
+    invoicesPerMonth: number;
+    monthlyVolume: number;
+  };
+  usage?: {
+    invoicesThisMonth: number;
+    monthlyVolume: number;
+  };
+  draftsThisMonth?: number;
+  totalDrafts?: number;
+  planId?: string;
+  status?: string;
 }
 
 /**
@@ -97,6 +117,98 @@ export async function searchUserByEmail(
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to search user'
+    };
+  }
+}
+
+/**
+ * Get detailed invoice creation permissions/limits for a specific user (admin only).
+ * This mirrors what the app uses to decide 403s on invoice/draft save.
+ */
+export async function getUserInvoicePermissionsDebug(
+  email: string
+): Promise<{ success: boolean; data?: AdminUserInvoiceDebug; error?: string }> {
+  try {
+    const session = await getServerSession(authOptions);
+
+    if (!session?.user?.email) {
+      return {
+        success: false,
+        error: 'Unauthorized'
+      };
+    }
+
+    const db = await getDatabase();
+    const adminUser = await db.collection('users').findOne({
+      email: session.user.email
+    });
+
+    if (!adminUser || !adminUser.adminTag) {
+      return {
+        success: false,
+        error: 'Admin access required'
+      };
+    }
+
+    const targetUser = await db.collection('users').findOne({
+      email: email.toLowerCase().trim()
+    });
+
+    if (!targetUser) {
+      return {
+        success: false,
+        error: 'User not found'
+      };
+    }
+
+    // Use the main subscription helper to get consistent flags/limits/usage
+    const subscription = await getUserSubscription();
+    const canCreate = await canCreateInvoice();
+
+    // Compute draft counts for this user/org
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const draftQuery: Record<string, unknown> = {
+      status: 'draft',
+      createdAt: { $gte: startOfMonth }
+    };
+
+    if (targetUser.organizationId) {
+      draftQuery.organizationId = targetUser.organizationId;
+    } else {
+      draftQuery.issuerId = targetUser._id;
+    }
+
+    const draftsThisMonth = await db.collection('invoices').countDocuments(draftQuery);
+
+    const totalDraftQuery: Record<string, unknown> = { status: 'draft' };
+    if (targetUser.organizationId) {
+      totalDraftQuery.organizationId = targetUser.organizationId;
+    } else {
+      totalDraftQuery.issuerId = targetUser._id;
+    }
+    const totalDrafts = await db.collection('invoices').countDocuments(totalDraftQuery);
+
+    return {
+      success: true,
+      data: {
+        canCreateInvoice: canCreate.allowed,
+        reason: canCreate.reason,
+        requiresUpgrade: canCreate.requiresUpgrade,
+        orgReadOnlyDueToTrialEnd: subscription?.orgReadOnlyDueToTrialEnd,
+        orgReadOnlyDueToOverdue: subscription?.orgReadOnlyDueToOverdue,
+        limits: subscription?.limits,
+        usage: subscription?.usage,
+        draftsThisMonth,
+        totalDrafts,
+        planId: subscription?.plan?.planId,
+        status: subscription?.status
+      }
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to load invoice permissions'
     };
   }
 }

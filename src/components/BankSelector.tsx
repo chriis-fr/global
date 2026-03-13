@@ -12,6 +12,7 @@ interface BankSelectorProps {
   placeholder?: string;
   disabled?: boolean;
   allowCustom?: boolean; // Allow custom bank entry
+  className?: string;
 }
 
 export default function BankSelector({
@@ -21,7 +22,8 @@ export default function BankSelector({
   onInputChangeAction,
   placeholder = "Search for a bank...",
   disabled = false,
-  allowCustom = true
+  allowCustom = true,
+  className = ''
 }: BankSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [banks, setBanks] = useState<Bank[]>([]);
@@ -127,7 +129,7 @@ export default function BankSelector({
           onFocus={() => setIsOpen(true)}
           placeholder={placeholder}
           disabled={disabled}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed placeholder:text-black"
+          className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed placeholder:text-black ${className}`}
         />
         
         <div className="absolute inset-y-0 right-0 flex items-center pr-2">

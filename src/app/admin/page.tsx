@@ -18,7 +18,8 @@ import {
   Sparkles,
   Mail,
   ExternalLink,
-  Link2
+  Link2,
+  AlertTriangle
 } from 'lucide-react';
 import { BILLING_PLANS } from '@/data/billingPlans';
 import { getPlanPriceLabel } from '@/lib/pricingEngine';
@@ -48,6 +49,26 @@ interface User {
     accountsReceivable: boolean;
     accountsPayable: boolean;
   };
+}
+
+interface UserInvoiceDebug {
+  canCreateInvoice: boolean;
+  reason?: string;
+  requiresUpgrade?: boolean;
+  orgReadOnlyDueToTrialEnd?: boolean;
+  orgReadOnlyDueToOverdue?: boolean;
+  limits?: {
+    invoicesPerMonth: number;
+    monthlyVolume: number;
+  };
+  usage?: {
+    invoicesThisMonth: number;
+    monthlyVolume: number;
+  };
+  draftsThisMonth?: number;
+  totalDrafts?: number;
+  planId?: string;
+  status?: string;
 }
 
 export default function AdminDashboard() {
@@ -84,6 +105,7 @@ export default function AdminDashboard() {
   const [searching, setSearching] = useState(false);
   const [updatingPlan, setUpdatingPlan] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string>('');
+  const [invoiceDebug, setInvoiceDebug] = useState<UserInvoiceDebug | null>(null);
   
   // Bulk update unknown plans
   const [unknownPlansCount, setUnknownPlansCount] = useState<number | null>(null);
@@ -250,7 +272,7 @@ export default function AdminDashboard() {
 
     setSearching(true);
     try {
-      const { searchUserByEmail } = await import('@/lib/actions/admin');
+      const { searchUserByEmail, getUserInvoicePermissionsDebug } = await import('@/lib/actions/admin');
       const result = await searchUserByEmail(searchEmail.trim());
       
       if (result.success && result.data) {
@@ -266,14 +288,29 @@ export default function AdminDashboard() {
         setAddToOrgSelected(null);
         setAddToOrgQuery('');
         setAddToOrgResults([]);
+
+        // Load invoice permission/limit debug info for this user
+        try {
+          const invoiceDebugResult = await getUserInvoicePermissionsDebug(result.data.email);
+          if (invoiceDebugResult.success && invoiceDebugResult.data) {
+            setInvoiceDebug(invoiceDebugResult.data as UserInvoiceDebug);
+          } else {
+            setInvoiceDebug(null);
+          }
+        } catch {
+          setInvoiceDebug(null);
+        }
+
         toast.success('User found');
       } else {
         toast.error(result.error || 'User not found');
         setSearchedUser(null);
+        setInvoiceDebug(null);
       }
     } catch (error) {
       console.error('Failed to search user:', error);
       toast.error('Failed to search user');
+      setInvoiceDebug(null);
     } finally {
       setSearching(false);
     }
@@ -654,6 +691,83 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                 </div>
+
+                {invoiceDebug && (
+                  <div className="mt-6 pt-4 border-t border-gray-200">
+                    <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-red-500" />
+                      <span>Invoice Permissions & Limits (what causes 403s)</span>
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                      <div className="space-y-1">
+                        <p>
+                          <span className="font-medium text-gray-700">Can create invoices:</span>{' '}
+                          <span className={invoiceDebug.canCreateInvoice ? 'text-green-700' : 'text-red-700'}>
+                            {invoiceDebug.canCreateInvoice ? 'Yes' : 'No'}
+                          </span>
+                        </p>
+                        <p>
+                          <span className="font-medium text-gray-700">403 reason:</span>{' '}
+                          <span className="text-gray-800">
+                            {invoiceDebug.reason || '—'}
+                          </span>
+                        </p>
+                        <p>
+                          <span className="font-medium text-gray-700">Requires upgrade:</span>{' '}
+                          <span className={invoiceDebug.requiresUpgrade ? 'text-red-700' : 'text-gray-700'}>
+                            {invoiceDebug.requiresUpgrade ? 'Yes' : 'No'}
+                          </span>
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <p>
+                          <span className="font-medium text-gray-700">Org read-only (trial end):</span>{' '}
+                          <span className={invoiceDebug.orgReadOnlyDueToTrialEnd ? 'text-red-700' : 'text-gray-700'}>
+                            {invoiceDebug.orgReadOnlyDueToTrialEnd ? 'Yes' : 'No'}
+                          </span>
+                        </p>
+                        <p>
+                          <span className="font-medium text-gray-700">Org read-only (overdue):</span>{' '}
+                          <span className={invoiceDebug.orgReadOnlyDueToOverdue ? 'text-red-700' : 'text-gray-700'}>
+                            {invoiceDebug.orgReadOnlyDueToOverdue ? 'Yes' : 'No'}
+                          </span>
+                        </p>
+                        {invoiceDebug.limits && invoiceDebug.usage && (
+                          <>
+                            <p>
+                              <span className="font-medium text-gray-700">Invoices this month:</span>{' '}
+                              <span className="text-gray-800">
+                                {invoiceDebug.usage.invoicesThisMonth} / {invoiceDebug.limits.invoicesPerMonth}
+                              </span>
+                            </p>
+                            <p>
+                              <span className="font-medium text-gray-700">Monthly volume:</span>{' '}
+                              <span className="text-gray-800">
+                                {invoiceDebug.usage.monthlyVolume} / {invoiceDebug.limits.monthlyVolume}
+                              </span>
+                            </p>
+                          </>
+                        )}
+                        {typeof invoiceDebug.draftsThisMonth === 'number' && typeof invoiceDebug.totalDrafts === 'number' && (
+                          <>
+                            <p>
+                              <span className="font-medium text-gray-700">Drafts this month:</span>{' '}
+                              <span className="text-gray-800">
+                                {invoiceDebug.draftsThisMonth}
+                              </span>
+                            </p>
+                            <p>
+                              <span className="font-medium text-gray-700">Total drafts:</span>{' '}
+                              <span className="text-gray-800">
+                                {invoiceDebug.totalDrafts}
+                              </span>
+                            </p>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="mt-6 flex items-center justify-between pt-4 border-t border-gray-200">
                   <div className="text-sm text-gray-600">
