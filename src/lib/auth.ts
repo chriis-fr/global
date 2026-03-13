@@ -225,7 +225,7 @@ export const authOptions: NextAuthOptions = {
     },
     async jwt({ token, user, trigger }) {
       if (user) {
-        // Add custom user data to token
+        // Add custom user data to token (initial login)
         token.userType = user.userType
         token.role = user.role
         token.address = user.address
@@ -235,6 +235,10 @@ export const authOptions: NextAuthOptions = {
         token.organizationId = user.organizationId
         token.picture = (user as { image?: string }).image ?? token.picture
         token.name = user.name ?? token.name
+        // Ensure session.user.id is always the MongoDB id from the start (credentials return user.id = _id)
+        if ((user as { id?: string }).id) {
+          token.mongoId = (user as { id: string }).id
+        }
 
         // For OAuth users, we need to get the MongoDB ObjectId from the database
         if (user.email && !token.mongoId) {

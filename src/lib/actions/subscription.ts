@@ -202,73 +202,64 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
       const organization = await db.collection('organizations').findOne({ _id: user.organizationId });
       if (organization) {
         
-        // Find the owner by matching billing email or by role
-        let owner = organization.members.find((member: OrganizationMember) => member.role === 'owner');
-        
-        if (owner) {
-        }
-        
-        // If no owner role found, find by billing email match
-        if (!owner) {
-          owner = organization.members.find((member: OrganizationMember) => 
+        // Find the owner by role, then by billing email; support both string and ObjectId userId
+        const members = organization.members || [];
+        let owner = members.find((member: OrganizationMember) => member.role === 'owner');
+        if (!owner && organization.billingEmail) {
+          owner = members.find((member: OrganizationMember) =>
             member.email === organization.billingEmail
           );
-          if (owner) {
+        }
+        // Fallback: current user might be the owner (e.g. creator) if no role set
+        if (!owner && members.some((m: OrganizationMember) => String(m.userId) === String(session.user.id))) {
+          const currentMember = members.find((m: OrganizationMember) => String(m.userId) === String(session.user.id));
+          if (currentMember?.role === 'owner' || (members.length === 1 && !organization.billingEmail)) {
+            owner = currentMember;
           }
         }
-        
-        if (!owner) {
-          return null;
+
+        let orgSubscription = organization.subscription;
+        let ownerUser: { subscription?: Record<string, unknown> } | null = null;
+
+        if (owner) {
+          const ownerId = owner.userId instanceof ObjectId ? owner.userId : new ObjectId(String(owner.userId));
+          ownerUser = await db.collection('users').findOne({ _id: ownerId });
+          if (ownerUser?.subscription) {
+            orgSubscription = orgSubscription || ownerUser.subscription;
+          }
         }
-        
-        // Get the owner's user record to access their subscription
-        const ownerUser = await db.collection('users').findOne({ _id: new ObjectId(owner.userId) });
-        if (!ownerUser) {
-          return null;
+
+        // If no owner found or no subscription yet, use org's cached subscription so members aren't blocked
+        if (!orgSubscription && ownerUser?.subscription) {
+          orgSubscription = ownerUser.subscription;
         }
-        
-        
-        if (!ownerUser.subscription) {
+        if (!orgSubscription && organization.subscription) {
+          orgSubscription = organization.subscription;
+        }
+
+        if (!orgSubscription) {
+          console.warn('[getUserSubscription] Org has no subscription and owner lookup failed or owner has no subscription', { organizationId: user.organizationId?.toString(), hasOwner: !!owner });
           return null;
         }
 
-        
-        
-        // Check if organization has cached subscription and if it's up to date
-        let orgSubscription = organization.subscription;
-        let needsUpdate = false;
-        
-        if (!orgSubscription) {
-          orgSubscription = ownerUser.subscription;
-          needsUpdate = true;
-        } else {
-          // Check if owner's subscription is newer than cached subscription
-          const ownerUpdatedAt = new Date(ownerUser.subscription.updatedAt || ownerUser.subscription.createdAt);
-          const orgUpdatedAt = new Date(orgSubscription.updatedAt || orgSubscription.createdAt);
-          
+        // When we have an owner, sync org cache if owner's subscription is newer
+        if (ownerUser?.subscription) {
+          const ownerSub = ownerUser.subscription as { updatedAt?: Date; createdAt?: Date };
+          const ownerUpdatedAt = new Date(ownerSub.updatedAt || ownerSub.createdAt || 0);
+          const orgUpdatedAt = new Date((orgSubscription as { updatedAt?: Date; createdAt?: Date }).updatedAt || (orgSubscription as { updatedAt?: Date; createdAt?: Date }).createdAt || 0);
           if (ownerUpdatedAt > orgUpdatedAt) {
-            orgSubscription = ownerUser.subscription;
-            needsUpdate = true;
-          } else {
+            orgSubscription = ownerUser.subscription as typeof orgSubscription;
+            try {
+              await db.collection('organizations').updateOne(
+                { _id: user.organizationId },
+                { $set: { subscription: orgSubscription, updatedAt: new Date() } }
+              );
+            } catch {
+              // Continue with owner's subscription even if cache update fails
+            }
           }
         }
-        
-        // Update organization subscription cache if needed
-        if (needsUpdate) {
-          try {
-            await db.collection('organizations').updateOne(
-              { _id: user.organizationId },
-              { 
-                $set: { 
-                  subscription: orgSubscription,
-                  updatedAt: new Date()
-                }
-              }
-            );
-          } catch {
-            // Continue with owner's subscription even if cache update fails
-          }
-        }
+
         const planId = orgSubscription.planId || 'receivables-free';
         const plan = BILLING_PLANS.find(p => p.planId === planId) || null;
         
@@ -301,8 +292,10 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
           ((planId.includes('payables') || planId.includes('combined')) && isActiveOrCombined)
         );
         
-        const currentMonthInvoiceCount = orgSubscription.usage?.invoicesThisMonth || 0;
-        
+        // Use live count for this org (not stale orgSubscription.usage) so members see correct limits
+        const currentMonthInvoiceCount = await getCurrentMonthInvoiceCount(session.user.id);
+        const monthlyVolume = orgSubscription.usage?.monthlyVolume ?? 0;
+
         // Organization read-only when trial ended (add-on: view-only until they pay)
         const orgReadOnlyDueToTrialEnd = isTrialPremiumPlan && !isTrialActive;
         // Organization read-only when subscription overdue: past_due OR period ended and 3+ days past grace
@@ -340,7 +333,7 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
           paymentFailedAt: orgSubscription.paymentFailedAt ? new Date(orgSubscription.paymentFailedAt) : null,
           usage: {
             invoicesThisMonth: currentMonthInvoiceCount,
-            monthlyVolume: orgSubscription.usage?.monthlyVolume || 0,
+            monthlyVolume,
             recentInvoiceCount: currentMonthInvoiceCount
           },
           canCreateOrganization,

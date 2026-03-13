@@ -166,7 +166,11 @@ export async function POST(request: NextRequest) {
     // Check subscription limits (invoice count and volume) with this invoice's total
     const canCreate = await canCreateInvoice(totalRounded);
     if (!canCreate.allowed) {
-      console.log('❌ [API Invoices] Invoice creation blocked:', canCreate.reason);
+      console.log('❌ [API Invoices] Invoice creation blocked:', {
+        reason: canCreate.reason,
+        userId: session.user?.id,
+        organizationId: (session.user as { organizationId?: string })?.organizationId
+      });
       return NextResponse.json({
         success: false,
         error: canCreate.reason,

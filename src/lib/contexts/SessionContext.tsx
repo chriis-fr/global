@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import type { Session } from 'next-auth';
+import { useSession as useNextAuthSession } from 'next-auth/react';
 import { getSessionAction } from '@/lib/actions/auth';
 
 type SessionContextValue = {
@@ -23,13 +24,20 @@ export function SessionProvider({
   const [session, setSession] = useState<Session | null>(initialSession ?? null);
   const [isLoading, setIsLoading] = useState(initialSession === undefined);
   const fetchedOnce = useRef(false);
+  const { update: nextAuthUpdate } = useNextAuthSession();
 
   const update = useCallback(async () => {
+    // Force NextAuth to re-run the JWT callback (trigger: 'update') so the cookie gets
+    // fresh user data from DB (organizationId, mongoId, etc.). Without this, the customer's
+    // session can stay stale and API calls (e.g. save draft) may get 403.
+    if (typeof nextAuthUpdate === 'function') {
+      await nextAuthUpdate();
+    }
     const next = await getSessionAction();
     setSession(next);
     setIsLoading(false);
     return next;
-  }, []);
+  }, [nextAuthUpdate]);
 
   // When no initialSession (e.g. client nav), fetch once via server action — never GET /api/auth/session
   useEffect(() => {
