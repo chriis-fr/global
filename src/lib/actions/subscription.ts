@@ -193,7 +193,18 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
     if (!user) {
       return null;
     }
-    
+
+    // OAuth/Google owners may have org membership only in organizations.members (role owner) and
+    // user.organizationId not set; resolve org so they get org subscription and can save drafts.
+    if (!user.organizationId) {
+      const orgAsOwner = await db.collection('organizations').findOne({
+        'members.userId': userObjectId,
+        'members.role': 'owner'
+      });
+      if (orgAsOwner) {
+        (user as { organizationId?: unknown }).organizationId = orgAsOwner._id;
+      }
+    }
     
     // Check if user is a member of an organization
     if (user.organizationId) {

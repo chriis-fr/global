@@ -164,7 +164,37 @@ export async function POST(request: NextRequest) {
     const totalRounded = round2(parseFloat(total) || 0);
 
     // Check subscription limits (invoice count and volume) with this invoice's total
-    const canCreate = await canCreateInvoice(totalRounded);
+    let canCreate = await canCreateInvoice(totalRounded);
+
+    // Guarantee: any member of a paying org (active paid or active trial) must never get 403 for create/draft
+    if (!canCreate.allowed) {
+      const db = await connectToDatabase();
+      const userDoc = await db.collection('users').findOne({ _id: new ObjectId(session.user!.id) });
+      let orgId = userDoc?.organizationId;
+      if (!orgId && userDoc) {
+        const orgAsOwner = await db.collection('organizations').findOne({
+          'members.userId': userDoc._id,
+          'members.role': 'owner'
+        });
+        if (orgAsOwner) orgId = orgAsOwner._id;
+      }
+      if (orgId) {
+        const org = await db.collection('organizations').findOne({ _id: orgId });
+        const sub = org?.subscription as { planId?: string; status?: string; trialEndDate?: Date } | undefined;
+        const planId = sub?.planId;
+        const status = sub?.status;
+        const isTrialPremium = planId === 'trial-premium';
+        const trialEnd = sub?.trialEndDate ? new Date(sub.trialEndDate) : null;
+        const trialActive = isTrialPremium && trialEnd && new Date() < trialEnd;
+        const isPaidPlan = planId && planId !== 'receivables-free' && planId !== 'trial-premium';
+        const activePaidOrTrial = status === 'active' && (isPaidPlan || trialActive);
+        if (activePaidOrTrial) {
+          canCreate = { allowed: true };
+          console.log('✅ [API Invoices] Allowing create: user is in paying org (safety net)', { orgId: String(orgId) });
+        }
+      }
+    }
+
     if (!canCreate.allowed) {
       console.log('❌ [API Invoices] Invoice creation blocked:', {
         reason: canCreate.reason,
