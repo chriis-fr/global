@@ -223,7 +223,7 @@ export async function getUserSubscription(): Promise<SubscriptionData | null> {
 
         if (owner) {
           const ownerId = owner.userId instanceof ObjectId ? owner.userId : new ObjectId(String(owner.userId));
-          ownerUser = await db.collection('users').findOne({ _id: ownerId });
+          ownerUser = await db.collection('users').findOne({ _id: ownerId }) as { subscription?: Record<string, unknown> } | null;
           if (ownerUser?.subscription) {
             orgSubscription = orgSubscription || ownerUser.subscription;
           }
