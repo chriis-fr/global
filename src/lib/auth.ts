@@ -220,6 +220,8 @@ export const authOptions: NextAuthOptions = {
         }
         session.user.services = (token.services as Record<string, boolean>) || createDefaultServices()
         session.user.organizationId = token.organizationId as string
+        session.user.organizationRole = (token.organizationRole as string | null) ?? undefined
+        session.user.mpesaEnabled = token.mpesaEnabled === true
       }
       return session
     },
@@ -346,6 +348,12 @@ export const authOptions: NextAuthOptions = {
                   }
                 }
                 token.services = effectiveServices
+                // Org role and M-Pesa for sidebar: avoid second request and waiter flash
+                const member = (org?.members as Array<{ userId: { toString: () => string }; role: string }> | undefined)?.find(
+                  (m) => m.userId.toString() === dbUser._id?.toString()
+                )
+                token.organizationRole = member?.role ?? null
+                token.mpesaEnabled = (org?.settings as { mpesa?: { enabled?: boolean } } | undefined)?.mpesa?.enabled === true
               } catch (err) {
                 console.error('[Services→Dashboard] JWT callback: org lookup failed, using user.services', { organizationId: dbUser.organizationId?.toString(), error: err })
                 token.services = { ...(dbUser.services || createDefaultServices()) } as Record<string, boolean>
@@ -400,6 +408,12 @@ export const authOptions: NextAuthOptions = {
           if (hasAnyEnabled && orgServices) {
             token.services = { ...createDefaultServices(), ...orgServices } as Record<string, boolean>
           }
+          const currentUserId = dbUser?._id?.toString() ?? (token.mongoId as string)
+          const member = (org?.members as Array<{ userId: { toString: () => string }; role: string }> | undefined)?.find(
+            (m) => m.userId.toString() === currentUserId
+          )
+          token.organizationRole = member?.role ?? null
+          token.mpesaEnabled = (org?.settings as { mpesa?: { enabled?: boolean } } | undefined)?.mpesa?.enabled === true
         } catch {
           // non-blocking; keep existing token
         }

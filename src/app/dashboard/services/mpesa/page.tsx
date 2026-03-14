@@ -177,27 +177,12 @@ export default async function MpesaServicePage() {
     );
   }
 
-  const mpesaEnabled = org.settings?.mpesa?.enabled === true;
-  if (!mpesaEnabled) {
-    return (
-      <div className="space-y-6">
-        <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
-          <h1 className="text-xl font-semibold text-white mb-2">M-Pesa</h1>
-          <p className="text-blue-200 text-sm">
-            M-Pesa has not been enabled for this organization. Please contact your
-            admin.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   const member = org.members.find(
     (m) => m.userId.toString() === session.user.id
   );
-  const orgRole = member?.role ?? null;
+  const orgRole = member?.role ?? (session.user as { organizationRole?: string }).organizationRole ?? null;
 
-  // Waiters: show only the prompt UI
+  // Waiters: show prompt UI immediately (having a waiter means org has M-Pesa enabled)
   if (orgRole === 'waiter') {
     return (
       <div className="space-y-6">
@@ -217,6 +202,21 @@ export default async function MpesaServicePage() {
         </div>
 
         <WaiterPromptCard />
+      </div>
+    );
+  }
+
+  const mpesaEnabled = org.settings?.mpesa?.enabled === true;
+  if (!mpesaEnabled) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
+          <h1 className="text-xl font-semibold text-white mb-2">M-Pesa</h1>
+          <p className="text-blue-200 text-sm">
+            M-Pesa has not been enabled for this organization. Please contact your
+            admin.
+          </p>
+        </div>
       </div>
     );
   }

@@ -29,8 +29,8 @@ export default function DashboardPage() {
   const sessionRefreshDoneRef = useRef(false);
   const subscriptionSuccessHandledRef = useRef(false);
   const [orgRole, setOrgRole] = useState<string | null>(null);
-  const [orgMpesaEnabled, setOrgMpesaEnabled] = useState(false);
-  const isWaiter = orgRole === 'waiter' && orgMpesaEnabled;
+  // Session-first: waiter from session shows waiter dashboard immediately; having a waiter means M-Pesa is enabled
+  const isWaiter = (session?.user?.organizationRole === 'waiter' || orgRole === 'waiter');
   const [waiterPrompts, setWaiterPrompts] = useState<
     Array<{
       id: string;
@@ -49,13 +49,13 @@ export default function DashboardPage() {
     setMounted(true);
   }, []);
 
-  // Load organization role + M-Pesa enabled flag (for waiter dashboards)
+  // Load organization role when not in session (fallback so isWaiter works for old JWTs)
   useEffect(() => {
     if (!session?.user?.organizationId) {
       setOrgRole(null);
-      setOrgMpesaEnabled(false);
       return;
     }
+    if (session?.user?.organizationRole != null) return;
     let cancelled = false;
     (async () => {
       try {
@@ -63,19 +63,15 @@ export default function DashboardPage() {
         const result = await getCurrentOrganizationRole();
         if (!cancelled && result.success && result.data) {
           setOrgRole(result.data.role);
-          setOrgMpesaEnabled(result.data.mpesaEnabled);
         }
       } catch {
-        if (!cancelled) {
-          setOrgRole(null);
-          setOrgMpesaEnabled(false);
-        }
+        if (!cancelled) setOrgRole(null);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [session?.user?.organizationId]);
+  }, [session?.user?.organizationId, session?.user?.organizationRole]);
 
   // Load recent waiter prompts when role/org state is known
   useEffect(() => {

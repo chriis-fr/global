@@ -91,11 +91,23 @@ function Sidebar() {
     return () => window.removeEventListener('resize', update);
   }, []);
 
-  // Load organization role + M-Pesa enabled flag for sidebar filtering
+  // Session-first: use organizationRole/mpesaEnabled from session so first paint is correct (no waiter flash).
+  // Fallback: load from API when session doesn't have them (e.g. old JWT).
+  const effectiveRole = session?.user?.organizationRole ?? orgRole;
+  const effectiveMpesaEnabled = session?.user?.mpesaEnabled ?? orgMpesaEnabled;
+  const roleUnknown = Boolean(
+    session?.user?.organizationId &&
+    (effectiveRole === undefined || effectiveRole === null || effectiveRole === '')
+  );
+
+  // Load organization role + M-Pesa when not in session (fallback for old tokens)
   useEffect(() => {
     if (!session?.user?.organizationId) {
       setOrgRole(null);
       setOrgMpesaEnabled(false);
+      return;
+    }
+    if (session?.user?.organizationRole != null && session?.user?.mpesaEnabled !== undefined) {
       return;
     }
     let cancelled = false;
@@ -117,7 +129,7 @@ function Sidebar() {
     return () => {
       cancelled = true;
     };
-  }, [session?.user?.organizationId]);
+  }, [session?.user?.organizationId, session?.user?.organizationRole, session?.user?.mpesaEnabled]);
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -303,8 +315,8 @@ function Sidebar() {
             {(!isCollapsed || isAutoHidden) && (
               <div className="flex justify-between items-center mb-2 px-2">
                 <h3 className="text-xs text-white/50 uppercase">Services</h3>
-                {/* Waiters cannot add/manage services, so hide the + button for them */}
-                {orgRole !== 'waiter' && (
+                {/* Waiters and unknown-role (loading) cannot add/manage services */}
+                {!roleUnknown && effectiveRole !== 'waiter' && (
                   <>
                     {isMobile ? (
                       <div
@@ -335,9 +347,14 @@ function Sidebar() {
               ? SERVICE_LINKS.filter(link => {
                 const isSuperAdmin = session?.user?.adminTag === true;
 
-                // Waiter: show ONLY the M-Pesa service when org has it enabled
-                if (orgRole === 'waiter') {
-                  return link.key === 'mpesaPayments' && orgMpesaEnabled;
+                // Role unknown (e.g. loading): show no service links to avoid waiter seeing admin items
+                if (roleUnknown) {
+                  return false;
+                }
+
+                // Waiter: show ONLY M-Pesa (having a waiter means org has M-Pesa enabled)
+                if (effectiveRole === 'waiter') {
+                  return link.key === 'mpesaPayments';
                 }
 
                 // Super admin (master account): has access to all services regardless of plan/user services flags
@@ -360,7 +377,7 @@ function Sidebar() {
                 }
                 if (link.key === 'mpesaPayments') {
                   // M-Pesa service: only when org has it enabled and user is in an organization
-                  return Boolean(session?.user?.organizationId) && orgMpesaEnabled;
+                  return Boolean(session?.user?.organizationId) && effectiveMpesaEnabled;
                 }
 
                 return isServiceEnabled;
@@ -414,8 +431,8 @@ function Sidebar() {
             })}
           </div>
 
-          {/* Admin */}
-          {permissions.canApproveBills && session?.user?.organizationId && (
+          {/* Admin: hide when role unknown (loading) or waiter */}
+          {permissions.canApproveBills && session?.user?.organizationId && !roleUnknown && effectiveRole !== 'waiter' && (
             <div>
               {(!isCollapsed || isAutoHidden) && (
                 <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wider mb-2 px-2">
@@ -504,8 +521,8 @@ function Sidebar() {
           {isSettingsOpen && (
             <div className="ml-4 space-y-1">
               {SETTINGS_LINKS.filter(link => {
-                // Waiters: only show Help & Support
-                if (orgRole === 'waiter') {
+                // Role unknown or waiter: only show Help & Support (no flash of admin settings)
+                if (roleUnknown || effectiveRole === 'waiter') {
                   return link.key === 'help';
                 }
                 // Only show integrations for admin accounts (adminTag)
@@ -614,8 +631,8 @@ function Sidebar() {
                   <User className="h-4 w-4 mr-3 shrink-0" />
                   Profile Settings
                 </button>
-                {/* For waiters, hide upsell/other items so they only see profile + sign out */}
-                {orgRole !== 'waiter' && (
+                {/* For waiters and unknown role, hide upsell so they only see profile + sign out */}
+                {!roleUnknown && effectiveRole !== 'waiter' && (
                   <>
                     <button
                       type="button"
