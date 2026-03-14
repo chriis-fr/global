@@ -4,8 +4,9 @@ import { redirect } from 'next/navigation';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
 import { OrganizationService } from '@/lib/services/organizationService';
+import Link from 'next/link';
 import { WaiterPromptCard } from '@/components/mpesa/WaiterPrompt';
-import { Waves, Users, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { Waves, Users, Clock, CheckCircle, XCircle, ChevronRight } from 'lucide-react';
 
 interface MpesaWaiterSummary {
   waiterUserId: string;
@@ -23,15 +24,17 @@ interface MpesaDashboardData {
   waiterSummaries: MpesaWaiterSummary[];
 }
 
+/** If provided, only include users whose org role is 'waiter' (exclude owner/admin). */
 async function getMpesaDashboardData(
-  organizationId: string
+  organizationId: string,
+  waiterOnlyUserIds?: string[]
 ): Promise<MpesaDashboardData> {
   const db = await connectToDatabase();
   const sessions = db.collection('mpesa_stk_sessions');
 
   const orgObjectId = new ObjectId(organizationId);
 
-  // Aggregate per waiter
+  // Aggregate per waiter (all users who have prompts)
   const agg = await sessions
     .aggregate<{
       _id: ObjectId | null;
@@ -120,6 +123,12 @@ async function getMpesaDashboardData(
         lastActivity: g.lastActivity,
       };
     });
+
+    // Show only actual waiters in Waiter Summary (exclude owner/admin)
+    if (waiterOnlyUserIds && waiterOnlyUserIds.length > 0) {
+      const set = new Set(waiterOnlyUserIds);
+      waiterSummaries = waiterSummaries.filter((w) => set.has(w.waiterUserId));
+    }
   }
 
   return {
@@ -211,7 +220,13 @@ export default async function MpesaServicePage() {
   }
 
   // Non-waiter roles: full dashboard + optional prompt card
-  const dashboardData = await getMpesaDashboardData(organizationId);
+  const waiterOnlyUserIds = org.members
+    .filter((m) => m.role === 'waiter')
+    .map((m) => m.userId.toString());
+  const dashboardData = await getMpesaDashboardData(
+    organizationId,
+    waiterOnlyUserIds
+  );
   const hasAnyStats =
     (dashboardData.totalAmount ?? 0) > 0 ||
     (dashboardData.successCount ?? 0) > 0 ||
@@ -298,29 +313,59 @@ export default async function MpesaServicePage() {
                       <th className="py-2 px-4 text-left font-medium">Prompts</th>
                       <th className="py-2 px-4 text-left font-medium">Total (KES)</th>
                       <th className="py-2 px-4 text-left font-medium">Last Activity</th>
+                      <th className="py-2 pl-4 w-8" aria-hidden />
                     </tr>
                   </thead>
                   <tbody>
                     {dashboardData.waiterSummaries.map((w) => (
-                      <tr key={w.waiterUserId} className="border-b border-white/5">
+                      <tr key={w.waiterUserId} className="border-b border-white/5 group">
                         <td className="py-2 pr-4 text-blue-100">
-                          <div className="flex flex-col">
+                          <Link
+                            href={`/dashboard/services/mpesa/waiter/${w.waiterUserId}`}
+                            className="flex flex-col hover:text-white transition-colors"
+                          >
                             <span className="font-medium">{w.waiterName}</span>
                             {w.waiterEmail && (
-                              <span className="text-xs text-blue-300">
+                              <span className="text-xs text-blue-300 group-hover:text-blue-200">
                                 {w.waiterEmail}
                               </span>
                             )}
-                          </div>
-                        </td>
-                        <td className="py-2 px-4 text-blue-100">{w.count}</td>
-                        <td className="py-2 px-4 text-blue-100">
-                          {w.totalAmount.toLocaleString()}
+                          </Link>
                         </td>
                         <td className="py-2 px-4 text-blue-100">
-                          {w.lastActivity
-                            ? w.lastActivity.toLocaleString()
-                            : '—'}
+                          <Link
+                            href={`/dashboard/services/mpesa/waiter/${w.waiterUserId}`}
+                            className="hover:text-white transition-colors"
+                          >
+                            {w.count}
+                          </Link>
+                        </td>
+                        <td className="py-2 px-4 text-blue-100">
+                          <Link
+                            href={`/dashboard/services/mpesa/waiter/${w.waiterUserId}`}
+                            className="hover:text-white transition-colors"
+                          >
+                            {w.totalAmount.toLocaleString()}
+                          </Link>
+                        </td>
+                        <td className="py-2 px-4 text-blue-100">
+                          <Link
+                            href={`/dashboard/services/mpesa/waiter/${w.waiterUserId}`}
+                            className="hover:text-white transition-colors"
+                          >
+                            {w.lastActivity
+                              ? w.lastActivity.toLocaleString()
+                              : '—'}
+                          </Link>
+                        </td>
+                        <td className="py-2 pl-4 text-blue-300 group-hover:text-white">
+                          <Link
+                            href={`/dashboard/services/mpesa/waiter/${w.waiterUserId}`}
+                            className="inline-flex"
+                            aria-label="View waiter details"
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </Link>
                         </td>
                       </tr>
                     ))}
