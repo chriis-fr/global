@@ -21,11 +21,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const delayedRetryRef = useRef(false);
    const apiStatusCheckedRef = useRef(false);
   const fetchOnboardingRef = useRef(fetchOnboarding);
+  const sessionRefreshedOnLoadRef = useRef(false);
 
   // Keep ref in sync with fetchOnboarding function
   useEffect(() => {
     fetchOnboardingRef.current = fetchOnboarding;
   }, [fetchOnboarding]);
+
+  // Once per dashboard visit: refresh JWT from DB so session has latest organizationId/mongoId (avoids 403 on save draft)
+  useEffect(() => {
+    if (status !== 'authenticated' || !session || sessionRefreshedOnLoadRef.current) return;
+    sessionRefreshedOnLoadRef.current = true;
+    refreshSession().catch(() => {});
+  }, [status, session, refreshSession]);
 
   useEffect(() => {
     if (status === 'loading') return;

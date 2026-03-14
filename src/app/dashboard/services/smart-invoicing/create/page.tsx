@@ -3999,6 +3999,7 @@ export default function CreateInvoicePage() {
                             onBankSelectAction={handleBankSelect}
                             onInputChangeAction={(value) => handleInputChange('bankName', value)}
                             placeholder="Search for a bank or type custom bank name..."
+                            className="text-black"
                             allowCustom={true}
                           />
                         </div>

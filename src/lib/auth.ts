@@ -225,7 +225,7 @@ export const authOptions: NextAuthOptions = {
     },
     async jwt({ token, user, trigger }) {
       if (user) {
-        // Add custom user data to token
+        // Add custom user data to token (initial login)
         token.userType = user.userType
         token.role = user.role
         token.address = user.address
@@ -235,13 +235,28 @@ export const authOptions: NextAuthOptions = {
         token.organizationId = user.organizationId
         token.picture = (user as { image?: string }).image ?? token.picture
         token.name = user.name ?? token.name
+        // Ensure session.user.id is always the MongoDB id from the start (credentials return user.id = _id)
+        if ((user as { id?: string }).id) {
+          token.mongoId = (user as { id: string }).id
+        }
 
-        // For OAuth users, we need to get the MongoDB ObjectId from the database
+        // For OAuth (Google) users, the token has no organizationId or mongoId from the provider.
+        // Fetch from DB and set them so the session is complete on first request (avoids 403 on save draft).
         if (user.email && !token.mongoId) {
           try {
             const dbUser = await UserService.getUserByEmail(user.email)
             if (dbUser?._id) {
               token.mongoId = dbUser._id.toString()
+              token.organizationId = dbUser.organizationId?.toString()
+              token.role = dbUser.role
+              token.userType = ((dbUser as unknown as Record<string, unknown>).userType as 'individual' | 'business') || 'individual'
+              token.onboarding = {
+                completed: dbUser.onboarding?.isCompleted || false,
+                currentStep: dbUser.onboarding?.currentStep || 0,
+                completedSteps: dbUser.onboarding?.completedSteps || [],
+                serviceOnboarding: dbUser.onboarding?.data || {}
+              }
+              token.services = (dbUser.services ? { ...createDefaultServices(), ...dbUser.services } : createDefaultServices()) as unknown as Record<string, boolean>
             }
           } catch {
             // Error fetching user for JWT
