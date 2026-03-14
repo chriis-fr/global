@@ -6,6 +6,8 @@ import { ObjectId } from 'mongodb';
 import { OrganizationService } from '@/lib/services/organizationService';
 import Link from 'next/link';
 import { WaiterPromptCard } from '@/components/mpesa/WaiterPrompt';
+import { RecentPromptsList } from '@/components/mpesa/RecentPromptsList';
+import { MpesaTotalAmountCard } from '@/components/mpesa/MpesaTotalAmountCard';
 import { Waves, Users, Clock, CheckCircle, XCircle, ChevronRight } from 'lucide-react';
 
 interface MpesaWaiterSummary {
@@ -254,15 +256,7 @@ export default async function MpesaServicePage() {
       {/* Stats (only when there is actual activity) */}
       {hasAnyStats && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 flex items-center justify-between">
-            <div>
-              <p className="text-sm text-blue-200">Total Successful Amount</p>
-              <p className="text-2xl font-semibold text-white mt-1">
-                KES {dashboardData.totalAmount.toLocaleString()}
-              </p>
-            </div>
-            <CheckCircle className="h-8 w-8 text-emerald-400" />
-          </div>
+          <MpesaTotalAmountCard />
           <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 flex items-center justify-between">
             <div>
               <p className="text-sm text-blue-200">Successful Prompts</p>
@@ -374,6 +368,9 @@ export default async function MpesaServicePage() {
               </div>
             )}
           </div>
+
+          {/* Recent prompts (org-wide) — below Waiter Summary for admins */}
+          <RecentPromptsList />
         </div>
 
         <div className="order-1 lg:order-2">

@@ -158,4 +158,79 @@ export async function getWaiterRecentPrompts(limit = 10): Promise<{
   }
 }
 
+export type MpesaTotalPeriod = 'today' | '1w' | '1m' | '3m';
 
+function getPeriodRange(period: MpesaTotalPeriod): { start: Date } {
+  const now = new Date();
+  const start = new Date(now);
+  start.setUTCHours(0, 0, 0, 0);
+
+  switch (period) {
+    case 'today':
+      return { start };
+    case '1w': {
+      const d = new Date(start);
+      const day = d.getUTCDay();
+      const diff = d.getUTCDate() - day + (day === 0 ? -6 : 1);
+      d.setUTCDate(diff);
+      return { start: d };
+    }
+    case '1m': {
+      const d = new Date(start);
+      d.setUTCDate(1);
+      return { start: d };
+    }
+    case '3m': {
+      const d = new Date(start);
+      d.setUTCMonth(d.getUTCMonth() - 3);
+      d.setUTCDate(1);
+      return { start: d };
+    }
+    default:
+      return { start };
+  }
+}
+
+export async function getMpesaTotalByPeriod(period: MpesaTotalPeriod): Promise<{
+  success: boolean;
+  data?: { totalAmount: number };
+  error?: string;
+}> {
+  try {
+    const session = await getServerSession(authOptions);
+    const organizationId = session?.user?.organizationId as string | undefined;
+
+    if (!organizationId) {
+      return { success: false, error: 'User is not part of an organization.' };
+    }
+
+    const { start } = getPeriodRange(period);
+    const db = await connectToDatabase();
+    const sessions = db.collection('mpesa_stk_sessions');
+
+    const agg = await sessions
+      .aggregate<{ totalAmount: number }>([
+        {
+          $match: {
+            organizationId: new ObjectId(organizationId),
+            status: 'success',
+            createdAt: { $gte: start },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalAmount: { $sum: '$amount' },
+          },
+        },
+      ])
+      .toArray();
+
+    const totalAmount = agg[0]?.totalAmount ?? 0;
+
+    return { success: true, data: { totalAmount } };
+  } catch (error) {
+    console.error('[getMpesaTotalByPeriod] Error:', error);
+    return { success: false, error: 'Failed to load total by period' };
+  }
+}
