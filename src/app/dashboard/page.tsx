@@ -29,8 +29,14 @@ export default function DashboardPage() {
   const sessionRefreshDoneRef = useRef(false);
   const subscriptionSuccessHandledRef = useRef(false);
   const [orgRole, setOrgRole] = useState<string | null>(null);
-  // Session-first: waiter from session shows waiter dashboard immediately; having a waiter means M-Pesa is enabled
-  const isWaiter = (session?.user?.organizationRole === 'waiter' || orgRole === 'waiter');
+  // Session-first + fallback: derive effectiveRole and whether role is still unknown (loading)
+  const effectiveRole = session?.user?.organizationRole ?? orgRole;
+  const roleUnknown = Boolean(
+    session?.user?.organizationId &&
+    (effectiveRole === undefined || effectiveRole === null || effectiveRole === '')
+  );
+  // Waiter: either session or fallback role says waiter. While role is unknown we treat the view as waiter-safe.
+  const isWaiter = effectiveRole === 'waiter';
   const [waiterPrompts, setWaiterPrompts] = useState<
     Array<{
       id: string;
@@ -348,19 +354,21 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Stats Cards - Independent Loading with Suspense */}
-      <Suspense fallback={
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6 animate-pulse">
-              <div className="h-8 w-24 bg-white/20 rounded mb-2"></div>
-              <div className="h-4 w-16 bg-white/20 rounded"></div>
-            </div>
-          ))}
-        </div>
-      }>
-        <StatsCards />
-      </Suspense>
+      {/* Stats Cards - hide entirely for waiters and while role is unknown so they never see payables/overview stats */}
+      {!isWaiter && !roleUnknown && (
+        <Suspense fallback={
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6 animate-pulse">
+                <div className="h-8 w-24 bg-white/20 rounded mb-2"></div>
+                <div className="h-4 w-16 bg-white/20 rounded"></div>
+              </div>
+            ))}
+          </div>
+        }>
+          <StatsCards />
+        </Suspense>
+      )}
 
       {/* Quick Actions & Alerts */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -374,7 +382,7 @@ export default function DashboardPage() {
                 <div className="flex items-center space-x-3 px-4 py-3 rounded-lg bg-white/5 animate-pulse h-12 w-full max-w-xs" aria-hidden />
                 <div className="flex items-center space-x-3 px-4 py-3 rounded-lg bg-white/5 animate-pulse h-12 w-full max-w-xs" aria-hidden />
               </>
-            ) : isWaiter ? (
+            ) : (isWaiter || roleUnknown) ? (
               <button
                 onClick={() => router.push('/dashboard/services/mpesa')}
                 className="flex items-center space-x-3 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -418,8 +426,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Alerts & Status (hide for waiters) */}
-        {!isWaiter && (
+        {/* Alerts & Status (hide for waiters AND while role is unknown so they never see system stats) */}
+        {!isWaiter && !roleUnknown && (
           <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
             <h3 className="text-lg font-semibold text-white mb-4">Status</h3>
             <div className="space-y-3">
@@ -446,8 +454,8 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Recent Activity / Recent Prompts - Independent Loading with Suspense (gated by mounted to avoid hydration mismatch) */}
-      {isWaiter ? (
+      {/* Recent Activity / Recent Prompts - for waiters OR while role is unknown, only show waiter prompts area */}
+      {isWaiter || roleUnknown ? (
         <div className="grid gap-6 grid-cols-1">
           <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-6">
             <h3 className="text-lg font-semibold text-white mb-4">Recent M-Pesa Prompts</h3>

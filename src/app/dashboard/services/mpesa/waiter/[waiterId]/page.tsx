@@ -88,7 +88,14 @@ export default async function WaiterDetailPage({ params }: WaiterDetailPageProps
       waiterUserId: waiterObjectId,
     })
     .sort({ createdAt: -1 })
-    .toArray();
+    .toArray() as Array<{
+      _id: ObjectId;
+      amount?: number;
+      createdAt?: Date;
+      status?: string;
+      phoneNumber?: string;
+      mpesaReceiptNumber?: string;
+    }>;
 
   const successfulSessions = allSessions.filter((s) => s.status === 'success');
   const totalAmount = (s: { amount?: number }[]) =>

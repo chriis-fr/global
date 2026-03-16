@@ -11,6 +11,8 @@ import {
   Bell,
   ChevronUp
 } from 'lucide-react';
+import { useSession } from '@/lib/auth-client';
+import { useSubscription } from '@/lib/contexts/SubscriptionContext';
 
 interface QuickAction {
   label: string;
@@ -22,20 +24,39 @@ interface QuickAction {
 export default function FloatingActionButton() {
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
+  const { data: session } = useSession();
+  const { subscription } = useSubscription();
+
+  // Role / access checks
+  const organizationRole = session?.user?.organizationRole;
+  const isWaiter = organizationRole === 'waiter';
+  const planType = subscription?.plan?.type;
+  const hasReceivablesAccess =
+    planType === 'receivables' ||
+    planType === 'combined' ||
+    subscription?.plan?.planId === 'receivables-free' ||
+    subscription?.plan?.planId === 'trial-premium';
+  const isSmartInvoicingEnabled = session?.user?.services?.smartInvoicing || false;
+  const canShowInvoiceActions = hasReceivablesAccess && isSmartInvoicingEnabled;
 
   const quickActions: QuickAction[] = [
-    {
-      label: 'Create Invoice',
-      href: '/dashboard/services/smart-invoicing/create',
-      icon: Plus,
-      color: 'bg-green-600 hover:bg-green-700'
-    },
-    {
-      label: 'View Invoices',
-      href: '/dashboard/services/smart-invoicing/invoices',
-      icon: FileText,
-      color: 'bg-blue-600 hover:bg-blue-700'
-    },
+    // Only show invoice actions when organization actually has receivables access
+    ...(canShowInvoiceActions
+      ? [
+          {
+            label: 'Create Invoice',
+            href: '/dashboard/services/smart-invoicing/create',
+            icon: Plus,
+            color: 'bg-green-600 hover:bg-green-700'
+          },
+          {
+            label: 'View Invoices',
+            href: '/dashboard/services/smart-invoicing/invoices',
+            icon: FileText,
+            color: 'bg-blue-600 hover:bg-blue-700'
+          }
+        ]
+      : []),
     {
       label: 'Clients',
       href: '/dashboard/clients',
@@ -58,6 +79,17 @@ export default function FloatingActionButton() {
 
   // Don't show on main dashboard page
   if (pathname === '/dashboard') {
+    return null;
+  }
+
+  // Hide entirely for waiters so they never see global quick routes (invoices, clients, settings, etc.)
+  if (isWaiter) {
+    return null;
+  }
+
+  // Hide completely on M-Pesa waiter flows and any M-Pesa-related pages so waiters don't see routes
+  // they shouldn't access (invoices, clients, settings, etc.).
+  if (pathname.startsWith('/dashboard/services/mpesa')) {
     return null;
   }
 

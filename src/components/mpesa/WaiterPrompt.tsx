@@ -139,7 +139,7 @@ export function WaiterPromptCard() {
           disabled={isPending}
           className="w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed font-medium text-white transition-colors"
         >
-          {isPending ? 'Sending...' : 'Send STK Push'}
+          {isPending ? 'Sending...' : 'Send prompt'}
         </button>
       </form>
     </div>
