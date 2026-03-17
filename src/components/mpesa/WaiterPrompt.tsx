@@ -35,6 +35,12 @@ export function WaiterPromptCard() {
   const [tableRef, setTableRef] = useState('');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successDetails, setSuccessDetails] = useState<{
+    amount: number;
+    phoneNumber: string;
+    mpesaReceiptNumber?: string;
+  } | null>(null);
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [isAwaitingCallback, setIsAwaitingCallback] = useState(false);
   const { data: session } = useSession();
@@ -58,10 +64,11 @@ export function WaiterPromptCard() {
     const poll = async () => {
       if (cancelled) return;
       const elapsed = Date.now() - start;
-      if (elapsed > 15000) {
+      // Keep waiting for up to ~90s to match M-Pesa behaviour
+      if (elapsed > 90000) {
         setIsAwaitingCallback(false);
         setStatusMessage(
-          'No response yet. If the customer did not see or complete the prompt, you can try again.'
+          'We have not received a response from M-Pesa yet. Check the recent prompts list below for any update; if nothing appears after a short while, you can try again.'
         );
         return;
       }
@@ -76,6 +83,9 @@ export function WaiterPromptCard() {
             status: 'pending' | 'success' | 'failed';
             resultCode?: string;
             resultDescription?: string;
+            amount: number;
+            phoneNumber: string;
+            mpesaReceiptNumber?: string;
           };
         };
         if (!data.success || !data.prompt) {
@@ -95,6 +105,18 @@ export function WaiterPromptCard() {
           setStatusMessage('The request was cancelled by the customer.');
         } else if (p.status === 'success') {
           setStatusMessage('Payment successful.');
+          setSuccessDetails({
+            amount: p.amount,
+            phoneNumber: p.phoneNumber,
+            mpesaReceiptNumber: p.mpesaReceiptNumber,
+          });
+          setIsSuccessModalOpen(true);
+          // Auto-dismiss modal + status after 60s
+          setTimeout(() => {
+            setIsSuccessModalOpen(false);
+            setSuccessDetails(null);
+            setStatusMessage(null);
+          }, 60000);
         } else {
           setStatusMessage('The request failed. Ask the customer to try again.');
         }
@@ -234,6 +256,45 @@ export function WaiterPromptCard() {
       {isAwaitingCallback && (
         <div className="mt-2 text-xs text-blue-200">
           Pending M-Pesa response. Ask the customer to check their phone and enter their PIN.
+        </div>
+      )}
+      {isSuccessModalOpen && successDetails && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40">
+          <div className="bg-slate-950/95 border border-emerald-500/60 rounded-2xl shadow-2xl px-6 py-5 max-w-sm w-full mx-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-emerald-200">
+                Payment confirmed
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSuccessModalOpen(false);
+                  setSuccessDetails(null);
+                  setStatusMessage(null);
+                }}
+                className="text-[11px] text-emerald-200 hover:text-white underline-offset-2 hover:underline"
+              >
+                Dismiss
+              </button>
+            </div>
+            <p className="text-xs text-emerald-100/80 mb-3">
+              The customer has successfully completed the M-Pesa prompt.
+            </p>
+            <div className="space-y-1.5 text-xs text-emerald-100">
+              <div>
+                <span className="font-medium">Amount:</span>{' '}
+                KES {successDetails.amount.toLocaleString()}
+              </div>
+              <div>
+                <span className="font-medium">Phone:</span>{' '}
+                {successDetails.phoneNumber}
+              </div>
+              <div>
+                <span className="font-medium">Receipt:</span>{' '}
+                {successDetails.mpesaReceiptNumber || '—'}
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
