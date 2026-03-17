@@ -11,6 +11,8 @@ export interface MpesaCredentialsInput {
   passkey: string;
   callbackUrl: string;
   environment: 'sandbox' | 'production';
+  /** Optional override for PartyB (till/store/agent) – stored encrypted */
+  partyBShortCode?: string;
 }
 
 /** Partial credentials for saving only what the admin has entered; rest stay from existing or env. */
@@ -184,6 +186,7 @@ export async function setOrganizationMpesaCredentials(
     if (credentials.passkey != null && credentials.passkey.trim()) trimmed.passkey = credentials.passkey.trim();
     if (credentials.callbackUrl != null && credentials.callbackUrl.trim()) trimmed.callbackUrl = credentials.callbackUrl.trim();
     if (credentials.environment != null) trimmed.environment = credentials.environment === 'production' ? 'production' : 'sandbox';
+   if (credentials.partyBShortCode != null && credentials.partyBShortCode.trim()) trimmed.partyBShortCode = credentials.partyBShortCode.trim();
 
     if (Object.keys(trimmed).length === 0) {
       return { success: false, error: 'Enter at least one field to save.' };
@@ -271,6 +274,7 @@ export async function getOrganizationMpesaCredentialsDecrypted(
     if (parsed.passkey) out.passkey = parsed.passkey;
     if (parsed.callbackUrl) out.callbackUrl = parsed.callbackUrl;
     if (parsed.environment) out.environment = parsed.environment === 'production' ? 'production' : 'sandbox';
+    if (parsed.partyBShortCode) out.partyBShortCode = parsed.partyBShortCode;
     return Object.keys(out).length > 0 ? out : null;
   } catch {
     return null;

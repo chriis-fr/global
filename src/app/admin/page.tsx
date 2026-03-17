@@ -139,6 +139,7 @@ export default function AdminDashboard() {
     passkey: '',
     callbackUrl: '',
     environment: 'sandbox' as 'sandbox' | 'production',
+    partyBShortCode: '',
   });
   const [mpesaBusinessForm, setMpesaBusinessForm] = useState({
     businessShortCode: '',
@@ -518,10 +519,11 @@ export default function AdminDashboard() {
         passkey: mpesaCredentialsForm.passkey,
         callbackUrl: mpesaCredentialsForm.callbackUrl,
         environment: mpesaCredentialsForm.environment,
+        partyBShortCode: mpesaCredentialsForm.partyBShortCode,
       });
       if (result.success) {
         await loadMpesaOrgDetail(mpesaOrgSelected.organizationId);
-        setMpesaCredentialsForm({ consumerKey: '', consumerSecret: '', passkey: '', callbackUrl: '', environment: 'sandbox' });
+        setMpesaCredentialsForm({ consumerKey: '', consumerSecret: '', passkey: '', callbackUrl: '', environment: 'sandbox', partyBShortCode: '' });
         setMpesaCredentialsShowForm(false);
         toast.success('Daraja credentials saved (stored encrypted). They are never shown in the UI.');
       } else if (result.error) {
@@ -1341,6 +1343,17 @@ export default function AdminDashboard() {
                           <option value="production">Production</option>
                         </select>
                       </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">PartyB Shortcode (optional)</label>
+                        <input
+                          type="text"
+                          value={mpesaCredentialsForm.partyBShortCode}
+                          onChange={(e) => setMpesaCredentialsForm((p) => ({ ...p, partyBShortCode: e.target.value }))}
+                          className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm"
+                          placeholder="Override for PartyB (till/store/agent). If empty, Business Shortcode is used."
+                          autoComplete="off"
+                        />
+                      </div>
                       <div className="flex gap-2">
                         <button
                           type="submit"
@@ -1351,7 +1364,7 @@ export default function AdminDashboard() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => { setMpesaCredentialsShowForm(false); setMpesaCredentialsForm({ consumerKey: '', consumerSecret: '', passkey: '', callbackUrl: '', environment: 'sandbox' }); }}
+                          onClick={() => { setMpesaCredentialsShowForm(false); setMpesaCredentialsForm({ consumerKey: '', consumerSecret: '', passkey: '', callbackUrl: '', environment: 'sandbox', partyBShortCode: '' }); }}
                           className="px-3 py-1.5 border border-gray-300 rounded text-sm hover:bg-gray-50"
                         >
                           Cancel

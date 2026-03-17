@@ -99,10 +99,6 @@ export async function sendWaiterStkPush(
       fiatCustomFields = fiat.customFields;
     } else {
       console.log('[M-Pesa STK] Using org-level Business Shortcode:', businessShortCode);
-      // Sandbox shortcode 174379 is a Paybill; Daraja requires CustomerPayBillOnline
-      if (businessShortCode === '174379') {
-        transactionType = 'CustomerPayBillOnline';
-      }
     }
 
     // Merge org-level encrypted credentials (if any) with payment method customFields + env
@@ -117,13 +113,25 @@ export async function sendWaiterStkPush(
       fiatCustomFields?.MPESA_CALLBACK_URL ||
       process.env.NEXT_PUBLIC_DARAJA_CALLBACK_URL ||
       '';
-    const environment: 'sandbox' | 'production' =
+    const rawEnv =
       orgCredentials?.environment ||
       (fiatCustomFields?.MPESA_ENV as 'sandbox' | 'production') ||
       (process.env.NEXT_PUBLIC_DARAJA_ENV as 'sandbox' | 'production') ||
-      'sandbox';
+      undefined;
+
+    if (rawEnv !== 'production') {
+      console.log('[M-Pesa STK] Early exit: M-Pesa not configured for production environment. rawEnv =', rawEnv);
+      return {
+        success: false,
+        error:
+          'M-Pesa is not configured for production. Please set environment=production in org M-Pesa credentials.',
+      };
+    }
+
+    const environment = 'production' as const;
     const consumerKey = orgCredentials?.consumerKey;
     const consumerSecret = orgCredentials?.consumerSecret;
+    const partyBShortCode = orgCredentials?.partyBShortCode?.trim() || undefined;
     if (orgCredentials && Object.keys(orgCredentials).length > 0) {
       console.log('[M-Pesa STK] Using org-level Daraja credentials (encrypted) where set');
     }
@@ -146,7 +154,7 @@ export async function sendWaiterStkPush(
       };
     }
 
-    console.log('[M-Pesa STK] Config resolved – businessShortCode:', businessShortCode, 'callbackUrl:', callbackUrl, 'environment:', environment, 'credentialsSource:', orgCredentials ? 'org' : 'paymentMethod/env');
+    console.log('[M-Pesa STK] Config resolved – businessShortCode:', businessShortCode, 'partyBShortCode:', partyBShortCode, 'callbackUrl:', callbackUrl, 'environment:', environment, 'credentialsSource:', orgCredentials ? 'org' : 'paymentMethod/env');
 
     // 4. Call Daraja STK
     const stkPayload = {
@@ -168,6 +176,7 @@ export async function sendWaiterStkPush(
         transactionDesc: 'POS Payment',
         environment,
         ...(consumerKey && consumerSecret ? { consumerKey, consumerSecret } : {}),
+        ...(partyBShortCode ? { partyBShortCode } : {}),
       },
       stkPayload
     );

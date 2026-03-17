@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { WaiterPromptCard } from '@/components/mpesa/WaiterPrompt';
 import { RecentPromptsList } from '@/components/mpesa/RecentPromptsList';
 import { MpesaTotalAmountCard } from '@/components/mpesa/MpesaTotalAmountCard';
-import { Waves, Users, Clock, CheckCircle, XCircle, ChevronRight } from 'lucide-react';
+import { Waves, Users, Clock, XCircle, ChevronRight } from 'lucide-react';
 
 interface MpesaWaiterSummary {
   waiterUserId: string;

@@ -19,6 +19,12 @@ export interface MpesaStkConfig {
   transactionType?: 'CustomerPayBillOnline' | 'CustomerBuyGoodsOnline';
   accountReference?: string;
   transactionDesc?: string;
+  /**
+   * Optional override for PartyB (till/store/agent number).
+   * When set, this is sent as PartyB while BusinessShortCode is still used
+   * for password generation and BusinessShortCode field.
+   */
+  partyBShortCode?: string;
   environment?: 'sandbox' | 'production';
   /**
    * Optional: use these for OAuth instead of env DARAJA_CONSUMER_KEY/SECRET (e.g. per-org credentials).
@@ -190,12 +196,29 @@ export async function initiateMpesaStkPush(
     TransactionType: transactionType,
     Amount: input.amount,
     PartyA: input.phoneNumber,
-    PartyB: businessShortCode,
+    PartyB: config.partyBShortCode || businessShortCode,
     PhoneNumber: input.phoneNumber,
     CallBackURL: callbackUrl,
     AccountReference: accountReference,
     TransactionDesc: transactionDesc,
   };
+
+  console.log('[M-Pesa STK] Initiate STK push – resolved config:', {
+    environment,
+    transactionType,
+    businessShortCode,
+    partyBShortCode: config.partyBShortCode || null,
+    callbackUrl,
+    accountReference,
+    transactionDesc,
+    credentialsSource: accessToken ? 'injected_accessToken' : (config.consumerKey ? 'override_consumerKey' : 'env'),
+    hasPasskey: Boolean(passkey),
+  });
+  console.log('[M-Pesa STK] Initiate STK push – attribution:', {
+    organizationId: input.organizationId,
+    waiterId: input.waiterId,
+    tableRef: input.tableRef,
+  });
 
   const payloadForLog = {
     ...payload,
@@ -218,6 +241,15 @@ export async function initiateMpesaStkPush(
       'Content-Length': Buffer.byteLength(data),
     },
   };
+  console.log('[M-Pesa STK] Daraja request meta:', {
+    url: `https://${hostname}${options.path}`,
+    method: options.method,
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(data),
+      Authorization: 'Bearer ***',
+    },
+  });
 
   return new Promise((resolve) => {
     const req = https.request(options, (res) => {
