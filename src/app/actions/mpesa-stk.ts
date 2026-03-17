@@ -15,6 +15,30 @@ interface SendWaiterStkInput {
   tableRef?: string;
 }
 
+interface SendAdminStkInput {
+  organizationId: string;
+  phoneNumber: string;
+  amount: number;
+}
+
+function normalizeKenyanPhoneServer(input: string): string | null {
+  const raw = input.replace(/[^\d+]/g, '');
+  const trimmed = raw.startsWith('+') ? raw.slice(1) : raw;
+
+  // 07XXXXXXXXX -> 2547XXXXXXXX
+  if (/^07\d{8}$/.test(trimmed)) {
+    return `254${trimmed.slice(1)}`;
+  }
+
+  // 2547XXXXXXXX -> already correct
+  if (/^2547\d{8}$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  // +2547XXXXXXXX handled by the 2547 case after removing +
+  return null;
+}
+
 export async function sendWaiterStkPush(
   input: SendWaiterStkInput
 ): Promise<{ success: boolean; message?: string; error?: string }> {
@@ -238,6 +262,181 @@ export async function sendWaiterStkPush(
   } catch (error) {
     console.error('[M-Pesa STK] sendWaiterStkPush threw:', error);
     if (error instanceof Error) console.error('[M-Pesa STK] stack:', error.stack);
+    return {
+      success: false,
+      error: 'Unexpected error while sending M-Pesa STK push.',
+    };
+  }
+}
+
+export async function sendAdminMpesaStkPush(
+  input: SendAdminStkInput
+): Promise<{ success: boolean; message?: string; error?: string }> {
+  console.log('[M-Pesa STK] sendAdminMpesaStkPush called – input:', {
+    organizationId: input.organizationId,
+    phoneNumber: input.phoneNumber,
+    amount: input.amount,
+  });
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.adminTag) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const organizationId = input.organizationId;
+    const org = await OrganizationService.getOrganizationById(organizationId);
+    if (!org) {
+      return { success: false, error: 'Organization not found' };
+    }
+    if (!org.settings?.mpesa?.enabled) {
+      return {
+        success: false,
+        error: 'M-Pesa is not enabled for this organization.',
+      };
+    }
+
+    const normalizedPhone = normalizeKenyanPhoneServer(input.phoneNumber);
+    if (!normalizedPhone) {
+      return {
+        success: false,
+        error:
+          'Invalid phone number. Use 07XXXXXXXX or 2547XXXXXXXX format for Kenyan numbers.',
+      };
+    }
+
+    const orgMpesa = org.settings?.mpesa;
+    let businessShortCode: string | undefined = orgMpesa?.businessShortCode?.trim();
+    let accountReference: string = orgMpesa?.accountReference?.trim() || 'Payment';
+    let transactionType: 'CustomerPayBillOnline' | 'CustomerBuyGoodsOnline' =
+      orgMpesa?.transactionType || 'CustomerPayBillOnline';
+    let fiatCustomFields: Record<string, string> | undefined;
+
+    if (!businessShortCode) {
+      const methods = await paymentMethodService.getPaymentMethods(
+        new ObjectId(organizationId),
+        undefined,
+        'fiat'
+      );
+      const mpesaMethod = methods.find(
+        (m) =>
+          m.fiatDetails?.subtype === 'mpesa_paybill' ||
+          m.fiatDetails?.subtype === 'mpesa_till'
+      );
+      if (!mpesaMethod?.fiatDetails) {
+        return {
+          success: false,
+          error:
+            'No M-Pesa config for this organization. Set Business Shortcode in Admin or add a Paybill/Till in Payment Methods.',
+        };
+      }
+      const fiat = mpesaMethod.fiatDetails;
+      businessShortCode =
+        fiat.subtype === 'mpesa_paybill' ? fiat.paybillNumber : fiat.tillNumber;
+      if (!businessShortCode) {
+        return {
+          success: false,
+          error: 'M-Pesa configuration is incomplete (missing paybill or till number).',
+        };
+      }
+      accountReference = fiat.mpesaAccountNumber || fiat.businessName || 'Payment';
+      transactionType =
+        fiat.subtype === 'mpesa_till'
+          ? 'CustomerBuyGoodsOnline'
+          : 'CustomerPayBillOnline';
+      fiatCustomFields = fiat.customFields;
+    }
+
+    const orgCredentials = await getOrganizationMpesaCredentialsDecrypted(organizationId);
+    const passkey =
+      orgCredentials?.passkey ||
+      fiatCustomFields?.MPESA_PASSKEY ||
+      process.env.NEXT_PUBLIC_DARAJA_PASSKEY ||
+      '';
+    const callbackUrl =
+      orgCredentials?.callbackUrl ||
+      fiatCustomFields?.MPESA_CALLBACK_URL ||
+      process.env.NEXT_PUBLIC_DARAJA_CALLBACK_URL ||
+      '';
+    const rawEnv =
+      orgCredentials?.environment ||
+      (fiatCustomFields?.MPESA_ENV as 'sandbox' | 'production') ||
+      (process.env.NEXT_PUBLIC_DARAJA_ENV as 'sandbox' | 'production') ||
+      undefined;
+
+    if (rawEnv !== 'production') {
+      return {
+        success: false,
+        error:
+          'M-Pesa is not configured for production for this organization. Please set environment=production in org M-Pesa credentials.',
+      };
+    }
+
+    const environment = 'production' as const;
+    const consumerKey = orgCredentials?.consumerKey;
+    const consumerSecret = orgCredentials?.consumerSecret;
+    const partyBShortCode = orgCredentials?.partyBShortCode?.trim() || undefined;
+
+    if (!passkey) {
+      return {
+        success: false,
+        error:
+          'Daraja passkey is not configured for this organization. Set org M-Pesa credentials in Admin or MPESA_PASSKEY in customFields/environment.',
+      };
+    }
+
+    if (!callbackUrl) {
+      return {
+        success: false,
+        error:
+          'Daraja callback URL is not configured for this organization. Set org M-Pesa credentials in Admin or MPESA_CALLBACK_URL in customFields/environment.',
+      };
+    }
+
+    console.log(
+      '[M-Pesa STK][Admin] Config resolved – businessShortCode:',
+      businessShortCode,
+      'partyBShortCode:',
+      partyBShortCode,
+      'callbackUrl:',
+      callbackUrl,
+      'environment:',
+      environment
+    );
+
+    const stkPayload = {
+      phoneNumber: normalizedPhone,
+      amount: input.amount,
+      organizationId,
+    };
+
+    const stkResult = await initiateMpesaStkPush(
+      {
+        businessShortCode,
+        passkey,
+        callbackUrl,
+        transactionType,
+        accountReference,
+        transactionDesc: 'POS Payment',
+        environment,
+        ...(consumerKey && consumerSecret ? { consumerKey, consumerSecret } : {}),
+        ...(partyBShortCode ? { partyBShortCode } : {}),
+      },
+      stkPayload
+    );
+
+    if (!stkResult.ok) {
+      return {
+        success: false,
+        error: stkResult.error || 'Failed to initiate STK push.',
+      };
+    }
+
+    return {
+      success: true,
+      message: stkResult.data.CustomerMessage || 'STK push sent.',
+    };
+  } catch (error) {
+    console.error('[M-Pesa STK] sendAdminMpesaStkPush threw:', error);
     return {
       success: false,
       error: 'Unexpected error while sending M-Pesa STK push.',

@@ -181,7 +181,12 @@ function Sidebar() {
 
   // Fetch pending approvals count for green-dot indicator (only when user can approve)
   useEffect(() => {
-    if (!session?.user?.organizationId || !permissions.canApproveBills) {
+    // Waiters and users without org or approve permission should never fetch approvals APIs
+    if (
+      !session?.user?.organizationId ||
+      !permissions.canApproveBills ||
+      effectiveRole === 'waiter'
+    ) {
       setPendingApprovalsCount(0);
       return;
     }

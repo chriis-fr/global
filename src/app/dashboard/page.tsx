@@ -458,7 +458,18 @@ export default function DashboardPage() {
       {isWaiter || roleUnknown ? (
         <div className="grid gap-6 grid-cols-1">
           <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-6">
-            <h3 className="text-lg font-semibold text-white mb-4">Recent M-Pesa Prompts</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">Recent M-Pesa Prompts</h3>
+              {session?.user?.id && (
+                <button
+                  type="button"
+                  onClick={() => router.push(`/dashboard/services/mpesa/waiter/${session.user.id}`)}
+                  className="text-xs font-medium text-blue-300 hover:text-white underline-offset-2 hover:underline"
+                >
+                  View all
+                </button>
+              )}
+            </div>
             {!mounted || waiterPromptsLoading ? (
               <div className="space-y-3">
                 {[...Array(3)].map((_, i) => (
@@ -471,7 +482,7 @@ export default function DashboardPage() {
               <p className="text-sm text-blue-200">No prompts yet. Use “Prompt Client” to send your first STK request.</p>
             ) : (
               <div className="space-y-3">
-                {waiterPrompts.map((p) => (
+                {waiterPrompts.slice(0, 5).map((p) => (
                   <div
                     key={p.id}
                     className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10"

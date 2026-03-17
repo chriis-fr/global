@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { WaiterPromptCard } from '@/components/mpesa/WaiterPrompt';
 import { RecentPromptsList } from '@/components/mpesa/RecentPromptsList';
 import { MpesaTotalAmountCard } from '@/components/mpesa/MpesaTotalAmountCard';
+import { AdminMpesaPrompt } from '@/components/mpesa/AdminMpesaPrompt';
 import { Waves, Users, Clock, XCircle, ChevronRight } from 'lucide-react';
 
 interface MpesaWaiterSummary {
@@ -149,6 +150,49 @@ export default async function MpesaServicePage() {
   }
 
   const organizationId = session.user.organizationId as string | undefined;
+
+  // Admin account without org: allow testing M-Pesa for any org that has M-Pesa enabled
+  if (!organizationId && session.user.adminTag) {
+    const db = await connectToDatabase();
+    const orgs = await db
+      .collection('organizations')
+      .find({ 'settings.mpesa.enabled': true })
+      .project({ _id: 1, name: 1 })
+      .toArray();
+    const enabledOrgs = orgs.map((o) => ({
+      id: (o._id as ObjectId).toString(),
+      name: o.name as string,
+    }));
+
+    return (
+      <div className="space-y-6">
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-blue-500/20">
+              <Waves className="h-6 w-6 text-blue-300" />
+            </div>
+            <div>
+              <h1 className="text-lg font-semibold text-white">M-Pesa Admin Prompt</h1>
+              <p className="text-blue-200 text-sm">
+                Select an organization with M-Pesa enabled and send a test prompt using its configuration.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {enabledOrgs.length === 0 ? (
+          <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
+            <p className="text-blue-200 text-sm">
+              No organizations with M-Pesa enabled were found. Enable M-Pesa for an organization in the
+              admin panel first.
+            </p>
+          </div>
+        ) : (
+          <AdminMpesaPrompt organizations={enabledOrgs} />
+        )}
+      </div>
+    );
+  }
 
   if (!organizationId) {
     return (

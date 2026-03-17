@@ -28,10 +28,10 @@ export default function Breadcrumb() {
       let label = segment;
       let href = currentPath;
 
-      // Waiter detail: last segment is waiter id — show "Details" and don't link
       const prevSegment = segs[index - 1];
+      // Waiter detail: last segment is waiter id — omit this crumb entirely (ID is already in URL)
       if (prevSegment === 'waiter' && /^[0-9a-fA-F]{24}$/.test(segment)) {
-        label = 'Details';
+        return;
       }
 
       // Customize labels for better readability

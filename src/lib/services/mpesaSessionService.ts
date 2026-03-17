@@ -96,7 +96,10 @@ export class MpesaSessionService {
     );
 
     const doc = result.value;
-    if (!doc) return null;
+    if (!doc) {
+      // Graceful: no matching session (e.g. admin test without recording, old session, etc.)
+      return null;
+    }
 
     const eventType: PaymentEventType =
       params.status === 'success'

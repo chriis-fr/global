@@ -51,11 +51,14 @@ export async function POST(req: NextRequest) {
       resultDescription: resultDesc,
     });
 
-    return NextResponse.json({
-      success: true,
-      merchantRequestId,
-      checkoutRequestId,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        merchantRequestId,
+        checkoutRequestId,
+      },
+      { status: 200 }
+    );
   } catch (error) {
     console.error('Error handling M-Pesa callback:', error);
     return NextResponse.json({ success: false }, { status: 500 });
