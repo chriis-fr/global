@@ -51,7 +51,7 @@ export interface RecentPayable {
   payableNumber: string;
   vendorName: string; // Just name, no full details
   total: number;
-  currency: string;
+  currency?: string;
   amountUsd?: number; // Converted USD amount (for crypto currencies)
   status: string;
   createdAt: string;
@@ -557,11 +557,11 @@ export async function getRecentPayables(limit: number = 5): Promise<{ success: b
     // Transform to minimal data structure with USD conversion for crypto (server-side, like admin stats)
     const recentPayablesPromises = payables.map(async (payable) => {
       const amount = payable.total || payable.amount || 0;
-      const currency = payable.currency || 'USD';
+      const currency = payable.currency;
       
       // Convert crypto to USD on server side (like admin stats)
       let amountUsd: number | undefined;
-      if (isCryptoCurrency(currency)) {
+      if (currency && isCryptoCurrency(currency)) {
         try {
           const { convertCryptoToUsd } = await import('@/lib/services/exchangeRateService');
           amountUsd = await convertCryptoToUsd(amount, currency);
@@ -576,7 +576,7 @@ export async function getRecentPayables(limit: number = 5): Promise<{ success: b
         payableNumber: payable.payableNumber || 'Payable',
         vendorName: payable.vendorName || 'Vendor',
         total: amount,
-        currency: currency,
+        currency: currency ?? undefined,
         amountUsd: amountUsd, // Converted USD amount for crypto
         status: payable.status || 'pending',
         createdAt: payable.createdAt?.toISOString() || new Date().toISOString()

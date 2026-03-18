@@ -599,8 +599,14 @@ export default function OrganizationSettingsPage() {
           </span>
           {subscription.plan && (
             <span className="text-blue-200/70">
-              Invoices: {subscription.usage.invoicesThisMonth}
-              {subscription.limits.invoicesPerMonth < 0 ? ' (unlimited)' : ` / ${subscription.limits.invoicesPerMonth}`}
+              {subscription.plan.type === 'payables' ? (
+                'Payables active'
+              ) : (
+                <>
+                  Invoices: {subscription.usage.invoicesThisMonth}
+                  {subscription.limits.invoicesPerMonth < 0 ? ' (unlimited)' : ` / ${subscription.limits.invoicesPerMonth}`}
+                </>
+              )}
             </span>
           )}
         </div>
