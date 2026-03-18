@@ -323,7 +323,7 @@ export async function getPayablesListPaginated(
       vendorCompany: p.vendorCompany,
       vendorEmail: p.vendorEmail || '',
       total: p.total || p.amount || 0,
-      currency: p.currency || 'USD',
+      currency: p.currency || undefined,
       status: p.status || 'pending',
       source: (p.status === 'submitted' || p.externalInvoiceNumber || p.vendorPaymentDetails)
         ? 'link'
@@ -807,7 +807,7 @@ export async function getAllPayables() {
       vendorEmail: p.vendorEmail || '',
       amount: p.amount || p.total || 0,
       total: p.total || p.amount || 0,
-      currency: p.currency || 'USD',
+      currency: p.currency || undefined,
       status: p.status || 'pending',
       dueDate: p.dueDate?.toISOString() || new Date().toISOString(),
       issueDate: p.issueDate?.toISOString() || new Date().toISOString(),

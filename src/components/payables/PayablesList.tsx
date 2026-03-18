@@ -14,7 +14,7 @@ interface Payable {
   vendorCompany?: string;
   vendorEmail: string;
   total: number;
-  currency: string;
+  currency?: string;
   status: 'draft' | 'submitted' | 'pending' | 'approved' | 'paid' | 'overdue';
   source?: 'link' | 'app';
   dueDate: string;
@@ -148,9 +148,14 @@ function PayablesListContent({ onCreatePayable }: PayablesListProps) {
             <div className="flex items-center space-x-2 sm:space-x-4 flex-shrink-0">
               <div className="text-right">
                 <p className="text-sm font-medium text-white">
-                  <FormattedNumberDisplay value={payable.total} currency={payable.currency} usePreferredCurrency={false} />
+                  <FormattedNumberDisplay
+                    value={payable.total}
+                    currency={payable.currency}
+                    usePreferredCurrency={false}
+                    showCurrency={!!payable.currency}
+                  />
                 </p>
-                <p className="text-sm text-blue-300">{payable.currency}</p>
+                <p className="text-sm text-blue-300">{payable.currency || ''}</p>
               </div>
               <div className="flex items-center space-x-1 sm:space-x-2">
                 <button

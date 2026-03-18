@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import {
   Receipt,
-  Clock,
   CheckCircle,
   AlertCircle,
   Loader2,
@@ -22,6 +21,7 @@ import {
   MoreHorizontal,
   ChevronDown,
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { getCurrencyByCode } from '@/data/currencies';
 import { generatePdfBlob } from '@/lib/utils/pdfDocument';
 import type { InvoicePdfData } from '@/components/invoicing/InvoicePdfDocument';
@@ -114,7 +114,7 @@ export default function PayableViewPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
-  const [showStatusHistory, setShowStatusHistory] = useState(false);
+  // Status history intentionally removed from UI (no longer shown in actions)
   const [downloadingReceipt, setDownloadingReceipt] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showMarkPaidModal, setShowMarkPaidModal] = useState(false);
@@ -180,7 +180,7 @@ export default function PayableViewPage() {
       const requestBody = newStatus === 'paid' 
         ? { markAsPaid: true }
         : { 
-            status: newStatus, 
+            newStatus: newStatus, 
             updatedAt: new Date().toISOString() 
           };
 
@@ -212,11 +212,11 @@ export default function PayableViewPage() {
         setPayable(updatedPayable);
         
         if (newStatus === 'paid') {
-          alert('Payable marked as paid successfully!');
+          toast.success('Payable marked as paid successfully!');
           sessionStorage.setItem('lastPaymentAction', Date.now().toString());
         }
       } else {
-        alert('Failed to update payable status. Please try again.');
+        toast.error('Failed to update payable status. Please try again.');
       }
     } catch {
     } finally {
@@ -224,7 +224,7 @@ export default function PayableViewPage() {
     }
   };
 
-  const handleMarkPaidConfirm = async (args: { txHash?: string; chainId?: number; paymentReference: string; proofUrl?: string }) => {
+  const handleMarkPaidConfirm = async (args: { txHash?: string; chainId?: number; paymentReference?: string; proofUrl?: string }) => {
     if (!payable) return;
 
     try {
@@ -241,14 +241,14 @@ export default function PayableViewPage() {
       if (result.success) {
         // Reload payable to get updated data
         await loadPayable();
-        alert('Payable marked as paid successfully!');
+        toast.success('Payable marked as paid successfully!');
         sessionStorage.setItem('lastPaymentAction', Date.now().toString());
       } else {
-        alert(result.error || 'Failed to mark payable as paid');
+        toast.error(result.error || 'Failed to mark payable as paid');
       }
     } catch (error) {
       console.error('Error marking payable as paid:', error);
-      alert('Failed to mark payable as paid. Please try again.');
+      toast.error('Failed to mark payable as paid. Please try again.');
     } finally {
       setUpdatingStatus(false);
     }
@@ -281,11 +281,11 @@ export default function PayableViewPage() {
       if (result.success) {
         router.push('/dashboard/services/payables?refresh=true');
       } else {
-        alert(result.error || 'Failed to delete payable');
+        toast.error(result.error || 'Failed to delete payable');
       }
     } catch (error) {
       console.error('Error deleting payable:', error);
-      alert('Failed to delete payable. Please try again.');
+      toast.error('Failed to delete payable. Please try again.');
     }
   };
 
@@ -345,7 +345,7 @@ export default function PayableViewPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      alert('Failed to download receipt. Please try again.');
+      toast.error('Failed to download receipt. Please try again.');
     } finally {
       setDownloadingReceipt(false);
     }
@@ -575,14 +575,6 @@ export default function PayableViewPage() {
                     <span>{downloadingReceipt ? 'Generating...' : 'Download Receipt'}</span>
                   </button>
                 )}
-                
-                <button
-                  onClick={() => setShowStatusHistory(!showStatusHistory)}
-                  className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-                >
-                  <Clock className="h-4 w-4" />
-                  <span>View History</span>
-                </button>
                 
                 <button
                   onClick={handleDeletePayable}
@@ -1067,14 +1059,6 @@ export default function PayableViewPage() {
                 )}
                 
                 <button
-                  onClick={() => setShowStatusHistory(!showStatusHistory)}
-                  className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-                >
-                  <Clock className="h-4 w-4" />
-                  <span>View History</span>
-                </button>
-                
-                <button
                   onClick={handleDeletePayable}
                   className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
                 >
@@ -1084,29 +1068,6 @@ export default function PayableViewPage() {
               </div>
             </div>
 
-            {/* Status History */}
-            {showStatusHistory && (
-              <div className="bg-white rounded-lg shadow-lg border p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Status History</h3>
-                <div className="space-y-3">
-                  {payable.statusHistory.map((entry, index) => (
-                    <div key={index} className="flex items-start space-x-3">
-                      <div className="flex-shrink-0">
-                        {getStatusIcon(entry.status)}
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900 capitalize">{entry.status}</p>
-                        <p className="text-xs text-gray-500">{formatDate(entry.changedAt)}</p>
-                        <p className="text-xs text-gray-500">by {entry.changedBy}</p>
-                        {entry.notes && (
-                          <p className="text-xs text-gray-600 mt-1">{entry.notes}</p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>

@@ -41,8 +41,10 @@ export function ProvidersWrapper({
   if (isPublicVendorRoute) {
     return (
       <ErrorBoundary>
-        <RouteProgress />
-        {children}
+        <SessionProvider session={initialSession ?? null}>
+          <RouteProgress />
+          {children}
+        </SessionProvider>
         <Toaster
           position="top-right"
           toastOptions={{

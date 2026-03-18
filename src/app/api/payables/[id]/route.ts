@@ -414,62 +414,61 @@ export async function PUT(
       });
     }
 
+    // Build a *safe* partial update:
+    // when the client sends only `{ status, updatedAt }`, we must preserve the existing
+    // financial + currency + item fields; otherwise they get wiped (leading to 0 amounts).
     const updateData = {
-      payableNumber,
-      issueDate: new Date(issueDate),
-      dueDate: new Date(dueDate),
-      companyLogo,
-      companyName,
-      companyEmail,
-      companyPhone,
-      companyAddress: {
-        street: companyAddress?.street || '',
-        city: companyAddress?.city || '',
-        state: companyAddress?.state || '',
-        zipCode: companyAddress?.zipCode || '',
-        country: companyAddress?.country || ''
-      },
-      companyTaxNumber,
-      vendorName,
-      vendorCompany,
-      vendorEmail,
-      vendorPhone,
-      vendorAddress: {
-        street: vendorAddress?.street || '',
-        city: vendorAddress?.city || '',
-        state: vendorAddress?.state || '',
-        zipCode: vendorAddress?.zipCode || '',
-        country: vendorAddress?.country || ''
-      },
-      currency,
-      paymentMethod,
-      paymentNetwork,
-      paymentAddress,
-      bankName,
-      accountNumber,
-      routingNumber,
-      enableMultiCurrency,
-      payableType: payableType || 'regular',
-      category: category || 'General',
-      priority: priority || 'medium',
-      items: items ? items.map((item: { id?: string; description: string; quantity: number; unitPrice: number; amount: number; tax: number; discount?: number }) => ({
-        id: item.id || `item-${Date.now()}-${Math.random()}`,
-        description: item.description,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        discount: item.discount || 0,
-        tax: item.tax || 0,
-        amount: item.amount
-      })) : undefined,
-      subtotal,
-      totalTax,
-      total,
-      memo,
-      status: newStatus || status,
+      payableNumber:
+        payableNumber ?? currentPayable.payableNumber,
+      issueDate:
+        issueDate != null ? new Date(issueDate) : currentPayable.issueDate,
+      dueDate:
+        dueDate != null ? new Date(dueDate) : currentPayable.dueDate,
+      companyLogo: companyLogo ?? currentPayable.companyLogo,
+      companyName: companyName ?? currentPayable.companyName,
+      companyEmail: companyEmail ?? currentPayable.companyEmail,
+      companyPhone: companyPhone ?? currentPayable.companyPhone,
+      companyAddress:
+        companyAddress ?? currentPayable.companyAddress,
+      companyTaxNumber: companyTaxNumber ?? currentPayable.companyTaxNumber,
+      vendorName: vendorName ?? currentPayable.vendorName,
+      vendorCompany: vendorCompany ?? currentPayable.vendorCompany,
+      vendorEmail: vendorEmail ?? currentPayable.vendorEmail,
+      vendorPhone: vendorPhone ?? currentPayable.vendorPhone,
+      vendorAddress: vendorAddress ?? currentPayable.vendorAddress,
+      currency: currency ?? currentPayable.currency,
+      paymentMethod: paymentMethod ?? currentPayable.paymentMethod,
+      paymentNetwork: paymentNetwork ?? currentPayable.paymentNetwork,
+      paymentAddress: paymentAddress ?? currentPayable.paymentAddress,
+      bankName: bankName ?? currentPayable.bankName,
+      accountNumber: accountNumber ?? currentPayable.accountNumber,
+      routingNumber: routingNumber ?? currentPayable.routingNumber,
+      enableMultiCurrency:
+        enableMultiCurrency ?? currentPayable.enableMultiCurrency,
+      payableType: payableType ?? currentPayable.payableType ?? 'regular',
+      category: category ?? currentPayable.category ?? 'General',
+      priority: priority ?? currentPayable.priority ?? 'medium',
+      items:
+        items
+          ? items.map((item: { id?: string; description: string; quantity: number; unitPrice: number; amount: number; tax: number; discount?: number }) => ({
+              id: item.id || `item-${Date.now()}-${Math.random()}`,
+              description: item.description,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              discount: item.discount || 0,
+              tax: item.tax || 0,
+              amount: item.amount
+            }))
+          : currentPayable.items,
+      subtotal: subtotal ?? currentPayable.subtotal,
+      totalTax: totalTax ?? currentPayable.totalTax,
+      total: total ?? currentPayable.total ?? currentPayable.amount,
+      memo: memo ?? currentPayable.memo,
+      status: newStatus ?? status ?? currentPayable.status,
       // Status update fields
       ...(approvalStatus && { approvalStatus }),
       ...(approvalNotes && { approvalNotes }),
-      ...(approvalStatus === 'approved' && { 
+      ...(approvalStatus === 'approved' && {
         approvedBy: userEmail,
         approvedAt: currentTime
       }),

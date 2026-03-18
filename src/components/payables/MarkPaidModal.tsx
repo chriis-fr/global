@@ -1,12 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { X, Loader2 } from 'lucide-react';
 
 interface MarkPaidModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (args: { txHash?: string; chainId?: number; paymentReference: string; proofUrl?: string }) => Promise<void>;
+  onConfirm: (args: { txHash?: string; chainId?: number; paymentReference?: string; proofUrl?: string }) => Promise<void>;
   isCrypto: boolean;
   payableId: string;
   chainId?: number;
@@ -27,6 +27,58 @@ export default function MarkPaidModal({
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const scrollY = window.scrollY;
+
+    // Save existing styles so we can restore them on close
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevBodyPosition = document.body.style.position;
+    const prevBodyTop = document.body.style.top;
+    const prevBodyWidth = document.body.style.width;
+
+    // Dashboard has its own scroll container: <main />
+    const mainEl = document.querySelector('main') as HTMLElement | null;
+    const prevMainOverflow = mainEl?.style.overflow;
+    const prevMainTouchAction = mainEl?.style.touchAction;
+    const prevMainScrollTop = mainEl?.scrollTop ?? 0;
+
+    // Force user to the top while modal is open
+    window.scrollTo(0, 0);
+
+    // Robust scroll lock
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = '100%';
+
+    if (mainEl) {
+      mainEl.style.overflow = 'hidden';
+      mainEl.style.touchAction = 'none';
+      mainEl.scrollTop = 0;
+    }
+
+    return () => {
+      // Restore
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      document.body.style.overflow = prevBodyOverflow;
+      document.body.style.position = prevBodyPosition;
+      document.body.style.top = prevBodyTop;
+      document.body.style.width = prevBodyWidth;
+
+      if (mainEl) {
+        mainEl.style.overflow = prevMainOverflow ?? '';
+        mainEl.style.touchAction = prevMainTouchAction ?? '';
+        mainEl.scrollTop = prevMainScrollTop;
+      }
+
+      window.scrollTo(0, scrollY);
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -81,14 +133,18 @@ export default function MarkPaidModal({
     e.preventDefault();
     setError(null);
 
-    if (!paymentReference.trim()) {
-      setError('Payment reference is required');
-      return;
-    }
+    const hasPaymentReference = !!paymentReference.trim();
+    const hasProofFile = !!proofFile;
 
     // For crypto payments, transaction hash is required
     if (isCrypto && !txHash.trim()) {
       setError('Transaction hash is required for crypto payments');
+      return;
+    }
+
+    // For non-crypto payments, require either a reference text or a proof upload.
+    if (!isCrypto && !hasPaymentReference && !hasProofFile) {
+      setError('Add a payment reference or upload a payment proof');
       return;
     }
 
@@ -109,7 +165,7 @@ export default function MarkPaidModal({
       await onConfirm({
         txHash: txHash.trim() || undefined,
         chainId,
-        paymentReference: paymentReference.trim(),
+        paymentReference: hasPaymentReference ? paymentReference.trim() : undefined,
         proofUrl,
       });
       // Reset form on success
@@ -135,7 +191,7 @@ export default function MarkPaidModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-0">
       {/* Semi-transparent backdrop */}
       <div 
         className="absolute inset-0 bg-gray-900/50 backdrop-blur-sm"
@@ -143,7 +199,8 @@ export default function MarkPaidModal({
       />
       
       {/* Modal */}
-      <div className="relative bg-gray-800 rounded-xl border border-gray-700 p-6 w-full max-w-md mx-4 shadow-2xl">
+      <div className="relative bg-gray-800 rounded-2xl border border-gray-700 p-6 w-full max-w-md shadow-2xl
+        h-[calc(100vh-16px)] sm:h-auto sm:max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold text-white">
@@ -162,7 +219,7 @@ export default function MarkPaidModal({
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              Payment reference <span className="text-red-400">*</span>
+              Payment reference (paste transaction/reference) 
             </label>
             <input
               type="text"
@@ -174,7 +231,6 @@ export default function MarkPaidModal({
               placeholder="e.g. MPESA code, bank reference, receipt number"
               className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
               disabled={isSubmitting}
-              required
             />
           </div>
 
@@ -244,7 +300,11 @@ export default function MarkPaidModal({
             </button>
             <button
               type="submit"
-              disabled={isSubmitting || !paymentReference.trim() || (isCrypto && !txHash.trim())}
+              disabled={
+                isSubmitting ||
+                (isCrypto && !txHash.trim()) ||
+                (!isCrypto && !paymentReference.trim() && !proofFile)
+              }
               className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isSubmitting ? (

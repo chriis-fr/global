@@ -34,6 +34,12 @@ export default function Breadcrumb() {
         return;
       }
 
+      // Payable detail: last segment is payable id — omit this crumb entirely
+      // so `/dashboard/services/payables/[id]` shows `Payables` only.
+      if (prevSegment === 'payables' && /^[0-9a-fA-F]{24}$/.test(segment)) {
+        return;
+      }
+
       // Customize labels for better readability
       switch (segment) {
         case 'services':
