@@ -3,9 +3,6 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
-import { writeFile } from 'fs/promises';
-import { join } from 'path';
-import { existsSync, mkdirSync } from 'fs';
 
 const MAX_SIZE = 8 * 1024 * 1024; // 8MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'];
@@ -57,18 +54,27 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
     }
 
-    const safeId = id.slice(-8);
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 60);
-    const fileName = `payproof-${safeId}-${Date.now()}-${safeName}`;
-    const uploadsDir = join(process.cwd(), 'public', 'uploads', 'payable-proofs');
-    if (!existsSync(uploadsDir)) {
-      mkdirSync(uploadsDir, { recursive: true });
-    }
+    const bytes = Buffer.from(await file.arrayBuffer());
 
-    const bytes = await file.arrayBuffer();
-    await writeFile(join(uploadsDir, fileName), Buffer.from(bytes));
+    const files = db.collection('fileUploads');
+    await files.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }).catch(() => {});
 
-    const url = `/uploads/payable-proofs/${fileName}`;
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+    const doc = {
+      ownerType: 'payable-proof',
+      ownerId: new ObjectId(id),
+      originalName: file.name,
+      contentType: type || 'application/octet-stream',
+      size: bytes.length,
+      data: bytes,
+      createdAt: now,
+      expiresAt,
+    };
+
+    const result = await files.insertOne(doc);
+    const url = `/api/files/${result.insertedId.toString()}`;
+
     return NextResponse.json({ success: true, url });
   } catch (error) {
     console.error('[Payable proof upload] Error:', error);

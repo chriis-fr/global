@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState, useEffect, useCallback } from 'react';
+import { Suspense, useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { 
@@ -32,6 +32,8 @@ type VendorWithCounts = {
 export default function AccountsPayablePage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'bills' | 'direct-payments' | 'vendors'>('bills');
+  const statsScrollRef = useRef<HTMLDivElement>(null);
+  const [showStatsScrollIndicator, setShowStatsScrollIndicator] = useState(false);
   const [vendorStats, setVendorStats] = useState<VendorWithCounts[]>([]);
   const [vendorStatsLoading, setVendorStatsLoading] = useState(false);
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
@@ -57,6 +59,43 @@ export default function AccountsPayablePage() {
       loadVendorStats();
     }
   }, [activeTab, loadVendorStats]);
+
+  // Horizontal scroll indicator logic (match Smart Invoicing / main dashboard)
+  useEffect(() => {
+    const checkScrollable = () => {
+      if (!statsScrollRef.current) return;
+      const container = statsScrollRef.current;
+      const hasHorizontalScroll = container.scrollWidth > container.clientWidth + 2;
+      const isAtEnd = container.scrollLeft + container.clientWidth >= container.scrollWidth - 10;
+      const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+      setShowStatsScrollIndicator(isMobile && hasHorizontalScroll && !isAtEnd);
+    };
+
+    const onScrollOrResize = () => {
+      checkScrollable();
+    };
+
+    const el = statsScrollRef.current;
+    el?.addEventListener('scroll', onScrollOrResize);
+    window.addEventListener('resize', onScrollOrResize);
+    onScrollOrResize();
+    const t1 = setTimeout(onScrollOrResize, 100);
+    const t2 = setTimeout(onScrollOrResize, 400);
+
+    const ro =
+      typeof ResizeObserver !== 'undefined' && el
+        ? new ResizeObserver(onScrollOrResize)
+        : null;
+    if (ro && el) ro.observe(el);
+
+    return () => {
+      el?.removeEventListener('scroll', onScrollOrResize);
+      window.removeEventListener('resize', onScrollOrResize);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      if (ro && el) ro.unobserve(el);
+    };
+  }, []);
 
   const handleCreatePayable = () => {
     router.push('/dashboard/services/payables/create');
@@ -119,71 +158,92 @@ export default function AccountsPayablePage() {
           <PayablesOnboardingStatus />
         </Suspense>
 
-        {/* Stats Cards - Independent Loading with Suspense */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        {/* Stats Cards - EXACT same layout as Smart Invoicing/dashboard */}
+        <div className="max-w-7xl mx-auto py-4 relative">
+          <div
+            ref={statsScrollRef}
+            className="flex md:grid gap-4 overflow-x-auto md:overflow-x-visible pb-2 md:pb-0 hide-scrollbar md:grid-cols-2 lg:grid-cols-4 snap-x snap-mandatory md:snap-none"
+          >
           <Suspense fallback={
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 animate-pulse">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="h-4 w-24 bg-white/20 rounded mb-2"></div>
-                  <div className="h-8 w-16 bg-white/20 rounded"></div>
-                </div>
-                <div className="p-3 bg-white/20 rounded-lg">
-                  <div className="h-6 w-6"></div>
+            <div className="flex-shrink-0 w-[calc(50%-8px)] min-w-[140px] md:w-auto md:min-w-0 h-[112px] md:h-auto md:min-h-0 snap-start overflow-hidden rounded-xl">
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 animate-pulse h-full flex flex-col justify-center">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="h-4 w-24 bg-white/20 rounded mb-2"></div>
+                    <div className="h-7 w-16 bg-white/20 rounded"></div>
+                  </div>
+                  <div className="w-10 h-10 bg-white/20 rounded-lg flex-shrink-0"></div>
                 </div>
               </div>
             </div>
           }>
-            <PayableStatCard type="total" />
+            <div className="flex-shrink-0 w-[calc(50%-8px)] min-w-[140px] md:w-auto md:min-w-0 h-[112px] md:h-auto md:min-h-0 snap-start overflow-hidden rounded-xl">
+              <PayableStatCard type="total" />
+            </div>
           </Suspense>
 
           <Suspense fallback={
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 animate-pulse">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="h-4 w-24 bg-white/20 rounded mb-2"></div>
-                  <div className="h-8 w-16 bg-white/20 rounded"></div>
-                </div>
-                <div className="p-3 bg-white/20 rounded-lg">
-                  <div className="h-6 w-6"></div>
+            <div className="flex-shrink-0 w-[calc(50%-8px)] min-w-[140px] md:w-auto md:min-w-0 h-[112px] md:h-auto md:min-h-0 snap-start overflow-hidden rounded-xl">
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 animate-pulse h-full flex flex-col justify-center">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="h-4 w-24 bg-white/20 rounded mb-2"></div>
+                    <div className="h-7 w-16 bg-white/20 rounded"></div>
+                  </div>
+                  <div className="w-10 h-10 bg-white/20 rounded-lg flex-shrink-0"></div>
                 </div>
               </div>
             </div>
           }>
-            <PayableStatCard type="amount" />
+            <div className="flex-shrink-0 w-[calc(50%-8px)] min-w-[140px] md:w-auto md:min-w-0 h-[112px] md:h-auto md:min-h-0 snap-start overflow-hidden rounded-xl">
+              <PayableStatCard type="amount" />
+            </div>
           </Suspense>
 
           <Suspense fallback={
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 animate-pulse">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="h-4 w-24 bg-white/20 rounded mb-2"></div>
-                  <div className="h-8 w-16 bg-white/20 rounded"></div>
-                </div>
-                <div className="p-3 bg-white/20 rounded-lg">
-                  <div className="h-6 w-6"></div>
+            <div className="flex-shrink-0 w-[calc(50%-8px)] min-w-[140px] md:w-auto md:min-w-0 h-[112px] md:h-auto md:min-h-0 snap-start overflow-hidden rounded-xl">
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 animate-pulse h-full flex flex-col justify-center">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="h-4 w-24 bg-white/20 rounded mb-2"></div>
+                    <div className="h-7 w-16 bg-white/20 rounded"></div>
+                  </div>
+                  <div className="w-10 h-10 bg-white/20 rounded-lg flex-shrink-0"></div>
                 </div>
               </div>
             </div>
           }>
-            <PayableStatCard type="pending" />
+            <div className="flex-shrink-0 w-[calc(50%-8px)] min-w-[140px] md:w-auto md:min-w-0 h-[112px] md:h-auto md:min-h-0 snap-start overflow-hidden rounded-xl">
+              <PayableStatCard type="pending" />
+            </div>
           </Suspense>
 
           <Suspense fallback={
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 animate-pulse">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="h-4 w-24 bg-white/20 rounded mb-2"></div>
-                  <div className="h-8 w-16 bg-white/20 rounded"></div>
-                </div>
-                <div className="p-3 bg-white/20 rounded-lg">
-                  <div className="h-6 w-6"></div>
+            <div className="flex-shrink-0 w-[calc(50%-8px)] min-w-[140px] md:w-auto md:min-w-0 h-[112px] md:h-auto md:min-h-0 snap-start overflow-hidden rounded-xl">
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 animate-pulse h-full flex flex-col justify-center">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="h-4 w-24 bg-white/20 rounded mb-2"></div>
+                    <div className="h-7 w-16 bg-white/20 rounded"></div>
+                  </div>
+                  <div className="w-10 h-10 bg-white/20 rounded-lg flex-shrink-0"></div>
                 </div>
               </div>
             </div>
           }>
-            <PayableStatCard type="paid" />
+            <div className="flex-shrink-0 w-[calc(50%-8px)] min-w-[140px] md:w-auto md:min-w-0 h-[112px] md:h-auto md:min-h-0 snap-start overflow-hidden rounded-xl">
+              <PayableStatCard type="paid" />
+            </div>
           </Suspense>
+          </div>
+
+          {showStatsScrollIndicator && (
+            <div className="absolute right-0 top-1/2 -translate-y-1/2 md:hidden pointer-events-none flex items-center justify-end pr-2 z-20">
+              <div className="bg-gradient-to-l from-blue-950 via-blue-950/90 to-transparent w-7 h-14 flex items-center justify-end rounded-l-lg">
+                <ChevronDown className="h-5 w-5 text-blue-400/80 rotate-90 animate-pulse" />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Quick Actions - Collapsible, hidden by default (matches Smart Invoicing) */}

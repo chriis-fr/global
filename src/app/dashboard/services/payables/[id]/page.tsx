@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { 
-  Receipt, 
-  Clock, 
-  CheckCircle, 
+import {
+  Receipt,
+  Clock,
+  CheckCircle,
   AlertCircle,
   Loader2,
   ArrowLeft,
@@ -18,7 +18,9 @@ import {
   CheckCircle2,
   XCircle,
   Clock3,
-  Wallet
+  Wallet,
+  MoreHorizontal,
+  ChevronDown,
 } from 'lucide-react';
 import { getCurrencyByCode } from '@/data/currencies';
 import { generatePdfBlob } from '@/lib/utils/pdfDocument';
@@ -119,7 +121,8 @@ export default function PayableViewPage() {
   const [showAttachmentModal, setShowAttachmentModal] = useState(false);
   const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
   const [attachmentIsImage, setAttachmentIsImage] = useState(false);
-
+  const [showMobileActions, setShowMobileActions] = useState(false);
+  const [showMobileParties, setShowMobileParties] = useState(false);
   const payableIdRaw = (params as unknown as { id?: string | string[] } | null)?.id;
   const payableId =
     typeof payableIdRaw === 'string'
@@ -137,14 +140,6 @@ export default function PayableViewPage() {
       const result = await getPayableWithInvoice(payableId);
 
       if (result.success && result.data) {
-        console.log('📊 [Payable View] Loaded payable data:', {
-          id: result.data._id,
-          payableNumber: result.data.payableNumber,
-          status: result.data.status,
-          txHash: (result.data as { txHash?: string }).txHash,
-          chainId: (result.data as { chainId?: number }).chainId,
-          paymentMethod: result.data.paymentMethod
-        });
         setPayable(result.data);
       } else {
         setError(result.error || 'Failed to load payable');
@@ -478,7 +473,7 @@ export default function PayableViewPage() {
       {/* Header */}
       <div className="bg-white/10 backdrop-blur-sm border-b border-white/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-3 sm:py-0 sm:h-16 gap-3 sm:gap-0">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-3 sm:py-0 sm:h-16 gap-3 sm:gap-0">
             <div className="flex items-center space-x-3 sm:space-x-4 min-w-0 flex-1">
               <button
                 onClick={() => router.push('/dashboard/services/payables?refresh=true')}
@@ -488,11 +483,6 @@ export default function PayableViewPage() {
               </button>
               <div className="min-w-0 flex-1">
                 <h1 className="text-base sm:text-xl font-semibold text-white truncate">{displayPayableName}</h1>
-                <p className="text-blue-200 text-xs sm:text-sm truncate">
-                  {payable.invoiceNumber 
-                    ? `#${payable.payableNumber}` 
-                    : `Payable #: ${payable.payableNumber}`}
-                </p>
               </div>
             </div>
             
@@ -512,6 +502,99 @@ export default function PayableViewPage() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Mobile: show Actions card at top for quick access */}
+          <div className="lg:hidden">
+            {/* Actions */}
+            <div className="bg-white rounded-lg shadow-lg border p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-semibold text-gray-900">Actions</h3>
+                <button
+                  type="button"
+                  className="flex items-center gap-1 rounded-full border border-gray-200 px-3 py-1 text-xs font-medium text-gray-700 bg-gray-50 hover:bg-gray-100"
+                  onClick={() => setShowMobileActions((v) => !v)}
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                  <span>{showMobileActions ? 'Hide' : 'Show'}</span>
+                </button>
+              </div>
+
+              <div className={`space-y-3 ${showMobileActions ? '' : 'hidden'}`}>
+                {(payable.status === 'pending' || payable.status === 'submitted') && (
+                  <button
+                    onClick={() => handleStatusUpdate('approved')}
+                    disabled={updatingStatus}
+                    className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {updatingStatus ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <CheckCircle className="h-4 w-4" />
+                    )}
+                    <span>{updatingStatus ? 'Updating...' : 'Approve Payable'}</span>
+                  </button>
+                )}
+                
+                {(payable.status === 'approved' || payable.status === 'pending' || payable.status === 'submitted') && (
+                  <>
+                    {(payable.paymentMethod === 'crypto' || payable.paymentMethodDetails?.method === 'crypto') && 
+                     payable.paymentAddress && (
+                      <button
+                        onClick={() => setShowPaymentModal(true)}
+                        disabled={updatingStatus}
+                        className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed mb-3"
+                      >
+                        <Wallet className="h-4 w-4" />
+                        <span>Pay Now</span>
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleStatusUpdate('paid')}
+                      disabled={updatingStatus}
+                      className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {updatingStatus ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <CheckCircle className="h-4 w-4" />
+                      )}
+                      <span>{updatingStatus ? 'Updating...' : 'Mark as Paid'}</span>
+                    </button>
+                  </>
+                )}
+                {payable.status === 'paid' && (
+                  <button
+                    onClick={handleDownloadReceipt}
+                    disabled={downloadingReceipt}
+                    className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {downloadingReceipt ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Receipt className="h-4 w-4" />
+                    )}
+                    <span>{downloadingReceipt ? 'Generating...' : 'Download Receipt'}</span>
+                  </button>
+                )}
+                
+                <button
+                  onClick={() => setShowStatusHistory(!showStatusHistory)}
+                  className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                >
+                  <Clock className="h-4 w-4" />
+                  <span>View History</span>
+                </button>
+                
+                <button
+                  onClick={handleDeletePayable}
+                  className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Delete</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
             {/* Payable Document */}
@@ -551,9 +634,28 @@ export default function PayableViewPage() {
 
               {/* Company and Vendor Info */}
               <div className="p-4 sm:p-8 border-b border-gray-200">
+                {/* Mobile: collapsible From/To section */}
+                <button
+                  type="button"
+                  className="w-full flex items-center justify-between md:hidden mb-4 text-left"
+                  onClick={() => setShowMobileParties((v) => !v)}
+                >
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Parties</p>
+                    <p className="text-sm text-gray-800">
+                      {isVendorLinkPayable ? 'Vendor and your company' : 'Your company and vendor'}
+                    </p>
+                  </div>
+                  <ChevronDown
+                    className={`h-5 w-5 text-gray-500 transform transition-transform ${
+                      showMobileParties ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   {/* Left column: From */}
-                  <div>
+                  <div className={`${showMobileParties ? 'block' : 'hidden'} md:block`}>
                     <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                       <Building2 className="h-5 w-5 mr-2 text-blue-600" />
                       {isVendorLinkPayable ? 'From (Vendor)' : 'From'}
@@ -582,7 +684,7 @@ export default function PayableViewPage() {
                   </div>
 
                   {/* Right column: To */}
-                  <div>
+                  <div className={`${showMobileParties ? 'block' : 'hidden'} md:block`}>
                     <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                       <User className="h-5 w-5 mr-2 text-green-600" />
                       {isVendorLinkPayable ? 'To (Your company)' : 'To'}
@@ -900,10 +1002,10 @@ export default function PayableViewPage() {
               </div>
             )}
 
-            {/* Actions */}
-            <div className="bg-white rounded-lg shadow-lg border p-6">
+            {/* Actions (desktop sidebar only; mobile actions are shown at top) */}
+            <div className="hidden lg:block bg-white rounded-lg shadow-lg border p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Actions</h3>
-              
+
               <div className="space-y-3">
                 {(payable.status === 'pending' || payable.status === 'submitted') && (
                   <button

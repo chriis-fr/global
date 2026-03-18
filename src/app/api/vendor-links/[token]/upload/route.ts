@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/database';
-import { writeFile } from 'fs/promises';
-import { join } from 'path';
-import { existsSync, mkdirSync } from 'fs';
+import { ObjectId } from 'mongodb';
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_TYPES = [
@@ -60,19 +58,28 @@ export async function POST(
       );
     }
 
-    const safeToken = token.slice(0, 12).replace(/[^a-zA-Z0-9]/g, '');
-    const ext = file.name.split('.').pop() || 'bin';
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 60);
-    const fileName = `${safeToken}-${Date.now()}-${safeName}`;
-    const uploadsDir = join(process.cwd(), 'public', 'uploads', 'vendor-invoices');
-    if (!existsSync(uploadsDir)) {
-      mkdirSync(uploadsDir, { recursive: true });
-    }
-    const filePath = join(uploadsDir, fileName);
-    const bytes = await file.arrayBuffer();
-    await writeFile(filePath, Buffer.from(bytes));
+    const bytes = Buffer.from(await file.arrayBuffer());
 
-    const url = `/uploads/vendor-invoices/${fileName}`;
+    const files = db.collection('fileUploads');
+    // Ensure TTL index (expires after 0 seconds past expiresAt)
+    await files.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }).catch(() => {});
+
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000); // ~2 weeks
+    const doc = {
+      ownerType: 'vendor-link',
+      ownerId: (vendor._id as ObjectId) || null,
+      originalName: file.name,
+      contentType: type || 'application/octet-stream',
+      size: bytes.length,
+      data: bytes,
+      createdAt: now,
+      expiresAt,
+    };
+
+    const result = await files.insertOne(doc);
+    const url = `/api/files/${result.insertedId.toString()}`;
+
     return NextResponse.json({ success: true, url });
   } catch (error) {
     console.error('[Vendor upload] Error:', error);

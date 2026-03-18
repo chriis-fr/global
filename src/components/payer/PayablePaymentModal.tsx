@@ -104,11 +104,6 @@ export default function PayablePaymentModal({
         const chain = getChainByNumericId(chainId);
         if (chain) {
             tokenDecimals = chain.chain.nativeCurrency.decimals;
-            console.log("Using native token decimals from chain config:", {
-                chainId,
-                nativeCurrency: chain.chain.nativeCurrency.symbol,
-                decimals: tokenDecimals,
-            });
         }
     } else if (!tokenDecimals && chainId && tokenAddress) {
         // Look up token decimals from chain configuration by token address
@@ -121,11 +116,6 @@ export default function PayablePaymentModal({
             );
             if (tokenEntry) {
                 tokenDecimals = tokenEntry.decimals;
-                console.log("Found token decimals from chain config:", {
-                    tokenAddress,
-                    symbol: tokenEntry.symbol,
-                    decimals: tokenDecimals,
-                });
             }
         }
     }
@@ -136,21 +126,13 @@ export default function PayablePaymentModal({
             const tokenInfo = getTokenBySymbol(chain.id, tokenSymbol);
             if (tokenInfo) {
                 tokenDecimals = tokenInfo.decimals;
-                console.log("Found token decimals by symbol:", {
-                    symbol: tokenSymbol,
-                    decimals: tokenDecimals,
-                });
             }
         }
     }
     // Default to 18 only if we couldn't determine it (most ERC20 tokens use 18)
     if (!tokenDecimals) {
+        // Default to 18 only if we couldn't determine it (most ERC20 tokens use 18)
         tokenDecimals = 18;
-        console.warn("Using default 18 decimals. Token decimals not found for:", {
-            tokenAddress,
-            tokenSymbol,
-            chainId,
-        });
     }
     const network = payable.paymentNetwork || 
                    payable.paymentMethodDetails?.network;
@@ -158,17 +140,6 @@ export default function PayablePaymentModal({
     // NOT the payer's address. Check multiple possible locations.
     const payeeAddress = payable.paymentAddress || 
                         payable.paymentMethodDetails?.address;
-    
-    // Log payment address extraction for debugging
-    console.log("Payment address extraction:", {
-        paymentAddress: payable.paymentAddress,
-        paymentMethodDetailsAddress: payable.paymentMethodDetails?.address,
-        // cryptoDetails doesn't have address property
-        finalPayeeAddress: payeeAddress,
-        connectedWalletAddress: connectedWallet?.address,
-        isSame: payeeAddress && connectedWallet?.address && 
-                payeeAddress.toLowerCase() === connectedWallet.address.toLowerCase(),
-    });
     
     // Validate that payeeAddress is not the same as the connected wallet
     // If they match, it means the address is wrong (should be recipient, not payer)
