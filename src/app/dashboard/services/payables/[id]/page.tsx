@@ -50,6 +50,11 @@ interface Payable {
   paymentMethod: string;
   paymentNetwork?: string;
   paymentAddress?: string;
+  externalInvoiceNumber?: string | null;
+  invoiceFileUrl?: string | null;
+  vendorPaymentDetails?: Record<string, unknown> | null;
+  paymentReference?: string | null;
+  paymentDetails?: Record<string, unknown> | null;
   enableMultiCurrency: boolean;
   items: Array<{
     id: string;
@@ -64,7 +69,7 @@ interface Payable {
   totalTax: number;
   total: number;
   memo: string;
-  status: 'pending' | 'approved' | 'paid' | 'overdue' | 'cancelled';
+  status: 'submitted' | 'pending' | 'approved' | 'paid' | 'overdue' | 'cancelled';
   priority: 'low' | 'medium' | 'high' | 'urgent';
   category: string;
   approvalStatus: 'pending' | 'approved' | 'rejected';
@@ -111,6 +116,9 @@ export default function PayableViewPage() {
   const [downloadingReceipt, setDownloadingReceipt] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showMarkPaidModal, setShowMarkPaidModal] = useState(false);
+  const [showAttachmentModal, setShowAttachmentModal] = useState(false);
+  const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
+  const [attachmentIsImage, setAttachmentIsImage] = useState(false);
 
   const payableIdRaw = (params as unknown as { id?: string | string[] } | null)?.id;
   const payableId =
@@ -155,16 +163,22 @@ export default function PayableViewPage() {
     }
   }, [payableId, loadPayable]);
 
+  const isVendorLinkPayable = payable
+    ? payable.status === 'submitted' ||
+      !!payable.externalInvoiceNumber ||
+      !!payable.vendorPaymentDetails
+    : false;
+
   const handleStatusUpdate = async (newStatus: string) => {
     if (!payable) return;
 
-    // For crypto payments, show modal to enter transaction hash
-    if (newStatus === 'paid' && payable.paymentMethod === 'crypto') {
+    // Always collect reference (and optional proof) when marking as paid
+    if (newStatus === 'paid') {
       setShowMarkPaidModal(true);
       return;
     }
 
-    // For non-crypto or other status updates, use the old flow
+    // For other status updates, use the old flow
     try {
       setUpdatingStatus(true);
 
@@ -215,7 +229,7 @@ export default function PayableViewPage() {
     }
   };
 
-  const handleMarkPaidConfirm = async (txHash?: string, chainId?: number) => {
+  const handleMarkPaidConfirm = async (args: { txHash?: string; chainId?: number; paymentReference: string; proofUrl?: string }) => {
     if (!payable) return;
 
     try {
@@ -223,8 +237,10 @@ export default function PayableViewPage() {
 
       const result = await markPayableAsPaid({
         payableId,
-        txHash,
-        chainId,
+        txHash: args.txHash,
+        chainId: args.chainId,
+        paymentReference: args.paymentReference,
+        proofUrl: args.proofUrl,
       });
 
       if (result.success) {
@@ -241,6 +257,19 @@ export default function PayableViewPage() {
     } finally {
       setUpdatingStatus(false);
     }
+  };
+
+  const openAttachmentModal = (url: string) => {
+    const lower = url.toLowerCase();
+    const isImage =
+      lower.endsWith('.jpg') ||
+      lower.endsWith('.jpeg') ||
+      lower.endsWith('.png') ||
+      lower.endsWith('.webp') ||
+      lower.endsWith('.gif');
+    setAttachmentUrl(url);
+    setAttachmentIsImage(isImage);
+    setShowAttachmentModal(true);
   };
 
   const handleDeletePayable = async () => {
@@ -359,6 +388,33 @@ export default function PayableViewPage() {
     }
   };
 
+  const renderAddress = (address?: Record<string, unknown>) => {
+    if (!address) return null;
+    const street = (address.street as string | undefined)?.trim() || '';
+    const city = (address.city as string | undefined)?.trim() || '';
+    const state = (address.state as string | undefined)?.trim() || '';
+    const zipCode = (address.zipCode as string | undefined)?.trim() || '';
+    const country = (address.country as string | undefined)?.trim() || '';
+
+    const hasLine1 = !!street;
+    const hasLine2 = city || state || zipCode;
+    const hasLine3 = !!country;
+
+    if (!hasLine1 && !hasLine2 && !hasLine3) return null;
+
+    return (
+      <div className="text-gray-600">
+        {hasLine1 && <p>{street}</p>}
+        {hasLine2 && (
+          <p>
+            {[city, state, zipCode].filter(Boolean).join(', ')}
+          </p>
+        )}
+        {hasLine3 && <p>{country}</p>}
+      </div>
+    );
+  };
+
   const formatDate = useCallback((dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -368,7 +424,8 @@ export default function PayableViewPage() {
   }, []);
 
   const getCurrencySymbol = useCallback(() => {
-    return getCurrencyByCode(payable?.currency || 'USD')?.symbol || '$';
+    if (!payable?.currency) return '';
+    return getCurrencyByCode(payable.currency)?.symbol || payable.currency;
   }, [payable?.currency]);
 
   // Compute display name with invoice prefix (shortened)
@@ -495,46 +552,60 @@ export default function PayableViewPage() {
               {/* Company and Vendor Info */}
               <div className="p-4 sm:p-8 border-b border-gray-200">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {/* Company (Sender) */}
+                  {/* Left column: From */}
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                       <Building2 className="h-5 w-5 mr-2 text-blue-600" />
-                      From
+                      {isVendorLinkPayable ? 'From (Vendor)' : 'From'}
                     </h3>
                     <div className="space-y-2">
-                      <p className="font-medium text-gray-900">{payable.companyName}</p>
-                      <p className="text-gray-600">{payable.companyEmail}</p>
-                      {payable.companyPhone && (
-                        <p className="text-gray-600">{payable.companyPhone}</p>
-                      )}
-                      {payable.companyAddress && (
-                        <div className="text-gray-600">
-                          <p>{payable.companyAddress.street as string}</p>
-                          <p>{payable.companyAddress.city as string}, {payable.companyAddress.state as string} {payable.companyAddress.zipCode as string}</p>
-                          <p>{payable.companyAddress.country as string}</p>
-                        </div>
+                      {isVendorLinkPayable ? (
+                        <>
+                          <p className="font-medium text-gray-900">{payable.vendorName}</p>
+                          <p className="text-gray-600">{payable.vendorEmail}</p>
+                          {payable.vendorPhone && (
+                            <p className="text-gray-600">{payable.vendorPhone}</p>
+                          )}
+                          {renderAddress(payable.vendorAddress as Record<string, unknown> | undefined)}
+                        </>
+                      ) : (
+                        <>
+                          <p className="font-medium text-gray-900">{payable.companyName}</p>
+                          <p className="text-gray-600">{payable.companyEmail}</p>
+                          {payable.companyPhone && (
+                            <p className="text-gray-600">{payable.companyPhone}</p>
+                          )}
+                          {renderAddress(payable.companyAddress as Record<string, unknown> | undefined)}
+                        </>
                       )}
                     </div>
                   </div>
 
-                  {/* Vendor (Recipient) */}
+                  {/* Right column: To */}
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                       <User className="h-5 w-5 mr-2 text-green-600" />
-                      To
+                      {isVendorLinkPayable ? 'To (Your company)' : 'To'}
                     </h3>
                     <div className="space-y-2">
-                      <p className="font-medium text-gray-900">{payable.vendorName}</p>
-                      <p className="text-gray-600">{payable.vendorEmail}</p>
-                      {payable.vendorPhone && (
-                        <p className="text-gray-600">{payable.vendorPhone}</p>
-                      )}
-                      {payable.vendorAddress && (
-                        <div className="text-gray-600">
-                          <p>{payable.vendorAddress.street as string}</p>
-                          <p>{payable.vendorAddress.city as string}, {payable.vendorAddress.state as string} {payable.vendorAddress.zipCode as string}</p>
-                          <p>{payable.vendorAddress.country as string}</p>
-                        </div>
+                      {isVendorLinkPayable ? (
+                        <>
+                          <p className="font-medium text-gray-900">{payable.companyName}</p>
+                          <p className="text-gray-600">{payable.companyEmail}</p>
+                          {payable.companyPhone && (
+                            <p className="text-gray-600">{payable.companyPhone}</p>
+                          )}
+                          {renderAddress(payable.companyAddress as Record<string, unknown> | undefined)}
+                        </>
+                      ) : (
+                        <>
+                          <p className="font-medium text-gray-900">{payable.vendorName}</p>
+                          <p className="text-gray-600">{payable.vendorEmail}</p>
+                          {payable.vendorPhone && (
+                            <p className="text-gray-600">{payable.vendorPhone}</p>
+                          )}
+                          {renderAddress(payable.vendorAddress as Record<string, unknown> | undefined)}
+                        </>
                       )}
                     </div>
                   </div>
@@ -584,16 +655,25 @@ export default function PayableViewPage() {
                       return (
                         <>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Subtotal:</span>
-                            <span className="font-medium">{currencySymbol}{payable.subtotal.toFixed(2)}</span>
+                      <span className="text-gray-700">Subtotal:</span>
+                      <span className="font-medium text-gray-900">
+                        {currencySymbol}
+                        {payable.subtotal.toFixed(2)}
+                      </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Tax:</span>
-                            <span className="font-medium">{currencySymbol}{payable.totalTax.toFixed(2)}</span>
+                      <span className="text-gray-700">Tax:</span>
+                      <span className="font-medium text-gray-900">
+                        {currencySymbol}
+                        {payable.totalTax.toFixed(2)}
+                      </span>
                     </div>
                     <div className="flex justify-between text-lg font-semibold border-t pt-2">
-                      <span>Total:</span>
-                            <span>{currencySymbol}{payable.total.toFixed(2)}</span>
+                      <span className="text-gray-900">Total:</span>
+                      <span className="text-gray-900">
+                        {currencySymbol}
+                        {payable.total.toFixed(2)}
+                      </span>
                     </div>
                         </>
                       );
@@ -621,6 +701,13 @@ export default function PayableViewPage() {
               </h3>
               
               <div className="space-y-4">
+                {payable.externalInvoiceNumber && (
+                  <div>
+                    <p className="text-sm text-gray-500">Invoice Number (Vendor)</p>
+                    <p className="font-medium text-gray-900">{payable.externalInvoiceNumber}</p>
+                  </div>
+                )}
+
                 <div>
                   <p className="text-sm text-gray-500">Payment Method</p>
                   <p className="font-medium text-gray-900 capitalize">{payable.paymentMethod}</p>
@@ -644,6 +731,27 @@ export default function PayableViewPage() {
                       >
                         <FileText className="h-4 w-4" />
                       </button>
+                    </div>
+                  </div>
+                )}
+
+                {payable.vendorPaymentDetails && (
+                  <div className="border-t pt-4">
+                    <p className="text-sm font-medium text-gray-900 mb-2">Submitted payment instructions</p>
+                    <div className="space-y-2 text-sm text-gray-700">
+                      {Object.entries(payable.vendorPaymentDetails).map(([key, value]) => {
+                        if (value === null || value === undefined || value === '') return null;
+                        const display =
+                          typeof value === 'string' || typeof value === 'number'
+                            ? String(value)
+                            : JSON.stringify(value);
+                        return (
+                          <div key={key} className="flex items-start justify-between gap-3">
+                            <span className="text-gray-500 capitalize">{key.replace(/_/g, ' ')}</span>
+                            <span className="font-medium text-gray-900 text-right break-all">{display}</span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -686,8 +794,30 @@ export default function PayableViewPage() {
                 
                 <div>
                   <p className="text-sm text-gray-500">Currency</p>
-                  <p className="font-medium text-gray-900">{payable.currency}</p>
+                  <p className="font-medium text-gray-900">{payable.currency || '—'}</p>
                 </div>
+
+                {payable.paymentReference && (
+                  <div>
+                    <p className="text-sm text-gray-500">Payment Reference</p>
+                    <p className="font-medium text-gray-900 break-all">{payable.paymentReference}</p>
+                  </div>
+                )}
+
+                {(payable.paymentDetails as { proofUrl?: string } | null | undefined)?.proofUrl && (
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">Payment Proof</p>
+                    <a
+                      href={(payable.paymentDetails as { proofUrl: string }).proofUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-800"
+                    >
+                      View uploaded proof
+                      <ExternalLink className="h-4 w-4 ml-1" />
+                    </a>
+                  </div>
+                )}
                 
                 <div>
                   <p className="text-sm text-gray-500">Payment Status</p>
@@ -699,12 +829,83 @@ export default function PayableViewPage() {
               </div>
             </div>
 
+            {/* Attached document (e.g. vendor invoice image/PDF) */}
+            {(payable.invoiceFileUrl || (Array.isArray(payable.attachedFiles) && payable.attachedFiles.length > 0)) && (
+              <div className="bg-white rounded-lg shadow-lg border p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  <FileText className="h-5 w-5 mr-2 text-blue-600" />
+                  Attached document
+                </h3>
+                {payable.invoiceFileUrl && (
+                  <div className="space-y-3">
+                    {(() => {
+                      const url = payable.invoiceFileUrl as string;
+                      const fileName = url.split('/').pop() || 'attachment';
+                      const lower = url.toLowerCase();
+                      const isImage =
+                        lower.endsWith('.jpg') ||
+                        lower.endsWith('.jpeg') ||
+                        lower.endsWith('.png') ||
+                        lower.endsWith('.webp') ||
+                        lower.endsWith('.gif');
+
+                      if (isImage) {
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => openAttachmentModal(url)}
+                            className="w-full flex items-center gap-3 border rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors p-3 text-left"
+                          >
+                            <div className="relative w-14 h-14 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 border border-gray-200">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={url}
+                                alt="Attached invoice"
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-gray-900 truncate">{fileName}</p>
+                              <p className="text-xs text-gray-500">Click to preview full invoice image</p>
+                            </div>
+                            <ExternalLink className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                          </button>
+                        );
+                      }
+
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => openAttachmentModal(url)}
+                          className="w-full flex items-center gap-3 border rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors p-3 text-left"
+                        >
+                          <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center">
+                            <FileText className="h-5 w-5 text-blue-600" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-gray-900 truncate">{fileName}</p>
+                            <p className="text-xs text-gray-500">Click to preview attached document</p>
+                          </div>
+                          <ExternalLink className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                        </button>
+                      );
+                    })()}
+                  </div>
+                )}
+                {!payable.invoiceFileUrl && Array.isArray(payable.attachedFiles) && payable.attachedFiles.length > 0 && (
+                  <p className="text-sm text-gray-600">
+                    This payable has attached files that were added in the app.
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Actions */}
             <div className="bg-white rounded-lg shadow-lg border p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Actions</h3>
               
               <div className="space-y-3">
-                {payable.status === 'pending' && (
+                {(payable.status === 'pending' || payable.status === 'submitted') && (
                   <button
                     onClick={() => handleStatusUpdate('approved')}
                     disabled={updatingStatus}
@@ -719,7 +920,7 @@ export default function PayableViewPage() {
                   </button>
                 )}
                 
-                {(payable.status === 'approved' || payable.status === 'pending') && (
+                {(payable.status === 'approved' || payable.status === 'pending' || payable.status === 'submitted') && (
                   <>
                     {/* Pay Now button for crypto payables */}
                     {(payable.paymentMethod === 'crypto' || payable.paymentMethodDetails?.method === 'crypto') && 
@@ -808,28 +1009,66 @@ export default function PayableViewPage() {
         </div>
       </div>
 
-      {/* Payment Modal */}
+      {/* Payment & attachment modals */}
       {payable && (
         <>
-          {/* Mark as Paid Modal (for crypto payments) */}
+          {/* Mark as Paid Modal */}
           <MarkPaidModal
             isOpen={showMarkPaidModal}
             onClose={() => setShowMarkPaidModal(false)}
             onConfirm={handleMarkPaidConfirm}
             isCrypto={payable.paymentMethod === 'crypto'}
+            payableId={payableId}
             chainId={(payable.paymentMethodDetails?.cryptoDetails as { chainId?: number })?.chainId || payable.chainId}
             network={payable.paymentMethodDetails?.network || payable.paymentNetwork}
           />
 
           <PayablePaymentModal
-          isOpen={showPaymentModal}
-          onCloseAction={() => setShowPaymentModal(false)}
-          payable={payable}
-          onPaymentSuccess={() => {
-            loadPayable();
-            setShowPaymentModal(false);
-          }}
+            isOpen={showPaymentModal}
+            onCloseAction={() => setShowPaymentModal(false)}
+            payable={payable}
+            onPaymentSuccess={() => {
+              loadPayable();
+              setShowPaymentModal(false);
+            }}
           />
+
+          {showAttachmentModal && attachmentUrl && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center">
+              <div
+                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                onClick={() => setShowAttachmentModal(false)}
+              />
+              <div className="relative bg-white rounded-2xl shadow-2xl max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                  <h2 className="text-sm font-medium text-gray-900">Attached document preview</h2>
+                  <button
+                    type="button"
+                    onClick={() => setShowAttachmentModal(false)}
+                    className="text-gray-500 hover:text-gray-900"
+                  >
+                    <XCircle className="h-5 w-5" />
+                  </button>
+                </div>
+                <div className="flex-1 bg-gray-50 flex items-center justify-center p-4">
+                  {attachmentIsImage ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={attachmentUrl}
+                      alt="Attached invoice"
+                      className="max-h-[80vh] max-w-full object-contain rounded-lg shadow-sm bg-white"
+                    />
+                  ) : (
+                    <iframe
+                      src={attachmentUrl}
+                      className="w-full h-[70vh] bg-white rounded-lg"
+                      title="Attached document"
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

@@ -13,10 +13,14 @@ export async function markPayableAsPaid({
   payableId,
   txHash,
   chainId,
+  paymentReference,
+  proofUrl,
 }: {
   payableId: string;
   txHash?: string;
   chainId?: number;
+  paymentReference?: string;
+  proofUrl?: string;
 }) {
   try {
     const session = await getServerSession(authOptions);
@@ -60,6 +64,17 @@ export async function markPayableAsPaid({
       paymentDate: new Date(),
       updatedAt: new Date(),
     };
+
+    const ref = paymentReference?.trim();
+    if (ref) {
+      updateData.paymentReference = ref;
+    }
+    if (proofUrl) {
+      updateData.paymentDetails = {
+        ...(payable.paymentDetails as Record<string, unknown> | undefined),
+        proofUrl,
+      };
+    }
 
     // Add transaction hash if provided (for crypto payments)
     if (txHash) {

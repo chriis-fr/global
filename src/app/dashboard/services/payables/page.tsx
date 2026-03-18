@@ -206,6 +206,7 @@ export default function AccountsPayablePage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.4 }}
                 className="flex-shrink-0 w-[calc(50%-8px)] min-w-[150px] md:w-auto md:min-w-0 h-[108px] md:h-auto md:min-h-0 snap-start overflow-hidden bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-2.5 md:p-3.5 hover:bg-white/15 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+                data-route-href="/dashboard/services/payables/onboarding"
                 onClick={handleManagePayablesInfo}
               >
                 <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1 min-h-0">
@@ -226,6 +227,7 @@ export default function AccountsPayablePage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.5 }}
                 className="flex-shrink-0 w-[calc(50%-8px)] min-w-[150px] md:w-auto md:min-w-0 h-[108px] md:h-auto md:min-h-0 snap-start overflow-hidden bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-2.5 md:p-3.5 hover:bg-white/15 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+                data-route-href="/dashboard/vendors"
                 onClick={() => router.push('/dashboard/vendors')}
               >
                 <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1 min-h-0">

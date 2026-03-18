@@ -10,7 +10,9 @@ async function generateSecurePayableNumber(
   ownerId: string
 ): Promise<string> {
   const currentYear = new Date().getFullYear();
-  const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+  const currentMonthIndex = new Date().getMonth(); // 0-based
+  const startOfMonth = new Date(currentYear, currentMonthIndex, 1);
+  const startOfNextMonth = new Date(currentYear, currentMonthIndex + 1, 1);
   let secureId: string;
   if (organizationId) {
     secureId = organizationId.slice(-4);
@@ -21,28 +23,35 @@ async function generateSecurePayableNumber(
     secureId = `${username}${domain}`.toUpperCase();
   }
   const query = organizationId ? { organizationId } : { ownerId };
-  const lastPayable = await db.collection('payables').findOne(query, {
-    sort: { payableNumber: -1 },
-    projection: { payableNumber: 1 },
-  });
+  const lastPayable = await db.collection('payables').findOne(
+    { ...query, createdAt: { $gte: startOfMonth, $lt: startOfNextMonth } },
+    {
+      sort: { createdAt: -1 },
+      projection: { payableNumber: 1 },
+    }
+  );
   let sequence = 1;
   if (lastPayable?.payableNumber) {
     const match = (lastPayable.payableNumber as string).match(/-(\d{4})$/);
     if (match) sequence = parseInt(match[1], 10) + 1;
   }
-  let payableNumber = `PAY-${secureId}-${currentYear}${currentMonth}-${String(sequence).padStart(4, '0')}`;
+  let payableNumber = `PAY-${secureId}-${String(sequence).padStart(4, '0')}`;
   const existingPayable = await db.collection('payables').findOne({ payableNumber });
   if (existingPayable) {
     const allPayables = await db
       .collection('payables')
-      .find({ payableNumber: { $regex: `^PAY-${secureId}-${currentYear}${currentMonth}-` } })
+      .find({
+        ...query,
+        createdAt: { $gte: startOfMonth, $lt: startOfNextMonth },
+        payableNumber: { $regex: `^PAY-${secureId}-` },
+      })
       .toArray();
     const usedSequences = allPayables.map((p) => {
       const m = (p.payableNumber as string).match(/-(\d{4})$/);
       return m ? parseInt(m[1], 10) : 0;
     });
     sequence = Math.max(...usedSequences, 0) + 1;
-    payableNumber = `PAY-${secureId}-${currentYear}${currentMonth}-${String(sequence).padStart(4, '0')}`;
+    payableNumber = `PAY-${secureId}-${String(sequence).padStart(4, '0')}`;
   }
   return payableNumber;
 }

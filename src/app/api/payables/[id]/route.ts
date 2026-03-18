@@ -138,6 +138,8 @@ export async function PUT(
       approvalNotes,
       paymentStatus,
       paymentDate,
+      paymentReference,
+      paymentDetails,
       updatedAt,
       // Payment action
       markAsPaid
@@ -195,7 +197,13 @@ export async function PUT(
         status: 'paid',
         paymentStatus: 'completed',
         paymentDate: new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        ...(typeof paymentReference === 'string' && paymentReference.trim()
+          ? { paymentReference: paymentReference.trim() }
+          : {}),
+        ...(paymentDetails && typeof paymentDetails === 'object'
+          ? { paymentDetails }
+          : {}),
       };
 
       const result = await collection.updateOne(

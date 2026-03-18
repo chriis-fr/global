@@ -5,7 +5,6 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
-  CheckCircle2,
   AlertCircle,
   Plus,
   Trash2,
@@ -15,13 +14,14 @@ import {
   FileText,
   X,
   ChevronDown,
+  Smartphone,
 } from 'lucide-react';
 import BankSelector from '@/components/BankSelector';
 import type { Bank } from '@/data';
+import toast from 'react-hot-toast';
 
 interface SubmitState {
   loading: boolean;
-  successMessage?: string;
   errorMessage?: string;
 }
 
@@ -61,6 +61,7 @@ export default function VendorPayableSubmitPage() {
   ]);
   const [currency, setCurrency] = useState('KES');
   const [paymentType, setPaymentType] = useState<'bank' | 'mpesa' | 'other'>('bank');
+  const [mpesaType, setMpesaType] = useState<'paybill' | 'till' | 'pochi' | 'send_money'>('paybill');
   const [paymentDetails, setPaymentDetails] = useState({
     bankName: '',
     bankCountryCode: 'KE',
@@ -71,6 +72,7 @@ export default function VendorPayableSubmitPage() {
     mpesaAccountNumber: '',
     tillNumber: '',
     businessName: '',
+    mpesaPhoneNumber: '',
     otherDetails: '',
   });
   const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null);
@@ -198,10 +200,12 @@ export default function VendorPayableSubmitPage() {
         : paymentType === 'mpesa'
           ? {
               type: 'mpesa' as const,
+              mpesaType,
               paybillNumber: paymentDetails.paybillNumber || undefined,
               mpesaAccountNumber: paymentDetails.mpesaAccountNumber || undefined,
               tillNumber: paymentDetails.tillNumber || undefined,
               businessName: paymentDetails.businessName || undefined,
+              phoneNumber: paymentDetails.mpesaPhoneNumber || undefined,
             }
           : {
               type: 'other' as const,
@@ -232,9 +236,10 @@ export default function VendorPayableSubmitPage() {
       }
       setState({
         loading: false,
-        successMessage:
-          'Invoice submitted successfully. Your invoice will appear in your history for this link once it is processed.',
       });
+      toast.success(
+        'Invoice submitted successfully. Your invoice will appear in your history for this link once it is processed.'
+      );
       form.reset();
       setItems([
         { id: `item-${Date.now()}`, description: '', quantity: 1, unitPrice: 0, tax: 0 },
@@ -249,9 +254,11 @@ export default function VendorPayableSubmitPage() {
         mpesaAccountNumber: '',
         tillNumber: '',
         businessName: '',
+        mpesaPhoneNumber: '',
         otherDetails: '',
       });
       setPaymentType('bank');
+      setMpesaType('paybill');
       setUploadedFileUrl(null);
       setUploadFileName(null);
       setTotalTaxPercent(0);
@@ -343,12 +350,6 @@ export default function VendorPayableSubmitPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-8">
-            {state.successMessage && (
-              <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-                <CheckCircle2 className="h-5 w-5 flex-shrink-0 mt-0.5" />
-                <span>{state.successMessage}</span>
-              </div>
-            )}
             {state.errorMessage && (
               <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
                 <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
@@ -642,7 +643,10 @@ export default function VendorPayableSubmitPage() {
                         onChange={() => setPaymentType('mpesa')}
                         className="text-blue-600"
                       />
-                      <span className="text-sm text-gray-800">M-Pesa</span>
+                      <span className="text-sm text-gray-800 inline-flex items-center gap-1.5">
+                        <Smartphone className="h-4 w-4 text-gray-700" />
+                        M-Pesa
+                      </span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
@@ -739,47 +743,159 @@ export default function VendorPayableSubmitPage() {
                   </div>
                 )}
                 {paymentType === 'mpesa' && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Paybill number</label>
-                      <input
-                        type="text"
-                        value={paymentDetails.paybillNumber}
-                        onChange={(e) => setPaymentDetails((p) => ({ ...p, paybillNumber: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-black"
-                        placeholder="e.g. 123456"
-                      />
+                      <label className="block text-sm font-medium text-gray-700 mb-2">M-Pesa type</label>
+                      <div className="flex flex-wrap gap-3">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="mpesaType"
+                            checked={mpesaType === 'paybill'}
+                            onChange={() => {
+                              setMpesaType('paybill');
+                              setPaymentDetails((p) => ({
+                                ...p,
+                                tillNumber: '',
+                                businessName: '',
+                                mpesaPhoneNumber: '',
+                              }));
+                            }}
+                            className="text-blue-600"
+                          />
+                          <span className="text-sm text-gray-800">Paybill</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="mpesaType"
+                            checked={mpesaType === 'till'}
+                            onChange={() => {
+                              setMpesaType('till');
+                              setPaymentDetails((p) => ({
+                                ...p,
+                                paybillNumber: '',
+                                mpesaAccountNumber: '',
+                                mpesaPhoneNumber: '',
+                              }));
+                            }}
+                            className="text-blue-600"
+                          />
+                          <span className="text-sm text-gray-800">Till</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="mpesaType"
+                            checked={mpesaType === 'pochi'}
+                            onChange={() => {
+                              setMpesaType('pochi');
+                              setPaymentDetails((p) => ({
+                                ...p,
+                                paybillNumber: '',
+                                mpesaAccountNumber: '',
+                                tillNumber: '',
+                                businessName: '',
+                              }));
+                            }}
+                            className="text-blue-600"
+                          />
+                          <span className="text-sm text-gray-800">Pochi</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="mpesaType"
+                            checked={mpesaType === 'send_money'}
+                            onChange={() => {
+                              setMpesaType('send_money');
+                              setPaymentDetails((p) => ({
+                                ...p,
+                                paybillNumber: '',
+                                mpesaAccountNumber: '',
+                                tillNumber: '',
+                                businessName: '',
+                              }));
+                            }}
+                            className="text-blue-600"
+                          />
+                          <span className="text-sm text-gray-800">Send money</span>
+                        </label>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Account number</label>
-                      <input
-                        type="text"
-                        value={paymentDetails.mpesaAccountNumber}
-                        onChange={(e) => setPaymentDetails((p) => ({ ...p, mpesaAccountNumber: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-black"
-                        placeholder="Account / reference"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Till number (if Till)</label>
-                      <input
-                        type="text"
-                        value={paymentDetails.tillNumber}
-                        onChange={(e) => setPaymentDetails((p) => ({ ...p, tillNumber: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-black"
-                        placeholder="Till number"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Business name (if Till)</label>
-                      <input
-                        type="text"
-                        value={paymentDetails.businessName}
-                        onChange={(e) => setPaymentDetails((p) => ({ ...p, businessName: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-black"
-                        placeholder="Business name"
-                      />
-                    </div>
+
+                    {mpesaType === 'paybill' ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Paybill number</label>
+                          <input
+                            type="text"
+                            value={paymentDetails.paybillNumber}
+                            onChange={(e) => setPaymentDetails((p) => ({ ...p, paybillNumber: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-black"
+                            placeholder="e.g. 123456"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Account number</label>
+                          <input
+                            type="text"
+                            value={paymentDetails.mpesaAccountNumber}
+                            onChange={(e) => setPaymentDetails((p) => ({ ...p, mpesaAccountNumber: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-black"
+                            placeholder="Account / reference"
+                          />
+                        </div>
+                      </div>
+                    ) : mpesaType === 'till' ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Till number</label>
+                          <input
+                            type="text"
+                            value={paymentDetails.tillNumber}
+                            onChange={(e) => setPaymentDetails((p) => ({ ...p, tillNumber: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-black"
+                            placeholder="Till number"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Business name (optional)</label>
+                          <input
+                            type="text"
+                            value={paymentDetails.businessName}
+                            onChange={(e) => setPaymentDetails((p) => ({ ...p, businessName: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-black"
+                            placeholder="Business name"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            {mpesaType === 'pochi' ? 'Pochi phone number' : 'Phone number'}
+                          </label>
+                          <input
+                            type="tel"
+                            value={paymentDetails.mpesaPhoneNumber}
+                            onChange={(e) => setPaymentDetails((p) => ({ ...p, mpesaPhoneNumber: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-black"
+                            placeholder="e.g. 2547XXXXXXXX"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Account / reference (optional)</label>
+                          <input
+                            type="text"
+                            value={paymentDetails.mpesaAccountNumber}
+                            onChange={(e) => setPaymentDetails((p) => ({ ...p, mpesaAccountNumber: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-black"
+                            placeholder="Reference"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
                 {paymentType === 'other' && (
