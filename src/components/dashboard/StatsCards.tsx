@@ -62,6 +62,7 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
     pendingInvoices: 0,
     paidInvoices: 0,
     totalClients: 0,
+    totalVendors: 0,
     netBalance: 0,
     totalPayables: 0,
     overdueCount: 0
@@ -129,8 +130,15 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
   const canShowReceivables = hasReceivablesAccess && isSmartInvoicingEnabled;
   const canShowPayables = hasPayablesAccess && isAccountsPayableEnabled;
 
+  // Only show Net Balance when there is incoming money from the receivables service.
+  // Payables-only orgs (or orgs with no paid receivables yet) should not see Net Balance.
+  const shouldShowNetBalance = canShowReceivables && (stats.totalPaidRevenue ?? 0) > 0;
+
+  // When invoicing is not enabled, show vendor relationships instead of client count.
+  const shouldShowVendors = !canShowReceivables && canShowPayables;
+
   // Calculate number of cards to show (needed for scroll indicator check)
-  const cardCount = 1 + // Net Balance (always shown)
+  const cardCount = (shouldShowNetBalance ? 1 : 0) + // Net Balance (conditional)
     (canShowReceivables ? 1 : 0) + // Receivables
     (canShowPayables ? 1 : 0) + // Payables
     1; // Total Clients (always shown)
@@ -390,27 +398,30 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
           'md:grid-cols-2'
         }`}
       >
-        {/* Net Balance - Show for all plans */}
-      <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200 flex-shrink-0 w-[calc(50%-12px)] md:w-auto min-h-[180px] md:min-h-0">
-        <div className="flex flex-col justify-between h-full">
-          <div>
-            <p className="text-blue-200 text-sm font-medium">Net Balance</p>
-            <p className={`text-2xl font-bold ${stats.netBalance >= 0 ? 'text-green-400' : 'text-red-400'} mt-2`}>
-              {stats.netBalance >= 0 ? '+' : ''}
-              <FormattedNumberDisplay value={Math.abs(stats.netBalance)} />
-            </p>
-            <p className="text-xs text-blue-300 mt-2">
-              {stats.netBalance >= 0 ? 'Positive cash flow' : 'Negative cash flow'}
-            </p>
+        {/* Net Balance - only show when there is incoming money from receivables */}
+        {shouldShowNetBalance && (
+          <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200 flex-shrink-0 w-[calc(50%-12px)] md:w-auto min-h-[180px] md:min-h-0">
+            <div className="flex flex-col justify-between h-full">
+              <div>
+                <p className="text-blue-200 text-sm font-medium">Net Balance</p>
+                <p className={`text-2xl font-bold ${stats.netBalance >= 0 ? 'text-green-400' : 'text-red-400'} mt-2`}>
+                  {stats.netBalance >= 0 ? '+' : ''}
+                  <FormattedNumberDisplay value={Math.abs(stats.netBalance)} />
+                </p>
+                <p className="text-xs text-blue-300 mt-2">
+                  {stats.netBalance >= 0 ? 'Positive cash flow' : 'Negative cash flow'}
+                </p>
+              </div>
+              <div className={`p-3 rounded-lg w-fit mt-4 ${stats.netBalance >= 0 ? 'bg-green-500/20' : 'bg-red-500/20'}`}>
+                {stats.netBalance >= 0 ? (
+                  <TrendingUp className="h-6 w-6 text-green-400" />
+                ) : (
+                  <TrendingDown className="h-6 w-6 text-red-400" />
+                )}
+              </div>
+            </div>
           </div>
-          <div className={`p-3 rounded-lg w-fit mt-4 ${stats.netBalance >= 0 ? 'bg-green-500/20' : 'bg-red-500/20'}`}>
-            {stats.netBalance >= 0 ? 
-              <TrendingUp className="h-6 w-6 text-green-400" /> : 
-              <TrendingDown className="h-6 w-6 text-red-400" />
-            }
-          </div>
-        </div>
-      </div>
+        )}
 
       {/* Receivables (Invoices) - Show if service is enabled AND user has subscription access */}
       {canShowReceivables && (
@@ -448,15 +459,15 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
         </div>
       )}
 
-      {/* Total Clients */}
+      {/* Total Clients / Total Vendors */}
       <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200 flex-shrink-0 w-[calc(50%-12px)] md:w-auto min-h-[180px] md:min-h-0">
         <div className="flex flex-col justify-between h-full">
           <div>
-            <p className="text-blue-200 text-sm font-medium">Total Clients</p>
+            <p className="text-blue-200 text-sm font-medium">{shouldShowVendors ? 'Total Vendors' : 'Total Clients'}</p>
             <p className="text-2xl font-bold text-white mt-2">
-              {stats.totalClients}
+              {shouldShowVendors ? stats.totalVendors : stats.totalClients}
             </p>
-            <p className="text-xs text-blue-300 mt-2">Active relationships</p>
+            <p className="text-xs text-blue-300 mt-2">{shouldShowVendors ? 'Active vendor relationships' : 'Active relationships'}</p>
           </div>
           <div className="p-3 bg-purple-500/20 rounded-lg w-fit mt-4">
             <Users className="h-6 w-6 text-purple-400" />

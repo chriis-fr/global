@@ -26,6 +26,7 @@ export interface DashboardStats {
   pendingInvoices: number;
   paidInvoices: number;
   totalClients: number;
+  totalVendors: number;
   netBalance: number;
   totalPayables: number;
   overdueCount: number;
@@ -180,6 +181,19 @@ export async function getDashboardStats(): Promise<{ success: boolean; data?: Da
 
     // Get client count (only count, no client data)
     const totalClients = await clientsCollection.countDocuments(baseQuery);
+
+    // Get vendor count (organizations deal with vendors for payables)
+    const vendorsCollection = db.collection('vendors');
+    const vendorQuery = isOrganization
+      ? {
+          $or: [
+            { organizationId: session.user.organizationId },
+            { organizationId: new ObjectId(session.user.organizationId) }
+          ]
+        }
+      : { userId: session.user.email };
+
+    const totalVendors = await vendorsCollection.countDocuments(vendorQuery);
 
     // Get payables stats using the same logic as the working payables API
     const payablesCollection = db.collection('payables');
@@ -379,6 +393,7 @@ export async function getDashboardStats(): Promise<{ success: boolean; data?: Da
       pendingInvoices,
       paidInvoices: paidInvoicesCount,
       totalClients,
+      totalVendors,
       netBalance: calculatedNetBalance, // Paid Receivables - Paid Payables - Approved Payables (for orgs)
       totalPayables: totalPayablesAmount, // Unpaid payables (bills to pay)
       overdueCount: (ledgerData.overdueReceivables || 0) + (ledgerData.overduePayables || 0)
