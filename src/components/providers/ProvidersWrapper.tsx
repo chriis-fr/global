@@ -2,6 +2,7 @@
 
 import type { Session } from 'next-auth';
 import { ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
 import { Toaster } from 'react-hot-toast';
 import { SessionProvider as NextAuthSessionProvider } from 'next-auth/react';
 import { SessionProvider } from "@/components/providers/SessionProvider";
@@ -32,6 +33,44 @@ export function ProvidersWrapper({
   initialSubscription,
   initialCurrency,
 }: { children: ReactNode } & InitialData) {
+  const pathname = usePathname();
+  const isPublicVendorRoute = !!pathname && pathname.startsWith('/vendor/');
+
+  // Ultra-fast public vendor links: don't mount auth/session providers.
+  // This avoids any client-side session hydration calls (e.g. GET /api/auth/session).
+  if (isPublicVendorRoute) {
+    return (
+      <ErrorBoundary>
+        <RouteProgress />
+        {children}
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            duration: 4000,
+            style: {
+              background: '#363636',
+              color: '#fff',
+            },
+            success: {
+              duration: 3000,
+              iconTheme: {
+                primary: '#10b981',
+                secondary: '#fff',
+              },
+            },
+            error: {
+              duration: 4000,
+              iconTheme: {
+                primary: '#ef4444',
+                secondary: '#fff',
+              },
+            },
+          }}
+        />
+      </ErrorBoundary>
+    );
+  }
+
   return (
     <ErrorBoundary>
       <NextAuthSessionProvider refetchInterval={0} session={initialSession === undefined ? undefined : initialSession ?? null}>

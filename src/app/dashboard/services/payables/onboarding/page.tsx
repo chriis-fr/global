@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from '@/lib/auth-client';
-import { getOrganizationData } from '@/lib/actions/organization';
 import { 
   CheckCircle,
   ArrowRight,
@@ -165,19 +164,39 @@ export default function PayablesOnboardingPage() {
             }
           }
 
-          // Prefer organization name for org accounts (even if saved onboarding exists)
+          // Prefer organization data for org accounts (even if saved onboarding exists)
           try {
-            const orgResult = await getOrganizationData();
-            const org = orgResult.success ? orgResult.data?.organization : undefined;
-            const orgName = (org?.name as string | undefined)?.trim();
-            if (orgName) {
-              setOnboardingData((prev) => ({
-                ...prev,
-                businessInfo: {
-                  ...prev.businessInfo,
-                  companyName: orgName,
-                },
-              }));
+            const res = await fetch('/api/organization/me', { credentials: 'include' });
+            if (res.ok) {
+              const json = await res.json();
+              if (json?.success && json.data) {
+                const orgName = (json.data?.name as string | undefined)?.trim();
+                const addr = (json.data.address as {
+                  street?: string;
+                  city?: string;
+                  state?: string;
+                  zipCode?: string;
+                  country?: string;
+                } | null) ?? null;
+
+                setOnboardingData((prev) => ({
+                  ...prev,
+                  businessInfo: {
+                    ...prev.businessInfo,
+                    companyName: orgName || prev.businessInfo.companyName,
+                    companyEmail: (prev.businessInfo.companyEmail || json.data.billingEmail || '').trim() || prev.businessInfo.companyEmail,
+                    companyPhone: prev.businessInfo.companyPhone || json.data.phone || '',
+                    companyTaxNumber: prev.businessInfo.companyTaxNumber || json.data.taxId || '',
+                    companyAddress: {
+                      street: prev.businessInfo.companyAddress.street || addr?.street || '',
+                      city: prev.businessInfo.companyAddress.city || addr?.city || '',
+                      state: prev.businessInfo.companyAddress.state || addr?.state || '',
+                      zipCode: prev.businessInfo.companyAddress.zipCode || addr?.zipCode || '',
+                      country: prev.businessInfo.companyAddress.country || addr?.country || 'US',
+                    },
+                  },
+                }));
+              }
             }
           } catch {
             // ignore and fall back to user/profile defaults

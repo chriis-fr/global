@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSession } from '@/lib/auth-client';
 import { useRouter } from 'next/navigation';
 import { 
@@ -15,6 +15,8 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { countries } from '@/data/countries';
+import BankSelector from '@/components/BankSelector';
+import type { Bank } from '@/data';
 
 interface Vendor {
   _id: string;
@@ -28,7 +30,10 @@ interface Vendor {
   preferredPayment?: {
     method?: 'fiat' | 'crypto';
     fiatSubtype?: 'bank' | 'mpesa_paybill' | 'mpesa_till';
+    bankCountryCode?: string;
     bankName?: string;
+    bankCode?: string;
+    swiftCode?: string;
     accountName?: string;
     accountNumber?: string;
     paybillNumber?: string;
@@ -62,7 +67,10 @@ export default function VendorsPage() {
     preferredPayment: {
       method: 'fiat' as 'fiat' | 'crypto',
       fiatSubtype: 'bank' as 'bank' | 'mpesa_paybill' | 'mpesa_till',
+      bankCountryCode: 'KE',
       bankName: '',
+      bankCode: '',
+      swiftCode: '',
       accountName: '',
       accountNumber: '',
       paybillNumber: '',
@@ -83,6 +91,34 @@ export default function VendorsPage() {
   const [showCountryDropdown, setShowCountryDropdown] = useState(false);
   const [countrySearch, setCountrySearch] = useState('');
   const [showAddressFields, setShowAddressFields] = useState(false);
+  const bankSelectedRef = useRef(false);
+  const [bankMetaLocked, setBankMetaLocked] = useState(false);
+
+  // Lock background scroll when modal is open
+  useEffect(() => {
+    if (!showAddModal) return;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevBodyPosition = document.body.style.position;
+    const prevBodyTop = document.body.style.top;
+    const prevBodyWidth = document.body.style.width;
+    const scrollY = window.scrollY;
+
+    // Robust scroll lock: freeze body at current scroll position
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = '100%';
+    return () => {
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      document.body.style.overflow = prevBodyOverflow;
+      document.body.style.position = prevBodyPosition;
+      document.body.style.top = prevBodyTop;
+      document.body.style.width = prevBodyWidth;
+      window.scrollTo(0, scrollY);
+    };
+  }, [showAddModal]);
 
   const fetchVendors = useCallback(async () => {
     try {
@@ -209,7 +245,10 @@ export default function VendorsPage() {
       preferredPayment: {
         method: vendor.preferredPayment?.method || 'fiat',
         fiatSubtype: vendor.preferredPayment?.fiatSubtype || 'bank',
+        bankCountryCode: vendor.preferredPayment?.bankCountryCode || 'KE',
         bankName: vendor.preferredPayment?.bankName || '',
+        bankCode: vendor.preferredPayment?.bankCode || '',
+        swiftCode: vendor.preferredPayment?.swiftCode || '',
         accountName: vendor.preferredPayment?.accountName || '',
         accountNumber: vendor.preferredPayment?.accountNumber || '',
         paybillNumber: vendor.preferredPayment?.paybillNumber || '',
@@ -252,7 +291,10 @@ export default function VendorsPage() {
       preferredPayment: {
         method: 'fiat',
         fiatSubtype: 'bank',
+        bankCountryCode: 'KE',
         bankName: '',
+        bankCode: '',
+        swiftCode: '',
         accountName: '',
         accountNumber: '',
         paybillNumber: '',
@@ -574,7 +616,7 @@ export default function VendorsPage() {
                           }
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white"
                         >
-                          <option value="fiat">Fiat</option>
+                          <option value="fiat">Fiat/local currency</option>
                           <option value="crypto">Crypto</option>
                         </select>
                       </div>
@@ -601,13 +643,113 @@ export default function VendorsPage() {
 
                           {formData.preferredPayment.fiatSubtype === 'bank' && (
                             <div className="grid grid-cols-1 gap-2">
-                              <input
-                                type="text"
-                                value={formData.preferredPayment.bankName}
-                                onChange={(e) => setFormData({ ...formData, preferredPayment: { ...formData.preferredPayment, bankName: e.target.value } })}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white"
-                                placeholder="Bank name"
-                              />
+                              <div>
+                                <div className="flex items-center justify-between mb-1">
+                                  <label className="block text-sm text-gray-700">Bank Name</label>
+                                  <div className="relative">
+                                    <select
+                                      value={formData.preferredPayment.bankCountryCode || 'KE'}
+                                      onChange={(e) =>
+                                        (setBankMetaLocked(false),
+                                        setFormData((prev) => ({
+                                          ...prev,
+                                          preferredPayment: {
+                                            ...prev.preferredPayment,
+                                            bankCountryCode: e.target.value,
+                                            // Clear codes when switching country
+                                            bankCode: '',
+                                            swiftCode: '',
+                                          },
+                                        })))
+                                      }
+                                      className="text-xs bg-white text-gray-900 border border-gray-300 rounded outline-none cursor-pointer pr-4 appearance-none focus:ring-2 focus:ring-blue-500"
+                                    >
+                                      <option value="GH">Ghana</option>
+                                      <option value="KE">Kenya</option>
+                                      <option value="NG">Nigeria</option>
+                                      <option value="AE">UAE</option>
+                                    </select>
+                                    <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-600 pointer-events-none" />
+                                  </div>
+                                </div>
+                                <BankSelector
+                                  countryCode={formData.preferredPayment.bankCountryCode || 'KE'}
+                                  value={formData.preferredPayment.bankName || ''}
+                                  onBankSelectAction={(bank: Bank | null) => {
+                                    if (!bank) return;
+                                      bankSelectedRef.current = true;
+                                    setBankMetaLocked(true);
+                                    setFormData((prev) => ({
+                                      ...prev,
+                                      preferredPayment: {
+                                        ...prev.preferredPayment,
+                                        bankName: bank.name,
+                                        bankCode: bank.bank_code || '',
+                                        swiftCode: bank.swift_code || '',
+                                      },
+                                    }));
+                                  }}
+                                  onInputChangeAction={(value) => {
+                                    // BankSelector calls onInputChangeAction after onBankSelectAction when selecting an option.
+                                    // Preserve codes in that case; clear codes only when user is typing a custom bank.
+                                    const preserveCodes = bankSelectedRef.current === true;
+                                    bankSelectedRef.current = false;
+                                    if (!preserveCodes) setBankMetaLocked(false);
+                                    setFormData((prev) => ({
+                                      ...prev,
+                                      preferredPayment: {
+                                        ...prev.preferredPayment,
+                                        bankName: value,
+                                        ...(preserveCodes
+                                          ? {}
+                                          : {
+                                              bankCode: '',
+                                              swiftCode: '',
+                                            }),
+                                      },
+                                    }));
+                                  }}
+                                  placeholder="Search for a bank or type custom bank name..."
+                                  allowCustom={true}
+                                  className="text-black"
+                                />
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">SWIFT code</label>
+                                  <input
+                                    type="text"
+                                    value={formData.preferredPayment.swiftCode || ''}
+                                    onChange={(e) =>
+                                      setFormData((prev) => ({
+                                        ...prev,
+                                        preferredPayment: { ...prev.preferredPayment, swiftCode: e.target.value },
+                                      }))
+                                    }
+                                    readOnly={bankMetaLocked}
+                                    className={`w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 ${
+                                      bankMetaLocked ? 'bg-gray-100 cursor-not-allowed' : 'bg-white focus:outline-none focus:ring-2 focus:ring-blue-500'
+                                    }`}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Bank code</label>
+                                  <input
+                                    type="text"
+                                    value={formData.preferredPayment.bankCode || ''}
+                                    onChange={(e) =>
+                                      setFormData((prev) => ({
+                                        ...prev,
+                                        preferredPayment: { ...prev.preferredPayment, bankCode: e.target.value },
+                                      }))
+                                    }
+                                    readOnly={bankMetaLocked}
+                                    className={`w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 ${
+                                      bankMetaLocked ? 'bg-gray-100 cursor-not-allowed' : 'bg-white focus:outline-none focus:ring-2 focus:ring-blue-500'
+                                    }`}
+                                  />
+                                </div>
+                              </div>
                               <input
                                 type="text"
                                 value={formData.preferredPayment.accountName}

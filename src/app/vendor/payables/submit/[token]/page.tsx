@@ -15,7 +15,6 @@ import {
   FileText,
   X,
   ChevronDown,
-  Smartphone,
 } from 'lucide-react';
 import BankSelector from '@/components/BankSelector';
 import type { Bank } from '@/data';
@@ -147,6 +146,7 @@ export default function VendorPayableSubmitPage() {
     );
     if (validItems.length === 0) {
       setState({
+        loading: false,
         errorMessage: 'Add at least one line item with description, quantity, and unit price.',
       });
       return;
@@ -157,7 +157,7 @@ export default function VendorPayableSubmitPage() {
     const invoiceNumber = (formData.get('invoiceNumber') as string)?.trim();
     const dueDate = formData.get('dueDate') as string;
     if (!invoiceNumber || !dueDate) {
-      setState({ errorMessage: 'Invoice number and due date are required.' });
+      setState({ loading: false, errorMessage: 'Invoice number and due date are required.' });
       return;
     }
 
@@ -241,6 +241,8 @@ export default function VendorPayableSubmitPage() {
       ]);
       setPaymentDetails({
         bankName: '',
+        bankCountryCode: 'KE',
+        swiftCode: '',
         accountName: '',
         accountNumber: '',
         paybillNumber: '',
@@ -263,7 +265,7 @@ export default function VendorPayableSubmitPage() {
 
   if (linkError) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
+      <div className="min-h-screen crossBg flex items-center justify-center overflow-hidden p-4">
         <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8 max-w-md w-full text-center">
           <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
           <h1 className="text-xl font-semibold text-gray-900 mb-2">Invalid or expired link</h1>
@@ -275,7 +277,7 @@ export default function VendorPayableSubmitPage() {
 
   if (!linkData) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="min-h-screen crossBg flex items-center justify-center overflow-hidden">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
       </div>
     );
@@ -313,12 +315,14 @@ export default function VendorPayableSubmitPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 py-8 px-4">
-      <div className="max-w-4xl mx-auto">
-        <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+    <div className="min-h-screen crossBg flex flex-col items-center justify-center overflow-hidden p-4">
+      <div className="w-full max-w-4xl bg-white rounded-2xl border border-gray-200 shadow-lg overflow-hidden flex flex-col max-h-[94vh]">
+        <div className="overflow-y-auto flex-1 min-h-0">
           <div className="p-6 sm:p-8 border-b border-gray-200">
-            <h1 className="text-2xl font-bold text-gray-900">Submit invoice</h1>
-            <p className="text-gray-700 mt-1">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h1 className="text-2xl font-bold text-gray-900">Submit invoice</h1>
+                <p className="text-gray-700 mt-1">
               {companyDisplayName ? (
                 <>
                   This payable link was sent by <strong className="text-gray-900">{companyDisplayName}</strong>. Your invoice will be sent to them as a payable. Enter your invoice number and items below; we also assign an internal payable reference.
@@ -328,7 +332,14 @@ export default function VendorPayableSubmitPage() {
                   Your invoice will be sent as a payable to the account that sent you this link. Enter your invoice number and items below; we also assign an internal payable reference.
                 </>
               )}
-            </p>
+                </p>
+              </div>
+              <div className="flex-shrink-0">
+                <div className="w-14 h-14 rounded-xl border border-gray-200 overflow-hidden bg-gray-50">
+                  <Image src="/chains.PNG" alt="Chains ERP" width={48} height={48} className="object-contain w-full h-full" />
+                </div>
+              </div>
+            </div>
           </div>
 
           <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-8">
@@ -853,20 +864,16 @@ export default function VendorPayableSubmitPage() {
             </div>
           </form>
         </div>
+      </div>
 
-        {/* Logo + Secured by Chains ERP */}
-        <div className="flex flex-col items-center justify-center pt-8 pb-4">
-          <Link href="/" className="flex flex-col items-center gap-2 text-gray-600 hover:text-gray-800 transition-colors">
-            <Image
-              src="/chains.svg"
-              alt="Chains ERP"
-              width={40}
-              height={40}
-              className="object-contain"
-            />
-            <span className="text-xs font-medium text-gray-700">Secured by Chains ERP</span>
-          </Link>
-        </div>
+      {/* Logo + Secured by Chains ERP */}
+      <div className="flex flex-col items-center justify-center pt-6">
+        <Link href="/" className="flex flex-col items-center gap-2 text-gray-600 hover:text-gray-800 transition-colors">
+          <div className="w-12 h-12 rounded-xl border border-gray-200 overflow-hidden bg-white">
+            <Image src="/chains.PNG" alt="Chains ERP" width={48} height={48} className="object-contain w-full h-full" />
+          </div>
+          <span className="text-xs font-medium text-gray-700">Secured by Chains ERP</span>
+        </Link>
       </div>
     </div>
   );
