@@ -56,7 +56,8 @@ export async function POST(request: NextRequest) {
       address,
       company,
       taxId,
-      notes
+      notes,
+      preferredPayment
     } = body;
 
     const db = await connectToDatabase();
@@ -71,6 +72,7 @@ export async function POST(request: NextRequest) {
       company,
       taxId,
       notes,
+      preferredPayment,
       userId: session.user.email,
       // One vendor = one reusable submission link
       paymentLinkToken: crypto.randomBytes(24).toString('hex'),

@@ -25,6 +25,19 @@ interface Vendor {
   company?: string;
   taxId?: string;
   notes?: string;
+  preferredPayment?: {
+    method?: 'fiat' | 'crypto';
+    fiatSubtype?: 'bank' | 'mpesa_paybill' | 'mpesa_till';
+    bankName?: string;
+    accountName?: string;
+    accountNumber?: string;
+    paybillNumber?: string;
+    mpesaAccountNumber?: string;
+    tillNumber?: string;
+    businessName?: string;
+    cryptoNetwork?: string;
+    cryptoAddress?: string;
+  };
   paymentLinkToken?: string;
   status?: string;
   createdAt: string;
@@ -46,6 +59,19 @@ export default function VendorsPage() {
     company: '',
     taxId: '',
     notes: '',
+    preferredPayment: {
+      method: 'fiat' as 'fiat' | 'crypto',
+      fiatSubtype: 'bank' as 'bank' | 'mpesa_paybill' | 'mpesa_till',
+      bankName: '',
+      accountName: '',
+      accountNumber: '',
+      paybillNumber: '',
+      mpesaAccountNumber: '',
+      tillNumber: '',
+      businessName: '',
+      cryptoNetwork: '',
+      cryptoAddress: '',
+    },
     address: {
       street: '',
       city: '',
@@ -180,6 +206,19 @@ export default function VendorsPage() {
       name: vendor.name ?? '',
       email: vendor.email ?? '',
       phone: vendor.phone || '',
+      preferredPayment: {
+        method: vendor.preferredPayment?.method || 'fiat',
+        fiatSubtype: vendor.preferredPayment?.fiatSubtype || 'bank',
+        bankName: vendor.preferredPayment?.bankName || '',
+        accountName: vendor.preferredPayment?.accountName || '',
+        accountNumber: vendor.preferredPayment?.accountNumber || '',
+        paybillNumber: vendor.preferredPayment?.paybillNumber || '',
+        mpesaAccountNumber: vendor.preferredPayment?.mpesaAccountNumber || '',
+        tillNumber: vendor.preferredPayment?.tillNumber || '',
+        businessName: vendor.preferredPayment?.businessName || '',
+        cryptoNetwork: vendor.preferredPayment?.cryptoNetwork || '',
+        cryptoAddress: vendor.preferredPayment?.cryptoAddress || '',
+      },
       address: {
         street,
         city,
@@ -209,7 +248,20 @@ export default function VendorsPage() {
       },
       company: '',
       taxId: '',
-      notes: ''
+      notes: '',
+      preferredPayment: {
+        method: 'fiat',
+        fiatSubtype: 'bank',
+        bankName: '',
+        accountName: '',
+        accountNumber: '',
+        paybillNumber: '',
+        mpesaAccountNumber: '',
+        tillNumber: '',
+        businessName: '',
+        cryptoNetwork: '',
+        cryptoAddress: '',
+      },
     });
     setShowCountryDropdown(false);
     setCountrySearch('');
@@ -505,6 +557,131 @@ export default function VendorsPage() {
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder-gray-600 bg-white font-medium"
                       placeholder="Phone number"
                     />
+                  </div>
+
+                  <div className="border-t border-gray-200 pt-4">
+                    <h4 className="text-sm font-semibold text-gray-900 mb-2">Preferred payment details</h4>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Method</label>
+                        <select
+                          value={formData.preferredPayment.method}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              preferredPayment: { ...formData.preferredPayment, method: e.target.value as 'fiat' | 'crypto' },
+                            })
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white"
+                        >
+                          <option value="fiat">Fiat</option>
+                          <option value="crypto">Crypto</option>
+                        </select>
+                      </div>
+
+                      {formData.preferredPayment.method === 'fiat' ? (
+                        <>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Fiat type</label>
+                            <select
+                              value={formData.preferredPayment.fiatSubtype}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  preferredPayment: { ...formData.preferredPayment, fiatSubtype: e.target.value as 'bank' | 'mpesa_paybill' | 'mpesa_till' },
+                                })
+                              }
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white"
+                            >
+                              <option value="bank">Bank</option>
+                              <option value="mpesa_paybill">M-Pesa Paybill</option>
+                              <option value="mpesa_till">M-Pesa Till</option>
+                            </select>
+                          </div>
+
+                          {formData.preferredPayment.fiatSubtype === 'bank' && (
+                            <div className="grid grid-cols-1 gap-2">
+                              <input
+                                type="text"
+                                value={formData.preferredPayment.bankName}
+                                onChange={(e) => setFormData({ ...formData, preferredPayment: { ...formData.preferredPayment, bankName: e.target.value } })}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white"
+                                placeholder="Bank name"
+                              />
+                              <input
+                                type="text"
+                                value={formData.preferredPayment.accountName}
+                                onChange={(e) => setFormData({ ...formData, preferredPayment: { ...formData.preferredPayment, accountName: e.target.value } })}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white"
+                                placeholder="Account name"
+                              />
+                              <input
+                                type="text"
+                                value={formData.preferredPayment.accountNumber}
+                                onChange={(e) => setFormData({ ...formData, preferredPayment: { ...formData.preferredPayment, accountNumber: e.target.value } })}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white"
+                                placeholder="Account number"
+                              />
+                            </div>
+                          )}
+
+                          {formData.preferredPayment.fiatSubtype === 'mpesa_paybill' && (
+                            <div className="grid grid-cols-1 gap-2">
+                              <input
+                                type="text"
+                                value={formData.preferredPayment.paybillNumber}
+                                onChange={(e) => setFormData({ ...formData, preferredPayment: { ...formData.preferredPayment, paybillNumber: e.target.value } })}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white"
+                                placeholder="Paybill number"
+                              />
+                              <input
+                                type="text"
+                                value={formData.preferredPayment.mpesaAccountNumber}
+                                onChange={(e) => setFormData({ ...formData, preferredPayment: { ...formData.preferredPayment, mpesaAccountNumber: e.target.value } })}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white"
+                                placeholder="Account number (optional)"
+                              />
+                            </div>
+                          )}
+
+                          {formData.preferredPayment.fiatSubtype === 'mpesa_till' && (
+                            <div className="grid grid-cols-1 gap-2">
+                              <input
+                                type="text"
+                                value={formData.preferredPayment.tillNumber}
+                                onChange={(e) => setFormData({ ...formData, preferredPayment: { ...formData.preferredPayment, tillNumber: e.target.value } })}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white"
+                                placeholder="Till number"
+                              />
+                              <input
+                                type="text"
+                                value={formData.preferredPayment.businessName}
+                                onChange={(e) => setFormData({ ...formData, preferredPayment: { ...formData.preferredPayment, businessName: e.target.value } })}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white"
+                                placeholder="Business name (optional)"
+                              />
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="grid grid-cols-1 gap-2">
+                          <input
+                            type="text"
+                            value={formData.preferredPayment.cryptoNetwork}
+                            onChange={(e) => setFormData({ ...formData, preferredPayment: { ...formData.preferredPayment, cryptoNetwork: e.target.value } })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white"
+                            placeholder="Network (e.g. USDT-TRC20)"
+                          />
+                          <input
+                            type="text"
+                            value={formData.preferredPayment.cryptoAddress}
+                            onChange={(e) => setFormData({ ...formData, preferredPayment: { ...formData.preferredPayment, cryptoAddress: e.target.value } })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black bg-white"
+                            placeholder="Wallet address"
+                          />
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">

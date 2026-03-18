@@ -73,7 +73,8 @@ export async function PUT(
       address,
       company,
       taxId,
-      notes
+      notes,
+      preferredPayment
     } = body;
 
     const db = await connectToDatabase();
@@ -119,6 +120,7 @@ export async function PUT(
       company,
       taxId,
       notes,
+      preferredPayment,
       updatedAt: new Date()
     };
 

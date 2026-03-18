@@ -28,6 +28,19 @@ interface Vendor {
   company?: string;
   taxId?: string;
   notes?: string;
+  preferredPayment?: {
+    method?: 'fiat' | 'crypto';
+    fiatSubtype?: 'bank' | 'mpesa_paybill' | 'mpesa_till';
+    bankName?: string;
+    accountName?: string;
+    accountNumber?: string;
+    paybillNumber?: string;
+    mpesaAccountNumber?: string;
+    tillNumber?: string;
+    businessName?: string;
+    cryptoNetwork?: string;
+    cryptoAddress?: string;
+  };
 }
 
 interface PayableFormData {
@@ -48,6 +61,7 @@ interface PayableFormData {
     country: string;
   };
   companyTaxNumber: string;
+  attachToVendor?: boolean;
   vendorName: string;
   vendorCompany?: string;
   vendorEmail: string;
@@ -187,6 +201,7 @@ export default function CreatePayablePage() {
       country: 'US'
     },
     companyTaxNumber: '',
+    attachToVendor: true,
     vendorName: '',
     vendorEmail: '',
     vendorPhone: '',
@@ -252,10 +267,36 @@ export default function CreatePayablePage() {
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
-    setFormData(prev => ({
-      ...prev,
-      attachedFiles: [...prev.attachedFiles, ...files]
-    }));
+    (async () => {
+      const compressed = await Promise.all(
+        files.map(async (file) => {
+          if (!file.type.startsWith('image/')) return file;
+          // Compress images to save space
+          const bitmap = await createImageBitmap(file);
+          const maxDim = 1600;
+          const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+          const w = Math.round(bitmap.width * scale);
+          const h = Math.round(bitmap.height * scale);
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return file;
+          ctx.drawImage(bitmap, 0, 0, w, h);
+          const blob: Blob | null = await new Promise((resolve) =>
+            canvas.toBlob(resolve, 'image/jpeg', 0.72)
+          );
+          if (!blob) return file;
+          return new File([blob], file.name.replace(/\.(png|webp|gif)$/i, '.jpg'), {
+            type: 'image/jpeg',
+          });
+        })
+      );
+      setFormData((prev) => ({
+        ...prev,
+        attachedFiles: [...prev.attachedFiles, ...compressed],
+      }));
+    })();
   };
 
   const handleRemoveFile = (index: number) => {
@@ -268,6 +309,7 @@ export default function CreatePayablePage() {
   const selectVendor = (vendor: Vendor) => {
     setFormData(prev => ({
       ...prev,
+      attachToVendor: true,
       vendorName: vendor.name,
       vendorEmail: vendor.email,
       vendorPhone: vendor.phone || '',
@@ -278,7 +320,27 @@ export default function CreatePayablePage() {
         state: vendor.address?.split(',')[2] || '',
         zipCode: vendor.address?.split(',')[3] || '',
         country: 'US'
-      }
+      },
+      // Autofill preferred payment method/details when set on vendor
+      ...(vendor.preferredPayment?.method === 'crypto'
+        ? {
+            paymentMethod: 'crypto' as const,
+            paymentNetwork: vendor.preferredPayment.cryptoNetwork || prev.paymentNetwork,
+            paymentAddress: vendor.preferredPayment.cryptoAddress || prev.paymentAddress,
+          }
+        : vendor.preferredPayment?.method === 'fiat'
+        ? {
+            paymentMethod: 'fiat' as const,
+            fiatPaymentSubtype: vendor.preferredPayment.fiatSubtype || prev.fiatPaymentSubtype,
+            bankName: vendor.preferredPayment.bankName || prev.bankName,
+            accountName: vendor.preferredPayment.accountName || prev.accountName,
+            accountNumber: vendor.preferredPayment.accountNumber || prev.accountNumber,
+            paybillNumber: vendor.preferredPayment.paybillNumber || prev.paybillNumber,
+            mpesaAccountNumber: vendor.preferredPayment.mpesaAccountNumber || prev.mpesaAccountNumber,
+            tillNumber: vendor.preferredPayment.tillNumber || prev.tillNumber,
+            businessName: vendor.preferredPayment.businessName || prev.businessName,
+          }
+        : {}),
     }));
     setShowVendorDropdown(false);
   };
@@ -424,9 +486,9 @@ export default function CreatePayablePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen border border-gray-200 rounded-xl bg-gray-50 text-gray-900">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200">
+      <div className="bg-white border-b rounded-xl border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-4">
@@ -589,81 +651,111 @@ export default function CreatePayablePage() {
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-gray-900">Vendor Information</h2>
-                <span className="text-gray-500 text-sm">
-                  Edit functionality coming soon
-                </span>
+                <label className="flex items-center gap-2 text-sm text-gray-700 select-none">
+                  <input
+                    type="checkbox"
+                    checked={formData.attachToVendor !== false}
+                    onChange={(e) => {
+                      const next = e.target.checked;
+                      setFormData((prev) => ({
+                        ...prev,
+                        attachToVendor: next,
+                        ...(next
+                          ? {}
+                          : {
+                              vendorName: '',
+                              vendorEmail: '',
+                              vendorPhone: '',
+                              vendorCompany: '',
+                              vendorAddress: {
+                                street: '',
+                                city: '',
+                                state: '',
+                                zipCode: '',
+                                country: 'US',
+                              },
+                            }),
+                      }));
+                    }}
+                  />
+                  <span>Attach to a vendor</span>
+                </label>
               </div>
               
-              <div className="relative">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Select Vendor</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={formData.vendorName}
-                    onChange={(e) => {
-                      handleInputChange('vendorName', e.target.value);
-                      setShowVendorDropdown(true);
-                    }}
-                    onFocus={() => setShowVendorDropdown(true)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Search or select vendor"
-                  />
-                  <button
-                    onClick={() => setShowVendorDropdown(!showVendorDropdown)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2"
-                  >
-                    <ChevronDown className="h-4 w-4 text-gray-400" />
-                  </button>
-                </div>
-                
-                {showVendorDropdown && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                    <div className="p-2">
+              {formData.attachToVendor !== false && (
+                <div className="space-y-4">
+                  <div className="relative">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Select Vendor</label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={formData.vendorName}
+                        onChange={(e) => {
+                          handleInputChange('vendorName', e.target.value);
+                          setShowVendorDropdown(true);
+                        }}
+                        onFocus={() => setShowVendorDropdown(true)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Search or select vendor"
+                      />
                       <button
-                        onClick={createNewVendor}
-                        className="w-full text-left px-3 py-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                        onClick={() => setShowVendorDropdown(!showVendorDropdown)}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2"
                       >
-                        <Plus className="h-4 w-4 inline mr-2" />
-                        Create New Vendor
+                        <ChevronDown className="h-4 w-4 text-gray-400" />
                       </button>
                     </div>
-                    {vendors.map(vendor => (
-                      <button
-                        key={vendor._id}
-                        onClick={() => selectVendor(vendor)}
-                        className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
-                      >
-                        <div className="font-medium text-gray-900">{vendor.name}</div>
-                        <div className="text-sm text-gray-500">{vendor.email}</div>
-                      </button>
-                    ))}
+
+                    {showVendorDropdown && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        <div className="p-2">
+                          <button
+                            onClick={createNewVendor}
+                            className="w-full text-left px-3 py-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                          >
+                            <Plus className="h-4 w-4 inline mr-2" />
+                            Create New Vendor
+                          </button>
+                        </div>
+                        {vendors.map(vendor => (
+                          <button
+                            key={vendor._id}
+                            onClick={() => selectVendor(vendor)}
+                            className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                          >
+                            <div className="font-medium text-gray-900">{vendor.name}</div>
+                            <div className="text-sm text-gray-500">{vendor.email}</div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Vendor Email</label>
-                  <input
-                    type="email"
-                    value={formData.vendorEmail}
-                    onChange={(e) => handleInputChange('vendorEmail', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="vendor@example.com"
-                  />
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Vendor Email</label>
+                      <input
+                        type="email"
+                        value={formData.vendorEmail}
+                        onChange={(e) => handleInputChange('vendorEmail', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="vendor@example.com"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Vendor Phone</label>
+                      <input
+                        type="tel"
+                        value={formData.vendorPhone}
+                        onChange={(e) => handleInputChange('vendorPhone', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="+1 (555) 123-4567"
+                      />
+                    </div>
+                  </div>
                 </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Vendor Phone</label>
-                  <input
-                    type="tel"
-                    value={formData.vendorPhone}
-                    onChange={(e) => handleInputChange('vendorPhone', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="+1 (555) 123-4567"
-                  />
-                </div>
-              </div>
+              )}
             </div>
 
             {/* Items */}

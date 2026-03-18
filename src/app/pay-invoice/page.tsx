@@ -447,7 +447,7 @@ function PayInvoiceContent() {
                       <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-0.5">Account number</p>
                       {accountNumber ? (
                         <div className="flex items-center gap-2">
-                          <code className="text-sm bg-gray-100 px-2 py-1.5 rounded font-mono">{accountNumber}</code>
+                          <code className="text-sm text-gray-900 bg-gray-100 px-2 py-1.5 rounded font-mono">{accountNumber}</code>
                           <button
                             type="button"
                             onClick={() => copyToClipboard(accountNumber, 'account')}

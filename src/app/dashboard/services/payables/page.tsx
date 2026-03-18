@@ -13,7 +13,8 @@ import {
   RotateCcw,
   FileText,
   CheckCircle,
-  Clock
+  Clock,
+  ChevronDown
 } from 'lucide-react';
 import PayableStatCard from '@/components/payables/PayableStatCard';
 import PayablesList from '@/components/payables/PayablesList';
@@ -33,6 +34,7 @@ export default function AccountsPayablePage() {
   const [activeTab, setActiveTab] = useState<'bills' | 'direct-payments' | 'vendors'>('bills');
   const [vendorStats, setVendorStats] = useState<VendorWithCounts[]>([]);
   const [vendorStatsLoading, setVendorStatsLoading] = useState(false);
+  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
 
   const loadVendorStats = useCallback(async () => {
     setVendorStatsLoading(true);
@@ -184,46 +186,63 @@ export default function AccountsPayablePage() {
           </Suspense>
         </div>
 
-        {/* Quick Actions - Always Visible */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200 cursor-pointer"
-            onClick={handleManagePayablesInfo}
-          >
-            <div className="flex items-center space-x-4">
-              <div className="p-3 bg-orange-500/20 rounded-lg">
-                <Building2 className="h-6 w-6 text-orange-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-lg font-semibold text-white">Manage Payables Settings</h3>
-                <p className="text-blue-200 text-sm">Configure business information and payment settings</p>
-              </div>
-              <ArrowRight className="h-5 w-5 text-blue-400 flex-shrink-0" />
-            </div>
-          </motion.div>
+        {/* Quick Actions - Collapsible, hidden by default (matches Smart Invoicing) */}
+        <button
+          type="button"
+          onClick={() => setQuickActionsOpen((v) => !v)}
+          className="w-full flex items-center justify-between gap-3 py-3 px-4 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 hover:bg-white/15 transition-colors text-left mb-4"
+        >
+          <span className="text-white font-medium">Quick actions</span>
+          <ChevronDown
+            className={`h-5 w-5 text-blue-400 flex-shrink-0 transition-transform duration-200 ${quickActionsOpen ? 'rotate-180' : ''}`}
+          />
+        </button>
 
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-            className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200 cursor-pointer"
-            onClick={() => router.push('/dashboard/vendors')}
-          >
-            <div className="flex items-center space-x-4">
-              <div className="p-3 bg-green-500/20 rounded-lg">
-                <Users className="h-6 w-6 text-green-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-lg font-semibold text-white">Manage Vendors</h3>
-                <p className="text-blue-200 text-sm">Add and organize your vendors</p>
-              </div>
-              <ArrowRight className="h-5 w-5 text-blue-400 flex-shrink-0" />
+        {quickActionsOpen && (
+          <div className="mb-8">
+            <div className="flex md:grid gap-4 overflow-x-auto md:overflow-x-visible pb-2 md:pb-0 hide-scrollbar md:grid-cols-2 lg:grid-cols-3 snap-x snap-mandatory md:snap-none">
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+                className="flex-shrink-0 w-[calc(50%-8px)] min-w-[150px] md:w-auto md:min-w-0 h-[108px] md:h-auto md:min-h-0 snap-start overflow-hidden bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-2.5 md:p-3.5 hover:bg-white/15 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+                onClick={handleManagePayablesInfo}
+              >
+                <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1 min-h-0">
+                  <div className="w-8 h-8 md:w-9 md:h-9 flex-shrink-0 flex items-center justify-center rounded-lg bg-orange-500/20">
+                    <Building2 className="h-4.5 w-4.5 text-orange-400" />
+                  </div>
+                  <div className="flex-1 min-w-0 overflow-hidden">
+                    <h3 className="text-sm md:text-[15px] font-semibold text-white line-clamp-2 break-words leading-tight">Manage Payables Settings</h3>
+                    <p className="text-blue-200/90 text-[11px] line-clamp-2 break-words leading-snug mt-0.5">Configure business information and payment settings</p>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-blue-400 shrink-0 hidden md:block" />
+                </div>
+                <div className="h-7 flex-shrink-0" aria-hidden />
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 }}
+                className="flex-shrink-0 w-[calc(50%-8px)] min-w-[150px] md:w-auto md:min-w-0 h-[108px] md:h-auto md:min-h-0 snap-start overflow-hidden bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-2.5 md:p-3.5 hover:bg-white/15 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+                onClick={() => router.push('/dashboard/vendors')}
+              >
+                <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1 min-h-0">
+                  <div className="w-8 h-8 md:w-9 md:h-9 flex-shrink-0 flex items-center justify-center rounded-lg bg-green-500/20">
+                    <Users className="h-4.5 w-4.5 text-green-400" />
+                  </div>
+                  <div className="flex-1 min-w-0 overflow-hidden">
+                    <h3 className="text-sm md:text-[15px] font-semibold text-white line-clamp-2 break-words leading-tight">Manage Vendors</h3>
+                    <p className="text-blue-200/90 text-[11px] line-clamp-2 break-words leading-snug mt-0.5">Add and organize your vendors</p>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-blue-400 shrink-0 hidden md:block" />
+                </div>
+                <div className="h-7 flex-shrink-0" aria-hidden />
+              </motion.div>
             </div>
-          </motion.div>
-        </div>
+          </div>
+        )}
 
         {/* Tab Navigation */}
         <motion.div
