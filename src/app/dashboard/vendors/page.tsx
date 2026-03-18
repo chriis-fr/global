@@ -104,18 +104,34 @@ export default function VendorsPage() {
     const prevBodyWidth = document.body.style.width;
     const scrollY = window.scrollY;
 
+    // Dashboard uses a scroll container (<main> with overflow-y-auto). Lock it too.
+    const mainEl = document.querySelector('main') as HTMLElement | null;
+    const prevMainOverflow = mainEl?.style.overflow;
+    const prevMainTouchAction = mainEl?.style.touchAction;
+    const mainScrollTop = mainEl?.scrollTop ?? 0;
+
     // Robust scroll lock: freeze body at current scroll position
     document.documentElement.style.overflow = 'hidden';
     document.body.style.overflow = 'hidden';
     document.body.style.position = 'fixed';
     document.body.style.top = `-${scrollY}px`;
     document.body.style.width = '100%';
+    if (mainEl) {
+      mainEl.style.overflow = 'hidden';
+      mainEl.style.touchAction = 'none';
+      mainEl.scrollTop = mainScrollTop;
+    }
     return () => {
       document.documentElement.style.overflow = prevHtmlOverflow;
       document.body.style.overflow = prevBodyOverflow;
       document.body.style.position = prevBodyPosition;
       document.body.style.top = prevBodyTop;
       document.body.style.width = prevBodyWidth;
+      if (mainEl) {
+        mainEl.style.overflow = prevMainOverflow || '';
+        mainEl.style.touchAction = prevMainTouchAction || '';
+        mainEl.scrollTop = mainScrollTop;
+      }
       window.scrollTo(0, scrollY);
     };
   }, [showAddModal]);
