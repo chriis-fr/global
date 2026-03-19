@@ -36,15 +36,17 @@ export function ProvidersWrapper({
   const pathname = usePathname();
   const isPublicVendorRoute = !!pathname && pathname.startsWith('/vendor/');
 
-  // Ultra-fast public vendor links: don't mount auth/session providers.
-  // This avoids any client-side session hydration calls (e.g. GET /api/auth/session).
+  // Ultra-fast public vendor links: minimal providers, but SessionProvider still needs NextAuth's context
+  // because it uses useSession (nextAuthUpdate) internally.
   if (isPublicVendorRoute) {
     return (
       <ErrorBoundary>
-        <SessionProvider session={initialSession ?? null}>
-          <RouteProgress />
-          {children}
-        </SessionProvider>
+        <NextAuthSessionProvider refetchInterval={0} session={initialSession === undefined ? undefined : initialSession ?? null}>
+          <SessionProvider session={initialSession ?? null}>
+            <RouteProgress />
+            {children}
+          </SessionProvider>
+        </NextAuthSessionProvider>
         <Toaster
           position="top-right"
           toastOptions={{
