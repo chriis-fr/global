@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
     let mpesaReceiptNumber: string | undefined;
     let amount: number | undefined;
     let phoneNumber: string | undefined;
+    let transactionDate: Date | undefined;
 
     if (Array.isArray(callback.CallbackMetadata?.Item)) {
       for (const item of callback.CallbackMetadata.Item) {
@@ -33,6 +34,15 @@ export async function POST(req: NextRequest) {
         }
         if (item.Name === 'PhoneNumber') {
           phoneNumber = item.Value?.toString();
+        }
+        if (item.Name === 'TransactionDate' && item.Value) {
+          // Daraja format: YYYYMMDDHHMMSS (e.g. 20260319154609)
+          const raw = String(item.Value);
+          if (raw.length === 14) {
+            const y = raw.slice(0, 4), mo = raw.slice(4, 6), d = raw.slice(6, 8);
+            const h = raw.slice(8, 10), mi = raw.slice(10, 12), s = raw.slice(12, 14);
+            transactionDate = new Date(`${y}-${mo}-${d}T${h}:${mi}:${s}`);
+          }
         }
       }
     }
@@ -49,6 +59,7 @@ export async function POST(req: NextRequest) {
       mpesaReceiptNumber,
       resultCode: resultCode != null ? String(resultCode) : undefined,
       resultDescription: resultDesc,
+      transactionDate,
     });
 
     return NextResponse.json(

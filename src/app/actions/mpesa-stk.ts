@@ -41,7 +41,7 @@ function normalizeKenyanPhoneServer(input: string): string | null {
 
 export async function sendWaiterStkPush(
   input: SendWaiterStkInput
-): Promise<{ success: boolean; message?: string; error?: string }> {
+): Promise<{ success: boolean; message?: string; error?: string; sessionId?: string }> {
   console.log('[M-Pesa STK] sendWaiterStkPush called – input:', { phoneNumber: input.phoneNumber, amount: input.amount, tableRef: input.tableRef });
   try {
     const session = await getServerSession(authOptions);
@@ -244,7 +244,7 @@ export async function sendWaiterStkPush(
 
     // 5. Record session
     console.log('[M-Pesa STK] Recording session – MerchantRequestID:', stkResult.data.MerchantRequestID, 'CheckoutRequestID:', stkResult.data.CheckoutRequestID);
-    await mpesaSessionService.createSession({
+    const createdSession = await mpesaSessionService.createSession({
       organizationId,
       waiterUserId: userId,
       phoneNumber: input.phoneNumber,
@@ -254,10 +254,12 @@ export async function sendWaiterStkPush(
       checkoutRequestId: stkResult.data.CheckoutRequestID,
     });
 
-    console.log('[M-Pesa STK] Success – message:', stkResult.data.CustomerMessage || 'STK push sent.');
+    const sessionId = createdSession._id?.toString();
+    console.log('[M-Pesa STK] Success – sessionId:', sessionId, 'message:', stkResult.data.CustomerMessage || 'STK push sent.');
     return {
       success: true,
       message: stkResult.data.CustomerMessage || 'STK push sent.',
+      sessionId,
     };
   } catch (error) {
     console.error('[M-Pesa STK] sendWaiterStkPush threw:', error);

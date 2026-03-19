@@ -1,11 +1,20 @@
 'use client';
 
 import { useState, useTransition, useEffect } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
+import { CheckCircle2, X } from 'lucide-react';
 import { useSession } from '@/lib/auth-client';
 import { sendWaiterStkPush } from '@/app/actions/mpesa-stk';
 
 const MESSAGE_DISMISS_MS = 5000;
+
+/**
+ * Set to true once the C2B Confirmation URL has been registered with Safaricom
+ * (via POST /api/mpesa/c2b-register). Until then, customer name is never fetched
+ * and the success modal shows only the STK callback data (transaction ref, amount, phone).
+ */
+const C2B_ENABLED = false;
 
 function normalizeKenyanPhone(input: string): string | null {
   const raw = input.replace(/[^\d+]/g, '');
@@ -39,10 +48,15 @@ export function WaiterPromptCard() {
     amount: number;
     phoneNumber: string;
     mpesaReceiptNumber?: string;
+    transactionDate?: string;
+    customerName?: string;
   } | null>(null);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [isAwaitingCallback, setIsAwaitingCallback] = useState(false);
+  // Tracks the specific session ID returned when a prompt is sent.
+  // Polling uses this ID so feedback always maps to the exact prompt this component initiated.
+  const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
   const { data: session } = useSession();
 
   useEffect(() => {
@@ -54,9 +68,11 @@ export function WaiterPromptCard() {
     return () => clearTimeout(id);
   }, [errorMessage, statusMessage]);
 
-  // When we are awaiting callback, keep a bounded timeout so the UI unlocks even if no callback arrives.
+  // Poll the specific session this component initiated — not "whatever is latest".
+  // This prevents feedback from going to the wrong prompt when multiple waiters
+  // (or the same waiter in multiple tabs/devices) are active simultaneously.
   useEffect(() => {
-    if (!isAwaitingCallback) return;
+    if (!isAwaitingCallback || !pendingSessionId) return;
 
     let cancelled = false;
     const start = Date.now();
@@ -67,6 +83,7 @@ export function WaiterPromptCard() {
       // Keep waiting for up to ~90s to match M-Pesa behaviour
       if (elapsed > 90000) {
         setIsAwaitingCallback(false);
+        setPendingSessionId(null);
         setStatusMessage(
           'We have not received a response from M-Pesa yet. Check the recent prompts list below for any update; if nothing appears after a short while, you can try again.'
         );
@@ -74,7 +91,7 @@ export function WaiterPromptCard() {
       }
 
       try {
-        const res = await fetch('/api/mpesa/latest-waiter-prompt', {
+        const res = await fetch(`/api/mpesa/prompt-status/${pendingSessionId}`, {
           cache: 'no-store',
         });
         const data = (await res.json()) as {
@@ -86,6 +103,9 @@ export function WaiterPromptCard() {
             amount: number;
             phoneNumber: string;
             mpesaReceiptNumber?: string;
+            transactionDate?: string;
+            customerName?: string | null;
+            nameReady?: boolean;
           };
         };
         if (!data.success || !data.prompt) {
@@ -99,27 +119,73 @@ export function WaiterPromptCard() {
           return;
         }
 
-        // We have a terminal status
-        setIsAwaitingCallback(false);
-        if (p.resultCode === '1032' && p.resultDescription?.includes('Request Cancelled by user')) {
-          setStatusMessage('The request was cancelled by the customer.');
-        } else if (p.status === 'success') {
+        // Payment failed — stop immediately
+        if (p.status !== 'success') {
+          setIsAwaitingCallback(false);
+          setPendingSessionId(null);
+          if (p.resultCode === '1032' && p.resultDescription?.includes('Request Cancelled by user')) {
+            setStatusMessage('The request was cancelled by the customer.');
+          } else {
+            setStatusMessage('The request failed. Ask the customer to try again.');
+          }
+          return;
+        }
+
+        const finishSuccess = (
+          amount: number,
+          phoneNumber: string,
+          receipt?: string,
+          transactionDate?: string,
+          customerName?: string,
+        ) => {
+          setIsAwaitingCallback(false);
+          setPendingSessionId(null);
           setStatusMessage('Payment successful.');
-          setSuccessDetails({
-            amount: p.amount,
-            phoneNumber: p.phoneNumber,
-            mpesaReceiptNumber: p.mpesaReceiptNumber,
-          });
+          setSuccessDetails({ amount, phoneNumber, mpesaReceiptNumber: receipt, transactionDate, customerName });
           setIsSuccessModalOpen(true);
-          // Auto-dismiss modal + status after 60s
           setTimeout(() => {
             setIsSuccessModalOpen(false);
             setSuccessDetails(null);
             setStatusMessage(null);
           }, 60000);
-        } else {
-          setStatusMessage('The request failed. Ask the customer to try again.');
+        };
+
+        // C2B_ENABLED: when true, we briefly poll for the customer name that arrives via
+        // Safaricom's C2B Confirmation callback (a few seconds after the STK callback).
+        // Until C2B URLs are registered with Safaricom, skip this and show success immediately.
+        if (!C2B_ENABLED) {
+          finishSuccess(p.amount, p.phoneNumber, p.mpesaReceiptNumber, p.transactionDate, undefined);
+          return;
         }
+
+        // C2B is active — wait up to 8 s for the name then show modal either way.
+        const successAt = Date.now();
+        const NAME_WAIT_MS = 8000;
+
+        const pollForName = async () => {
+          if (cancelled) return;
+          if (p.nameReady) {
+            finishSuccess(p.amount, p.phoneNumber, p.mpesaReceiptNumber, p.transactionDate, p.customerName ?? undefined);
+            return;
+          }
+          if (Date.now() - successAt >= NAME_WAIT_MS) {
+            finishSuccess(p.amount, p.phoneNumber, p.mpesaReceiptNumber, p.transactionDate, undefined);
+            return;
+          }
+          try {
+            const r2 = await fetch(`/api/mpesa/prompt-status/${pendingSessionId}`, { cache: 'no-store' });
+            const d2 = (await r2.json()) as typeof data;
+            if (d2.success && d2.prompt?.nameReady) {
+              finishSuccess(d2.prompt.amount, d2.prompt.phoneNumber, d2.prompt.mpesaReceiptNumber, d2.prompt.transactionDate, d2.prompt.customerName ?? undefined);
+            } else {
+              setTimeout(pollForName, 1500);
+            }
+          } catch {
+            setTimeout(pollForName, 1500);
+          }
+        };
+
+        pollForName();
       } catch {
         setTimeout(poll, 3000);
       }
@@ -130,13 +196,14 @@ export function WaiterPromptCard() {
     return () => {
       cancelled = true;
     };
-  }, [isAwaitingCallback]);
+  }, [isAwaitingCallback, pendingSessionId]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setStatusMessage(null);
     setErrorMessage(null);
     setIsAwaitingCallback(false);
+    setPendingSessionId(null);
 
     const numericAmount = typeof amount === 'string' ? Number(amount) : amount;
     if (!numericAmount || numericAmount <= 0) {
@@ -162,6 +229,7 @@ export function WaiterPromptCard() {
       if (!result.success) {
         setErrorMessage(result.error || 'Failed to send M-Pesa STK prompt.');
         setIsAwaitingCallback(false);
+        setPendingSessionId(null);
         return;
       }
 
@@ -169,6 +237,7 @@ export function WaiterPromptCard() {
         result.message ||
           'STK push sent. Waiting for M-Pesa response on the customer phone...'
       );
+      setPendingSessionId(result.sessionId ?? null);
       setIsAwaitingCallback(true);
       setPhone('');
       setAmount('');
@@ -258,45 +327,121 @@ export function WaiterPromptCard() {
           Pending M-Pesa response. Ask the customer to check their phone and enter their PIN.
         </div>
       )}
-      {isSuccessModalOpen && successDetails && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40">
-          <div className="bg-slate-950/95 border border-emerald-500/60 rounded-2xl shadow-2xl px-6 py-5 max-w-sm w-full mx-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-emerald-200">
-                Payment confirmed
-              </h3>
+      {isSuccessModalOpen && successDetails && (() => {
+        // Format phone: ensure it starts with +254
+        const rawPhone = successDetails.phoneNumber;
+        const displayPhone = rawPhone.startsWith('+')
+          ? rawPhone
+          : `+${rawPhone}`;
+
+        // Format transaction date: "19 Mar 2026 · 15:46"
+        let displayDate: string | null = null;
+        if (successDetails.transactionDate) {
+          const d = new Date(successDetails.transactionDate);
+          if (!isNaN(d.getTime())) {
+            displayDate = d.toLocaleDateString('en-GB', {
+              day: '2-digit', month: 'short', year: 'numeric',
+            }) + ' · ' + d.toLocaleTimeString('en-GB', {
+              hour: '2-digit', minute: '2-digit',
+            });
+          }
+        }
+
+        const dismiss = () => {
+          setIsSuccessModalOpen(false);
+          setSuccessDetails(null);
+          setStatusMessage(null);
+        };
+
+        return (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+            <div className="relative bg-white rounded-2xl border border-gray-200 shadow-lg max-w-xs w-full overflow-hidden">
+
+              {/* Close */}
               <button
                 type="button"
-                onClick={() => {
-                  setIsSuccessModalOpen(false);
-                  setSuccessDetails(null);
-                  setStatusMessage(null);
-                }}
-                className="text-[11px] text-emerald-200 hover:text-white underline-offset-2 hover:underline"
+                onClick={dismiss}
+                className="absolute top-3 right-3 p-1 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                aria-label="Close"
               >
-                Dismiss
+                <X className="h-4 w-4" />
               </button>
-            </div>
-            <p className="text-xs text-emerald-100/80 mb-3">
-              The customer has successfully completed the M-Pesa prompt.
-            </p>
-            <div className="space-y-1.5 text-xs text-emerald-100">
-              <div>
-                <span className="font-medium">Amount:</span>{' '}
-                KES {successDetails.amount.toLocaleString()}
-              </div>
-              <div>
-                <span className="font-medium">Phone:</span>{' '}
-                {successDetails.phoneNumber}
-              </div>
-              <div>
-                <span className="font-medium">Receipt:</span>{' '}
-                {successDetails.mpesaReceiptNumber || '—'}
+
+              <div className="px-6 pt-7 pb-6 space-y-4">
+
+                {/* Logo + check icon */}
+                <div className="flex items-center justify-between">
+                  <div className="border border-gray-200 rounded-lg px-3 py-1.5">
+                    <Image
+                      src="/mpesalogo.png"
+                      alt="M-Pesa"
+                      width={68}
+                      height={24}
+                      className="object-contain h-5 w-auto"
+                    />
+                  </div>
+                  <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center">
+                    <CheckCircle2 className="h-6 w-6 text-blue-600" strokeWidth={2} />
+                  </div>
+                </div>
+
+                {/* Transaction Ref — prominent at top */}
+                <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
+                  <p className="text-[10px] font-semibold text-blue-500 uppercase tracking-widest mb-1">
+                    Transaction Ref
+                  </p>
+                  <p className="font-mono font-bold text-blue-700 text-lg tracking-wider">
+                    {successDetails.mpesaReceiptNumber || '—'}
+                  </p>
+                </div>
+
+                {/* Confirmed label + amount */}
+                <div className="border-b border-gray-100 pb-3">
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-0.5">
+                    Payment Confirmed
+                  </p>
+                  <p className="text-3xl font-bold text-gray-900">
+                    KES {successDetails.amount.toLocaleString()}
+                  </p>
+                </div>
+
+                {/* Customer name (C2B only) */}
+                {successDetails.customerName && (
+                  <div className="border-b border-gray-100 pb-3">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-0.5">Customer</p>
+                    <p className="text-base font-semibold text-gray-900 capitalize">
+                      {successDetails.customerName.toLowerCase()}
+                    </p>
+                  </div>
+                )}
+
+                {/* Detail rows */}
+                <div className="space-y-2.5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Phone</span>
+                    <span className="text-sm font-medium text-gray-900">{displayPhone}</span>
+                  </div>
+                  {displayDate && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Date & Time</span>
+                      <span className="text-sm font-medium text-gray-900">{displayDate}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Done */}
+                <button
+                  type="button"
+                  onClick={dismiss}
+                  className="w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold transition-colors text-sm"
+                >
+                  Done
+                </button>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

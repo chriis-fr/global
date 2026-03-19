@@ -67,6 +67,7 @@ export class MpesaSessionService {
     mpesaReceiptNumber?: string;
     resultCode?: string;
     resultDescription?: string;
+    transactionDate?: Date;
   }): Promise<MpesaStkSession | null> {
     const { sessions, events } = await this.getCollections();
 
@@ -84,6 +85,9 @@ export class MpesaSessionService {
     }
     if (params.resultDescription) {
       update.resultDescription = params.resultDescription;
+    }
+    if (params.transactionDate) {
+      update.transactionDate = params.transactionDate;
     }
     if (params.status !== 'pending') {
       update.completedAt = now;
@@ -126,6 +130,28 @@ export class MpesaSessionService {
       .catch(() => {});
 
     return doc;
+  }
+
+  /**
+   * Called by the C2B confirmation callback.
+   * Matches by mpesaReceiptNumber (= TransID in the C2B payload) and stamps the customer name.
+   */
+  async updateSessionCustomerName(params: {
+    mpesaReceiptNumber: string;
+    firstName?: string;
+    middleName?: string;
+    lastName?: string;
+  }): Promise<void> {
+    const { sessions } = await this.getCollections();
+    const update: Partial<MpesaStkSession> = { updatedAt: new Date() };
+    if (params.firstName)  update.customerFirstName  = params.firstName;
+    if (params.middleName) update.customerMiddleName = params.middleName;
+    if (params.lastName)   update.customerLastName   = params.lastName;
+
+    await sessions.updateOne(
+      { mpesaReceiptNumber: params.mpesaReceiptNumber },
+      { $set: update }
+    );
   }
 
   async getRecentSessionsForUser(params: {

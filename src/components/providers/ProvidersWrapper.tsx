@@ -41,7 +41,7 @@ export function ProvidersWrapper({
   if (isPublicVendorRoute) {
     return (
       <ErrorBoundary>
-        <NextAuthSessionProvider refetchInterval={0} session={initialSession === undefined ? undefined : initialSession ?? null}>
+        <NextAuthSessionProvider refetchInterval={0} refetchOnWindowFocus={false} session={initialSession === undefined ? undefined : initialSession ?? null}>
           <SessionProvider session={initialSession ?? null}>
             <RouteProgress />
             {children}
@@ -77,7 +77,7 @@ export function ProvidersWrapper({
 
   return (
     <ErrorBoundary>
-      <NextAuthSessionProvider refetchInterval={0} session={initialSession === undefined ? undefined : initialSession ?? null}>
+      <NextAuthSessionProvider refetchInterval={0} refetchOnWindowFocus={false} session={initialSession === undefined ? undefined : initialSession ?? null}>
       <SessionProvider session={initialSession === undefined ? undefined : initialSession}>
         <ErrorBoundary>
           <CurrencyProvider initialCurrency={initialCurrency ?? undefined}>

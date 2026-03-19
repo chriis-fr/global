@@ -22,6 +22,12 @@ export interface MpesaStkSession {
   mpesaReceiptNumber?: string;
   resultCode?: string;
   resultDescription?: string;
+  transactionDate?: Date; // Parsed from Daraja's TransactionDate (YYYYMMDDHHMMSS)
+
+  // Customer identity — populated by C2B confirmation callback (arrives shortly after STK callback)
+  customerFirstName?: string;
+  customerMiddleName?: string;
+  customerLastName?: string;
 
   // Optional contextual metadata (kept minimal)
   tableRef?: string; // Table/seat identifier for restaurants/bars
