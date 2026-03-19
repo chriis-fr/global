@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { Loader2, AlertCircle, FileText, CheckCircle2, Clock, ArrowLeft } from 'lucide-react';
+import { Loader2, AlertCircle, FileText, CheckCircle2, Clock, ArrowLeft, X } from 'lucide-react';
 
 interface VendorHistoryPayable {
   id: string;
@@ -20,6 +20,7 @@ interface VendorHistoryPayable {
   paymentDate: string | null;
   paymentMethod: string | null;
   hasPaymentProof: boolean;
+  paymentReference: string | null;
 }
 
 interface VendorHistoryResponse {
@@ -60,11 +61,51 @@ function formatAmount(cur: string, value: number) {
   })}`;
 }
 
+function InvoicePreviewModal({ url, onClose }: { url: string; onClose: () => void }) {
+  const [imgFailed, setImgFailed] = useState(false);
+  const tryAsImage = !imgFailed && (
+    url.includes('/api/files/') ||
+    /\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(url)
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+          <h2 className="text-sm font-medium text-gray-900">Uploaded invoice</h2>
+          <button type="button" onClick={onClose} className="text-gray-500 hover:text-gray-900 rounded-lg p-1 hover:bg-gray-100">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="flex-1 bg-gray-50 flex items-center justify-center p-4 overflow-auto">
+          {tryAsImage ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={url}
+              alt="Uploaded invoice"
+              className="max-h-[75vh] max-w-full object-contain rounded-lg shadow-sm bg-white"
+              onError={() => setImgFailed(true)}
+            />
+          ) : (
+            <iframe
+              src={url}
+              className="w-full h-[70vh] bg-white rounded-lg"
+              title="Uploaded invoice"
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function VendorPayablesHistoryPage() {
   const params = useParams<{ token: string }>();
   const [data, setData] = useState<VendorHistoryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const token = params?.token;
@@ -132,6 +173,9 @@ export default function VendorPayablesHistoryPage() {
 
   return (
     <div className="min-h-screen bg-gray-100 py-8 px-4">
+      {previewUrl && (
+        <InvoicePreviewModal url={previewUrl} onClose={() => setPreviewUrl(null)} />
+      )}
       <div className="max-w-3xl mx-auto">
         <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
           <div className="p-5 sm:p-6 border-b border-gray-200 flex items-start justify-between gap-3">
@@ -232,25 +276,32 @@ export default function VendorPayablesHistoryPage() {
                     <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-600 pt-1 border-t border-gray-200 mt-2">
                       <div className="flex items-center gap-2">
                         {p.invoiceFileUrl && (
-                          <a
-                            href={p.invoiceFileUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          <button
+                            type="button"
+                            onClick={() => setPreviewUrl(p.invoiceFileUrl)}
                             className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700"
                           >
                             <FileText className="h-3 w-3" />
                             Uploaded invoice
-                          </a>
+                          </button>
                         )}
                         {isPaid && paidLabel && (
                           <span className="text-gray-600">Paid on {paidLabel}</span>
                         )}
                       </div>
-                      {p.hasPaymentProof && (
-                        <span className="text-xs font-medium text-emerald-700">
-                          Proof of payment available with the payer
-                        </span>
-                      )}
+                      <div className="flex flex-wrap items-center gap-2">
+                        {p.paymentReference && (
+                          <span className="inline-flex items-center gap-1 text-xs text-gray-700">
+                            <span className="text-gray-500">Ref:</span>
+                            <span className="font-medium text-gray-900">{p.paymentReference}</span>
+                          </span>
+                        )}
+                        {p.hasPaymentProof && (
+                          <span className="text-xs font-medium text-emerald-700">
+                            Proof of payment available with the payer
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );

@@ -107,6 +107,66 @@ interface Payable {
   updatedAt: string;
 }
 
+/** Try to render as image; fall back to file-icon if load fails (handles /api/files/{id} with no extension). */
+function AttachmentCard({
+  url,
+  onOpen,
+}: {
+  url: string;
+  onOpen: (url: string, isImage: boolean) => void;
+}) {
+  const [imgFailed, setImgFailed] = useState(false);
+  const fileName = url.split('/').pop()?.split('?')[0] || 'attachment';
+  // Treat all /api/files/ URLs as potentially images; extension-based URLs we already know
+  const tryAsImage = !imgFailed && (
+    url.includes('/api/files/') ||
+    /\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(url)
+  );
+
+  if (tryAsImage) {
+    return (
+      <button
+        type="button"
+        onClick={() => onOpen(url, true)}
+        className="w-full flex items-center gap-3 border rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors p-3 text-left"
+      >
+        <div className="relative w-14 h-14 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 border border-gray-200">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={url}
+            alt="Attached invoice"
+            className="w-full h-full object-cover"
+            onError={() => setImgFailed(true)}
+          />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-gray-900 truncate">{fileName}</p>
+          <p className="text-xs text-gray-500">Click to preview full invoice image</p>
+        </div>
+        <ExternalLink className="h-4 w-4 text-gray-400 flex-shrink-0" />
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(url, false)}
+      className="w-full flex items-center gap-3 border rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors p-3 text-left"
+    >
+      <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center">
+        <FileText className="h-5 w-5 text-blue-600" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-gray-900 truncate">{fileName}</p>
+        <p className="text-xs text-gray-500">Click to preview attached document</p>
+      </div>
+      <ExternalLink className="h-4 w-4 text-gray-400 flex-shrink-0" />
+    </button>
+  );
+}
+
+
 export default function PayableViewPage() {
   const router = useRouter();
   const params = useParams();
@@ -121,6 +181,7 @@ export default function PayableViewPage() {
   const [showAttachmentModal, setShowAttachmentModal] = useState(false);
   const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
   const [attachmentIsImage, setAttachmentIsImage] = useState(false);
+  const [attachmentImgFailed, setAttachmentImgFailed] = useState(false);
   const [showMobileActions, setShowMobileActions] = useState(false);
   const [showMobileParties, setShowMobileParties] = useState(false);
   const payableIdRaw = (params as unknown as { id?: string | string[] } | null)?.id;
@@ -254,16 +315,25 @@ export default function PayableViewPage() {
     }
   };
 
-  const openAttachmentModal = (url: string) => {
+  const isImageUrl = (url: string): boolean => {
     const lower = url.toLowerCase();
-    const isImage =
+    if (
       lower.endsWith('.jpg') ||
       lower.endsWith('.jpeg') ||
       lower.endsWith('.png') ||
       lower.endsWith('.webp') ||
-      lower.endsWith('.gif');
+      lower.endsWith('.gif')
+    ) return true;
+    try {
+      const t = new URL(url, 'http://localhost').searchParams.get('t') || '';
+      if (t.startsWith('image/')) return true;
+    } catch {}
+    return false;
+  };
+
+  const openAttachmentModal = (url: string) => {
     setAttachmentUrl(url);
-    setAttachmentIsImage(isImage);
+    setAttachmentIsImage(isImageUrl(url));
     setShowAttachmentModal(true);
   };
 
@@ -932,58 +1002,15 @@ export default function PayableViewPage() {
                 </h3>
                 {payable.invoiceFileUrl && (
                   <div className="space-y-3">
-                    {(() => {
-                      const url = payable.invoiceFileUrl as string;
-                      const fileName = url.split('/').pop() || 'attachment';
-                      const lower = url.toLowerCase();
-                      const isImage =
-                        lower.endsWith('.jpg') ||
-                        lower.endsWith('.jpeg') ||
-                        lower.endsWith('.png') ||
-                        lower.endsWith('.webp') ||
-                        lower.endsWith('.gif');
-
-                      if (isImage) {
-                        return (
-                          <button
-                            type="button"
-                            onClick={() => openAttachmentModal(url)}
-                            className="w-full flex items-center gap-3 border rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors p-3 text-left"
-                          >
-                            <div className="relative w-14 h-14 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 border border-gray-200">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={url}
-                                alt="Attached invoice"
-                                className="w-full h-full object-cover"
-                              />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium text-gray-900 truncate">{fileName}</p>
-                              <p className="text-xs text-gray-500">Click to preview full invoice image</p>
-                            </div>
-                            <ExternalLink className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                          </button>
-                        );
-                      }
-
-                      return (
-                        <button
-                          type="button"
-                          onClick={() => openAttachmentModal(url)}
-                          className="w-full flex items-center gap-3 border rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors p-3 text-left"
-                        >
-                          <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center">
-                            <FileText className="h-5 w-5 text-blue-600" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-gray-900 truncate">{fileName}</p>
-                            <p className="text-xs text-gray-500">Click to preview attached document</p>
-                          </div>
-                          <ExternalLink className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                        </button>
-                      );
-                    })()}
+                    <AttachmentCard
+                      url={payable.invoiceFileUrl as string}
+                      onOpen={(url, isImage) => {
+                        setAttachmentUrl(url);
+                        setAttachmentIsImage(isImage);
+                        setAttachmentImgFailed(false);
+                        setShowAttachmentModal(true);
+                      }}
+                    />
                   </div>
                 )}
                 {!payable.invoiceFileUrl && Array.isArray(payable.attachedFiles) && payable.attachedFiles.length > 0 && (
@@ -1097,12 +1124,12 @@ export default function PayableViewPage() {
           />
 
           {showAttachmentModal && attachmentUrl && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
               <div
                 className="absolute inset-0 bg-black/60 backdrop-blur-sm"
                 onClick={() => setShowAttachmentModal(false)}
               />
-              <div className="relative bg-white rounded-2xl shadow-2xl max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col overflow-hidden">
+              <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
                   <h2 className="text-sm font-medium text-gray-900">Attached document preview</h2>
                   <button
@@ -1113,13 +1140,14 @@ export default function PayableViewPage() {
                     <XCircle className="h-5 w-5" />
                   </button>
                 </div>
-                <div className="flex-1 bg-gray-50 flex items-center justify-center p-4">
-                  {attachmentIsImage ? (
+                <div className="flex-1 bg-gray-50 flex items-center justify-center p-4 overflow-auto">
+                  {!attachmentImgFailed && (attachmentUrl.includes('/api/files/') || /\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(attachmentUrl)) ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={attachmentUrl}
-                      alt="Attached invoice"
-                      className="max-h-[80vh] max-w-full object-contain rounded-lg shadow-sm bg-white"
+                      alt="Attached document"
+                      className="max-h-[75vh] max-w-full object-contain rounded-lg shadow-sm bg-white"
+                      onError={() => setAttachmentImgFailed(true)}
                     />
                   ) : (
                     <iframe

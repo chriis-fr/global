@@ -160,6 +160,7 @@ export async function GET(
           (p.paymentDate as Date | undefined)?.toISOString() || null,
         paymentMethod: (p.paymentMethod as string) || null,
         hasPaymentProof,
+        paymentReference: (p.paymentReference as string) || null,
       };
     });
 

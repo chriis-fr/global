@@ -15,6 +15,7 @@ import {
   X,
   ChevronDown,
   Smartphone,
+  History,
 } from 'lucide-react';
 import BankSelector from '@/components/BankSelector';
 import type { Bank } from '@/data';
@@ -341,7 +342,16 @@ export default function VendorPayableSubmitPage() {
               )}
                 </p>
               </div>
-              <div className="flex-shrink-0">
+              <div className="flex-shrink-0 flex flex-col items-end gap-2">
+                {params?.token && (
+                  <Link
+                    href={`/vendor/payables/history/${params.token}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                  >
+                    <History className="h-4 w-4" />
+                    Previously paid invoices
+                  </Link>
+                )}
                 <div className="w-14 h-14 rounded-xl border border-gray-200 overflow-hidden bg-gray-50">
                   <Image src="/chains.PNG" alt="Chains ERP" width={48} height={48} className="object-contain w-full h-full" />
                 </div>

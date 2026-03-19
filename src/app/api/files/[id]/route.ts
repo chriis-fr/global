@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { ObjectId } from 'mongodb';
+import { ObjectId, Binary } from 'mongodb';
 import { connectToDatabase } from '@/lib/database';
 
 export async function GET(
@@ -20,18 +20,30 @@ export async function GET(
       return new Response('File not found', { status: 404 });
     }
 
-    const data = doc.data as Buffer | undefined;
     const contentType = (doc.contentType as string | undefined) || 'application/octet-stream';
 
-    if (!data) {
+    // MongoDB returns binary data as a BSON Binary object, not a plain Buffer.
+    // We must unwrap it to get the actual bytes.
+    const raw = doc.data;
+    let bytes: Buffer;
+    if (Buffer.isBuffer(raw)) {
+      bytes = raw;
+    } else if (raw instanceof Binary) {
+      bytes = Buffer.from(raw.buffer);
+    } else if (raw?.buffer instanceof Uint8Array || raw?.buffer instanceof ArrayBuffer) {
+      bytes = Buffer.from(raw.buffer);
+    } else if (raw != null) {
+      // Last resort: try coercing to Buffer (handles edge cases across driver versions)
+      bytes = Buffer.from(raw as unknown as ArrayBuffer);
+    } else {
       return new Response('File data missing', { status: 500 });
     }
 
-    return new Response(data, {
+    return new Response(bytes, {
       status: 200,
       headers: {
         'Content-Type': contentType,
-        'Cache-Control': 'private, max-age=0, no-store',
+        'Cache-Control': 'private, max-age=300, stale-while-revalidate=60',
       },
     });
   } catch (error) {

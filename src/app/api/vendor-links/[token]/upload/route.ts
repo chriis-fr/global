@@ -78,7 +78,7 @@ export async function POST(
     };
 
     const result = await files.insertOne(doc);
-    const url = `/api/files/${result.insertedId.toString()}`;
+    const url = `/api/files/${result.insertedId.toString()}?t=${encodeURIComponent(type)}`;
 
     return NextResponse.json({ success: true, url });
   } catch (error) {
