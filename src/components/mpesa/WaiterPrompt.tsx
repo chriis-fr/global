@@ -248,7 +248,7 @@ export function WaiterPromptCard() {
   return (
     <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-white">Prompt Customer via M-pesa</h2>
+        <h2 className="text-lg font-semibold text-white">Prompt via M-pesa</h2>
         {session?.user?.id && (
           <Link
             href={`/dashboard/services/mpesa/waiter/${session.user.id}`}

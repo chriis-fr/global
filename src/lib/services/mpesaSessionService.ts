@@ -65,6 +65,7 @@ export class MpesaSessionService {
     checkoutRequestId: string;
     status: MpesaStkStatus;
     mpesaReceiptNumber?: string;
+    confirmedAmount?: number;
     resultCode?: string;
     resultDescription?: string;
     transactionDate?: Date;
@@ -79,6 +80,9 @@ export class MpesaSessionService {
 
     if (params.mpesaReceiptNumber) {
       update.mpesaReceiptNumber = params.mpesaReceiptNumber;
+    }
+    if (params.confirmedAmount != null) {
+      update.confirmedAmount = params.confirmedAmount;
     }
     if (params.resultCode) {
       update.resultCode = params.resultCode;
@@ -152,6 +156,11 @@ export class MpesaSessionService {
       { mpesaReceiptNumber: params.mpesaReceiptNumber },
       { $set: update }
     );
+  }
+
+  async getSessionByCheckoutId(checkoutRequestId: string): Promise<(MpesaStkSession & { _id: import('mongodb').ObjectId }) | null> {
+    const { sessions } = await this.getCollections();
+    return sessions.findOne({ checkoutRequestId }) as Promise<(MpesaStkSession & { _id: import('mongodb').ObjectId }) | null>;
   }
 
   async getRecentSessionsForUser(params: {

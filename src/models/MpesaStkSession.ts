@@ -20,6 +20,7 @@ export interface MpesaStkSession {
 
   // Result data
   mpesaReceiptNumber?: string;
+  confirmedAmount?: number;  // Actual amount M-Pesa charged (from callback) — may differ from amount
   resultCode?: string;
   resultDescription?: string;
   transactionDate?: Date; // Parsed from Daraja's TransactionDate (YYYYMMDDHHMMSS)

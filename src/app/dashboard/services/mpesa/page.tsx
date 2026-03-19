@@ -9,7 +9,7 @@ import { WaiterPromptCard } from '@/components/mpesa/WaiterPrompt';
 import { RecentPromptsList } from '@/components/mpesa/RecentPromptsList';
 import { MpesaTotalAmountCard } from '@/components/mpesa/MpesaTotalAmountCard';
 import { AdminMpesaPrompt } from '@/components/mpesa/AdminMpesaPrompt';
-import { Waves, Users, Clock, XCircle, ChevronRight } from 'lucide-react';
+import { Waves, Users, Clock, XCircle, ChevronRight, BarChart3 } from 'lucide-react';
 
 interface MpesaWaiterSummary {
   waiterUserId: string;
@@ -295,6 +295,13 @@ export default async function MpesaServicePage() {
             </p>
           </div>
         </div>
+        <Link
+          href="/dashboard/services/mpesa/reconciliation"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
+        >
+          <BarChart3 className="h-4 w-4" />
+          Reconciliation
+        </Link>
       </div>
 
       {/* Stats (only when there is actual activity) */}
@@ -303,19 +310,21 @@ export default async function MpesaServicePage() {
           <MpesaTotalAmountCard />
           <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 flex items-center justify-between">
             <div>
-              <p className="text-sm text-blue-200">Successful Prompts</p>
+              <p className="text-sm text-blue-200">Successful Payments</p>
               <p className="text-2xl font-semibold text-white mt-1">
                 {dashboardData.successCount}
               </p>
+              <p className="text-xs text-blue-300 mt-0.5">{dashboardData.successCount} prompt{dashboardData.successCount !== 1 ? 's' : ''}</p>
             </div>
             <Clock className="h-8 w-8 text-blue-300" />
           </div>
           <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 flex items-center justify-between">
             <div>
-              <p className="text-sm text-blue-200">Failed Prompts</p>
+              <p className="text-sm text-blue-200">Failed Payments</p>
               <p className="text-2xl font-semibold text-white mt-1">
                 {dashboardData.failedCount}
               </p>
+              <p className="text-xs text-blue-300 mt-0.5">{dashboardData.failedCount} prompt{dashboardData.failedCount !== 1 ? 's' : ''}</p>
             </div>
             <XCircle className="h-8 w-8 text-red-400" />
           </div>

@@ -19,7 +19,7 @@ import {
 
 interface WaiterDetailPageProps {
   params: Promise<{ waiterId: string }>;
-  searchParams?: { page?: string };
+  searchParams?: Promise<{ page?: string }>;
 }
 
 function startOfDay(d: Date): Date {
@@ -53,6 +53,7 @@ export default async function WaiterDetailPage({ params, searchParams }: WaiterD
 
   const { waiterId } = await params;
   if (!waiterId) notFound();
+  const sp = searchParams ? await searchParams : {};
 
   const org = await OrganizationService.getOrganizationById(organizationId);
   if (!org?._id) notFound();
@@ -144,7 +145,7 @@ export default async function WaiterDetailPage({ params, searchParams }: WaiterD
         <WaiterCollectionsSection
           organizationId={organizationId}
           waiterId={waiterId}
-          page={Number(searchParams?.page ?? '1') || 1}
+          page={Number(sp.page ?? '1') || 1}
         />
       </Suspense>
     </div>

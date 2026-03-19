@@ -381,8 +381,14 @@ function Sidebar() {
                   return !isPayablesOnly && isServiceEnabled;
                 }
                 if (link.key === 'mpesaPayments') {
-                  // M-Pesa service: only when org has it enabled and user is in an organization
-                  return Boolean(session?.user?.organizationId) && effectiveMpesaEnabled;
+                  // M-Pesa service: org must have it enabled, user must be in an org,
+                  // AND the role must be owner or admin.
+                  // Waiters are already handled in the waiter-only branch above (they see ONLY M-Pesa).
+                  // All other roles (financeManager, accountant, approver, etc.) do NOT see M-Pesa
+                  // even when the org has it enabled — they manage their own services but are not
+                  // granted M-Pesa visibility until an admin explicitly elevates their access.
+                  const canSeeMpesa = effectiveRole === 'owner' || effectiveRole === 'admin';
+                  return Boolean(session?.user?.organizationId) && effectiveMpesaEnabled && canSeeMpesa;
                 }
 
                 return isServiceEnabled;

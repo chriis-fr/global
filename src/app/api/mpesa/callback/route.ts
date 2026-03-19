@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { mpesaSessionService } from '@/lib/services/mpesaSessionService';
+import { reconcileOrg } from '@/lib/services/reconEngine';
 
 // Daraja callback handler for STK Push.
 // This is the ONLY API route we introduce because Safaricom must call an HTTP endpoint.
@@ -53,14 +54,23 @@ export async function POST(req: NextRequest) {
 
     console.log('[M-Pesa callback] Parsed – CheckoutRequestID:', checkoutRequestId, 'ResultCode:', resultCode, 'ResultDesc:', resultDesc, 'MpesaReceiptNumber:', mpesaReceiptNumber, 'Amount:', amount, 'PhoneNumber:', phoneNumber);
 
-    await mpesaSessionService.updateSessionStatusByCheckoutId({
+    const updatedSession = await mpesaSessionService.updateSessionStatusByCheckoutId({
       checkoutRequestId,
       status: resultCode === 0 ? 'success' : 'failed',
       mpesaReceiptNumber,
+      confirmedAmount: amount,
       resultCode: resultCode != null ? String(resultCode) : undefined,
       resultDescription: resultDesc,
       transactionDate,
     });
+
+    // Real-time mini-reconciliation — fire-and-forget so callback response is not delayed.
+    if (updatedSession?.organizationId && updatedSession?._id) {
+      reconcileOrg(updatedSession.organizationId.toString(), {
+        stkSessionId: (updatedSession._id as import('mongodb').ObjectId).toString(),
+        actor: 'system',
+      }).catch((err) => console.error('[callback recon]', err));
+    }
 
     return NextResponse.json(
       {
