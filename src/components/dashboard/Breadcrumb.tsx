@@ -21,11 +21,25 @@ export default function Breadcrumb() {
     let currentPath = '/dashboard';
     
     // Start from index 1 to skip 'dashboard' segment (already in breadcrumbs)
-    segments.slice(1).forEach((segment, index) => {
+    const segs = segments.slice(1);
+    segs.forEach((segment, index) => {
       currentPath += `/${segment}`;
       
       let label = segment;
-      
+      let href = currentPath;
+
+      const prevSegment = segs[index - 1];
+      // Waiter detail: last segment is waiter id — omit this crumb entirely (ID is already in URL)
+      if (prevSegment === 'waiter' && /^[0-9a-fA-F]{24}$/.test(segment)) {
+        return;
+      }
+
+      // Payable detail: last segment is payable id — omit this crumb entirely
+      // so `/dashboard/services/payables/[id]` shows `Payables` only.
+      if (prevSegment === 'payables' && /^[0-9a-fA-F]{24}$/.test(segment)) {
+        return;
+      }
+
       // Customize labels for better readability
       switch (segment) {
         case 'services':
@@ -70,15 +84,25 @@ export default function Breadcrumb() {
         case 'payables':
           label = 'Payables';
           break;
+        case 'mpesa':
+          label = 'M-Pesa';
+          break;
+        case 'waiter':
+          label = 'Waiter';
+          // No page at /dashboard/services/mpesa/waiter — link to M-Pesa list
+          if (segs.indexOf('waiter') < segs.length - 1) href = '/dashboard/services/mpesa';
+          break;
         default:
           // Capitalize first letter and replace hyphens with spaces
           label = segment.charAt(0).toUpperCase() + segment.slice(1).replace(/-/g, ' ');
       }
       
       // isActive is true for the last segment
-      const isActive = index === segments.slice(1).length - 1;
+      const isActive = index === segs.length - 1;
       // /dashboard/settings has no page; link "Settings" to profile as the default settings page
-      const href = currentPath === '/dashboard/settings' ? '/dashboard/settings/profile' : currentPath;
+      // /dashboard/services has no page; link "Services" to the services catalog
+      if (currentPath === '/dashboard/settings') href = '/dashboard/settings/profile';
+      else if (currentPath === '/dashboard/services') href = '/dashboard';
       breadcrumbs.push({
         label,
         href,

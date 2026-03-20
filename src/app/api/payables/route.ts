@@ -8,7 +8,9 @@ import { LedgerSyncService } from '@/lib/services/ledgerSyncService';
 // Secure payable number generation function
 const generateSecurePayableNumber = async (db: Record<string, unknown>, organizationId: string, ownerId: string, excludeNumber?: string): Promise<string> => {
   const currentYear = new Date().getFullYear();
-  const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+  const currentMonthIndex = new Date().getMonth(); // 0-based
+  const startOfMonth = new Date(currentYear, currentMonthIndex, 1);
+  const startOfNextMonth = new Date(currentYear, currentMonthIndex + 1, 1);
   
   // Create a short, secure identifier from organization/user ID
   let secureId: string;
@@ -32,9 +34,9 @@ const generateSecurePayableNumber = async (db: Record<string, unknown>, organiza
   }
   
   const lastPayable = await (db as { collection: (name: string) => { findOne: (query: Record<string, unknown>, options?: Record<string, unknown>) => Promise<Record<string, unknown> | null> } }).collection('payables').findOne(
-    query,
+    { ...query, createdAt: { $gte: startOfMonth, $lt: startOfNextMonth } },
     { 
-      sort: { payableNumber: -1 },
+      sort: { createdAt: -1 },
       projection: { payableNumber: 1 }
     }
   );
@@ -50,12 +52,12 @@ const generateSecurePayableNumber = async (db: Record<string, unknown>, organiza
   }
 
   // Generate the payable number
-  let payableNumber = `PAY-${secureId}-${currentYear}${currentMonth}-${String(sequence).padStart(4, '0')}`;
+  let payableNumber = `PAY-${secureId}-${String(sequence).padStart(4, '0')}`;
   
   // If we need to exclude a specific number, check if it matches and increment if needed
   if (excludeNumber && payableNumber === excludeNumber) {
     sequence++;
-    payableNumber = `PAY-${secureId}-${currentYear}${currentMonth}-${String(sequence).padStart(4, '0')}`;
+    payableNumber = `PAY-${secureId}-${String(sequence).padStart(4, '0')}`;
   }
   
   // Double-check that the generated number doesn't exist
@@ -67,7 +69,9 @@ const generateSecurePayableNumber = async (db: Record<string, unknown>, organiza
     // If it exists, find all payables for this month and get the highest sequence
     const allPayables = await (db as { collection: (name: string) => { find: (query: Record<string, unknown>) => { toArray: () => Promise<Record<string, unknown>[]> } } }).collection('payables').find(
       { 
-        payableNumber: { $regex: `^PAY-${secureId}-${currentYear}${currentMonth}-` }
+        ...query,
+        createdAt: { $gte: startOfMonth, $lt: startOfNextMonth },
+        payableNumber: { $regex: `^PAY-${secureId}-` },
       }
     ).toArray();
     
@@ -81,7 +85,7 @@ const generateSecurePayableNumber = async (db: Record<string, unknown>, organiza
     const highestSequence = Math.max(...usedSequences, 0);
     sequence = highestSequence + 1;
     
-    payableNumber = `PAY-${secureId}-${currentYear}${currentMonth}-${String(sequence).padStart(4, '0')}`;
+    payableNumber = `PAY-${secureId}-${String(sequence).padStart(4, '0')}`;
   }
 
   return payableNumber;

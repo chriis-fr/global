@@ -350,7 +350,7 @@ export default function AdminUserDetailPage() {
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">System Role</label>
                   {isEditing ? (
                     <select
                       value={formData.role}
@@ -383,6 +383,14 @@ export default function AdminUserDetailPage() {
                     <p className="text-gray-900">{user.adminTag ? 'Yes' : 'No'}</p>
                   )}
                 </div>
+                {user.organizationId && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Organization Role</label>
+                    <p className="text-gray-900 capitalize">
+                      {user.organizationRole || 'member'}
+                    </p>
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Email Verified</label>
                   {isEditing ? (

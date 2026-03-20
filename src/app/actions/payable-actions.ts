@@ -19,6 +19,8 @@ export async function getPayableWithInvoice(payableId: string) {
     const db = await connectToDatabase();
     const payablesCollection = db.collection('payables');
     const invoicesCollection = db.collection('invoices');
+    const organizationsCollection = db.collection('organizations');
+    const vendorsCollection = db.collection('vendors');
 
     // Build query
     const isOrganization = !!session.user.organizationId;
@@ -51,6 +53,65 @@ export async function getPayableWithInvoice(payableId: string) {
 
     if (!payable) {
       return { success: false, error: 'Payable not found' };
+    }
+
+    // Enrich company info from organization if missing (common for vendor-link payables)
+    let companyName: string = payable.companyName || '';
+    let companyEmail: string = payable.companyEmail || '';
+    let companyPhone: string | undefined = payable.companyPhone;
+    let companyAddress: unknown = payable.companyAddress;
+
+    if (!companyName || !companyEmail) {
+      try {
+        if (session.user.organizationId && ObjectId.isValid(session.user.organizationId)) {
+          const org = await organizationsCollection.findOne(
+            { _id: new ObjectId(session.user.organizationId) },
+            { projection: { name: 1, billingEmail: 1, phone: 1, address: 1 } }
+          );
+
+          if (org) {
+            companyName = companyName || (org.name as string) || '';
+            companyEmail = companyEmail || (org.billingEmail as string) || session.user.email || '';
+            companyPhone = companyPhone || (org.phone as string | undefined);
+            companyAddress = companyAddress || (org.address as unknown);
+          }
+        } else {
+          // Fallback to session user
+          companyName = companyName || (session.user.name as string) || '';
+          companyEmail = companyEmail || session.user.email || '';
+        }
+      } catch (orgError) {
+        console.error('Error enriching company info for payable:', orgError);
+      }
+    }
+
+    // Enrich vendor info from vendors collection if missing
+    let vendorName: string = payable.vendorName || '';
+    let vendorEmail: string = payable.vendorEmail || '';
+    let vendorPhone: string | undefined = payable.vendorPhone;
+    let vendorAddress: unknown = payable.vendorAddress;
+
+    if ((!vendorName || !vendorEmail) && payable.vendorId) {
+      try {
+        const vendorId =
+          typeof payable.vendorId === 'string' && ObjectId.isValid(payable.vendorId)
+            ? new ObjectId(payable.vendorId)
+            : payable.vendorId;
+
+        const vendor = await vendorsCollection.findOne(
+          { _id: vendorId },
+          { projection: { name: 1, email: 1, phone: 1, address: 1 } }
+        );
+
+        if (vendor) {
+          vendorName = vendorName || (vendor.name as string) || '';
+          vendorEmail = vendorEmail || (vendor.email as string) || '';
+          vendorPhone = vendorPhone || (vendor.phone as string | undefined);
+          vendorAddress = vendorAddress || (vendor.address as unknown);
+        }
+      } catch (vendorError) {
+        console.error('Error enriching vendor info for payable:', vendorError);
+      }
     }
 
     // Get invoice number and payment details if relatedInvoiceId exists
@@ -90,16 +151,17 @@ export async function getPayableWithInvoice(payableId: string) {
       issueDate: payable.issueDate?.toISOString() || new Date().toISOString(),
       dueDate: payable.dueDate?.toISOString() || new Date().toISOString(),
       paymentDate: payable.paymentDate?.toISOString(),
-      companyName: payable.companyName || '',
-      companyEmail: payable.companyEmail || '',
-      companyPhone: payable.companyPhone,
-      companyAddress: payable.companyAddress,
+      companyName,
+      companyEmail,
+      companyPhone,
+      companyAddress,
       companyTaxNumber: payable.companyTaxNumber,
-      vendorName: payable.vendorName || '',
-      vendorEmail: payable.vendorEmail || '',
-      vendorPhone: payable.vendorPhone,
-      vendorAddress: payable.vendorAddress,
-      currency: payable.currency || 'USD',
+      vendorName,
+      vendorEmail,
+      vendorPhone,
+      vendorAddress,
+      // Do not fabricate a default currency; if missing, keep empty
+      currency: (payable.currency as string | undefined) || '',
       paymentMethod: payable.paymentMethod || 'fiat',
       paymentNetwork: payable.paymentNetwork,
       // Use invoice's payment address if available (correct recipient), otherwise use payable's
@@ -111,6 +173,11 @@ export async function getPayableWithInvoice(payableId: string) {
       total: payable.total || payable.amount || 0,
       memo: payable.memo || '',
       status: payable.status || 'pending',
+      externalInvoiceNumber: payable.externalInvoiceNumber || null,
+      invoiceFileUrl: payable.invoiceFileUrl || null,
+      vendorPaymentDetails: payable.vendorPaymentDetails || null,
+      paymentReference: payable.paymentReference || null,
+      paymentDetails: payable.paymentDetails || null,
       priority: payable.priority || 'medium',
       category: payable.category || '',
       approvalStatus: payable.approvalStatus || 'pending',
@@ -256,8 +323,11 @@ export async function getPayablesListPaginated(
       vendorCompany: p.vendorCompany,
       vendorEmail: p.vendorEmail || '',
       total: p.total || p.amount || 0,
-      currency: p.currency || 'USD',
+      currency: p.currency || undefined,
       status: p.status || 'pending',
+      source: (p.status === 'submitted' || p.externalInvoiceNumber || p.vendorPaymentDetails)
+        ? 'link'
+        : 'app',
       dueDate: p.dueDate?.toISOString() || new Date().toISOString(),
       issueDate: p.issueDate?.toISOString() || new Date().toISOString(),
       category: p.category,
@@ -291,6 +361,168 @@ export async function getPayablesListPaginated(
   } catch (error) {
     console.error('Error getting payables list:', error);
     return { success: false, error: 'Failed to fetch payables' };
+  }
+}
+
+/**
+ * Get vendors with payable counts for the current user/org (for payables page Vendors tab).
+ */
+export async function getVendorsWithPayableCounts(): Promise<{
+  success: boolean;
+  error?: string;
+  data?: Array<{
+    vendor: { _id: string; name?: string; email?: string; company?: string };
+    pendingCount: number;
+    paidCount: number;
+    totalCount: number;
+    pendingAmount: number;
+  }>;
+}> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const db = await connectToDatabase();
+    const vendorsCollection = db.collection('vendors');
+    const payablesCollection = db.collection('payables');
+
+    const isOrganization = !!(session.user.organizationId && session.user.organizationId !== session.user.id);
+    const isObjectId = /^[0-9a-fA-F]{24}$/.test(session.user.id);
+    const issuerIdQuery = isObjectId
+      ? { issuerId: new ObjectId(session.user.id) }
+      : { issuerId: session.user.id };
+
+    const vendorQuery: Record<string, unknown> = isOrganization
+      ? { organizationId: session.user.organizationId }
+      : { userId: session.user.email };
+
+    const payableBaseQuery: Record<string, unknown> = isOrganization
+      ? {
+          $or: [
+            { organizationId: session.user.organizationId },
+            { organizationId: new ObjectId(session.user.organizationId) },
+          ],
+        }
+      : {
+          $or: [issuerIdQuery, { userId: session.user.email }],
+        };
+
+    const vendors = await vendorsCollection
+      .find(vendorQuery)
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    if (vendors.length === 0) {
+      return { success: true, data: [] };
+    }
+
+    const vendorIds = vendors.map((v) => v._id);
+    const vendorEmailsLower = (vendors.map((v) => (v.email as string)?.toLowerCase()).filter(Boolean) as string[]);
+
+    // Payables linked by vendorId (e.g. from vendor submission link)
+    const payablesByVendorId = await payablesCollection
+      .find({
+        ...payableBaseQuery,
+        vendorId: { $in: vendorIds },
+      })
+      .toArray();
+
+    // Payables with no vendorId but matching vendor email (e.g. created manually) - case-insensitive
+    const emailRegexList = vendorEmailsLower.length
+      ? vendorEmailsLower.map((e) => ({
+          vendorEmail: new RegExp(`^${e.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
+        }))
+      : [];
+    const payablesByEmail = emailRegexList.length
+      ? await payablesCollection
+          .find({
+            ...payableBaseQuery,
+            $and: [
+              { $or: [{ vendorId: { $exists: false } }, { vendorId: null }, { vendorId: { $nin: vendorIds } }] },
+              { $or: emailRegexList },
+            ],
+          })
+          .toArray()
+      : [];
+
+    const statsByVendorId: Record<
+      string,
+      { pendingCount: number; paidCount: number; totalCount: number; pendingAmount: number }
+    > = {};
+    for (const v of vendors) {
+      const idStr = (v._id as ObjectId).toString();
+      statsByVendorId[idStr] = { pendingCount: 0, paidCount: 0, totalCount: 0, pendingAmount: 0 };
+    }
+
+    const seenPayableIds = new Set<string>();
+
+    for (const p of payablesByVendorId) {
+      const vid = p.vendorId;
+      if (!vid) continue;
+      const idStr = (vid as ObjectId).toString();
+      if (!statsByVendorId[idStr]) continue;
+      const key = (p._id as ObjectId).toString();
+      if (seenPayableIds.has(key)) continue;
+      seenPayableIds.add(key);
+      statsByVendorId[idStr].totalCount += 1;
+      if (p.status === 'paid') {
+        statsByVendorId[idStr].paidCount += 1;
+      } else {
+        statsByVendorId[idStr].pendingCount += 1;
+        statsByVendorId[idStr].pendingAmount += p.total ?? p.amount ?? 0;
+      }
+    }
+
+    const vendorIdByEmail: Record<string, string> = {};
+    for (const v of vendors) {
+      const em = (v.email as string)?.toLowerCase();
+      if (em) vendorIdByEmail[em] = (v._id as ObjectId).toString();
+    }
+    for (const p of payablesByEmail) {
+      const key = (p._id as ObjectId).toString();
+      if (seenPayableIds.has(key)) continue;
+      const em = (p.vendorEmail as string)?.toLowerCase();
+      if (!em || !vendorIdByEmail[em]) continue;
+      const idStr = vendorIdByEmail[em];
+      if (!statsByVendorId[idStr]) continue;
+      seenPayableIds.add(key);
+      statsByVendorId[idStr].totalCount += 1;
+      if (p.status === 'paid') {
+        statsByVendorId[idStr].paidCount += 1;
+      } else {
+        statsByVendorId[idStr].pendingCount += 1;
+        statsByVendorId[idStr].pendingAmount += p.total ?? p.amount ?? 0;
+      }
+    }
+
+    const data = vendors.map((v) => {
+      const idStr = (v._id as ObjectId).toString();
+      const stats = statsByVendorId[idStr] ?? {
+        pendingCount: 0,
+        paidCount: 0,
+        totalCount: 0,
+        pendingAmount: 0,
+      };
+      return {
+        vendor: {
+          _id: idStr,
+          name: v.name,
+          email: v.email,
+          company: v.company,
+        },
+        pendingCount: stats.pendingCount,
+        paidCount: stats.paidCount,
+        totalCount: stats.totalCount,
+        pendingAmount: Math.round(stats.pendingAmount * 100) / 100,
+      };
+    });
+
+    return { success: true, data };
+  } catch (error) {
+    console.error('Error getting vendors with payable counts:', error);
+    return { success: false, error: 'Failed to fetch vendors' };
   }
 }
 
@@ -415,9 +647,10 @@ export async function getPayablesStats() {
         };
 
     // Run all queries in parallel for maximum speed
-    const [total, draftCount, pendingCount, approvedCount, paidCount, overdueCount, allPayables] = await Promise.all([
+    const [total, draftCount, submittedCount, pendingCount, approvedCount, paidCount, overdueCount, allPayables] = await Promise.all([
       payablesCollection.countDocuments(baseQuery),
       payablesCollection.countDocuments({ ...baseQuery, status: 'draft' }),
+      payablesCollection.countDocuments({ ...baseQuery, status: 'submitted' }),
       payablesCollection.countDocuments({ ...baseQuery, status: 'pending' }),
       payablesCollection.countDocuments({ ...baseQuery, status: 'approved' }),
       payablesCollection.countDocuments({ ...baseQuery, status: 'paid' }),
@@ -428,14 +661,24 @@ export async function getPayablesStats() {
     // Calculate total amount for unpaid payables
     const unpaidPayables = allPayables.filter(p => p.status !== 'paid');
     const totalAmount = unpaidPayables.reduce((sum, p) => sum + (p.total || p.amount || 0), 0);
+    const unpaidCurrencies = Array.from(
+      new Set(
+        unpaidPayables
+          .map((p) => (p.currency as string | undefined) ?? '')
+          .filter(Boolean)
+      )
+    );
+    const currency = unpaidCurrencies.length === 1 ? unpaidCurrencies[0] : null;
 
     return {
       success: true,
       data: {
         totalPayables: total,
         totalAmount,
+        currency,
         statusCounts: {
           draft: draftCount,
+          submitted: submittedCount,
           pending: pendingCount,
           approved: approvedCount,
           paid: paidCount,
@@ -564,7 +807,7 @@ export async function getAllPayables() {
       vendorEmail: p.vendorEmail || '',
       amount: p.amount || p.total || 0,
       total: p.total || p.amount || 0,
-      currency: p.currency || 'USD',
+      currency: p.currency || undefined,
       status: p.status || 'pending',
       dueDate: p.dueDate?.toISOString() || new Date().toISOString(),
       issueDate: p.issueDate?.toISOString() || new Date().toISOString(),

@@ -9,6 +9,11 @@ const DURATION_GROW = 280;
 const DURATION_FINISH = 180;
 
 function isInternalNavLink(el: HTMLElement): boolean {
+  const dataHref = el.closest('[data-route-href]')?.getAttribute('data-route-href') ?? '';
+  if (dataHref) {
+    if (dataHref.startsWith('#') || dataHref.startsWith('javascript:')) return false;
+    return dataHref.startsWith('/');
+  }
   const a = el.closest('a[href]') as HTMLAnchorElement | null;
   if (!a || a.target === '_blank' || a.hasAttribute('download')) return false;
   const href = a.getAttribute('href') ?? '';
@@ -81,7 +86,7 @@ export function RouteProgress() {
     const onClick = (e: MouseEvent) => {
       const target = getClickTarget(e.target);
       if (!target) return;
-      if (target.closest('a[href]') && isInternalNavLink(target)) {
+      if ((target.closest('a[href]') || target.closest('[data-route-href]')) && isInternalNavLink(target)) {
         startProgress(target);
       }
     };

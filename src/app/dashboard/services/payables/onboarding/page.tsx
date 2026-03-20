@@ -116,6 +116,8 @@ export default function PayablesOnboardingPage() {
     const loadData = async () => {
       if (session?.user) {
         try {
+          let loadedSavedOnboarding = false;
+
           // First, try to load existing payables onboarding data
           const onboardingResponse = await fetch('/api/onboarding/service?service=accountsPayable');
           if (onboardingResponse.ok) {
@@ -158,11 +160,51 @@ export default function PayablesOnboardingPage() {
                 categories: (Array.isArray(savedData.categories) ? savedData.categories as string[] : prev.categories)
               }));
               
-              // If we loaded saved data, return early (don't overwrite with user profile)
-              return;
+              loadedSavedOnboarding = true;
             }
           }
-          
+
+          // Prefer organization data for org accounts (even if saved onboarding exists)
+          try {
+            const res = await fetch('/api/organization/me', { credentials: 'include' });
+            if (res.ok) {
+              const json = await res.json();
+              if (json?.success && json.data) {
+                const orgName = (json.data?.name as string | undefined)?.trim();
+                const addr = (json.data.address as {
+                  street?: string;
+                  city?: string;
+                  state?: string;
+                  zipCode?: string;
+                  country?: string;
+                } | null) ?? null;
+
+                setOnboardingData((prev) => ({
+                  ...prev,
+                  businessInfo: {
+                    ...prev.businessInfo,
+                    companyName: orgName || prev.businessInfo.companyName,
+                    companyEmail: (prev.businessInfo.companyEmail || json.data.billingEmail || '').trim() || prev.businessInfo.companyEmail,
+                    companyPhone: prev.businessInfo.companyPhone || json.data.phone || '',
+                    companyTaxNumber: prev.businessInfo.companyTaxNumber || json.data.taxId || '',
+                    companyAddress: {
+                      street: prev.businessInfo.companyAddress.street || addr?.street || '',
+                      city: prev.businessInfo.companyAddress.city || addr?.city || '',
+                      state: prev.businessInfo.companyAddress.state || addr?.state || '',
+                      zipCode: prev.businessInfo.companyAddress.zipCode || addr?.zipCode || '',
+                      country: prev.businessInfo.companyAddress.country || addr?.country || 'US',
+                    },
+                  },
+                }));
+              }
+            }
+          } catch {
+            // ignore and fall back to user/profile defaults
+          }
+
+          // If we already loaded saved onboarding, don't overwrite the rest with profile fallback.
+          if (loadedSavedOnboarding) return;
+
           // If no saved onboarding data, load user profile as fallback
           const response = await fetch('/api/users/profile');
           if (response.ok) {
@@ -304,7 +346,7 @@ export default function PayablesOnboardingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen rounded-xl bg-gray-50">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="text-center mb-8">
@@ -356,9 +398,9 @@ export default function PayablesOnboardingPage() {
           <button
             onClick={handlePrevious}
             disabled={currentStep === 0}
-            className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed disabled:text-gray-400"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="h-4 w-4 text-gray-700" />
             <span>Previous</span>
           </button>
 

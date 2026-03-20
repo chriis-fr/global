@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { 
@@ -10,15 +10,92 @@ import {
   Users,
   Building2,
   ArrowRight,
-  RotateCcw
+  RotateCcw,
+  FileText,
+  CheckCircle,
+  Clock,
+  ChevronDown
 } from 'lucide-react';
 import PayableStatCard from '@/components/payables/PayableStatCard';
 import PayablesList from '@/components/payables/PayablesList';
 import PayablesOnboardingStatus from '@/components/payables/PayablesOnboardingStatus';
+import { getVendorsWithPayableCounts } from '@/app/actions/payable-actions';
+
+type VendorWithCounts = {
+  vendor: { _id: string; name?: string; email?: string; company?: string };
+  pendingCount: number;
+  paidCount: number;
+  totalCount: number;
+  pendingAmount: number;
+};
 
 export default function AccountsPayablePage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'bills' | 'direct-payments' | 'vendors'>('bills');
+  const statsScrollRef = useRef<HTMLDivElement>(null);
+  const [showStatsScrollIndicator, setShowStatsScrollIndicator] = useState(false);
+  const [vendorStats, setVendorStats] = useState<VendorWithCounts[]>([]);
+  const [vendorStatsLoading, setVendorStatsLoading] = useState(false);
+  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
+
+  const loadVendorStats = useCallback(async () => {
+    setVendorStatsLoading(true);
+    try {
+      const result = await getVendorsWithPayableCounts();
+      if (result.success && result.data) {
+        setVendorStats(result.data);
+      } else {
+        setVendorStats([]);
+      }
+    } catch {
+      setVendorStats([]);
+    } finally {
+      setVendorStatsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'vendors') {
+      loadVendorStats();
+    }
+  }, [activeTab, loadVendorStats]);
+
+  // Horizontal scroll indicator logic (match Smart Invoicing / main dashboard)
+  useEffect(() => {
+    const checkScrollable = () => {
+      if (!statsScrollRef.current) return;
+      const container = statsScrollRef.current;
+      const hasHorizontalScroll = container.scrollWidth > container.clientWidth + 2;
+      const isAtEnd = container.scrollLeft + container.clientWidth >= container.scrollWidth - 10;
+      const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+      setShowStatsScrollIndicator(isMobile && hasHorizontalScroll && !isAtEnd);
+    };
+
+    const onScrollOrResize = () => {
+      checkScrollable();
+    };
+
+    const el = statsScrollRef.current;
+    el?.addEventListener('scroll', onScrollOrResize);
+    window.addEventListener('resize', onScrollOrResize);
+    onScrollOrResize();
+    const t1 = setTimeout(onScrollOrResize, 100);
+    const t2 = setTimeout(onScrollOrResize, 400);
+
+    const ro =
+      typeof ResizeObserver !== 'undefined' && el
+        ? new ResizeObserver(onScrollOrResize)
+        : null;
+    if (ro && el) ro.observe(el);
+
+    return () => {
+      el?.removeEventListener('scroll', onScrollOrResize);
+      window.removeEventListener('resize', onScrollOrResize);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      if (ro && el) ro.unobserve(el);
+    };
+  }, []);
 
   const handleCreatePayable = () => {
     router.push('/dashboard/services/payables/create');
@@ -81,113 +158,153 @@ export default function AccountsPayablePage() {
           <PayablesOnboardingStatus />
         </Suspense>
 
-        {/* Stats Cards - Independent Loading with Suspense */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        {/* Stats Cards - EXACT same layout as Smart Invoicing/dashboard */}
+        <div className="max-w-7xl mx-auto py-4 relative">
+          <div
+            ref={statsScrollRef}
+            className="flex md:grid gap-4 overflow-x-auto md:overflow-x-visible pb-2 md:pb-0 hide-scrollbar md:grid-cols-2 lg:grid-cols-4 snap-x snap-mandatory md:snap-none"
+          >
           <Suspense fallback={
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 animate-pulse">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="h-4 w-24 bg-white/20 rounded mb-2"></div>
-                  <div className="h-8 w-16 bg-white/20 rounded"></div>
-                </div>
-                <div className="p-3 bg-white/20 rounded-lg">
-                  <div className="h-6 w-6"></div>
+            <div className="flex-shrink-0 w-[calc(50%-8px)] min-w-[140px] md:w-auto md:min-w-0 h-[112px] md:h-auto md:min-h-0 snap-start overflow-hidden rounded-xl">
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 animate-pulse h-full flex flex-col justify-center">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="h-4 w-24 bg-white/20 rounded mb-2"></div>
+                    <div className="h-7 w-16 bg-white/20 rounded"></div>
+                  </div>
+                  <div className="w-10 h-10 bg-white/20 rounded-lg flex-shrink-0"></div>
                 </div>
               </div>
             </div>
           }>
-            <PayableStatCard type="total" />
+            <div className="flex-shrink-0 w-[calc(50%-8px)] min-w-[140px] md:w-auto md:min-w-0 h-[112px] md:h-auto md:min-h-0 snap-start overflow-hidden rounded-xl">
+              <PayableStatCard type="total" />
+            </div>
           </Suspense>
 
           <Suspense fallback={
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 animate-pulse">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="h-4 w-24 bg-white/20 rounded mb-2"></div>
-                  <div className="h-8 w-16 bg-white/20 rounded"></div>
-                </div>
-                <div className="p-3 bg-white/20 rounded-lg">
-                  <div className="h-6 w-6"></div>
+            <div className="flex-shrink-0 w-[calc(50%-8px)] min-w-[140px] md:w-auto md:min-w-0 h-[112px] md:h-auto md:min-h-0 snap-start overflow-hidden rounded-xl">
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 animate-pulse h-full flex flex-col justify-center">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="h-4 w-24 bg-white/20 rounded mb-2"></div>
+                    <div className="h-7 w-16 bg-white/20 rounded"></div>
+                  </div>
+                  <div className="w-10 h-10 bg-white/20 rounded-lg flex-shrink-0"></div>
                 </div>
               </div>
             </div>
           }>
-            <PayableStatCard type="amount" />
+            <div className="flex-shrink-0 w-[calc(50%-8px)] min-w-[140px] md:w-auto md:min-w-0 h-[112px] md:h-auto md:min-h-0 snap-start overflow-hidden rounded-xl">
+              <PayableStatCard type="amount" />
+            </div>
           </Suspense>
 
           <Suspense fallback={
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 animate-pulse">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="h-4 w-24 bg-white/20 rounded mb-2"></div>
-                  <div className="h-8 w-16 bg-white/20 rounded"></div>
-                </div>
-                <div className="p-3 bg-white/20 rounded-lg">
-                  <div className="h-6 w-6"></div>
+            <div className="flex-shrink-0 w-[calc(50%-8px)] min-w-[140px] md:w-auto md:min-w-0 h-[112px] md:h-auto md:min-h-0 snap-start overflow-hidden rounded-xl">
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 animate-pulse h-full flex flex-col justify-center">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="h-4 w-24 bg-white/20 rounded mb-2"></div>
+                    <div className="h-7 w-16 bg-white/20 rounded"></div>
+                  </div>
+                  <div className="w-10 h-10 bg-white/20 rounded-lg flex-shrink-0"></div>
                 </div>
               </div>
             </div>
           }>
-            <PayableStatCard type="pending" />
+            <div className="flex-shrink-0 w-[calc(50%-8px)] min-w-[140px] md:w-auto md:min-w-0 h-[112px] md:h-auto md:min-h-0 snap-start overflow-hidden rounded-xl">
+              <PayableStatCard type="pending" />
+            </div>
           </Suspense>
 
           <Suspense fallback={
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 animate-pulse">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="h-4 w-24 bg-white/20 rounded mb-2"></div>
-                  <div className="h-8 w-16 bg-white/20 rounded"></div>
-                </div>
-                <div className="p-3 bg-white/20 rounded-lg">
-                  <div className="h-6 w-6"></div>
+            <div className="flex-shrink-0 w-[calc(50%-8px)] min-w-[140px] md:w-auto md:min-w-0 h-[112px] md:h-auto md:min-h-0 snap-start overflow-hidden rounded-xl">
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 animate-pulse h-full flex flex-col justify-center">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="h-4 w-24 bg-white/20 rounded mb-2"></div>
+                    <div className="h-7 w-16 bg-white/20 rounded"></div>
+                  </div>
+                  <div className="w-10 h-10 bg-white/20 rounded-lg flex-shrink-0"></div>
                 </div>
               </div>
             </div>
           }>
-            <PayableStatCard type="paid" />
+            <div className="flex-shrink-0 w-[calc(50%-8px)] min-w-[140px] md:w-auto md:min-w-0 h-[112px] md:h-auto md:min-h-0 snap-start overflow-hidden rounded-xl">
+              <PayableStatCard type="paid" />
+            </div>
           </Suspense>
+          </div>
+
+          {showStatsScrollIndicator && (
+            <div className="absolute right-0 top-1/2 -translate-y-1/2 md:hidden pointer-events-none flex items-center justify-end pr-2 z-20">
+              <div className="bg-gradient-to-l from-blue-950 via-blue-950/90 to-transparent w-7 h-14 flex items-center justify-end rounded-l-lg">
+                <ChevronDown className="h-5 w-5 text-blue-400/80 rotate-90 animate-pulse" />
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Quick Actions - Always Visible */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200 cursor-pointer"
-            onClick={handleManagePayablesInfo}
-          >
-            <div className="flex items-center space-x-4">
-              <div className="p-3 bg-orange-500/20 rounded-lg">
-                <Building2 className="h-6 w-6 text-orange-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-lg font-semibold text-white">Manage Payables Settings</h3>
-                <p className="text-blue-200 text-sm">Configure business information and payment settings</p>
-              </div>
-              <ArrowRight className="h-5 w-5 text-blue-400 flex-shrink-0" />
-            </div>
-          </motion.div>
+        {/* Quick Actions - Collapsible, hidden by default (matches Smart Invoicing) */}
+        <button
+          type="button"
+          onClick={() => setQuickActionsOpen((v) => !v)}
+          className="w-full flex items-center justify-between gap-3 py-3 px-4 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 hover:bg-white/15 transition-colors text-left mb-4"
+        >
+          <span className="text-white font-medium">Quick actions</span>
+          <ChevronDown
+            className={`h-5 w-5 text-blue-400 flex-shrink-0 transition-transform duration-200 ${quickActionsOpen ? 'rotate-180' : ''}`}
+          />
+        </button>
 
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-            className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200 cursor-pointer"
-            onClick={() => router.push('/dashboard/vendors')}
-          >
-            <div className="flex items-center space-x-4">
-              <div className="p-3 bg-green-500/20 rounded-lg">
-                <Users className="h-6 w-6 text-green-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-lg font-semibold text-white">Manage Vendors</h3>
-                <p className="text-blue-200 text-sm">Add and organize your vendors</p>
-              </div>
-              <ArrowRight className="h-5 w-5 text-blue-400 flex-shrink-0" />
+        {quickActionsOpen && (
+          <div className="mb-8">
+            <div className="flex md:grid gap-4 overflow-x-auto md:overflow-x-visible pb-2 md:pb-0 hide-scrollbar md:grid-cols-2 lg:grid-cols-3 snap-x snap-mandatory md:snap-none">
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+                className="flex-shrink-0 w-[calc(50%-8px)] min-w-[150px] md:w-auto md:min-w-0 h-[108px] md:h-auto md:min-h-0 snap-start overflow-hidden bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-2.5 md:p-3.5 hover:bg-white/15 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+                data-route-href="/dashboard/services/payables/onboarding"
+                onClick={handleManagePayablesInfo}
+              >
+                <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1 min-h-0">
+                  <div className="w-8 h-8 md:w-9 md:h-9 flex-shrink-0 flex items-center justify-center rounded-lg bg-orange-500/20">
+                    <Building2 className="h-4.5 w-4.5 text-orange-400" />
+                  </div>
+                  <div className="flex-1 min-w-0 overflow-hidden">
+                    <h3 className="text-sm md:text-[15px] font-semibold text-white line-clamp-2 break-words leading-tight">Manage Payables Settings</h3>
+                    <p className="text-blue-200/90 text-[11px] line-clamp-2 break-words leading-snug mt-0.5">Configure business information and payment settings</p>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-blue-400 shrink-0 hidden md:block" />
+                </div>
+                <div className="h-7 flex-shrink-0" aria-hidden />
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 }}
+                className="flex-shrink-0 w-[calc(50%-8px)] min-w-[150px] md:w-auto md:min-w-0 h-[108px] md:h-auto md:min-h-0 snap-start overflow-hidden bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-2.5 md:p-3.5 hover:bg-white/15 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+                data-route-href="/dashboard/vendors"
+                onClick={() => router.push('/dashboard/vendors')}
+              >
+                <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1 min-h-0">
+                  <div className="w-8 h-8 md:w-9 md:h-9 flex-shrink-0 flex items-center justify-center rounded-lg bg-green-500/20">
+                    <Users className="h-4.5 w-4.5 text-green-400" />
+                  </div>
+                  <div className="flex-1 min-w-0 overflow-hidden">
+                    <h3 className="text-sm md:text-[15px] font-semibold text-white line-clamp-2 break-words leading-tight">Manage Vendors</h3>
+                    <p className="text-blue-200/90 text-[11px] line-clamp-2 break-words leading-snug mt-0.5">Add and organize your vendors</p>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-blue-400 shrink-0 hidden md:block" />
+                </div>
+                <div className="h-7 flex-shrink-0" aria-hidden />
+              </motion.div>
             </div>
-          </motion.div>
-        </div>
+          </div>
+        )}
 
         {/* Tab Navigation */}
         <motion.div
@@ -291,25 +408,87 @@ export default function AccountsPayablePage() {
                   <h3 className="text-lg font-semibold text-white">Vendors</h3>
                   <button
                     onClick={() => router.push('/dashboard/vendors')}
-                    className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                    className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                   >
                     <Plus className="h-4 w-4" />
-                    <span>Add Vendor</span>
+                    <span>Add / Manage Vendors</span>
                   </button>
                 </div>
-                
-                <div className="text-center py-12">
-                  <Users className="h-12 w-12 text-blue-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-white mb-2">Manage Vendors</h3>
-                  <p className="text-blue-200 mb-6">Add and manage your vendor information for easy payments.</p>
-                  <button
-                    onClick={() => router.push('/dashboard/vendors')}
-                    className="inline-flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span>Manage Vendors</span>
-                  </button>
-                </div>
+
+                {vendorStatsLoading ? (
+                  <div className="space-y-4">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="flex items-center justify-between p-4 bg-white/5 rounded-lg animate-pulse">
+                        <div className="h-4 bg-white/20 rounded w-32" />
+                        <div className="h-4 bg-white/20 rounded w-24" />
+                      </div>
+                    ))}
+                  </div>
+                ) : vendorStats.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Users className="h-12 w-12 text-blue-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-white mb-2">No vendors yet</h3>
+                    <p className="text-blue-200 mb-6">Add vendors to see an overview of payables per vendor here.</p>
+                    <button
+                      onClick={() => router.push('/dashboard/vendors')}
+                      className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      <Plus className="h-4 w-4" />
+                      <span>Manage Vendors</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-sm text-blue-200 mb-4">
+                      Overview of each vendor and their payables. Open Manage Vendors to edit details or send submission links.
+                    </p>
+                    {vendorStats.map(({ vendor, pendingCount, paidCount, totalCount, pendingAmount }) => (
+                      <div
+                        key={vendor._id}
+                        className="flex flex-wrap items-center justify-between gap-3 p-4 bg-white/5 rounded-lg hover:bg-white/10 transition-colors"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="font-medium text-white truncate">
+                            {vendor.name || vendor.company || 'Vendor'}
+                          </div>
+                          {(vendor.company || vendor.email) && (
+                            <div className="text-sm text-blue-200 truncate">
+                              {[vendor.company, vendor.email].filter(Boolean).join(' · ')}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-4 text-sm">
+                          <span className="flex items-center gap-1.5 text-blue-200" title="Total payables">
+                            <FileText className="h-4 w-4 text-blue-400" />
+                            <span className="text-white font-medium">{totalCount}</span>
+                            <span>total</span>
+                          </span>
+                          <span className="flex items-center gap-1.5 text-amber-200" title="Pending">
+                            <Clock className="h-4 w-4 text-amber-400" />
+                            <span className="text-white font-medium">{pendingCount}</span>
+                            <span>pending</span>
+                            {pendingAmount > 0 && (
+                              <span className="text-amber-300 font-medium">
+                                ({typeof pendingAmount === 'number' ? pendingAmount.toLocaleString(undefined, { minimumFractionDigits: 2 }) : pendingAmount})
+                              </span>
+                            )}
+                          </span>
+                          <span className="flex items-center gap-1.5 text-green-200" title="Paid">
+                            <CheckCircle className="h-4 w-4 text-green-400" />
+                            <span className="text-white font-medium">{paidCount}</span>
+                            <span>paid</span>
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => router.push('/dashboard/vendors')}
+                          className="text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors"
+                        >
+                          Manage →
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

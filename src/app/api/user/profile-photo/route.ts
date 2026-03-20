@@ -3,15 +3,15 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { UserService } from '@/lib/services/userService';
 import { getDatabase } from '@/lib/database';
-import { writeFile, unlink } from 'fs/promises';
-import { join } from 'path';
-import { existsSync, mkdirSync } from 'fs';
+import { ObjectId } from 'mongodb';
 
-// POST /api/user/profile-photo - Upload profile photo
+const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
+
+// POST /api/user/profile-photo - Upload profile photo (stored in DB, not local disk)
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    
+
     if (!session?.user?.email) {
       return NextResponse.json(
         { success: false, message: 'Unauthorized' },
@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     }
 
     const user = await UserService.getUserByEmail(session.user.email);
-    
+
     if (!user) {
       return NextResponse.json(
         { success: false, message: 'User not found' },
@@ -29,16 +29,15 @@ export async function POST(request: NextRequest) {
     }
 
     const formData = await request.formData();
-    const file = formData.get('profilePhoto') as File;
-    
-    if (!file) {
+    const file = formData.get('profilePhoto') as File | null;
+
+    if (!file || !file.size) {
       return NextResponse.json(
         { success: false, message: 'No file provided' },
         { status: 400 }
       );
     }
 
-    // Validate file type
     if (!file.type.startsWith('image/')) {
       return NextResponse.json(
         { success: false, message: 'File must be an image' },
@@ -46,67 +45,62 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > MAX_SIZE) {
       return NextResponse.json(
         { success: false, message: 'File size must be less than 5MB' },
         { status: 400 }
       );
     }
 
-    // Create uploads directory if it doesn't exist
-    const uploadsDir = join(process.cwd(), 'public', 'uploads', 'profile-photos');
-    if (!existsSync(uploadsDir)) {
-      mkdirSync(uploadsDir, { recursive: true });
-    }
+    const bytes = Buffer.from(await file.arrayBuffer());
+    const db = await getDatabase();
+    const files = db.collection('fileUploads');
 
-    // Generate unique filename
-    const fileExtension = file.name.split('.').pop();
-    const fileName = `${user._id}_${Date.now()}.${fileExtension}`;
-    const filePath = join(uploadsDir, fileName);
-
-    // Convert file to buffer and save
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    await writeFile(filePath, buffer);
-
-    // Generate public URL
-    const profilePhotoUrl = `/uploads/profile-photos/${fileName}`;
-
-    // Remove old profile photo if it exists
-    if (user.avatar && user.avatar.startsWith('/uploads/profile-photos/')) {
-      try {
-        const oldFilePath = join(process.cwd(), 'public', user.avatar);
-        if (existsSync(oldFilePath)) {
-          await unlink(oldFilePath);
-        }
-      } catch (error) {
-        console.error('Error removing old profile photo:', error);
+    // Remove old DB-stored photo if it exists
+    if (user.avatar && user.avatar.startsWith('/api/files/')) {
+      const oldId = user.avatar.replace('/api/files/', '');
+      if (ObjectId.isValid(oldId)) {
+        await files.deleteOne({ _id: new ObjectId(oldId) }).catch(() => {});
       }
     }
 
-    // Update user record and set flag so sidebar session picks up new avatar on next refresh
-    const db = await getDatabase();
+    const now = new Date();
+    const doc = {
+      ownerType: 'profile-photo',
+      ownerId: user._id,
+      originalName: file.name,
+      contentType: file.type,
+      size: bytes.length,
+      data: bytes,
+      createdAt: now,
+    };
+
+    const result = await files.insertOne(doc);
+    const profilePhotoUrl = `/api/files/${result.insertedId.toString()}`;
+
     await db.collection('users').updateOne(
       { _id: user._id },
-      { $set: { avatar: profilePhotoUrl, profilePhotoUpdatedAt: new Date(), updatedAt: new Date() } }
+      {
+        $set: {
+          avatar: profilePhotoUrl,
+          profilePhotoUpdatedAt: now,
+          updatedAt: now,
+        },
+      }
     );
 
     return NextResponse.json({
       success: true,
-      data: {
-        profilePhoto: profilePhotoUrl
-      },
-      message: 'Profile photo updated successfully'
+      data: { profilePhoto: profilePhotoUrl },
+      message: 'Profile photo updated successfully',
     });
-
   } catch (error) {
     console.error('Error uploading profile photo:', error);
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         message: 'Failed to upload profile photo',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       },
       { status: 500 }
     );
@@ -117,7 +111,7 @@ export async function POST(request: NextRequest) {
 export async function DELETE() {
   try {
     const session = await getServerSession(authOptions);
-    
+
     if (!session?.user?.email) {
       return NextResponse.json(
         { success: false, message: 'Unauthorized' },
@@ -126,7 +120,7 @@ export async function DELETE() {
     }
 
     const user = await UserService.getUserByEmail(session.user.email);
-    
+
     if (!user) {
       return NextResponse.json(
         { success: false, message: 'User not found' },
@@ -134,37 +128,38 @@ export async function DELETE() {
       );
     }
 
-    // Remove profile photo file if it exists
-    if (user.avatar && user.avatar.startsWith('/uploads/profile-photos/')) {
-      try {
-        const filePath = join(process.cwd(), 'public', user.avatar);
-        if (existsSync(filePath)) {
-          await unlink(filePath);
-        }
-      } catch (error) {
-        console.error('Error removing profile photo file:', error);
+    const db = await getDatabase();
+
+    // Remove the stored file from DB if it was saved there
+    if (user.avatar && user.avatar.startsWith('/api/files/')) {
+      const oldId = user.avatar.replace('/api/files/', '');
+      if (ObjectId.isValid(oldId)) {
+        await db
+          .collection('fileUploads')
+          .deleteOne({ _id: new ObjectId(oldId) })
+          .catch(() => {});
       }
     }
 
-    // Update user record to remove profile photo and set flag so sidebar session refreshes
-    const db = await getDatabase();
     await db.collection('users').updateOne(
       { _id: user._id },
-      { $unset: { avatar: 1 }, $set: { profilePhotoUpdatedAt: new Date(), updatedAt: new Date() } }
+      {
+        $unset: { avatar: 1 },
+        $set: { profilePhotoUpdatedAt: new Date(), updatedAt: new Date() },
+      }
     );
 
     return NextResponse.json({
       success: true,
-      message: 'Profile photo removed successfully'
+      message: 'Profile photo removed successfully',
     });
-
   } catch (error) {
     console.error('Error removing profile photo:', error);
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         message: 'Failed to remove profile photo',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       },
       { status: 500 }
     );

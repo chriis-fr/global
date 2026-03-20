@@ -22,7 +22,8 @@ import {
   Loader2,
   Plug,
   Crown,
-  ChevronUp
+  ChevronUp,
+  Waves
 } from 'lucide-react';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import Image from 'next/image';
@@ -33,6 +34,7 @@ import { useOnboardingStore } from '@/lib/stores/onboardingStore';
 const SERVICE_LINKS = [
   { key: 'smartInvoicing', label: 'Smart Invoicing', icon: FileText, href: '/dashboard/services/smart-invoicing' },
   { key: 'accountsPayable', label: 'Pay', icon: Receipt, href: '/dashboard/services/payables' },
+  { key: 'mpesaPayments', label: 'M-Pesa', icon: Waves, href: '/dashboard/services/mpesa' },
 ];
 
 const ADMIN_LINKS = [
@@ -71,6 +73,8 @@ function Sidebar() {
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
   const [isMobile, setIsMobile] = useState(false);
   const [sidebarReady, setSidebarReady] = useState(false);
+  const [orgRole, setOrgRole] = useState<string | null>(null);
+  const [orgMpesaEnabled, setOrgMpesaEnabled] = useState(false);
 
   const sidebarRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
@@ -86,6 +90,46 @@ function Sidebar() {
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
   }, []);
+
+  // Session-first: use organizationRole/mpesaEnabled from session so first paint is correct (no waiter flash).
+  // Fallback: load from API when session doesn't have them (e.g. old JWT).
+  const effectiveRole = session?.user?.organizationRole ?? orgRole;
+  const effectiveMpesaEnabled = session?.user?.mpesaEnabled ?? orgMpesaEnabled;
+  const roleUnknown = Boolean(
+    session?.user?.organizationId &&
+    (effectiveRole === undefined || effectiveRole === null || effectiveRole === '')
+  );
+
+  // Load organization role + M-Pesa when not in session (fallback for old tokens)
+  useEffect(() => {
+    if (!session?.user?.organizationId) {
+      setOrgRole(null);
+      setOrgMpesaEnabled(false);
+      return;
+    }
+    if (session?.user?.organizationRole != null && session?.user?.mpesaEnabled !== undefined) {
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { getCurrentOrganizationRole } = await import('@/app/actions/organization-role');
+        const result = await getCurrentOrganizationRole();
+        if (!cancelled && result.success && result.data) {
+          setOrgRole(result.data.role);
+          setOrgMpesaEnabled(result.data.mpesaEnabled);
+        }
+      } catch {
+        if (!cancelled) {
+          setOrgRole(null);
+          setOrgMpesaEnabled(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.organizationId, session?.user?.organizationRole, session?.user?.mpesaEnabled]);
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -137,7 +181,12 @@ function Sidebar() {
 
   // Fetch pending approvals count for green-dot indicator (only when user can approve)
   useEffect(() => {
-    if (!session?.user?.organizationId || !permissions.canApproveBills) {
+    // Waiters and users without org or approve permission should never fetch approvals APIs
+    if (
+      !session?.user?.organizationId ||
+      !permissions.canApproveBills ||
+      effectiveRole === 'waiter'
+    ) {
       setPendingApprovalsCount(0);
       return;
     }
@@ -165,7 +214,7 @@ function Sidebar() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [session?.user?.organizationId, permissions.canApproveBills]);
+  }, [session?.user?.organizationId, permissions.canApproveBills, effectiveRole]);
 
   const toggleMobileMenu = useCallback(() => {
     setIsMobileMenuOpen(v => !v);
@@ -271,39 +320,77 @@ function Sidebar() {
             {(!isCollapsed || isAutoHidden) && (
               <div className="flex justify-between items-center mb-2 px-2">
                 <h3 className="text-xs text-white/50 uppercase">Services</h3>
-                {isMobile ? (
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => handleMobileNavigation('/services')}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        handleMobileNavigation('/services');
-                      }
-                    }}
-                    className="p-1 rounded hover:bg-white/10 cursor-pointer"
-                  >
-                    <Plus className="h-4 w-4 text-white/50" />
-                  </div>
-                ) : (
-                  <Link href="/services">
-                    <Plus className="h-4 w-4 text-white/50" />
-                  </Link>
+                {/* Waiters and unknown-role (loading) cannot add/manage services */}
+                {!roleUnknown && effectiveRole !== 'waiter' && (
+                  <>
+                    {isMobile ? (
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => handleMobileNavigation('/services')}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleMobileNavigation('/services');
+                          }
+                        }}
+                        className="p-1 rounded hover:bg-white/10 cursor-pointer"
+                      >
+                        <Plus className="h-4 w-4 text-white/50" />
+                      </div>
+                    ) : (
+                      <Link href="/services">
+                        <Plus className="h-4 w-4 text-white/50" />
+                      </Link>
+                    )}
+                  </>
                 )}
               </div>
             )}
 
             {(sidebarReady
               ? SERVICE_LINKS.filter(link => {
+                const isSuperAdmin = session?.user?.adminTag === true;
+
+                // Role unknown (e.g. loading): show no service links to avoid waiter seeing admin items
+                if (roleUnknown) {
+                  return false;
+                }
+
+                // Waiter: show ONLY M-Pesa (having a waiter means org has M-Pesa enabled)
+                if (effectiveRole === 'waiter') {
+                  return link.key === 'mpesaPayments';
+                }
+
+                // Super admin (master account): has access to all services regardless of plan/user services flags
+                // and regardless of per-organization M-Pesa enablement.
+                if (isSuperAdmin) {
+                  return true;
+                }
+
                 const isServiceEnabled = session?.user?.services?.[link.key] || false;
+
                 if (link.key === 'accountsPayable') {
-                  return (subscription?.canAccessPayables || false) && isServiceEnabled;
+                  // Treat plan access as the primary gate; user service flag is secondary.
+                  // This ensures payables plans always see the Payables service in the sidebar.
+                  const hasPlanAccess = subscription?.canAccessPayables || false;
+                  return hasPlanAccess;
                 }
                 if (link.key === 'smartInvoicing') {
                   const isPayablesOnly = subscription?.plan?.type === 'payables';
                   return !isPayablesOnly && isServiceEnabled;
                 }
+                if (link.key === 'mpesaPayments') {
+                  // M-Pesa service: org must have it enabled, user must be in an org,
+                  // AND the role must be owner or admin.
+                  // Waiters are already handled in the waiter-only branch above (they see ONLY M-Pesa).
+                  // All other roles (financeManager, accountant, approver, etc.) do NOT see M-Pesa
+                  // even when the org has it enabled — they manage their own services but are not
+                  // granted M-Pesa visibility until an admin explicitly elevates their access.
+                  const canSeeMpesa = effectiveRole === 'owner' || effectiveRole === 'admin';
+                  return Boolean(session?.user?.organizationId) && effectiveMpesaEnabled && canSeeMpesa;
+                }
+
                 return isServiceEnabled;
               })
               : []
@@ -355,8 +442,8 @@ function Sidebar() {
             })}
           </div>
 
-          {/* Admin */}
-          {permissions.canApproveBills && session?.user?.organizationId && (
+          {/* Admin: hide when role unknown (loading) or waiter */}
+          {permissions.canApproveBills && session?.user?.organizationId && !roleUnknown && effectiveRole !== 'waiter' && (
             <div>
               {(!isCollapsed || isAutoHidden) && (
                 <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wider mb-2 px-2">
@@ -445,6 +532,10 @@ function Sidebar() {
           {isSettingsOpen && (
             <div className="ml-4 space-y-1">
               {SETTINGS_LINKS.filter(link => {
+                // Role unknown or waiter: only show Help & Support (no flash of admin settings)
+                if (roleUnknown || effectiveRole === 'waiter') {
+                  return link.key === 'help';
+                }
                 // Only show integrations for admin accounts (adminTag)
                 if (link.key === 'integrations') {
                   return session?.user?.adminTag === true;
@@ -551,20 +642,25 @@ function Sidebar() {
                   <User className="h-4 w-4 mr-3 shrink-0" />
                   Profile Settings
                 </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handleMobileNavigation('/pricing');
-                  }}
-                  className="flex w-full items-center px-4 py-2.5 text-sm text-white/90 hover:bg-white/10 transition-colors text-left"
-                  role="menuitem"
-                >
-                  <Crown className="h-4 w-4 mr-3 shrink-0 text-amber-400" />
-                  Unlock More
-                </button>
-                <div className="border-t border-white/10 my-1" />
+                {/* For waiters and unknown role, hide upsell so they only see profile + sign out */}
+                {!roleUnknown && effectiveRole !== 'waiter' && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleMobileNavigation('/pricing');
+                      }}
+                      className="flex w-full items-center px-4 py-2.5 text-sm text-white/90 hover:bg-white/10 transition-colors text-left"
+                      role="menuitem"
+                    >
+                      <Crown className="h-4 w-4 mr-3 shrink-0 text-amber-400" />
+                      Unlock More
+                    </button>
+                    <div className="border-t border-white/10 my-1" />
+                  </>
+                )}
                 <button
                   type="button"
                   onClick={async () => {

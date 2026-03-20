@@ -14,8 +14,9 @@ interface Payable {
   vendorCompany?: string;
   vendorEmail: string;
   total: number;
-  currency: string;
-  status: 'draft' | 'pending' | 'approved' | 'paid' | 'overdue';
+  currency?: string;
+  status: 'draft' | 'submitted' | 'pending' | 'approved' | 'paid' | 'overdue';
+  source?: 'link' | 'app';
   dueDate: string;
   issueDate: string;
   category?: string;
@@ -42,7 +43,7 @@ function PayablesListContent({ onCreatePayable }: PayablesListProps) {
       const result = await getPayablesListPaginated(page, limit);
       
       if (result.success && result.data) {
-        setPayables(result.data.payables.slice(0, limit));
+        setPayables(result.data.payables.slice(0, limit) as unknown as Payable[]);
         setTotalPages(result.data.pagination?.pages || 1);
         setTotalPayablesCount(result.data.pagination?.total || 0);
       }
@@ -60,6 +61,7 @@ function PayablesListContent({ onCreatePayable }: PayablesListProps) {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'draft': return 'text-blue-300 bg-blue-500/20';
+      case 'submitted': return 'text-amber-700 bg-amber-100';
       case 'pending': return 'text-yellow-600 bg-yellow-100';
       case 'approved': return 'text-blue-600 bg-blue-100';
       case 'paid': return 'text-green-600 bg-green-100';
@@ -124,7 +126,19 @@ function PayablesListContent({ onCreatePayable }: PayablesListProps) {
                   <p className="text-sm font-medium text-white truncate">
                     {payable.companyName || payable.vendorCompany || payable.vendorName}
                   </p>
-                  <p className="text-sm text-blue-300">#{payable.payableNumber}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm text-blue-300">#{payable.payableNumber}</p>
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium flex-shrink-0 border ${
+                        (payable.source ?? 'app') === 'link'
+                          ? 'bg-white/10 text-blue-200 border-white/20'
+                          : 'bg-white/5 text-blue-200/80 border-white/15'
+                      }`}
+                      title={(payable.source ?? 'app') === 'link' ? 'Submitted via public vendor link' : 'Created in app'}
+                    >
+                      {(payable.source ?? 'app') === 'link' ? 'Link' : 'App'}
+                    </span>
+                  </div>
                 </div>
                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${getStatusColor(payable.status)}`}>
                   {payable.status}
@@ -134,13 +148,19 @@ function PayablesListContent({ onCreatePayable }: PayablesListProps) {
             <div className="flex items-center space-x-2 sm:space-x-4 flex-shrink-0">
               <div className="text-right">
                 <p className="text-sm font-medium text-white">
-                  <FormattedNumberDisplay value={payable.total} />
+                  <FormattedNumberDisplay
+                    value={payable.total}
+                    currency={payable.currency}
+                    usePreferredCurrency={false}
+                    showCurrency={!!payable.currency}
+                  />
                 </p>
-                <p className="text-sm text-blue-300">{payable.currency}</p>
+                <p className="text-sm text-blue-300">{payable.currency || ''}</p>
               </div>
               <div className="flex items-center space-x-1 sm:space-x-2">
                 <button
                   onClick={() => router.push(`/dashboard/services/payables/${payable._id}`)}
+                  data-route-href={`/dashboard/services/payables/${payable._id}`}
                   className="text-blue-600 hover:text-blue-700 transition-colors p-1 rounded-lg hover:bg-blue-50 touch-manipulation active:scale-95"
                   style={{ touchAction: 'manipulation' }}
                   title="View Bill"
@@ -150,6 +170,7 @@ function PayablesListContent({ onCreatePayable }: PayablesListProps) {
                 {payable.status === 'draft' && (
                   <button
                     onClick={() => router.push(`/dashboard/services/payables/create?id=${payable._id}`)}
+                    data-route-href={`/dashboard/services/payables/create?id=${payable._id}`}
                     className="text-blue-600 hover:text-blue-700 transition-colors p-1 rounded-lg hover:bg-blue-50 touch-manipulation active:scale-95"
                     style={{ touchAction: 'manipulation' }}
                     title="Edit Bill"

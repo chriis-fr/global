@@ -165,6 +165,39 @@ export const REQUEST_FINANCE_ROLES = {
       canBulkUpdate: false,
       canViewAudit: false
     }
+  },
+
+  waiter: {
+    name: 'Waiter',
+    description: 'Can send M-Pesa payment prompts for their organization; no access to financial data or settings',
+    permissions: {
+      canAddPaymentMethods: false,
+      canModifyPaymentMethods: false,
+      canManageTreasury: false,
+      canManageTeam: false,
+      canInviteMembers: false,
+      canRemoveMembers: false,
+      canManageCompanyInfo: false,
+      canManageSettings: false,
+      canCreateInvoices: false,
+      canSendInvoices: false,
+      canManageInvoices: false,
+      canCreateBills: false,
+      canApproveBills: false,
+      canExecutePayments: false,
+      canManagePayables: false,
+      canViewAllData: false,
+      canExportData: false,
+      canReconcileTransactions: false,
+      canManageAccounting: false,
+      canApproveDocuments: false,
+      canManageApprovalPolicies: false,
+      canClosePeriod: false,
+      canReopenPeriod: false,
+      canWriteOff: false,
+      canBulkUpdate: false,
+      canViewAudit: false
+    }
   }
 } as const;
 

@@ -36,7 +36,7 @@ export default function OrganizationMembersPage() {
     planName?: string;
   } | null>(null);
   const [formData, setFormData] = useState({
-    email: '',
+    emails: '',
     role: 'financeManager' as RoleKey
   });
 
@@ -140,47 +140,89 @@ export default function OrganizationMembersPage() {
   };
 
   const handleAddMember = async () => {
-    if (!formData.email || !formData.role) {
+    if (!formData.emails || !formData.role) {
       setMessage({ type: 'error', text: 'Please fill in all required fields' });
       return;
     }
 
-    // Check seat limit before sending invitation
-    if (seatInfo && seatInfo.availableSeats <= 0) {
-      setMessage({ type: 'error', text: `You have reached your seat limit of ${seatInfo.paidSeats}. You currently have ${seatInfo.currentMembers} member${seatInfo.currentMembers === 1 ? '' : 's'} and ${seatInfo.pendingInvitations} pending invitation${seatInfo.pendingInvitations === 1 ? '' : 's'}. Please upgrade your plan to add more members.` });
+    const isWaiterRole = formData.role === 'waiter';
+
+    // Parse emails (comma or newline separated), clean and dedupe
+    const rawTokens = formData.emails
+      .split(/[\n,]/)
+      .map((e) => e.trim())
+      .filter(Boolean);
+    const uniqueEmails = Array.from(new Set(rawTokens));
+
+    if (uniqueEmails.length === 0) {
+      setMessage({ type: 'error', text: 'Please enter at least one email.' });
       return;
     }
 
-    console.log('📧 [Members Page] Starting invitation process...');
-    console.log('📧 [Members Page] Email:', formData.email);
+    // For waiters, allow larger batches; for other roles, keep a sane per-action cap
+    if (!isWaiterRole && uniqueEmails.length > 10) {
+      setMessage({ type: 'error', text: 'You can invite a maximum of 10 members at once for this role.' });
+      return;
+    }
+
+    // Basic email format validation
+    const invalid = uniqueEmails.find(
+      (email) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    );
+    if (invalid) {
+      setMessage({ type: 'error', text: `Invalid email: ${invalid}` });
+      return;
+    }
+
+    // Check seat limit before sending invitations, except for waiter role (waiters are seat-free)
+    if (!isWaiterRole && seatInfo && seatInfo.availableSeats < uniqueEmails.length) {
+      setMessage({
+        type: 'error',
+        text: `You can invite up to ${seatInfo.availableSeats} more member${seatInfo.availableSeats === 1 ? '' : 's'} based on your current plan.`,
+      });
+      return;
+    }
+
+    console.log('📧 [Members Page] Starting bulk invitation process...');
+    console.log('📧 [Members Page] Emails:', uniqueEmails);
     console.log('📧 [Members Page] Role:', formData.role);
 
     setAdding(true);
     try {
-      console.log('📧 [Members Page] Calling sendInvitation server action...');
-      const result = await sendInvitation(formData.email, formData.role);
-      console.log('📧 [Members Page] Server action result:', result);
+      let successCount = 0;
+      let lastError: string | null = null;
 
-      if (result.success) {
-        console.log('✅ [Members Page] Invitation sent successfully');
-        setMessage({ type: 'success', text: `Invitation sent to ${formData.email}! They will receive an email with instructions to join.` });
-        setShowAddForm(false);
-        setFormData({ email: '', role: 'financeManager' });
-        // Refresh both invitations and seat info to sync the page
-        await Promise.all([
-          fetchPendingInvitations(),
-          fetchSeatInfo()
-        ]);
-      } else {
-        console.log('❌ [Members Page] Invitation failed:', result.error);
-        setMessage({ type: 'error', text: result.error || 'Failed to send invitation' });
-        // Refresh seat info even on error to ensure UI is synced
-        await fetchSeatInfo();
+      for (const email of uniqueEmails) {
+        console.log('📧 [Members Page] Calling sendInvitation for:', email);
+        const result = await sendInvitation(email, formData.role);
+        console.log('📧 [Members Page] Server action result:', result);
+
+        if (result.success) {
+          successCount += 1;
+        } else {
+          lastError = result.error || `Failed to send invitation to ${email}`;
+        }
       }
+
+      if (successCount > 0) {
+        setMessage({
+          type: 'success',
+          text:
+            successCount === uniqueEmails.length
+              ? `Invitations sent to ${successCount} ${successCount === 1 ? 'member' : 'members'}!`
+              : `Invitations sent to ${successCount} member${successCount === 1 ? '' : 's'}, but some invites failed. ${lastError ?? ''}`,
+        });
+        setShowAddForm(false);
+        setFormData({ emails: '', role: 'financeManager' });
+      } else if (lastError) {
+        setMessage({ type: 'error', text: lastError });
+      }
+
+      // Refresh invitations and seat info to sync the page
+      await Promise.all([fetchPendingInvitations(), fetchSeatInfo()]);
     } catch (error) {
-      console.error('❌ [Members Page] Error sending invitation:', error);
-      setMessage({ type: 'error', text: 'Failed to send invitation. Please try again.' });
-      // Refresh seat info on error
+      console.error('❌ [Members Page] Error sending invitations:', error);
+      setMessage({ type: 'error', text: 'Failed to send invitations. Please try again.' });
       await fetchSeatInfo();
     } finally {
       setAdding(false);
@@ -342,6 +384,8 @@ export default function OrganizationMembersPage() {
   }
 
   const isAdmin = orgInfo.userRole === 'owner' || orgInfo.userRole === 'admin';
+  const orgSettings = orgInfo.organization?.settings as { mpesa?: { enabled?: boolean } } | undefined;
+  const mpesaEnabled = orgSettings?.mpesa?.enabled === true;
 
   return (
     <div className="max-w-4xl mx-auto w-full">
@@ -446,25 +490,28 @@ export default function OrganizationMembersPage() {
              {showAddForm && (
                <div className="space-y-4 relative z-20">
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   <div>
-                     <label className="block text-blue-300 text-sm font-medium mb-2">
-                       Email Address *
-                     </label>
-                     <input
-                       type="email"
-                       value={formData.email}
-                       onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                       className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                       placeholder="Enter member's email"
-                     />
-                   </div>
+                  <div>
+                    <label className="block text-blue-300 text-sm font-medium mb-2">
+                      Email Address(es) *
+                    </label>
+                    <textarea
+                      value={formData.emails}
+                      onChange={(e) => setFormData(prev => ({ ...prev, emails: e.target.value }))}
+                      className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[88px]"
+                      placeholder="Enter 1–10 emails, separated by commas or new lines"
+                    />
+                    <p className="mt-1 text-xs text-blue-200">
+                      You can invite up to 10 members at once.
+                    </p>
+                  </div>
                    
                    <div className="relative z-30">
-                     <RoleSelector
-                       selectedRole={formData.role}
-                       onRoleChange={(role) => setFormData(prev => ({ ...prev, role }))}
-                       showPermissions={true}
-                     />
+                    <RoleSelector
+                      selectedRole={formData.role}
+                      onRoleChange={(role) => setFormData(prev => ({ ...prev, role }))}
+                      showPermissions={true}
+                      allowWaiter={mpesaEnabled}
+                    />
                    </div>
                  </div>
 
@@ -472,7 +519,7 @@ export default function OrganizationMembersPage() {
                    <button
                      onClick={() => {
                        setShowAddForm(false);
-                       setFormData({ email: '', role: 'financeManager' });
+                       setFormData({ emails: '', role: 'financeManager' });
                      }}
                      className="px-4 py-2 text-blue-300 hover:text-white transition-colors"
                      disabled={adding}
@@ -617,6 +664,7 @@ export default function OrganizationMembersPage() {
                         setEditingMember(null);
                       }}
                       showPermissions={true}
+                      allowWaiter={mpesaEnabled}
                     />
                   </div>
                 )}

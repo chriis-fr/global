@@ -93,10 +93,13 @@ export async function sendInvitation(email: string, role: RoleKey): Promise<{
 
     console.log('✅ [Invitation] Email is not already a member');
 
+    // For waiter role, skip seat-limit enforcement entirely (waiters do not consume seats)
+    const isWaiterRole = role === 'waiter';
+
     // Check seat limit: Get organization owner's subscription to see how many seats they paid for
     // Find organization owner to get their subscription
     const ownerMember = organization.members.find((m: { role: string }) => m.role === 'owner');
-    if (ownerMember) {
+    if (ownerMember && !isWaiterRole) {
       const ownerUserId = ownerMember.userId;
       const ownerUserDoc = await db.collection('users').findOne({ _id: ownerUserId });
       
@@ -162,7 +165,8 @@ export async function sendInvitation(email: string, role: RoleKey): Promise<{
     console.log('✅ [Invitation] Expires at:', expiresAt.toISOString());
 
     // Create invitation token
-    const tokenRole: 'admin' | 'financeManager' | 'accountant' | 'approver' = role === 'owner' ? 'admin' : role;
+    const tokenRole: 'admin' | 'financeManager' | 'accountant' | 'approver' | 'waiter' =
+      role === 'owner' ? 'admin' : (role as 'admin' | 'financeManager' | 'accountant' | 'approver' | 'waiter');
     const invitationToken: InvitationToken = {
       token,
       organizationId: new ObjectId(user.organizationId.toString()),
@@ -653,16 +657,18 @@ export async function completeInvitationAcceptance(token: string): Promise<{
     // Update user to link to organization and set status to active
     // Mark onboarding as completed – they joined an existing org, so no org setup needed
     // Inherit organization's enabled services (after sync-from-owner) so members see same as owner
+    const existingOnboarding = user.onboarding as { isCompleted?: boolean; currentStep?: number; completedSteps?: string[]; data?: Record<string, unknown> } | undefined;
     const updates: Record<string, unknown> = {
       organizationId: invitation.organizationId,
       userType: 'business',
       status: 'active',
       services: Object.keys(effectiveOrgServices).length ? effectiveOrgServices : (organization.services || user.services),
       onboarding: {
-        ...user.onboarding,
-        completed: true,
+        ...existingOnboarding,
+        isCompleted: true,
         currentStep: 4,
-        completedSteps: ['1', '2', '3', '4']
+        completedSteps: ['1', '2', '3', '4'],
+        data: existingOnboarding?.data ?? {}
       }
     };
 

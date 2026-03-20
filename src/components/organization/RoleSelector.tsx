@@ -9,13 +9,16 @@ interface RoleSelectorProps {
   onRoleChange: (role: RoleKey) => void;
   disabled?: boolean;
   showPermissions?: boolean;
+  /** When true, the 'waiter' role will be offered as an option. */
+  allowWaiter?: boolean;
 }
 
 export default function RoleSelector({ 
   selectedRole, 
   onRoleChange, 
   disabled = false,
-  showPermissions = true 
+  showPermissions = true,
+  allowWaiter = false
 }: RoleSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -94,7 +97,11 @@ export default function RoleSelector({
       {isOpen && !disabled && (
         <div className="absolute z-50 w-full mt-1 bg-gray-900/95 backdrop-blur-sm border border-white/20 rounded-lg shadow-xl max-h-80 overflow-y-auto">
           {Object.entries(REQUEST_FINANCE_ROLES)
-            .filter(([roleKey]) => roleKey !== 'owner') // Remove owner from selectable roles
+            .filter(([roleKey]) => {
+              if (roleKey === 'owner') return false; // never selectable
+              if (roleKey === 'waiter' && !allowWaiter) return false;
+              return true;
+            })
             .map(([roleKey, roleData]) => (
             <button
               key={roleKey}

@@ -26,6 +26,7 @@ export interface DashboardStats {
   pendingInvoices: number;
   paidInvoices: number;
   totalClients: number;
+  totalVendors: number;
   netBalance: number;
   totalPayables: number;
   overdueCount: number;
@@ -50,7 +51,7 @@ export interface RecentPayable {
   payableNumber: string;
   vendorName: string; // Just name, no full details
   total: number;
-  currency: string;
+  currency?: string;
   amountUsd?: number; // Converted USD amount (for crypto currencies)
   status: string;
   createdAt: string;
@@ -180,6 +181,19 @@ export async function getDashboardStats(): Promise<{ success: boolean; data?: Da
 
     // Get client count (only count, no client data)
     const totalClients = await clientsCollection.countDocuments(baseQuery);
+
+    // Get vendor count (organizations deal with vendors for payables)
+    const vendorsCollection = db.collection('vendors');
+    const vendorQuery = isOrganization
+      ? {
+          $or: [
+            { organizationId: session.user.organizationId },
+            { organizationId: new ObjectId(session.user.organizationId) }
+          ]
+        }
+      : { userId: session.user.email };
+
+    const totalVendors = await vendorsCollection.countDocuments(vendorQuery);
 
     // Get payables stats using the same logic as the working payables API
     const payablesCollection = db.collection('payables');
@@ -379,6 +393,7 @@ export async function getDashboardStats(): Promise<{ success: boolean; data?: Da
       pendingInvoices,
       paidInvoices: paidInvoicesCount,
       totalClients,
+      totalVendors,
       netBalance: calculatedNetBalance, // Paid Receivables - Paid Payables - Approved Payables (for orgs)
       totalPayables: totalPayablesAmount, // Unpaid payables (bills to pay)
       overdueCount: (ledgerData.overdueReceivables || 0) + (ledgerData.overduePayables || 0)
@@ -542,11 +557,11 @@ export async function getRecentPayables(limit: number = 5): Promise<{ success: b
     // Transform to minimal data structure with USD conversion for crypto (server-side, like admin stats)
     const recentPayablesPromises = payables.map(async (payable) => {
       const amount = payable.total || payable.amount || 0;
-      const currency = payable.currency || 'USD';
+      const currency = payable.currency;
       
       // Convert crypto to USD on server side (like admin stats)
       let amountUsd: number | undefined;
-      if (isCryptoCurrency(currency)) {
+      if (currency && isCryptoCurrency(currency)) {
         try {
           const { convertCryptoToUsd } = await import('@/lib/services/exchangeRateService');
           amountUsd = await convertCryptoToUsd(amount, currency);
@@ -561,7 +576,7 @@ export async function getRecentPayables(limit: number = 5): Promise<{ success: b
         payableNumber: payable.payableNumber || 'Payable',
         vendorName: payable.vendorName || 'Vendor',
         total: amount,
-        currency: currency,
+        currency: currency ?? undefined,
         amountUsd: amountUsd, // Converted USD amount for crypto
         status: payable.status || 'pending',
         createdAt: payable.createdAt?.toISOString() || new Date().toISOString()

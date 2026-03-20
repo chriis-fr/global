@@ -17,6 +17,10 @@ export interface AdminUserData {
   createdAt: Date;
   lastLogin?: Date;
   isEmailVerified: boolean;
+  invoiceCount?: number;
+  invoicesThisMonth?: number;
+  invoicesRemainingThisMonth?: number | null;
+  invoiceLimitPerMonth?: number;
   subscription: {
     planId: string;
     status: string;
@@ -89,6 +93,40 @@ export async function searchUserByEmail(
       };
     }
 
+    // Count invoices created by this user (by issuerId or userId/email)
+    const invoicesCollection = db.collection('invoices');
+    const userIdString = user._id?.toString();
+    const baseInvoiceOwnerQuery = {
+      $or: [
+        ...(userIdString ? [{ issuerId: userIdString }, { issuerId: new ObjectId(userIdString) }] : []),
+        { userId: user.email }
+      ]
+    };
+
+    const invoiceCount = await invoicesCollection.countDocuments(baseInvoiceOwnerQuery);
+
+    // Compute current month usage and remaining quota based on subscription plan
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    const invoicesThisMonth = await invoicesCollection.countDocuments({
+      ...baseInvoiceOwnerQuery,
+      createdAt: { $gte: monthStart, $lt: nextMonthStart }
+    });
+
+    const planId = user.subscription?.planId || 'receivables-free';
+    const plan = BILLING_PLANS.find(p => p.planId === planId);
+    const isTrialPremiumPlan = planId === 'trial-premium';
+    const invoiceLimitPerMonth = isTrialPremiumPlan
+      ? -1
+      : (plan?.limits?.invoicesPerMonth ?? 5);
+
+    const invoicesRemainingThisMonth =
+      invoiceLimitPerMonth > 0
+        ? Math.max(0, invoiceLimitPerMonth - invoicesThisMonth)
+        : null;
+
     return {
       success: true,
       data: {
@@ -100,6 +138,10 @@ export async function searchUserByEmail(
         createdAt: user.createdAt,
         lastLogin: user.lastLogin,
         isEmailVerified: user.isEmailVerified || false,
+        invoicesThisMonth,
+        invoicesRemainingThisMonth,
+        invoiceLimitPerMonth,
+        invoiceCount,
         subscription: {
           planId: user.subscription?.planId || 'receivables-free',
           status: user.subscription?.status || 'active',

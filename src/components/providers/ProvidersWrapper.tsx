@@ -2,6 +2,7 @@
 
 import type { Session } from 'next-auth';
 import { ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
 import { Toaster } from 'react-hot-toast';
 import { SessionProvider as NextAuthSessionProvider } from 'next-auth/react';
 import { SessionProvider } from "@/components/providers/SessionProvider";
@@ -32,9 +33,51 @@ export function ProvidersWrapper({
   initialSubscription,
   initialCurrency,
 }: { children: ReactNode } & InitialData) {
+  const pathname = usePathname();
+  const isPublicVendorRoute = !!pathname && pathname.startsWith('/vendor/');
+
+  // Ultra-fast public vendor links: minimal providers, but SessionProvider still needs NextAuth's context
+  // because it uses useSession (nextAuthUpdate) internally.
+  if (isPublicVendorRoute) {
+    return (
+      <ErrorBoundary>
+        <NextAuthSessionProvider refetchInterval={0} refetchOnWindowFocus={false} session={initialSession === undefined ? undefined : initialSession ?? null}>
+          <SessionProvider session={initialSession ?? null}>
+            <RouteProgress />
+            {children}
+          </SessionProvider>
+        </NextAuthSessionProvider>
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            duration: 4000,
+            style: {
+              background: '#363636',
+              color: '#fff',
+            },
+            success: {
+              duration: 3000,
+              iconTheme: {
+                primary: '#10b981',
+                secondary: '#fff',
+              },
+            },
+            error: {
+              duration: 4000,
+              iconTheme: {
+                primary: '#ef4444',
+                secondary: '#fff',
+              },
+            },
+          }}
+        />
+      </ErrorBoundary>
+    );
+  }
+
   return (
     <ErrorBoundary>
-      <NextAuthSessionProvider refetchInterval={0} session={initialSession === undefined ? undefined : initialSession ?? null}>
+      <NextAuthSessionProvider refetchInterval={0} refetchOnWindowFocus={false} session={initialSession === undefined ? undefined : initialSession ?? null}>
       <SessionProvider session={initialSession === undefined ? undefined : initialSession}>
         <ErrorBoundary>
           <CurrencyProvider initialCurrency={initialCurrency ?? undefined}>

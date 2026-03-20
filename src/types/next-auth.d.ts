@@ -25,6 +25,8 @@ declare module "next-auth" {
       services: Record<string, boolean>
       organizationId?: string
       adminTag?: boolean
+      organizationRole?: string | null
+      mpesaEnabled?: boolean
     }
   }
 
@@ -51,6 +53,8 @@ declare module "next-auth" {
     services: Record<string, boolean>
     organizationId?: string
     adminTag?: boolean
+    organizationRole?: string | null
+    mpesaEnabled?: boolean
   }
 }
 
@@ -76,5 +80,7 @@ declare module "next-auth/jwt" {
     services?: Record<string, boolean>
     organizationId?: string
     adminTag?: boolean
+    organizationRole?: string | null
+    mpesaEnabled?: boolean
   }
 } 

@@ -16,6 +16,12 @@ import FormattedNumberDisplay from '@/components/FormattedNumber';
 import { getDashboardStats, DashboardStats } from '@/lib/actions/dashboard';
 import { useSubscription } from '@/lib/contexts/SubscriptionContext';
 
+interface WaiterStats {
+  totalAmount: number;
+  successCount: number;
+  failedCount: number;
+}
+
 interface StatsCardsProps {
   className?: string;
 }
@@ -56,6 +62,7 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
     pendingInvoices: 0,
     paidInvoices: 0,
     totalClients: 0,
+    totalVendors: 0,
     netBalance: 0,
     totalPayables: 0,
     overdueCount: 0
@@ -66,6 +73,42 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
   const hasInitialized = useRef(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [showScrollIndicator, setShowScrollIndicator] = useState(false);
+
+  const [orgRole, setOrgRole] = useState<string | null>(null);
+  const [orgMpesaEnabled, setOrgMpesaEnabled] = useState(false);
+  const [waiterStats, setWaiterStats] = useState<WaiterStats | null>(null);
+  const [waiterLoading, setWaiterLoading] = useState(false);
+  const [waiterError, setWaiterError] = useState<string | null>(null);
+
+  const isWaiter = orgRole === 'waiter' && orgMpesaEnabled;
+
+  // Load organization role + M-Pesa enabled flag for waiter dashboards
+  useEffect(() => {
+    if (!session?.user?.organizationId) {
+      setOrgRole(null);
+      setOrgMpesaEnabled(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { getCurrentOrganizationRole } = await import('@/app/actions/organization-role');
+        const result = await getCurrentOrganizationRole();
+        if (!cancelled && result.success && result.data) {
+          setOrgRole(result.data.role);
+          setOrgMpesaEnabled(result.data.mpesaEnabled);
+        }
+      } catch {
+        if (!cancelled) {
+          setOrgRole(null);
+          setOrgMpesaEnabled(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.organizationId]);
 
   // Check if user has access to receivables and payables
   const isPayablesOnly = subscription?.plan?.type === 'payables';
@@ -79,14 +122,23 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
   
   // Check if services are enabled (must be enabled during onboarding)
   const isSmartInvoicingEnabled = session?.user?.services?.smartInvoicing || false;
-  const isAccountsPayableEnabled = session?.user?.services?.accountsPayable || false;
+  // If subscription grants payables, treat Accounts Payable as enabled even if legacy services flag is missing.
+  const isAccountsPayableEnabled =
+    session?.user?.services?.accountsPayable || !!hasPayablesAccess;
   
   // Stats should only show if BOTH subscription access AND service is enabled
   const canShowReceivables = hasReceivablesAccess && isSmartInvoicingEnabled;
   const canShowPayables = hasPayablesAccess && isAccountsPayableEnabled;
 
+  // Only show Net Balance when there is incoming money from the receivables service.
+  // Payables-only orgs (or orgs with no paid receivables yet) should not see Net Balance.
+  const shouldShowNetBalance = canShowReceivables && (stats.totalPaidRevenue ?? 0) > 0;
+
+  // When invoicing is not enabled, show vendor relationships instead of client count.
+  const shouldShowVendors = !canShowReceivables && canShowPayables;
+
   // Calculate number of cards to show (needed for scroll indicator check)
-  const cardCount = 1 + // Net Balance (always shown)
+  const cardCount = (shouldShowNetBalance ? 1 : 0) + // Net Balance (conditional)
     (canShowReceivables ? 1 : 0) + // Receivables
     (canShowPayables ? 1 : 0) + // Payables
     1; // Total Clients (always shown)
@@ -94,6 +146,12 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
   useEffect(() => {
     // Only fetch data when on the dashboard page
     if (!isOnDashboardPage) {
+      return;
+    }
+
+    // For waiter dashboards, we don't fetch the general finance stats
+    if (isWaiter) {
+      setLoading(false);
       return;
     }
 
@@ -148,7 +206,43 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
     if (!hasInitialized.current) {
       loadStats();
     }
-  }, [isOnDashboardPage, session?.user?.id, subscription?.plan?.planId]); // Re-fetch only if user or plan changes, or when navigating to/from dashboard
+  }, [isOnDashboardPage, session?.user?.id, subscription?.plan?.planId, isWaiter]); // Re-fetch only if user/plan changes, or when navigating to/from dashboard
+
+  // Load waiter-specific M-Pesa stats when on dashboard
+  useEffect(() => {
+    if (!isOnDashboardPage) return;
+    if (!isWaiter || !session?.user?.id) return;
+
+    let cancelled = false;
+    setWaiterLoading(true);
+    setWaiterError(null);
+
+    (async () => {
+      try {
+        const { getWaiterMpesaStats } = await import('@/app/actions/mpesa-waiter-stats');
+        const result = await getWaiterMpesaStats();
+        if (!cancelled) {
+          if (result.success && result.data) {
+            setWaiterStats(result.data);
+          } else {
+            setWaiterError(result.error || 'Failed to load M-Pesa stats');
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setWaiterError('Failed to load M-Pesa stats');
+        }
+      } finally {
+        if (!cancelled) {
+          setWaiterLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOnDashboardPage, isWaiter, session?.user?.id]);
 
   // Check if there's more content to scroll (mobile only)
   useEffect(() => {
@@ -177,6 +271,91 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
       };
     }
   }, [cardCount, loading]); // Re-check when cards change or loading completes
+
+  // Waiter-specific stats view
+  if (isWaiter) {
+    if (waiterLoading) {
+      return (
+        <div className={`relative ${className}`}>
+          <div className="flex gap-6 overflow-x-auto pb-2 hide-scrollbar">
+            {[...Array(3)].map((_, i) => (
+              <div
+                key={i}
+                className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6 animate-pulse flex-shrink-0 w-[calc(50%-12px)] md:w-auto min-h-[160px]"
+              >
+                <div className="h-4 w-24 bg-white/20 rounded mb-2" />
+                <div className="h-6 w-20 bg-white/20 rounded" />
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (waiterError) {
+      return (
+        <div className={`bg-red-500/10 border border-red-500/30 rounded-xl p-6 ${className}`}>
+          <div className="flex items-center space-x-2 text-red-400">
+            <AlertTriangle className="h-5 w-5" />
+            <span className="font-medium">Failed to load M-Pesa stats</span>
+          </div>
+          <p className="text-red-300 text-sm mt-2">{waiterError}</p>
+        </div>
+      );
+    }
+
+    const ws = waiterStats ?? { totalAmount: 0, successCount: 0, failedCount: 0 };
+
+    return (
+      <div className={`relative ${className}`}>
+        <div
+          ref={scrollContainerRef}
+          className="flex gap-6 overflow-x-auto pb-2 hide-scrollbar md:grid md:grid-cols-3 md:overflow-x-visible md:pb-0"
+        >
+          <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 flex-shrink-0 w-[calc(60%-12px)] md:w-auto">
+            <div className="flex flex-col justify-between h-full">
+              <div>
+                <p className="text-blue-200 text-sm font-medium">Total Prompted (KES)</p>
+                <p className="text-2xl font-bold text-white mt-2">
+                  <FormattedNumberDisplay value={ws.totalAmount} />
+                </p>
+                <p className="text-xs text-blue-300 mt-2">Sum of successful STK prompts</p>
+              </div>
+              <div className="p-3 bg-blue-500/20 rounded-lg w-fit mt-4">
+                <TrendingUp className="h-6 w-6 text-blue-300" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 flex-shrink-0 w-[calc(50%-12px)] md:w-auto">
+            <div className="flex flex-col justify-between h-full">
+              <div>
+                <p className="text-blue-200 text-sm font-medium">Successful Prompts</p>
+                <p className="text-2xl font-bold text-white mt-2">{ws.successCount}</p>
+                <p className="text-xs text-blue-300 mt-2">Approved STK requests</p>
+              </div>
+              <div className="p-3 bg-green-500/20 rounded-lg w-fit mt-4">
+                <ArrowDownLeft className="h-6 w-6 text-emerald-400" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 flex-shrink-0 w-[calc(50%-12px)] md:w-auto">
+            <div className="flex flex-col justify-between h-full">
+              <div>
+                <p className="text-blue-200 text-sm font-medium">Failed Prompts</p>
+                <p className="text-2xl font-bold text-white mt-2">{ws.failedCount}</p>
+                <p className="text-xs text-blue-300 mt-2">Declined or timed-out STK</p>
+              </div>
+              <div className="p-3 bg-red-500/20 rounded-lg w-fit mt-4">
+                <ArrowUpRight className="h-6 w-6 text-red-400" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -219,27 +398,30 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
           'md:grid-cols-2'
         }`}
       >
-        {/* Net Balance - Show for all plans */}
-      <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200 flex-shrink-0 w-[calc(50%-12px)] md:w-auto min-h-[180px] md:min-h-0">
-        <div className="flex flex-col justify-between h-full">
-          <div>
-            <p className="text-blue-200 text-sm font-medium">Net Balance</p>
-            <p className={`text-2xl font-bold ${stats.netBalance >= 0 ? 'text-green-400' : 'text-red-400'} mt-2`}>
-              {stats.netBalance >= 0 ? '+' : ''}
-              <FormattedNumberDisplay value={Math.abs(stats.netBalance)} />
-            </p>
-            <p className="text-xs text-blue-300 mt-2">
-              {stats.netBalance >= 0 ? 'Positive cash flow' : 'Negative cash flow'}
-            </p>
+        {/* Net Balance - only show when there is incoming money from receivables */}
+        {shouldShowNetBalance && (
+          <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200 flex-shrink-0 w-[calc(50%-12px)] md:w-auto min-h-[180px] md:min-h-0">
+            <div className="flex flex-col justify-between h-full">
+              <div>
+                <p className="text-blue-200 text-sm font-medium">Net Balance</p>
+                <p className={`text-2xl font-bold ${stats.netBalance >= 0 ? 'text-green-400' : 'text-red-400'} mt-2`}>
+                  {stats.netBalance >= 0 ? '+' : ''}
+                  <FormattedNumberDisplay value={Math.abs(stats.netBalance)} />
+                </p>
+                <p className="text-xs text-blue-300 mt-2">
+                  {stats.netBalance >= 0 ? 'Positive cash flow' : 'Negative cash flow'}
+                </p>
+              </div>
+              <div className={`p-3 rounded-lg w-fit mt-4 ${stats.netBalance >= 0 ? 'bg-green-500/20' : 'bg-red-500/20'}`}>
+                {stats.netBalance >= 0 ? (
+                  <TrendingUp className="h-6 w-6 text-green-400" />
+                ) : (
+                  <TrendingDown className="h-6 w-6 text-red-400" />
+                )}
+              </div>
+            </div>
           </div>
-          <div className={`p-3 rounded-lg w-fit mt-4 ${stats.netBalance >= 0 ? 'bg-green-500/20' : 'bg-red-500/20'}`}>
-            {stats.netBalance >= 0 ? 
-              <TrendingUp className="h-6 w-6 text-green-400" /> : 
-              <TrendingDown className="h-6 w-6 text-red-400" />
-            }
-          </div>
-        </div>
-      </div>
+        )}
 
       {/* Receivables (Invoices) - Show if service is enabled AND user has subscription access */}
       {canShowReceivables && (
@@ -277,15 +459,15 @@ export default function StatsCards({ className = '' }: StatsCardsProps) {
         </div>
       )}
 
-      {/* Total Clients */}
+      {/* Total Clients / Total Vendors */}
       <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-200 flex-shrink-0 w-[calc(50%-12px)] md:w-auto min-h-[180px] md:min-h-0">
         <div className="flex flex-col justify-between h-full">
           <div>
-            <p className="text-blue-200 text-sm font-medium">Total Clients</p>
+            <p className="text-blue-200 text-sm font-medium">{shouldShowVendors ? 'Total Vendors' : 'Total Clients'}</p>
             <p className="text-2xl font-bold text-white mt-2">
-              {stats.totalClients}
+              {shouldShowVendors ? stats.totalVendors : stats.totalClients}
             </p>
-            <p className="text-xs text-blue-300 mt-2">Active relationships</p>
+            <p className="text-xs text-blue-300 mt-2">{shouldShowVendors ? 'Active vendor relationships' : 'Active relationships'}</p>
           </div>
           <div className="p-3 bg-purple-500/20 rounded-lg w-fit mt-4">
             <Users className="h-6 w-6 text-purple-400" />

@@ -4,7 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Receipt, Clock, CheckCircle, XCircle, AlertTriangle, ChevronDown } from 'lucide-react';
 import { getRecentPayables, RecentPayable } from '@/lib/actions/dashboard';
-import CurrencyAmount from '@/components/CurrencyAmount';
+import FormattedNumberDisplay from '@/components/FormattedNumber';
+import { useCurrency } from '@/lib/contexts/CurrencyContext';
 
 interface RecentPayablesProps {
   className?: string;
@@ -28,6 +29,7 @@ function readCache(): { data: RecentPayable[]; valid: boolean } {
 }
 
 export default function RecentPayables({ className = '' }: RecentPayablesProps) {
+  const { preferredCurrency } = useCurrency();
   const [state, setState] = useState<{ payables: RecentPayable[]; loading: boolean; error: string | null }>(() => {
     const { data, valid } = readCache();
     return { payables: data, loading: !valid, error: null };
@@ -256,12 +258,15 @@ export default function RecentPayables({ className = '' }: RecentPayablesProps) 
                   </div>
                   <div className="text-right">
                     <p className="font-semibold text-white">
-                      <CurrencyAmount 
-                        amount={payable.total} 
-                        currency={payable.currency || 'USD'}
-                        convertedAmount={payable.amountUsd}
-                        convertedCurrency="USD"
+                      <FormattedNumberDisplay
+                        value={payable.total}
+                        currency={payable.currency || preferredCurrency}
+                        usePreferredCurrency={false}
+                        showCurrency={!!(payable.currency || preferredCurrency)}
                       />
+                    </p>
+                    <p className="text-xs font-medium text-blue-300">
+                      {payable.currency || preferredCurrency}
                     </p>
                     <p className={`text-xs font-medium ${getStatusColor(payable.status)}`}>
                       {payable.status.charAt(0).toUpperCase() + payable.status.slice(1).replace('_', ' ')}

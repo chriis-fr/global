@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
+import crypto from 'crypto';
 
 export async function GET() {
   try {
@@ -55,29 +56,27 @@ export async function POST(request: NextRequest) {
       address,
       company,
       taxId,
-      notes
+      notes,
+      preferredPayment
     } = body;
-
-    if (!name || !email) {
-      return NextResponse.json(
-        { success: false, message: 'Name and email are required' },
-        { status: 400 }
-      );
-    }
 
     const db = await connectToDatabase();
     const collection = db.collection('vendors');
 
     let query = {};
     const vendorData: Record<string, unknown> = {
-      name,
-      email,
+      name: name ?? '',
+      email: email ?? '',
       phone,
       address,
       company,
       taxId,
       notes,
+      preferredPayment,
       userId: session.user.email,
+      // One vendor = one reusable submission link
+      paymentLinkToken: crypto.randomBytes(24).toString('hex'),
+      status: 'active',
       createdAt: new Date(),
       updatedAt: new Date()
     };
