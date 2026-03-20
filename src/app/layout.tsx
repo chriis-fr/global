@@ -148,6 +148,7 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <meta name="safe-apps" content="true" />
+      <meta name="google-site-verification" content="eg_efXchRi8BhszYPqUBb0xxQAy8Mv57hKcdilYfLfM" />
       <link rel="icon" href="/chains.PNG" />
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
