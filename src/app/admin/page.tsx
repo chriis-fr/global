@@ -4,22 +4,21 @@ import { useState, useEffect, useRef } from 'react';
 import { useSession } from '@/lib/auth-client';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { 
-  Users, 
-  FileText, 
+import {
+  Users,
+  FileText,
   DollarSign,
   Loader2,
   ArrowUp,
   CheckCircle,
   XCircle,
-  UserCheck,
   Search,
   ArrowUpDown,
   Sparkles,
   Mail,
   ExternalLink,
   Link2,
-  AlertTriangle
+  AlertTriangle,
 } from 'lucide-react';
 import { BILLING_PLANS } from '@/data/billingPlans';
 import { getPlanPriceLabel } from '@/lib/pricingEngine';

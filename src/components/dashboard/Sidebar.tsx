@@ -214,7 +214,7 @@ function Sidebar() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [session?.user?.organizationId, permissions.canApproveBills]);
+  }, [session?.user?.organizationId, permissions.canApproveBills, effectiveRole]);
 
   const toggleMobileMenu = useCallback(() => {
     setIsMobileMenuOpen(v => !v);

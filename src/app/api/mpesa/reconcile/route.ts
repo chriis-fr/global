@@ -10,11 +10,19 @@ import { reconcileOrg, getReconSummary } from '@/lib/services/reconEngine';
  * Admin-only (owner | admin | superAdmin).
  */
 
-async function authorise(session: Awaited<ReturnType<typeof getServerSession>>) {
-  const userId = session?.user?.id as string | undefined;
-  const orgId  = session?.user?.organizationId as string | undefined;
-  const role   = (session?.user as { organizationRole?: string })?.organizationRole;
-  const isSuper = (session?.user as { adminTag?: boolean })?.adminTag === true;
+type SessionUserShape = {
+  id?: string | null;
+  organizationId?: string | null;
+  organizationRole?: string | null;
+  adminTag?: boolean;
+};
+
+async function authorise(session: { user?: SessionUserShape } | null) {
+  const user = session?.user ?? {};
+  const userId = user.id;
+  const orgId = user.organizationId;
+  const role = user.organizationRole;
+  const isSuper = user.adminTag === true;
 
   if (!userId || (!orgId && !isSuper)) return null;
   if (!isSuper && role !== 'owner' && role !== 'admin') return null;
@@ -22,7 +30,7 @@ async function authorise(session: Awaited<ReturnType<typeof getServerSession>>) 
   return { userId, orgId: orgId!, isSuper };
 }
 
-export async function GET(_req: NextRequest) {
+export async function GET() {
   const session = await getServerSession(authOptions);
   const auth = await authorise(session);
   if (!auth) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });

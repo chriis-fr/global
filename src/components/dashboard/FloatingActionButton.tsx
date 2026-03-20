@@ -89,7 +89,7 @@ export default function FloatingActionButton() {
 
   // Hide completely on M-Pesa waiter flows and any M-Pesa-related pages so waiters don't see routes
   // they shouldn't access (invoices, clients, settings, etc.).
-  if (pathname.startsWith('/dashboard/services/mpesa')) {
+  if (pathname?.startsWith('/dashboard/services/mpesa')) {
     return null;
   }
 

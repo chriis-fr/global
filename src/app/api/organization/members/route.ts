@@ -33,7 +33,9 @@ export async function GET() {
       );
     }
 
-    const organization = await OrganizationService.getOrganizationById(user.organizationId.toString());
+    const organization = await OrganizationService.getOrganizationById(
+      user.organizationId.toString()
+    );
     
     if (!organization) {
       return NextResponse.json(
@@ -205,8 +207,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Enforce role constraints, including waiter role only when M-Pesa is enabled
+    type OrgRole =
+      | 'owner'
+      | 'admin'
+      | 'financeManager'
+      | 'accountant'
+      | 'approver'
+      | 'waiter';
+
     const mpesaEnabled = organization?.settings?.mpesa?.enabled === true;
-    const allowedRoles: Array<'owner' | 'admin' | 'financeManager' | 'accountant' | 'approver' | 'waiter'> = [
+    const allowedRoles: OrgRole[] = [
       'admin',
       'financeManager',
       'accountant',
@@ -215,7 +225,7 @@ export async function POST(request: NextRequest) {
     if (mpesaEnabled) {
       allowedRoles.push('waiter');
     }
-    if (!allowedRoles.includes(role as any)) {
+    if (!allowedRoles.includes(role as OrgRole)) {
       return NextResponse.json(
         { success: false, message: 'Invalid role for this organization or service configuration' },
         { status: 400 }
@@ -421,8 +431,15 @@ export async function PUT(request: NextRequest) {
 
     // Enforce role constraints on update, including waiter role only when M-Pesa is enabled
     const organization = await OrganizationService.getOrganizationById(user.organizationId.toString());
+    type UpdatableOrgRole =
+      | 'admin'
+      | 'financeManager'
+      | 'accountant'
+      | 'approver'
+      | 'waiter';
+
     const mpesaEnabled = organization?.settings?.mpesa?.enabled === true;
-    const allowedRoles: Array<'admin' | 'financeManager' | 'accountant' | 'approver' | 'waiter'> = [
+    const allowedRoles: UpdatableOrgRole[] = [
       'admin',
       'financeManager',
       'accountant',
@@ -431,7 +448,7 @@ export async function PUT(request: NextRequest) {
     if (mpesaEnabled) {
       allowedRoles.push('waiter');
     }
-    if (!allowedRoles.includes(role as any)) {
+    if (!allowedRoles.includes(role as UpdatableOrgRole)) {
       return NextResponse.json(
         { success: false, message: 'Invalid role for this organization or service configuration' },
         { status: 400 }

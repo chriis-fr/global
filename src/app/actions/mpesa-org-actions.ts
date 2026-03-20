@@ -40,7 +40,10 @@ export async function setOrganizationMpesaEnabled(
     }
 
     const currentSettings = org.settings || {};
-    const currentMpesa = currentSettings.mpesa || { enabled: false };
+    const currentMpesa =
+      currentSettings.mpesa && typeof currentSettings.mpesa === 'object'
+        ? currentSettings.mpesa
+        : { enabled: false };
 
     await OrganizationService.updateOrganization(organizationId, {
       settings: {
@@ -136,7 +139,7 @@ export async function setOrganizationMpesaBusinessConfig(
     if (!org) return { success: false, error: 'Organization not found' };
 
     const currentSettings = org.settings || {};
-    const currentMpesa = currentSettings.mpesa || { enabled: currentSettings.mpesa?.enabled ?? false };
+    const currentMpesa = currentSettings.mpesa || { enabled: false };
 
     const updatedMpesa = { ...currentMpesa };
     if (config.businessShortCode !== undefined) {
@@ -207,7 +210,10 @@ export async function setOrganizationMpesaCredentials(
     const credentialsEncrypted = encrypt(payload);
 
     const currentSettings = org.settings || {};
-    const currentMpesa = currentSettings.mpesa || { enabled: currentSettings.mpesa?.enabled ?? false };
+    const currentMpesa =
+      currentSettings.mpesa && typeof currentSettings.mpesa === 'object'
+        ? currentSettings.mpesa
+        : { enabled: false };
 
     await OrganizationService.updateOrganization(organizationId, {
       settings: {

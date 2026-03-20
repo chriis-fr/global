@@ -180,7 +180,6 @@ export default function PayableViewPage() {
   const [showMarkPaidModal, setShowMarkPaidModal] = useState(false);
   const [showAttachmentModal, setShowAttachmentModal] = useState(false);
   const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
-  const [attachmentIsImage, setAttachmentIsImage] = useState(false);
   const [attachmentImgFailed, setAttachmentImgFailed] = useState(false);
   const [showMobileActions, setShowMobileActions] = useState(false);
   const [showMobileParties, setShowMobileParties] = useState(false);
@@ -201,7 +200,7 @@ export default function PayableViewPage() {
       const result = await getPayableWithInvoice(payableId);
 
       if (result.success && result.data) {
-        setPayable(result.data);
+        setPayable(result.data as unknown as Payable);
       } else {
         setError(result.error || 'Failed to load payable');
       }
@@ -313,28 +312,6 @@ export default function PayableViewPage() {
     } finally {
       setUpdatingStatus(false);
     }
-  };
-
-  const isImageUrl = (url: string): boolean => {
-    const lower = url.toLowerCase();
-    if (
-      lower.endsWith('.jpg') ||
-      lower.endsWith('.jpeg') ||
-      lower.endsWith('.png') ||
-      lower.endsWith('.webp') ||
-      lower.endsWith('.gif')
-    ) return true;
-    try {
-      const t = new URL(url, 'http://localhost').searchParams.get('t') || '';
-      if (t.startsWith('image/')) return true;
-    } catch {}
-    return false;
-  };
-
-  const openAttachmentModal = (url: string) => {
-    setAttachmentUrl(url);
-    setAttachmentIsImage(isImageUrl(url));
-    setShowAttachmentModal(true);
   };
 
   const handleDeletePayable = async () => {
@@ -1004,9 +981,8 @@ export default function PayableViewPage() {
                   <div className="space-y-3">
                     <AttachmentCard
                       url={payable.invoiceFileUrl as string}
-                      onOpen={(url, isImage) => {
+                      onOpen={(url) => {
                         setAttachmentUrl(url);
-                        setAttachmentIsImage(isImage);
                         setAttachmentImgFailed(false);
                         setShowAttachmentModal(true);
                       }}

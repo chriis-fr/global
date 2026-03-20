@@ -196,11 +196,9 @@ export async function getAdminUserDetail(
 
     // Derive organization role/name for clarity in admin UI
     let organizationRole: string | undefined;
-    let organizationName: string | undefined;
     if (user.organizationId) {
       const org = await db.collection('organizations').findOne({ _id: user.organizationId });
       if (org) {
-        organizationName = org.name as string | undefined;
         const members = (org.members as Array<{ userId: ObjectId; role: string }> | undefined) || [];
         const member = members.find((m) => m.userId.toString() === user._id.toString());
         if (member) {

@@ -32,51 +32,8 @@ const PENDING_TIMEOUT_MINUTES = 20;
 // Amount tolerance for soft matching (KES)
 const AMOUNT_TOLERANCE = 1;
 
-// Time window for soft matching
-const SOFT_MATCH_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Heuristic scoring
-// ─────────────────────────────────────────────────────────────────────────────
-
-function scoreMatch(
-  session: MpesaStkSession & { _id: ObjectId },
-  candidate: { amount?: number; phoneNumber?: string; createdAt?: Date }
-): number {
-  let score = 0;
-
-  // Amount match (40%)
-  const expectedAmt = session.amount ?? 0;
-  const candidateAmt = candidate.amount ?? 0;
-  if (Math.abs(expectedAmt - candidateAmt) <= AMOUNT_TOLERANCE) {
-    score += 0.4;
-  } else if (Math.abs(expectedAmt - candidateAmt) / (expectedAmt || 1) < 0.05) {
-    score += 0.2; // within 5%
-  }
-
-  // Phone match (30%)
-  if (session.phoneNumber && candidate.phoneNumber) {
-    const normalise = (p: string) => p.replace(/\D/g, '').slice(-9);
-    if (normalise(session.phoneNumber) === normalise(candidate.phoneNumber)) {
-      score += 0.3;
-    }
-  }
-
-  // Time match (20%) — within soft match window
-  if (session.createdAt && candidate.createdAt) {
-    const diff = Math.abs(
-      new Date(session.createdAt).getTime() - new Date(candidate.createdAt).getTime()
-    );
-    if (diff <= SOFT_MATCH_WINDOW_MS) {
-      score += 0.2 * (1 - diff / SOFT_MATCH_WINDOW_MS);
-    }
-  }
-
-  // Reference match (10%)
-  // Reserved for when intent layer (invoiceId / tableRef) is present
-
-  return Math.min(score, 1);
-}
+// (Soft-match heuristic reserved for future: current engine classifies using exact
+// receipt / amount / timeout rules only, to avoid unnecessary complexity.)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Classify a single session into a matchStatus

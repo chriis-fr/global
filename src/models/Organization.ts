@@ -223,6 +223,13 @@ export interface UpdateOrganizationInput {
       carryForward?: boolean;
       auditLog?: boolean;
     };
+    mpesa?: {
+      enabled?: boolean;
+      credentialsEncrypted?: string;
+      businessShortCode?: string;
+      accountReference?: string;
+      transactionType?: 'CustomerPayBillOnline' | 'CustomerBuyGoodsOnline';
+    };
   };
 }
 

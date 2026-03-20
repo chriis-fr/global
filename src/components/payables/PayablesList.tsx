@@ -43,7 +43,7 @@ function PayablesListContent({ onCreatePayable }: PayablesListProps) {
       const result = await getPayablesListPaginated(page, limit);
       
       if (result.success && result.data) {
-        setPayables(result.data.payables.slice(0, limit));
+        setPayables(result.data.payables.slice(0, limit) as unknown as Payable[]);
         setTotalPages(result.data.pagination?.pages || 1);
         setTotalPayablesCount(result.data.pagination?.total || 0);
       }
