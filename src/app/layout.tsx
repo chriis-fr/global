@@ -22,23 +22,54 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL("https://chains-erp.com"),
   title: {
-    default: "Global Finance - Send Invoices, get paid globally",
+    default: "Chains ERP | Finance",
     template: "%s | Chains ERP"
   },
   description:
-    "Chains ERP is a next-generation global finance and business automation platform integrating Web2 + Web3 technology. For companies seeking accounting, payroll, HR, blockchain payments, B2B automation, and decentralized financial tools.",
-  keywords: [
-    "Chains ERP",
-    "global finance software",
-    "web3 erp",
-    "blockchain erp",
-    "crypto payments",
-    "b2b finance platform",
-    "decentralized accounting",
-    "smart contract finance",
-    "Christopher Odhiambo",
-    "next generation erp"
-  ],
+    "Chains ERP helps you run your entire business—from invoicing to global payments—in one place. Chains ERP helps companies manage finances, automate operations, and get paid across borders with ease. From expenses and payroll to team and vendor management, businesses use Chains to simplify workflows, stay in control, and scale faster worldwide.",
+    keywords: [
+      "Chains ERP",
+      "global finance software",
+      "business management platform",
+      "all-in-one ERP system",
+      "enterprise resource planning",
+      "global payments platform",
+      "cross-border payments",
+      "multi-currency business tools",
+      "international invoicing",
+      "accounts payable and receivable",
+      "financial operations platform",
+      "business automation software",
+      "B2B finance platform",
+      "enterprise finance solution",
+      "startup finance tools",
+      "SME business software",
+      "corporate finance management",
+      "global payroll solutions",
+      "remote team payments",
+      "vendor and supplier management",
+      "expense management system",
+      "cash flow management software",
+      "real-time financial tracking",
+      "business scaling tools",
+      "operations management platform",
+      "digital finance infrastructure",
+      "stable currency payments",
+      "modern payment rails",
+      "fast business payments",
+      "secure global transactions",
+      "web3 erp",
+      "blockchain erp",
+      "crypto payments",
+      "stablecoin payments",
+      "decentralized accounting",
+      "smart contract finance",
+      "on-chain finance",
+      "Christopher Odhiambo",
+      "next generation erp",
+      "future of business finance",
+      "borderless business operations"
+    ],
   other: {
     "safe-apps": "true"
   },
@@ -54,7 +85,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Global Finance - Send Invoices, get paid globally",
     description:
-      "Manage invoices, payables and more with the most flexible and secure finance platform.",
+  "Run your business and finances globally in one place. Manage invoices, payments, expenses, and operations with a platform built for scale, speed, and cross-border growth.",
     url: "https://global.chains-erp.com",
     siteName: "Chains ERP",
     images: [
@@ -71,9 +102,9 @@ export const metadata: Metadata = {
 
   twitter: {
     card: "summary_large_image",
-    title: "Chains ERP – Finance + Web3 automation",
+    title: "Chains ERP – Financial Operations Simplified",
     description:
-      "Next-generation ERP that merges Web2 and Web3 for global businesses.",
+      "Chains ERP gives businesses the tools to send invoices, receive payments, manage expenses, and run operations across countries effortlessly. With modern global payment rails and stable-value currencies, companies reduce costs, get paid faster, and operate with confidence—while keeping everything organized in one place.",
     images: ["/chains.PNG"],
     creator: "@chains_erp",
   },
