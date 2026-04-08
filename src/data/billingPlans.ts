@@ -65,12 +65,12 @@ export const BILLING_PLANS: BillingPlan[] = [
     tier: 'growth',
     name: 'Growth',
     description: ' Full features for your individual account.',
-    monthlyPrice: 5.99,
-    yearlyPrice: 59.88,
+    monthlyPrice: 6.99,
+    yearlyPrice: 69.88,
     currency: 'USD',
     audience: 'individual',
     dynamicPricing: {
-      basePrice: 5.99,
+      basePrice: 6.99,
       seatPrice: 0,
       includedSeats: 1, // 1 seat only, no extra seats
       invoiceLimit: 50,
@@ -94,21 +94,21 @@ export const BILLING_PLANS: BillingPlan[] = [
     ctaText: 'Start Growth',
     ctaVariant: 'primary',
   },
-  // Growth – $5.99 per seat from 1 seat (for Business / teams)
+  // Growth – $6.99 per seat from 1 seat (for Business / teams)
   {
     planId: 'receivables-pro',
     type: 'receivables',
     tier: 'growth',
     name: 'Growth',
     description: 'Solo invoicer or small team. Full features from day one.',
-    monthlyPrice: 5.99,
-    yearlyPrice: 59.88,
+    monthlyPrice: 9.99,
+    yearlyPrice: 99.88,
     currency: 'USD',
     audience: 'business',
     dynamicPricing: {
       basePrice: 0,
-      seatPrice: 5.99,
-      includedSeats: 0, // every seat charged at seatPrice; 1 seat = $5.99
+      seatPrice: 9.99,
+      includedSeats: 0, // every seat charged at seatPrice; 1 seat = $7.99
       invoiceLimit: 100,
       invoiceOveragePrice: 10,
       invoiceOverageBlock: 100,
@@ -116,7 +116,7 @@ export const BILLING_PLANS: BillingPlan[] = [
       volumeFee: 0.005, // 0.5%
     },
     features: [
-      { id: 'seats', name: 'From 1 seat at $5.99', description: 'Add more seats at $5.99 each', included: true },
+      { id: 'seats', name: 'From 1 seat at $9.99', description: 'Add more seats at $9.99 each', included: true },
       { id: 'invoices', name: '100 invoices per month', description: 'Extra: $10 per 100 invoices', included: true, limit: 100, unit: 'invoices' },
       { id: 'volume', name: '$25,000 volume included', description: '0.5% over volume', included: true },
       { id: 'reconciliation', name: 'Real-time reconciliation', description: 'Automatic payment tracking', included: true },
