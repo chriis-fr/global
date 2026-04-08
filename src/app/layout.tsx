@@ -22,7 +22,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL("https://chains-erp.com"),
   title: {
-    default: "Chains ERP | Finance",
+    default: "Chains ERP | Finance Core",
     template: "%s | Chains ERP"
   },
   description:

@@ -112,7 +112,7 @@ export default function PricingPage() {
 
   // If user has organization, only show business plans
   const effectiveAudience = hasOrganization ? 'business' : audience
-  
+
   const plansForAudience = BILLING_PLANS.filter(plan => {
     const a = plan.audience ?? 'both'
     if (effectiveAudience === 'individual') return a === 'individual' || a === 'both'
@@ -120,9 +120,10 @@ export default function PricingPage() {
   })
   // Filter plans based on audience and type
   // For individuals: only show growth tier (not scale or enterprise) for payables and combined
+
   const filteredPlans = plansForAudience.filter(plan => {
     if (plan.type !== selectedType) return false;
-    
+
     // For individual users, exclude scale and enterprise tiers for payables and combined
     if (effectiveAudience === 'individual') {
       if (plan.type === 'payables' || plan.type === 'combined') {
@@ -130,13 +131,19 @@ export default function PricingPage() {
         return plan.tier === 'growth';
       }
     }
-    
+
     return true;
   })
 
+  const subscriptionStatus = subscription?.status
+
+  const isActive = subscriptionStatus === 'active'
+  const isExpired = subscriptionStatus === 'expired'
+  const isCancelled = subscriptionStatus === 'cancelled'
+
   const getSeatsForPlan = (plan: BillingPlan) => {
     if (plan.dynamicPricing) {
-      const isCurrentPlan = session && subscription?.plan?.planId === plan.planId;
+      const isCurrentPlan = session && subscription?.plan?.planId === plan.planId && isActive;
       const minSeats = effectiveAudience === 'business' && minSeatsFromMembers != null ? Math.max(1, minSeatsFromMembers) : 1;
       if (isCurrentPlan && currentPlanSeats != null) {
         const base = Math.max(currentPlanSeats, minSeats);
@@ -159,17 +166,17 @@ export default function PricingPage() {
   // 3. Payables and combined plans (individuals only get 1 seat)
   const isIndividualSingleSeat = (plan: BillingPlan) => {
     if (effectiveAudience !== 'individual') return false;
-    
+
     // Individual-specific receivables plan
     if (plan.planId === 'receivables-growth-individual' || plan.audience === 'individual') {
       return true;
     }
-    
+
     // For payables and combined plans, individuals always get 1 seat
     if (plan.type === 'payables' || plan.type === 'combined') {
       return true;
     }
-    
+
     return false;
   }
 
@@ -348,8 +355,8 @@ export default function PricingPage() {
               <button
                 onClick={() => setAudience('individual')}
                 className={`flex items-center justify-center gap-3 px-8 py-5 rounded-xl border-2 transition-all ${audience === 'individual'
-                    ? 'border-blue-600 bg-blue-50 text-blue-900 shadow-sm'
-                    : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                  ? 'border-blue-600 bg-blue-50 text-blue-900 shadow-sm'
+                  : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
                   }`}
               >
                 <User className="h-7 w-7" />
@@ -361,8 +368,8 @@ export default function PricingPage() {
               <button
                 onClick={() => setAudience('business')}
                 className={`flex items-center justify-center gap-3 px-8 py-5 rounded-xl border-2 transition-all ${audience === 'business'
-                    ? 'border-blue-600 bg-blue-50 text-blue-900 shadow-sm'
-                    : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                  ? 'border-blue-600 bg-blue-50 text-blue-900 shadow-sm'
+                  : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
                   }`}
               >
                 <UsersRound className="h-7 w-7" />
@@ -436,8 +443,8 @@ export default function PricingPage() {
               <button
                 onClick={() => setBillingPeriod('monthly')}
                 className={`px-6 py-2 rounded-md text-sm font-medium transition-colors ${billingPeriod === 'monthly'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
                   }`}
               >
                 Monthly
@@ -445,8 +452,8 @@ export default function PricingPage() {
               <button
                 onClick={() => setBillingPeriod('yearly')}
                 className={`px-6 py-2 rounded-md text-sm font-medium transition-colors ${billingPeriod === 'yearly'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
                   }`}
               >
                 Yearly <span className="text-xs bg-green-500 text-white px-1 rounded ml-1">Save 17%</span>
@@ -466,8 +473,8 @@ export default function PricingPage() {
                   key={type}
                   onClick={() => setSelectedType(type)}
                   className={`flex items-center gap-3 px-6 py-4 rounded-xl border-2 transition-all ${selectedType === type
-                      ? 'border-blue-600 bg-blue-50 text-blue-900'
-                      : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                    ? 'border-blue-600 bg-blue-50 text-blue-900'
+                    : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
                     }`}
                 >
                   {getTypeIcon(type)}
@@ -498,6 +505,12 @@ export default function PricingPage() {
           <div className={`grid gap-6 mx-auto ${effectiveAudience === 'individual' ? 'grid-cols-1 sm:grid-cols-2 max-w-2xl' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-5xl'}`}>
             {filteredPlans.map((plan) => {
               const isCurrentPlan = session && subscription?.plan?.planId === plan.planId;
+              
+              const isInactiveCurrentPlan =
+    session &&
+    subscription?.plan?.planId === plan.planId &&
+    (isExpired || isCancelled);
+              
               return (
                 <PlanCard
                   key={plan.planId}
@@ -508,6 +521,7 @@ export default function PricingPage() {
                   onSubscribe={handleSubscribe}
                   loading={loading === plan.planId}
                   isCurrentPlan={isCurrentPlan ? true : undefined}
+                  isInactiveCurrentPlan={isInactiveCurrentPlan ? true : undefined}
                   hideSeatSelector={isIndividualSingleSeat(plan)}
                   currentPlanSeats={isCurrentPlan ? currentPlanSeats : undefined}
                   allowSeatUpgrade={isCurrentPlan && plan.dynamicPricing ? true : undefined}
@@ -597,6 +611,7 @@ function PlanCard({
   onSubscribe,
   loading,
   isCurrentPlan,
+  isInactiveCurrentPlan,
   hideSeatSelector = false,
   currentPlanSeats,
   allowSeatUpgrade,
@@ -609,6 +624,7 @@ function PlanCard({
   onSubscribe: (plan: BillingPlan, seats?: number) => void
   loading: boolean
   isCurrentPlan?: boolean
+  isInactiveCurrentPlan?: boolean
   hideSeatSelector?: boolean
   currentPlanSeats?: number | null
   allowSeatUpgrade?: boolean
@@ -644,11 +660,19 @@ function PlanCard({
         </div>
       )}
 
-      {isCurrentPlan && (
+      {isCurrentPlan && !isInactiveCurrentPlan && (
         <div className="absolute -top-3 right-3">
           <span className="bg-green-500 text-white px-2 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1">
             <CheckCircle className="h-3 w-3" />
             Current
+          </span>
+        </div>
+      )}
+
+      {isInactiveCurrentPlan && (
+        <div className="absolute -top-3 right-3">
+          <span className="bg-red-500 text-white px-2 py-0.5 rounded-full text-xs font-semibold">
+            Expired
           </span>
         </div>
       )}
@@ -711,37 +735,37 @@ function PlanCard({
             return true;
           })
           .map((feature) => {
-          // For individual users, update seat-related feature wording
-          let displayName = feature.name;
-          let displayDescription = feature.description;
-          
-          if (hideSeatSelector && feature.id === 'seats') {
-            // Individual users: show "1 seat" instead of "X seats included"
-            displayName = '1 seat';
-            displayDescription = 'Individual account';
-          } else if (hideSeatSelector && feature.id === 'receivables-payables') {
-            // Individual users: keep the same but ensure description is appropriate
-            displayDescription = 'Full suite for your account';
-          }
-          
-          return (
-            <div key={feature.id} className="flex items-start gap-2">
-              <div className="flex-shrink-0 mt-0.5">
-                {feature.included ? (
-                  <Check className="h-4 w-4 text-green-500" />
-                ) : (
-                  <X className="h-4 w-4 text-red-400" />
-                )}
+            // For individual users, update seat-related feature wording
+            let displayName = feature.name;
+            let displayDescription = feature.description;
+
+            if (hideSeatSelector && feature.id === 'seats') {
+              // Individual users: show "1 seat" instead of "X seats included"
+              displayName = '1 seat';
+              displayDescription = 'Individual account';
+            } else if (hideSeatSelector && feature.id === 'receivables-payables') {
+              // Individual users: keep the same but ensure description is appropriate
+              displayDescription = 'Full suite for your account';
+            }
+
+            return (
+              <div key={feature.id} className="flex items-start gap-2">
+                <div className="flex-shrink-0 mt-0.5">
+                  {feature.included ? (
+                    <Check className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <X className="h-4 w-4 text-red-400" />
+                  )}
+                </div>
+                <div className="text-gray-600 text-sm">
+                  <span className="font-medium">{displayName}</span>
+                  {displayDescription && (
+                    <span className="block text-xs opacity-80">{displayDescription}</span>
+                  )}
+                </div>
               </div>
-              <div className="text-gray-600 text-sm">
-                <span className="font-medium">{displayName}</span>
-                {displayDescription && (
-                  <span className="block text-xs opacity-80">{displayDescription}</span>
-                )}
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
       </div>
 
       {isEnterprise ? (
@@ -754,18 +778,27 @@ function PlanCard({
       ) : (
         <button
           onClick={() => onSubscribe(plan, plan.dynamicPricing ? seats : undefined)}
-          disabled={loading || (isCurrentPlan && !allowSeatUpgrade) || (isCurrentPlan && allowSeatUpgrade && currentPlanSeats !== null && currentPlanSeats !== undefined && seats <= currentPlanSeats)}
-          className={`w-full py-3 px-4 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
-            isCurrentPlan && allowSeatUpgrade && currentPlanSeats !== null && currentPlanSeats !== undefined && seats > currentPlanSeats
-              ? 'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-400'
-              : isCurrentPlan && (!allowSeatUpgrade || (currentPlanSeats !== null && currentPlanSeats !== undefined && seats <= currentPlanSeats))
-                ? 'bg-green-100 text-green-700 cursor-not-allowed'
-                : plan.ctaVariant === 'primary'
-                  ? 'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-400'
-                  : plan.ctaVariant === 'secondary'
-                    ? 'bg-gray-600 text-white hover:bg-gray-700 disabled:bg-gray-400'
-                    : 'border-2 border-gray-300 text-gray-700 hover:bg-gray-50 disabled:bg-gray-100'
-          }`}
+          disabled={
+            loading ||
+            (!isInactiveCurrentPlan && (
+              (isCurrentPlan && !allowSeatUpgrade) ||
+              (isCurrentPlan &&
+                allowSeatUpgrade &&
+                currentPlanSeats !== null &&
+                currentPlanSeats !== undefined &&
+                seats <= currentPlanSeats)
+            ))
+          }
+          className={`w-full py-3 px-4 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${isCurrentPlan && allowSeatUpgrade && currentPlanSeats !== null && currentPlanSeats !== undefined && seats > currentPlanSeats
+            ? 'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-400'
+            : isCurrentPlan && (!allowSeatUpgrade || (currentPlanSeats !== null && currentPlanSeats !== undefined && seats <= currentPlanSeats))
+              ? 'bg-green-100 text-green-700 cursor-not-allowed'
+              : plan.ctaVariant === 'primary'
+                ? 'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-400'
+                : plan.ctaVariant === 'secondary'
+                  ? 'bg-gray-600 text-white hover:bg-gray-700 disabled:bg-gray-400'
+                  : 'border-2 border-gray-300 text-gray-700 hover:bg-gray-50 disabled:bg-gray-100'
+            }`}
         >
           {loading ? (
             <>
@@ -777,19 +810,25 @@ function PlanCard({
               <Users className="h-4 w-4" />
               <span>Upgrade to {seats} Seats</span>
             </>
-          ) : isCurrentPlan ? (
-            <>
-              <CheckCircle className="h-4 w-4" />
-              <span>
-                Current Plan
-                {currentPlanSeats && plan.dynamicPricing && (
-                  <span className="ml-1 text-xs opacity-90">({currentPlanSeats} seat{currentPlanSeats === 1 ? '' : 's'})</span>
-                )}
-              </span>
-            </>
-          ) : (
-            plan.ctaText
-          )}
+          )
+            : isInactiveCurrentPlan ? (
+              <>
+                <AlertCircle className="h-4 w-4" />
+                <span>Pay / Renew</span>
+              </>
+            ) : isCurrentPlan ? (
+              <>
+                <CheckCircle className="h-4 w-4" />
+                <span>
+                  Current Plan
+                  {currentPlanSeats && plan.dynamicPricing && (
+                    <span className="ml-1 text-xs opacity-90">({currentPlanSeats} seat{currentPlanSeats === 1 ? '' : 's'})</span>
+                  )}
+                </span>
+              </>
+            ) : (
+              plan.ctaText
+            )}
         </button>
       )}
     </div>
