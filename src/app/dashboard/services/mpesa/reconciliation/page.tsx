@@ -222,6 +222,15 @@ export default async function ReconciliationPage({ searchParams }: Props) {
         .toArray()) as (ReconTransaction & { _id: ObjectId })[]
     : [];
 
+  // Pulled-only transactions (no STK session) — surfaced as exceptions so missed callbacks are visible.
+  const pulledOnlyFilter: Record<string, unknown> = { organizationId: orgObjectId, matchStatus: 'missing_internal' };
+  if (rangeStart) pulledOnlyFilter.createdAt = { $gte: rangeStart };
+  const pulledOnlyDocs = (await reconCol
+    .find(pulledOnlyFilter)
+    .sort({ createdAt: -1 })
+    .limit(200)
+    .toArray()) as (ReconTransaction & { _id: ObjectId })[];
+
   const reconByStkId = new Map<string, ReconTransaction>();
   for (const r of reconDocs) {
     if (r.stkSessionId) reconByStkId.set(r.stkSessionId.toString(), r);
@@ -281,6 +290,22 @@ export default async function ReconciliationPage({ searchParams }: Props) {
       };
     });
 
+  // Add pulled-only exceptions (missing_internal) so they show up even without STK sessions.
+  for (const r of pulledOnlyDocs) {
+    exceptionDocs.push({
+      id: r._id.toString(),
+      matchStatus: 'missing_internal',
+      waiterName: '—',
+      phoneNumber: r.phoneNumber ?? '—',
+      amount: r.expectedAmount ?? 0,
+      mpesaAmount: r.mpesaAmount,
+      mpesaReceiptNumber: r.mpesaReceiptNumber,
+      tableRef: r.tableRef,
+      date: r.mpesaTimestamp ?? r.createdAt ?? null,
+      matchNote: r.matchNote ?? 'Pulled transaction with no matching STK session.',
+    });
+  }
+
   const filteredExceptions = exceptionsTab === 'all'
     ? exceptionDocs
     : exceptionDocs.filter((e) => e.matchStatus === exceptionsTab);
@@ -288,6 +313,7 @@ export default async function ReconciliationPage({ searchParams }: Props) {
   const exceptionCountByType = {
     amount_mismatch:  exceptionDocs.filter((e) => e.matchStatus === 'amount_mismatch').length,
     missing_external: exceptionDocs.filter((e) => e.matchStatus === 'missing_external').length,
+    missing_internal: exceptionDocs.filter((e) => e.matchStatus === 'missing_internal').length,
     duplicate:        exceptionDocs.filter((e) => e.matchStatus === 'duplicate').length,
     orphaned:         exceptionDocs.filter((e) => e.matchStatus === 'orphaned').length,
   };
@@ -586,6 +612,7 @@ export default async function ReconciliationPage({ searchParams }: Props) {
               ['all', `All (${totalExceptions})`, null],
               ['amount_mismatch', `Amount Mismatch (${exceptionCountByType.amount_mismatch})`, 'text-orange-300'],
               ['missing_external', `No Callback (${exceptionCountByType.missing_external})`, 'text-yellow-300'],
+              ['missing_internal', `No STK Record (${exceptionCountByType.missing_internal})`, 'text-purple-300'],
               ['duplicate', `Duplicate (${exceptionCountByType.duplicate})`, 'text-red-300'],
               ['orphaned', `Orphaned (${exceptionCountByType.orphaned})`, 'text-rose-300'],
             ] as [string, string, string | null][]).map(([key, label]) => (

@@ -93,9 +93,13 @@ function Sidebar() {
 
   // Session-first: use organizationRole/mpesaEnabled from session so first paint is correct (no waiter flash).
   // Fallback: load from API when session doesn't have them (e.g. old JWT).
+  const isSuperAdmin =
+    session?.user?.adminTag === true ||
+    (session?.user?.email ?? '').toLowerCase() === 'caspianodhis@gmail.com';
   const effectiveRole = session?.user?.organizationRole ?? orgRole;
   const effectiveMpesaEnabled = session?.user?.mpesaEnabled ?? orgMpesaEnabled;
   const roleUnknown = Boolean(
+    !isSuperAdmin &&
     session?.user?.organizationId &&
     (effectiveRole === undefined || effectiveRole === null || effectiveRole === '')
   );
@@ -350,7 +354,8 @@ function Sidebar() {
 
             {(sidebarReady
               ? SERVICE_LINKS.filter(link => {
-                const isSuperAdmin = session?.user?.adminTag === true;
+                // Super admin always sees all services.
+                if (isSuperAdmin) return true;
 
                 // Role unknown (e.g. loading): show no service links to avoid waiter seeing admin items
                 if (roleUnknown) {
@@ -360,12 +365,6 @@ function Sidebar() {
                 // Waiter: show ONLY M-Pesa (having a waiter means org has M-Pesa enabled)
                 if (effectiveRole === 'waiter') {
                   return link.key === 'mpesaPayments';
-                }
-
-                // Super admin (master account): has access to all services regardless of plan/user services flags
-                // and regardless of per-organization M-Pesa enablement.
-                if (isSuperAdmin) {
-                  return true;
                 }
 
                 const isServiceEnabled = session?.user?.services?.[link.key] || false;
@@ -387,7 +386,7 @@ function Sidebar() {
                   // All other roles (financeManager, accountant, approver, etc.) do NOT see M-Pesa
                   // even when the org has it enabled — they manage their own services but are not
                   // granted M-Pesa visibility until an admin explicitly elevates their access.
-                  const canSeeMpesa = effectiveRole === 'owner' || effectiveRole === 'admin';
+                  const canSeeMpesa = effectiveRole === 'owner' || effectiveRole === 'admin' || isSuperAdmin;
                   return Boolean(session?.user?.organizationId) && effectiveMpesaEnabled && canSeeMpesa;
                 }
 

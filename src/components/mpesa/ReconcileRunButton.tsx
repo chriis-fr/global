@@ -27,7 +27,7 @@ export function ReconcileRunButton({ lastRunAt }: Props) {
     setMessage(null);
     setIsError(false);
     try {
-      const res  = await fetch('/api/mpesa/reconcile', { method: 'POST', body: JSON.stringify({}) });
+      const res  = await fetch('/api/mpesa/reconcile', { method: 'POST', body: JSON.stringify({ pullTransactions: true }) });
       const data = await res.json();
       if (!data.success) throw new Error(data.error ?? 'Unknown error');
       const r = data.result;

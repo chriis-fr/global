@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { reconcileOrg, getReconSummary } from '@/lib/services/reconEngine';
+import { queryPullTransactionsAndIngest } from '@/lib/services/darajaPullTransactionsService';
 
 /**
  * GET  /api/mpesa/reconcile  — fetch current reconciliation summary (no re-run)
@@ -52,13 +53,20 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const stkSessionId = body?.stkSessionId as string | undefined;
+    const pullTransactions = body?.pullTransactions === true;
+
+    let pullResult: unknown = null;
+    if (pullTransactions) {
+      pullResult = await queryPullTransactionsAndIngest({ organizationId: auth.orgId });
+      console.log('[reconcile] Pull transactions result:', pullResult);
+    }
 
     const result = await reconcileOrg(auth.orgId, {
       stkSessionId,
       actor: auth.userId,
     });
 
-    return NextResponse.json({ success: true, result });
+    return NextResponse.json({ success: true, result, pullResult });
   } catch (err) {
     console.error('[reconcile POST]', err);
     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });

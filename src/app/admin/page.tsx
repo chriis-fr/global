@@ -137,7 +137,7 @@ export default function AdminDashboard() {
     consumerSecret: '',
     passkey: '',
     callbackUrl: '',
-    environment: 'sandbox' as 'sandbox' | 'production',
+    environment: 'production' as 'sandbox' | 'production',
     partyBShortCode: '',
   });
   const [mpesaBusinessForm, setMpesaBusinessForm] = useState({
@@ -146,6 +146,8 @@ export default function AdminDashboard() {
     transactionType: 'CustomerPayBillOnline' as 'CustomerPayBillOnline' | 'CustomerBuyGoodsOnline',
   });
   const [mpesaBusinessSaving, setMpesaBusinessSaving] = useState(false);
+  const [mpesaRegisteringC2B, setMpesaRegisteringC2B] = useState(false);
+  const [mpesaPullNominatedNumber, setMpesaPullNominatedNumber] = useState('');
 
   // Org search for "Add to organization"
   useEffect(() => {
@@ -505,6 +507,43 @@ export default function AdminDashboard() {
       setMpesaToggling(false);
     }
   };
+
+  const handleRegisterC2BUrl = async () => {
+    if (!mpesaOrgSelected) return;
+    setMpesaRegisteringC2B(true);
+
+    try{
+      if (!mpesaPullNominatedNumber.trim()) {
+        toast.error('Enter nominated number (e.g. 2547XXXXXXXX)');
+        return;
+      }
+
+      if (!mpesaOrgDetail?.businessShortCode?.trim()) {
+        toast.error('Set Business Shortcode first');
+        return;
+      }
+
+      const data = {
+        organizationId: mpesaOrgSelected.organizationId,
+        shortCode: mpesaOrgDetail.businessShortCode,
+        nominatedNumber: mpesaPullNominatedNumber.trim(),
+        callbackUrl: 'https://70b1-129-222-146-124.ngrok-free.app/api/mpesa/pulltransactions/callback',
+      };
+
+      const { registerC2B } = await import('@/app/actions/register-c2b')
+      const result = await registerC2B(data)
+      if (result?.success) {
+        toast.success('Pull registration requested');
+      } else {
+        toast.error(result?.error || 'Failed to register pull transactions');
+      }
+    }catch(error){
+      console.error('Failed to register C2B URL:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to register pull transactions');
+    } finally {
+      setMpesaRegisteringC2B(false);
+    }
+  }
 
   const handleSaveMpesaCredentials = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1197,6 +1236,25 @@ export default function AdminDashboard() {
                       Controls whether this organization can use the waiter STK prompts and M-Pesa flows.
                     </p>
                   </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={mpesaPullNominatedNumber}
+                      onChange={(e) => setMpesaPullNominatedNumber(e.target.value)}
+                      className="w-56 px-3 py-1.5 border border-gray-300 rounded text-sm"
+                      placeholder="Nominated number (2547...)"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleRegisterC2BUrl}
+                      disabled={mpesaRegisteringC2B}
+                      className="px-4 py-1.5 rounded-lg text-sm font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {mpesaRegisteringC2B ? 'Registering…' : 'Register Pull'}
+                    </button>
+                  </div>
+
                   <button
                     type="button"
                     onClick={handleToggleOrgMpesa}

@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     const creds = await getOrganizationMpesaCredentialsDecrypted(organizationId);
     const consumerKey = creds?.consumerKey ?? process.env.DARAJA_CONSUMER_KEY ?? '';
     const consumerSecret = creds?.consumerSecret ?? process.env.DARAJA_CONSUMER_SECRET ?? '';
-    const environment: 'sandbox' | 'production' = (creds?.environment ?? process.env.NEXT_PUBLIC_DARAJA_ENV ?? 'sandbox') as 'sandbox' | 'production';
+    const environment: 'sandbox' | 'production' = (creds?.environment ?? process.env.DARAJA_ENV ?? 'production') as 'sandbox' | 'production';
 
     if (!consumerKey || !consumerSecret) {
       return NextResponse.json({ success: false, error: 'Consumer key/secret not configured' }, { status: 400 });
