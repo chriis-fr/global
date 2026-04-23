@@ -6,7 +6,6 @@ import { motion } from 'framer-motion';
 import { 
   Plus, 
   Receipt,
-  DollarSign, 
   Users,
   Building2,
   ArrowRight,
@@ -31,7 +30,7 @@ type VendorWithCounts = {
 
 export default function AccountsPayablePage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'bills' | 'direct-payments' | 'vendors'>('bills');
+  const [activeTab, setActiveTab] = useState<'bills' | 'vendors'>('bills');
   const statsScrollRef = useRef<HTMLDivElement>(null);
   const [showStatsScrollIndicator, setShowStatsScrollIndicator] = useState(false);
   const [vendorStats, setVendorStats] = useState<VendorWithCounts[]>([]);
@@ -329,19 +328,6 @@ export default function AccountsPayablePage() {
                 </div>
               </button>
               <button
-                onClick={() => setActiveTab('direct-payments')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                  activeTab === 'direct-payments'
-                    ? 'border-blue-400 text-blue-400'
-                    : 'border-transparent text-blue-300 hover:text-white hover:border-blue-400'
-                }`}
-              >
-                <div className="flex items-center space-x-2">
-                  <DollarSign className="h-4 w-4" />
-                  <span>Direct Payments</span>
-                </div>
-              </button>
-              <button
                 onClick={() => setActiveTab('vendors')}
                 className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
                   activeTab === 'vendors'
@@ -372,34 +358,6 @@ export default function AccountsPayablePage() {
               }>
                 <PayablesList onCreatePayable={handleCreatePayable} />
               </Suspense>
-            )}
-
-            {activeTab === 'direct-payments' && (
-              <div>
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-lg font-semibold text-white">Direct Payments</h3>
-                  <button
-                    onClick={() => router.push('/dashboard/services/payables/create?type=direct')}
-                    className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span>Make Payment</span>
-                  </button>
-                </div>
-                
-                <div className="text-center py-12">
-                  <DollarSign className="h-12 w-12 text-blue-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-white mb-2">Direct Payments</h3>
-                  <p className="text-blue-200 mb-6">Make direct payments to vendors without creating bills first.</p>
-                  <button
-                    onClick={() => router.push('/dashboard/services/payables/create?type=direct')}
-                    className="inline-flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span>Make Payment</span>
-                  </button>
-                </div>
-              </div>
             )}
 
             {activeTab === 'vendors' && (
