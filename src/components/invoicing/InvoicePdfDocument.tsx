@@ -72,6 +72,7 @@ export interface InvoicePdfData {
   withholdingTaxEnabled?: boolean;
   withholdingTaxAmount?: number;
   withholdingTaxRatePercent?: number;
+  withholdingTaxType?: 'wht' | 'paye';
   memo?: string;
 }
 
@@ -704,7 +705,9 @@ export function InvoicePdfDocument({ data, invoiceNumber, variant = 'invoice' }:
             )}
             {showWithholding && (
               <View style={styles.totalRow}>
-                <Text>Withholding ({data.withholdingTaxRatePercent ?? 5}%):</Text>
+                <Text>
+                  {data.withholdingTaxType === 'paye' ? 'PAYE' : 'Withholding tax'} ({data.withholdingTaxRatePercent ?? 5}%):
+                </Text>
                 <Text>-{symbol}{withholdingAmount.toFixed(2)}</Text>
               </View>
             )}

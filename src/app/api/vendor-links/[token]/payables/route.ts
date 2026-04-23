@@ -76,6 +76,7 @@ export async function POST(
     const vendors = db.collection('vendors');
     const payables = db.collection('payables');
     const events = db.collection<PayableEvent>('payable_events');
+    const users = db.collection('users');
 
     // Look up vendor by paymentLinkToken and ensure it's active
     const vendor = await vendors.findOne({
@@ -114,11 +115,34 @@ export async function POST(
       );
     }
 
+    const vendorOrgRaw = vendor.organizationId as string | ObjectId | undefined;
+    const vendorOwnerEmail = vendor.userId as string | undefined;
+
+    let organizationIdString =
+      typeof vendorOrgRaw === 'string'
+        ? vendorOrgRaw
+        : vendorOrgRaw
+        ? vendorOrgRaw.toString()
+        : undefined;
+
+    // Legacy safety: if vendor lacks organizationId, recover it from owner user record.
+    if (!organizationIdString && vendorOwnerEmail) {
+      const ownerUser = await users.findOne(
+        { email: vendorOwnerEmail },
+        { projection: { organizationId: 1 } }
+      );
+      const ownerOrg = ownerUser?.organizationId as string | ObjectId | undefined;
+      if (ownerOrg) {
+        organizationIdString =
+          typeof ownerOrg === 'string' ? ownerOrg : ownerOrg.toString();
+      }
+    }
+
     const organizationId =
-      (vendor.organizationId as ObjectId | undefined) || undefined;
-    const ownerId = organizationId
-      ? organizationId.toString()
-      : (vendor.userId as string | undefined);
+      organizationIdString && ObjectId.isValid(organizationIdString)
+        ? new ObjectId(organizationIdString)
+        : undefined;
+    const ownerId = organizationIdString || vendorOwnerEmail;
 
     if (!ownerId) {
       return NextResponse.json(
@@ -191,7 +215,7 @@ export async function POST(
 
     const payableNumber = await generateSecurePayableNumber(
       db,
-      organizationId ? organizationId.toString() : null,
+      organizationIdString ?? null,
       ownerId
     );
 
@@ -202,8 +226,9 @@ export async function POST(
       dueDate: new Date(dueDate),
 
       ownerId,
-      ownerType: organizationId ? 'organization' : 'individual',
-      organizationId: organizationId ?? null,
+      ownerType: organizationIdString ? 'organization' : 'individual',
+      organizationId: organizationId ?? organizationIdString ?? null,
+      userId: vendorOwnerEmail ?? null,
 
       vendorId: vendor._id,
       vendorName: vendor.name,

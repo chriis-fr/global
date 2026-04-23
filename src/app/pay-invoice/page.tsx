@@ -68,6 +68,7 @@ interface Invoice {
   total?: number;
   withholdingTaxAmount?: number;
   withholdingTaxRatePercent?: number;
+  withholdingTaxType?: 'wht' | 'paye';
   memo?: string;
   status: string;
   paidAt?: string;
@@ -359,7 +360,8 @@ function PayInvoiceContent() {
                 {(invoice.withholdingTaxAmount ?? 0) > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">
-                      Withholding{invoice.withholdingTaxRatePercent != null ? ` (${invoice.withholdingTaxRatePercent}%)` : ''}
+                      {invoice.withholdingTaxType === 'paye' ? 'PAYE' : 'Withholding'}
+                      {invoice.withholdingTaxRatePercent != null ? ` (${invoice.withholdingTaxRatePercent}%)` : ''}
                     </span>
                     <span className="font-medium text-red-600">-{fmt(invoice.withholdingTaxAmount ?? 0)}</span>
                   </div>

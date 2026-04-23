@@ -163,6 +163,8 @@ interface InvoiceFormData {
   withholdingTaxEnabled?: boolean;
   /** Withholding tax rate % (e.g. 5 for 5%); default 5. */
   withholdingTaxRatePercent?: number;
+  /** When deduction applies: WHT (withholding) vs PAYE (Pay As You Earn). */
+  withholdingTaxType?: 'wht' | 'paye';
   memo: string;
   attachedFiles: File[];
   status: 'draft' | 'sent' | 'paid' | 'overdue';
@@ -244,6 +246,7 @@ const defaultInvoiceData: InvoiceFormData = {
   subtotal: 0,
   totalTax: 0,
   total: 0,
+  withholdingTaxType: 'wht',
   memo: '',
   attachedFiles: [],
   status: 'draft',
@@ -270,7 +273,13 @@ const useFormPersistence = (key: string, initialData: InvoiceFormData, setAutoSa
             paymentNetwork: parsed.paymentNetwork || initialData.paymentNetwork,
             chainId: parsed.chainId || initialData.chainId,
             tokenAddress: parsed.tokenAddress || initialData.tokenAddress,
-            paymentAddress: parsed.paymentAddress || initialData.paymentAddress
+            paymentAddress: parsed.paymentAddress || initialData.paymentAddress,
+            withholdingTaxType:
+              parsed.withholdingTaxType === 'paye'
+                ? 'paye'
+                : parsed.withholdingTaxType === 'wht'
+                  ? 'wht'
+                  : (initialData.withholdingTaxType ?? 'wht')
           };
           
           // If tokenAddress is set and currency doesn't match, sync it
@@ -397,11 +406,17 @@ function round2(x: number): number {
   return Math.round(x * 100) / 100;
 }
 
+/** Payload to API: may send `withholdingTaxType: null` to clear PAYE on update. */
+type NormalizedInvoiceApiPayload = Omit<InvoiceFormData, 'withholdingTaxType'> & {
+  routingNumber: string;
+  withholdingTaxType: 'wht' | 'paye' | null;
+} & { withholdingTaxAmount?: number; withholdingTaxRatePercent?: number };
+
 /** Normalize all monetary fields to 2 decimals before sending to API so 500 stays 500. */
 function normalizeInvoicePayload(
   data: InvoiceFormData,
   overrides: Partial<InvoiceFormData> & { withholdingTaxAmount?: number; withholdingTaxRatePercent?: number } = {}
-): InvoiceFormData & { withholdingTaxAmount?: number; withholdingTaxRatePercent?: number; routingNumber?: string } {
+): NormalizedInvoiceApiPayload {
   const sub = round2(Number(data.subtotal) ?? 0);
   const tax = round2(Number(data.totalTax) ?? 0);
   const tot = round2(Number(data.total) ?? 0);
@@ -414,7 +429,12 @@ function normalizeInvoicePayload(
   }));
   // API expects routingNumber; create form uses swiftCode/bankCode (e.g. Kenya) — send as routingNumber
   const routingNumber = data.swiftCode || data.bankCode || '';
-  return { ...data, subtotal: sub, totalTax: tax, total: tot, items, routingNumber, ...overrides };
+  const merged = { ...data, subtotal: sub, totalTax: tax, total: tot, items, routingNumber, ...overrides };
+  const enabled = Boolean(merged.withholdingTaxEnabled);
+  const withholdingTaxType: 'wht' | 'paye' | null = enabled
+    ? (merged.withholdingTaxType ?? 'wht')
+    : null;
+  return { ...merged, withholdingTaxType };
 }
 
 /** Generate professional vector PDF (react-pdf) and return base64. Used for send and download. */
@@ -462,6 +482,8 @@ export default function CreateInvoicePage() {
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [sendingInvoice, setSendingInvoice] = useState(false);
   const [creatingClient, setCreatingClient] = useState(false);
+  /** WHT vs PAYE when using "Add" before deduction is turned on. */
+  const [withholdingTypeToAdd, setWithholdingTypeToAdd] = useState<'wht' | 'paye'>('wht');
   const [logoMounted, setLogoMounted] = useState(false);
   const [invoiceProfiles, setInvoiceProfiles] = useState<InvoiceProfileSummary[]>([]);
   const [selectedInvoiceProfileId, setSelectedInvoiceProfileId] = useState<string | null>(null);
@@ -568,6 +590,7 @@ export default function CreateInvoicePage() {
             ? settings.defaultCurrency
             : prev.currency,
         withholdingTaxEnabled: showWithholding,
+        withholdingTaxType: 'wht',
         withholdingTaxRatePercent: ratePercent,
         total,
       };
@@ -1153,6 +1176,7 @@ export default function CreateInvoicePage() {
           tokenAddress: raw.paymentSettings?.tokenAddress || raw.tokenAddress,
           withholdingTaxEnabled: (raw.withholdingTaxAmount != null && raw.withholdingTaxAmount > 0),
           withholdingTaxRatePercent: Number(raw.withholdingTaxRatePercent) || 5,
+          withholdingTaxType: (raw as { withholdingTaxType?: string }).withholdingTaxType === 'paye' ? 'paye' : 'wht',
           subtotal: round2(Number(raw.subtotal) ?? 0),
           totalTax: round2(Number(raw.totalTax) ?? 0),
           total: round2(Number(raw.total) ?? 0)
@@ -1205,6 +1229,7 @@ export default function CreateInvoicePage() {
               ? onboardingData.invoiceSettings.defaultCurrency
               : prev.currency,
             withholdingTaxEnabled: showWithholding,
+            withholdingTaxType: 'wht',
             withholdingTaxRatePercent: ratePercent,
             total: showWithholding ? newTotal : prev.total
           };
@@ -4556,35 +4581,59 @@ export default function CreateInvoicePage() {
                 {!formData.withholdingTaxEnabled ? (
                   <div className="flex justify-between text-gray-800 items-center gap-2">
                     <span className="text-sm text-gray-700">Withholding tax</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const sub = formData.subtotal ?? 0;
-                        const tax = formData.totalTax ?? 0;
-                        const ratePercent = formData.withholdingTaxRatePercent ?? 5;
-                        const rate = ratePercent / 100;
-                        setFormData(prev => ({
-                          ...prev,
-                          withholdingTaxEnabled: true,
-                          withholdingTaxRatePercent: ratePercent,
-                          total: sub + tax - (sub + tax) * rate
-                        }));
-                      }}
-                      className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
-                    >
-                      Add withholding tax
-                    </button>
+                    <span className="flex items-center gap-2">
+                      <select
+                        value={withholdingTypeToAdd}
+                        onChange={(e) => setWithholdingTypeToAdd(e.target.value as 'wht' | 'paye')}
+                        className="text-sm bg-white border border-gray-300 rounded px-1.5 py-0.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:light]"
+                        aria-label="WHT or PAYE"
+                      >
+                        <option value="wht">WHT</option>
+                        <option value="paye">PAYE</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const sub = formData.subtotal ?? 0;
+                          const tax = formData.totalTax ?? 0;
+                          const ratePercent = formData.withholdingTaxRatePercent ?? 5;
+                          const rate = ratePercent / 100;
+                          setFormData(prev => ({
+                            ...prev,
+                            withholdingTaxEnabled: true,
+                            withholdingTaxType: withholdingTypeToAdd,
+                            withholdingTaxRatePercent: ratePercent,
+                            total: sub + tax - (sub + tax) * rate
+                          }));
+                        }}
+                        className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                      >
+                        Add withholding tax
+                      </button>
+                    </span>
                   </div>
                 ) : (
                   <div className="flex justify-between text-gray-800 items-center gap-2 flex-wrap">
                     <span className="flex items-center gap-2">
-                      <span className="text-gray-800">Withholding tax (</span>
+                      <select
+                        value={formData.withholdingTaxType ?? 'wht'}
+                        onChange={(e) => {
+                          const t = e.target.value as 'wht' | 'paye';
+                          setFormData(prev => ({ ...prev, withholdingTaxType: t }));
+                        }}
+                        className="text-sm font-normal bg-white border border-gray-300 rounded px-1 py-0.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:light]"
+                        aria-label="WHT or PAYE"
+                      >
+                        <option value="wht">Withholding tax</option>
+                        <option value="paye">PAYE</option>
+                      </select>
+                      <span className="text-gray-800">(</span>
                       <input
                         type="number"
                         min="0"
                         max="100"
                         step="0.5"
-                        className="w-14 px-1 py-0.5 text-sm bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="w-14 px-1 py-0.5 text-sm bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         value={formData.withholdingTaxRatePercent ?? 5}
                         onChange={(e) => {
                           const sub = formData.subtotal ?? 0;
@@ -4610,7 +4659,7 @@ export default function CreateInvoicePage() {
                         onClick={() => {
                           const sub = formData.subtotal ?? 0;
                           const tax = formData.totalTax ?? 0;
-                          setFormData(prev => ({ ...prev, withholdingTaxEnabled: false, total: sub + tax }));
+                          setFormData(prev => ({ ...prev, withholdingTaxEnabled: false, withholdingTaxType: 'wht', total: sub + tax }));
                         }}
                         className="p-0.5 rounded hover:bg-red-100 text-gray-500 hover:text-red-600 transition-colors"
                         title="Remove withholding tax"

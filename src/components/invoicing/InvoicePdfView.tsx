@@ -63,6 +63,7 @@ interface InvoiceFormData {
   withholdingTaxAmount?: number;
   /** Withholding tax rate % (e.g. 5 for 5%); for label on PDF. */
   withholdingTaxRatePercent?: number;
+  withholdingTaxType?: 'wht' | 'paye';
   memo?: string;
 }
 
@@ -253,7 +254,9 @@ const InvoicePdfView = memo(forwardRef<HTMLDivElement, InvoicePdfViewProps>(
               )}
               {(formData.withholdingTaxEnabled || (formData.withholdingTaxAmount != null && formData.withholdingTaxAmount > 0)) && (
                 <div className="flex justify-between text-gray-600">
-                  <span>Withholding tax ({(formData.withholdingTaxRatePercent ?? 5)}%):</span>
+                  <span>
+                    {formData.withholdingTaxType === 'paye' ? 'PAYE' : 'Withholding tax'} ({(formData.withholdingTaxRatePercent ?? 5)}%):
+                  </span>
                   <span className="text-red-600">-{getCurrencySymbol()}{(formData.withholdingTaxAmount ?? (formData.subtotal + formData.totalTax) * ((formData.withholdingTaxRatePercent ?? 5) / 100)).toFixed(2)}</span>
                 </div>
               )}

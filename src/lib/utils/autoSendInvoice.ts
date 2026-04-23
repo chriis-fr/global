@@ -64,6 +64,7 @@ interface ApiInvoice {
   withholdingTaxAmount?: number;
   withholdingTaxRatePercent?: number;
   memo?: string;
+  withholdingTaxType?: 'wht' | 'paye';
 }
 
 /** Map API invoice to InvoicePdfData - same format as invoice details page and email. */
@@ -131,6 +132,7 @@ function invoiceToPdfData(inv: ApiInvoice): InvoicePdfData {
     withholdingTaxEnabled: (inv.withholdingTaxAmount ?? 0) > 0,
     withholdingTaxAmount: inv.withholdingTaxAmount,
     withholdingTaxRatePercent: inv.withholdingTaxRatePercent,
+    withholdingTaxType: inv.withholdingTaxType,
     memo: inv.memo,
   };
 }

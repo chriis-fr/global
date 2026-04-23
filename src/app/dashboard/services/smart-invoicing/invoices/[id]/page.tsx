@@ -82,6 +82,7 @@ interface Invoice {
   totalAmount?: number;
   withholdingTaxAmount?: number;
   withholdingTaxRatePercent?: number;
+  withholdingTaxType?: 'wht' | 'paye';
   memo?: string;
   status?: 'draft' | 'sent' | 'pending' | 'paid' | 'overdue';
   createdAt?: string;
@@ -189,6 +190,7 @@ function invoiceToPdfData(inv: Invoice): InvoicePdfData {
     withholdingTaxEnabled: (inv.withholdingTaxAmount ?? 0) > 0,
     withholdingTaxAmount: inv.withholdingTaxAmount,
     withholdingTaxRatePercent: inv.withholdingTaxRatePercent,
+    withholdingTaxType: inv.withholdingTaxType,
     memo: inv.memo,
   };
 }

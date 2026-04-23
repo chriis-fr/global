@@ -145,6 +145,7 @@ export async function POST(request: NextRequest) {
       total,
       withholdingTaxAmount,
       withholdingTaxRatePercent,
+      withholdingTaxType,
       memo,
       status,
       createdAt,
@@ -406,8 +407,9 @@ export async function POST(request: NextRequest) {
       subtotal: subtotalRounded,
       totalTax: totalTaxRounded,
       total: totalRounded,
-      ...(withholdingTaxAmount != null && withholdingTaxAmount > 0 && { withholdingTaxAmount: round2(parseFloat(withholdingTaxAmount as string) || 0) }),
+      ...(withholdingTaxAmount != null && Number(withholdingTaxAmount) > 0 && { withholdingTaxAmount: round2(parseFloat(String(withholdingTaxAmount)) || 0) }),
       ...(withholdingTaxRatePercent != null && { withholdingTaxRatePercent }),
+      ...(withholdingTaxAmount != null && Number(withholdingTaxAmount) > 0 && String(withholdingTaxType) === 'paye' && { withholdingTaxType: 'paye' as const }),
       memo: memo,
 
       // Status and metadata

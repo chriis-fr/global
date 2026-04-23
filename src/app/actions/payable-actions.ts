@@ -36,7 +36,9 @@ export async function getPayableWithInvoice(payableId: string) {
         _id: new ObjectId(payableId),
         $or: [
           { organizationId: session.user.organizationId },
-          { organizationId: new ObjectId(session.user.organizationId) }
+          { organizationId: new ObjectId(session.user.organizationId) },
+          // Backward compatibility: legacy records may have ownerId set to org id.
+          { ownerId: session.user.organizationId },
         ]
       };
     } else {
@@ -259,7 +261,9 @@ export async function getPayablesListPaginated(
       ? { 
           $or: [
             { organizationId: session.user.organizationId },
-            { organizationId: new ObjectId(session.user.organizationId) }
+            { organizationId: new ObjectId(session.user.organizationId) },
+            // Backward compatibility: vendor-link records created before org wiring fix.
+            { ownerId: session.user.organizationId },
           ]
         }
       : { 
@@ -282,7 +286,8 @@ export async function getPayablesListPaginated(
       ? { 
           $or: [
             { organizationId: session.user.organizationId },
-            { organizationId: new ObjectId(session.user.organizationId) }
+            { organizationId: new ObjectId(session.user.organizationId) },
+            { ownerId: session.user.organizationId },
           ]
         }
       : { 
@@ -403,6 +408,7 @@ export async function getVendorsWithPayableCounts(): Promise<{
           $or: [
             { organizationId: session.user.organizationId },
             { organizationId: new ObjectId(session.user.organizationId) },
+            { ownerId: session.user.organizationId },
           ],
         }
       : {
@@ -636,7 +642,8 @@ export async function getPayablesStats() {
       ? { 
           $or: [
             { organizationId: session.user.organizationId },
-            { organizationId: new ObjectId(session.user.organizationId) }
+            { organizationId: new ObjectId(session.user.organizationId) },
+            { ownerId: session.user.organizationId },
           ]
         }
       : { 
@@ -718,7 +725,8 @@ export async function deletePayable(payableId: string) {
           _id: new ObjectId(payableId),
           $or: [
             { organizationId: session.user.organizationId },
-            { organizationId: new ObjectId(session.user.organizationId) }
+            { organizationId: new ObjectId(session.user.organizationId) },
+            { ownerId: session.user.organizationId },
           ]
         }
       : { 
@@ -767,7 +775,8 @@ export async function getAllPayables() {
       ? { 
           $or: [
             { organizationId: session.user.organizationId },
-            { organizationId: new ObjectId(session.user.organizationId) }
+            { organizationId: new ObjectId(session.user.organizationId) },
+            { ownerId: session.user.organizationId },
           ]
         }
       : { 

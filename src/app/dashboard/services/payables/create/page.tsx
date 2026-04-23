@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from '@/lib/auth-client';
 import { 
@@ -114,20 +114,7 @@ interface PayableFormData {
   approverEmail?: string;
 }
 
-const PAYABLE_CATEGORIES = [
-  'Office Supplies',
-  'Software & Services',
-  'Marketing & Advertising',
-  'Travel & Entertainment',
-  'Professional Services',
-  'Utilities',
-  'Rent & Facilities',
-  'Equipment & Hardware',
-  'Training & Development',
-  'Legal & Compliance',
-  'Insurance',
-  'Other'
-];
+const OTHER_CATEGORY = 'Other';
 
 const PAYABLE_PRIORITIES = [
   { value: 'low', label: 'Low', color: 'text-green-600' },
@@ -149,7 +136,7 @@ const useFormPersistence = (key: string, initialData: PayableFormData, setAutoSa
     }
   }, [key]);
 
-  const updateFormData = (newData: PayableFormData | ((prev: PayableFormData) => PayableFormData)) => {
+  const updateFormData = useCallback((newData: PayableFormData | ((prev: PayableFormData) => PayableFormData)) => {
     setFormData(prev => {
       const updated = typeof newData === 'function' ? newData(prev) : newData;
       
@@ -164,12 +151,12 @@ const useFormPersistence = (key: string, initialData: PayableFormData, setAutoSa
       
       return updated;
     });
-  };
+  }, [key, setAutoSaveStatus]);
 
-  const clearSavedData = () => {
+  const clearSavedData = useCallback(() => {
     localStorage.removeItem(key);
     setFormData(initialData);
-  };
+  }, [key, initialData]);
 
   return { formData, setFormData: updateFormData, clearSavedData };
 };
@@ -183,8 +170,9 @@ export default function CreatePayablePage() {
   const [showVendorCreation, setShowVendorCreation] = useState(false);
   const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [payableCategories, setPayableCategories] = useState<string[]>([OTHER_CATEGORY]);
 
-  const currencies = getFiatCurrencies();
+  const currencies = useMemo(() => getFiatCurrencies(), []);
 
   const initialFormData: PayableFormData = {
     payableName: '',
@@ -259,6 +247,110 @@ export default function CreatePayablePage() {
   useEffect(() => {
     loadVendors();
   }, []);
+
+  // Prevent background/page scrolling while vendor modal is open.
+  useEffect(() => {
+    if (!showVendorCreation) return;
+
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    const prevBodyPosition = document.body.style.position;
+    const prevBodyTop = document.body.style.top;
+    const prevBodyWidth = document.body.style.width;
+    const scrollY = window.scrollY;
+
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = '100%';
+
+    const blockScroll = (e: Event) => {
+      e.preventDefault();
+    };
+
+    const blockScrollKeys = (e: KeyboardEvent) => {
+      const blockedKeys = [' ', 'PageUp', 'PageDown', 'Home', 'End', 'ArrowUp', 'ArrowDown'];
+      if (blockedKeys.includes(e.key)) {
+        e.preventDefault();
+      }
+    };
+
+    window.addEventListener('wheel', blockScroll, { passive: false });
+    window.addEventListener('touchmove', blockScroll, { passive: false });
+    window.addEventListener('keydown', blockScrollKeys, { passive: false });
+
+    return () => {
+      document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      document.body.style.position = prevBodyPosition;
+      document.body.style.top = prevBodyTop;
+      document.body.style.width = prevBodyWidth;
+      window.removeEventListener('wheel', blockScroll);
+      window.removeEventListener('touchmove', blockScroll);
+      window.removeEventListener('keydown', blockScrollKeys);
+      window.scrollTo(0, scrollY);
+    };
+  }, [showVendorCreation]);
+
+  // Load categories saved during Accounts Payable onboarding.
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadOnboardingCategories = async () => {
+      try {
+        const response = await fetch('/api/onboarding/service?service=accountsPayable', {
+          credentials: 'include',
+        });
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const onboarding = data?.data?.serviceOnboarding as { categories?: unknown } | undefined;
+        const paymentSettings = data?.data?.serviceOnboarding as { paymentSettings?: { defaultCurrency?: unknown } } | undefined;
+        const savedCategories = Array.isArray(onboarding?.categories)
+          ? onboarding.categories.filter((c): c is string => typeof c === 'string' && c.trim().length > 0)
+          : [];
+        const savedPreferredCurrency =
+          typeof paymentSettings?.paymentSettings?.defaultCurrency === 'string'
+            ? paymentSettings.paymentSettings.defaultCurrency.trim()
+            : '';
+
+        // Category list should be: saved categories + constant "Other".
+        const categories = [...new Set([...savedCategories, OTHER_CATEGORY])];
+
+        if (!cancelled) {
+          setPayableCategories(categories);
+          // Keep selected category valid even if localStorage had an old value.
+          setFormData((prev) => {
+            const nextCategory =
+              !prev.category || categories.includes(prev.category) ? prev.category : OTHER_CATEGORY;
+
+            // Sync currency with saved payables preferred currency when available.
+            const nextCurrency =
+              savedPreferredCurrency && currencies.some((c) => c.code === savedPreferredCurrency)
+                ? savedPreferredCurrency
+                : prev.currency;
+
+            if (nextCategory === prev.category && nextCurrency === prev.currency) return prev;
+
+            return {
+              ...prev,
+              category: nextCategory,
+              currency: nextCurrency,
+            };
+          });
+        }
+      } catch {
+        // Keep constant fallback if onboarding lookup fails.
+        if (!cancelled) setPayableCategories([OTHER_CATEGORY]);
+      }
+    };
+
+    loadOnboardingCategories();
+    return () => {
+      cancelled = true;
+    };
+  }, [setFormData, currencies]);
 
   const handleInputChange = (field: keyof PayableFormData, value: string | number | boolean) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -581,7 +673,7 @@ export default function CreatePayablePage() {
                     onChange={(e) => handleInputChange('category', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
-                    {PAYABLE_CATEGORIES.map(category => (
+                    {payableCategories.map(category => (
                       <option key={category} value={category}>{category}</option>
                     ))}
                   </select>
@@ -1028,11 +1120,12 @@ function VendorCreationForm({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Create New Vendor</h2>
-        
-        <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="fixed inset-0 z-[9999] bg-black/50 backdrop-blur-sm p-4 overflow-hidden">
+      <div className="w-full h-full flex items-center justify-center">
+        <div className="bg-white rounded-xl p-6 w-full max-w-md border border-gray-200 shadow-2xl">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Create New Vendor</h2>
+          
+          <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
             <input
@@ -1105,22 +1198,23 @@ function VendorCreationForm({
             />
           </div>
           
-          <div className="flex space-x-3 pt-4">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Create Vendor
-            </button>
-          </div>
-        </form>
+            <div className="flex space-x-3 pt-4">
+              <button
+                type="button"
+                onClick={onCancel}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Create Vendor
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   );

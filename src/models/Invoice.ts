@@ -105,6 +105,8 @@ export interface Invoice {
   withholdingTaxAmount?: number;
   /** Withholding tax rate % used (e.g. 5 for 5%); for PDF display. */
   withholdingTaxRatePercent?: number;
+  /** Distinguish generic WHT from PAYE (Pay As You Earn) on PDFs and pay views. */
+  withholdingTaxType?: 'wht' | 'paye';
   
   // Payment Settings
   paymentSettings: PaymentSettings;

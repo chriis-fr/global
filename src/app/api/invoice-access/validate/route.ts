@@ -115,6 +115,7 @@ export async function POST(request: NextRequest) {
           total: totalAmount,
           withholdingTaxAmount: (invoice as { withholdingTaxAmount?: number }).withholdingTaxAmount,
           withholdingTaxRatePercent: (invoice as { withholdingTaxRatePercent?: number }).withholdingTaxRatePercent,
+          withholdingTaxType: (invoice as { withholdingTaxType?: 'wht' | 'paye' }).withholdingTaxType,
           memo: invoice.memo,
           status: invoice.status,
           createdAt: invoice.createdAt,
