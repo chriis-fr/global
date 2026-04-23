@@ -30,6 +30,7 @@ import Image from 'next/image';
 import { useSubscription } from '@/lib/contexts/SubscriptionContext';
 import { usePermissions } from '@/lib/contexts/PermissionContext';
 import { useOnboardingStore } from '@/lib/stores/onboardingStore';
+import { isPlatformSuperAdmin } from '@/lib/utils/platformSuperAdmin';
 
 const SERVICE_LINKS = [
   { key: 'smartInvoicing', label: 'Smart Invoicing', icon: FileText, href: '/dashboard/services/smart-invoicing' },
@@ -93,9 +94,9 @@ function Sidebar() {
 
   // Session-first: use organizationRole/mpesaEnabled from session so first paint is correct (no waiter flash).
   // Fallback: load from API when session doesn't have them (e.g. old JWT).
-  const isSuperAdmin =
-    session?.user?.adminTag === true ||
-    (session?.user?.email ?? '').toLowerCase() === 'caspianodhis@gmail.com';
+  const isSuperAdmin = isPlatformSuperAdmin(
+    session?.user as { adminTag?: boolean; email?: string | null } | undefined
+  );
   const effectiveRole = session?.user?.organizationRole ?? orgRole;
   const effectiveMpesaEnabled = session?.user?.mpesaEnabled ?? orgMpesaEnabled;
   const roleUnknown = Boolean(
@@ -535,9 +536,9 @@ function Sidebar() {
                 if (roleUnknown || effectiveRole === 'waiter') {
                   return link.key === 'help';
                 }
-                // Only show integrations for admin accounts (adminTag)
+                // Integrations: platform super admin (adminTag or designated account)
                 if (link.key === 'integrations') {
-                  return session?.user?.adminTag === true;
+                  return isSuperAdmin;
                 }
                 // Finance Controls: available in profile/settings for admin accounts (adminTag)
                 if (link.key === 'finance-controls') {

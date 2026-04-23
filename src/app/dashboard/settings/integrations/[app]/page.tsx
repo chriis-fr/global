@@ -6,6 +6,7 @@ import { ArrowLeft, Link2, FileText, Loader2, Unplug, ChevronDown, ChevronRight 
 import Link from 'next/link';
 import Image from 'next/image';
 import { useSession } from '@/lib/auth-client';
+import { isPlatformSuperAdmin } from '@/lib/utils/platformSuperAdmin';
 import { createInvoiceDraftFromClickUpPage } from '@/lib/actions/pdf-invoice';
 
 
@@ -66,13 +67,15 @@ export default function IntegrationAppPage() {
   const searchParams = useSearchParams();
   const { data: session } = useSession();
   const app = (params?.app as string) || '';
+  const canAccessIntegrations = isPlatformSuperAdmin(
+    session?.user as { adminTag?: boolean; email?: string | null } | undefined
+  );
 
-  // Redirect non-admin users - integrations are admin-only
   useEffect(() => {
-    if (session && !session.user?.adminTag) {
+    if (session && !canAccessIntegrations) {
       router.push('/dashboard');
     }
-  }, [session, router]);
+  }, [session, canAccessIntegrations, router]);
 
   const [connected, setConnected] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -216,8 +219,7 @@ export default function IntegrationAppPage() {
       .finally(() => setLoadingData(false));
   };
 
-  // Don't render anything if not admin
-  if (!session?.user?.adminTag) {
+  if (!canAccessIntegrations) {
     return null;
   }
 

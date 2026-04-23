@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { getDatabase } from '@/lib/database';
 import { UserService } from '@/lib/services/userService';
+import { isPlatformSuperAdmin } from '@/lib/utils/platformSuperAdmin';
 
 /** ClickUp task attachment (file/document) - can be converted for invoicing */
 interface ClickUpAttachment {
@@ -204,7 +205,7 @@ export async function GET(request: Request) {
   }
 
   const user = await UserService.getUserByEmail(session.user.email);
-  const isAdmin = (session.user as { adminTag?: boolean }).adminTag === true;
+  const isAdmin = isPlatformSuperAdmin(session.user as { adminTag?: boolean; email?: string | null });
 
   const db = await getDatabase();
   let connection = null;

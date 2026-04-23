@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { ChevronRight, LayoutList, Link2, Unplug, Loader2 } from 'lucide-react';
 import { useSession } from '@/lib/auth-client';
+import { isPlatformSuperAdmin } from '@/lib/utils/platformSuperAdmin';
 import DashboardFloatingButton from '@/components/DashboardFloatingButton';
 
 const INTEGRATIONS = [
@@ -26,25 +27,27 @@ export default function IntegrationsSettingsPage() {
   const [clickUpConnected, setClickUpConnected] = useState<boolean | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
 
-  // Redirect non-admin users - integrations are admin-only
+  const canAccess = isPlatformSuperAdmin(
+    session?.user as { adminTag?: boolean; email?: string | null } | undefined
+  );
+
+  // Redirect non–super-admin users - integrations are restricted
   useEffect(() => {
-    if (session && !session.user?.adminTag) {
+    if (session && !canAccess) {
       router.push('/dashboard');
     }
-  }, [session, router]);
+  }, [session, canAccess, router]);
 
   useEffect(() => {
-    // Only fetch status if user is admin
-    if (session?.user?.adminTag) {
+    if (canAccess) {
       fetch('/api/integrations/clickup/status')
         .then((res) => res.json())
         .then((data) => setClickUpConnected(!!data?.connected))
         .catch(() => setClickUpConnected(false));
     }
-  }, [session]);
+  }, [session, canAccess]);
 
-  // Don't render anything if not admin
-  if (!session?.user?.adminTag) {
+  if (!canAccess) {
     return null;
   }
 
