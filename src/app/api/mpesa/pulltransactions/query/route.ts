@@ -14,13 +14,12 @@ import { queryPullTransactionsAndIngest } from '@/lib/services/darajaPullTransac
  */
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
-  const user = session?.user as any;
-
-  const isSuper = user?.adminTag === true;
-  const orgIdFromSession: string | undefined = user?.organizationId || undefined;
-  const role: string | undefined = user?.organizationRole || undefined;
-
   if (!session?.user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+
+  const { adminTag, organizationId: userOrgId, organizationRole } = session.user;
+  const isSuper = adminTag === true;
+  const orgIdFromSession: string | undefined = userOrgId || undefined;
+  const role: string | undefined = organizationRole ?? undefined;
   if (!isSuper && (role !== 'owner' && role !== 'admin')) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
   }

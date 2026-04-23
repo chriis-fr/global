@@ -146,8 +146,12 @@ export default function AdminDashboard() {
     transactionType: 'CustomerPayBillOnline' as 'CustomerPayBillOnline' | 'CustomerBuyGoodsOnline',
   });
   const [mpesaBusinessSaving, setMpesaBusinessSaving] = useState(false);
-  const [mpesaRegisteringC2B, setMpesaRegisteringC2B] = useState(false);
+  const [mpesaRegisteringPull, setMpesaRegisteringPull] = useState(false);
+  const [mpesaRegisteringC2BUrls, setMpesaRegisteringC2BUrls] = useState(false);
   const [mpesaPullNominatedNumber, setMpesaPullNominatedNumber] = useState('');
+  const [c2bRegisterResponseType, setC2bRegisterResponseType] = useState<'Completed' | 'Cancelled'>('Completed');
+  const [c2bConfirmationOverride, setC2bConfirmationOverride] = useState('');
+  const [c2bValidationOverride, setC2bValidationOverride] = useState('');
 
   // Org search for "Add to organization"
   useEffect(() => {
@@ -508,11 +512,12 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleRegisterC2BUrl = async () => {
+  /** Safaricom Pull Transactions API (separate from C2B registerurl). */
+  const handleRegisterPullTransactions = async () => {
     if (!mpesaOrgSelected) return;
-    setMpesaRegisteringC2B(true);
+    setMpesaRegisteringPull(true);
 
-    try{
+    try {
       if (!mpesaPullNominatedNumber.trim()) {
         toast.error('Enter nominated number (e.g. 2547XXXXXXXX)');
         return;
@@ -523,27 +528,76 @@ export default function AdminDashboard() {
         return;
       }
 
-      const data = {
+      const callbackUrl =
+        typeof window !== 'undefined'
+          ? `${window.location.origin.replace(/\/$/, '')}/api/mpesa/pulltransactions/callback`
+          : 'http://localhost:3000/api/mpesa/pulltransactions/callback';
+
+      const { registerC2B } = await import('@/app/actions/register-c2b');
+      const result = await registerC2B({
         organizationId: mpesaOrgSelected.organizationId,
         shortCode: mpesaOrgDetail.businessShortCode,
         nominatedNumber: mpesaPullNominatedNumber.trim(),
-        callbackUrl: 'https://70b1-129-222-146-124.ngrok-free.app/api/mpesa/pulltransactions/callback',
-      };
-
-      const { registerC2B } = await import('@/app/actions/register-c2b')
-      const result = await registerC2B(data)
+        callbackUrl,
+      });
       if (result?.success) {
         toast.success('Pull registration requested');
       } else {
         toast.error(result?.error || 'Failed to register pull transactions');
       }
-    }catch(error){
-      console.error('Failed to register C2B URL:', error);
+    } catch (error) {
+      console.error('Failed to register pull transactions:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to register pull transactions');
     } finally {
-      setMpesaRegisteringC2B(false);
+      setMpesaRegisteringPull(false);
     }
-  }
+  };
+
+  /**
+   * C2B v2 registerurl: OAuth + POST confirmation/validation URLs for the org shortcode
+   * (production Daraja: api.safaricom.co.ke - matches Safaricom docs).
+   */
+  const handleRegisterC2BUrls = async () => {
+    if (!mpesaOrgSelected) return;
+    if (!mpesaOrgDetail?.mpesaEnabled) {
+      toast.error('Enable M-Pesa for this organization first');
+      return;
+    }
+    if (!mpesaOrgDetail?.businessShortCode?.trim()) {
+      toast.error('Save a Business Shortcode (till / paybill) first');
+      return;
+    }
+    if (!mpesaOrgDetail?.credentialsConfigured) {
+      toast.error('Set Daraja consumer key/secret (and callback base) for this org first');
+      return;
+    }
+
+    setMpesaRegisteringC2BUrls(true);
+    try {
+      const res = await fetch('/api/mpesa/c2b-register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organizationId: mpesaOrgSelected.organizationId,
+          responseType: c2bRegisterResponseType,
+          ...(c2bConfirmationOverride.trim() ? { confirmationUrl: c2bConfirmationOverride.trim() } : {}),
+          ...(c2bValidationOverride.trim() ? { validationUrl: c2bValidationOverride.trim() } : {}),
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data?.success) {
+        toast.success(data?.message || 'C2B URLs registered with Safaricom');
+      } else {
+        toast.error(data?.error || 'C2B URL registration failed');
+        if (data?.raw) console.warn('[Admin C2B register]', data.raw);
+      }
+    } catch (error) {
+      console.error('Failed to register C2B URLs:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to register C2B URLs');
+    } finally {
+      setMpesaRegisteringC2BUrls(false);
+    }
+  };
 
   const handleSaveMpesaCredentials = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1229,37 +1283,18 @@ export default function AdminDashboard() {
                   </button>
                 </div>
 
-                <div className="flex items-center justify-between mt-2">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-2">
                   <div>
                     <p className="text-sm font-medium text-gray-700">M-Pesa Enabled</p>
                     <p className="text-xs text-gray-500">
                       Controls whether this organization can use the waiter STK prompts and M-Pesa flows.
                     </p>
                   </div>
-
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={mpesaPullNominatedNumber}
-                      onChange={(e) => setMpesaPullNominatedNumber(e.target.value)}
-                      className="w-56 px-3 py-1.5 border border-gray-300 rounded text-sm"
-                      placeholder="Nominated number (2547...)"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleRegisterC2BUrl}
-                      disabled={mpesaRegisteringC2B}
-                      className="px-4 py-1.5 rounded-lg text-sm font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {mpesaRegisteringC2B ? 'Registering…' : 'Register Pull'}
-                    </button>
-                  </div>
-
                   <button
                     type="button"
                     onClick={handleToggleOrgMpesa}
                     disabled={!mpesaOrgDetail || mpesaToggling}
-                    className={`px-4 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 ${
+                    className={`shrink-0 px-4 py-1.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 ${
                       mpesaOrgDetail?.mpesaEnabled
                         ? 'bg-red-600 text-white hover:bg-red-700'
                         : 'bg-green-600 text-white hover:bg-green-700'
@@ -1273,6 +1308,86 @@ export default function AdminDashboard() {
                       'Enable'
                     )}
                   </button>
+                </div>
+
+                <div className="mt-4 p-3 rounded-lg border border-emerald-200 bg-emerald-50/80 space-y-2">
+                  <p className="text-sm font-semibold text-gray-900">C2B — register till / paybill URLs (Safaricom)</p>
+                  <p className="text-xs text-gray-600">
+                    Calls Daraja: OAuth <code className="text-gray-800">/oauth/v1/generate</code> then{' '}
+                    <code className="text-gray-800">/mpesa/c2b/v2/registerurl</code> using this org’s consumer key/secret, shortcode, and
+                    your public HTTPS base (from saved callback URL). Use production keys for live till registration.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">ResponseType</label>
+                      <select
+                        value={c2bRegisterResponseType}
+                        onChange={(e) => setC2bRegisterResponseType(e.target.value as 'Completed' | 'Cancelled')}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white"
+                      >
+                        <option value="Completed">Completed</option>
+                        <option value="Cancelled">Cancelled</option>
+                      </select>
+                    </div>
+                    <div className="sm:col-span-2 text-xs text-gray-500">
+                      Default confirmation: <code className="bg-white px-1 rounded">…/api/mpesa/c2b-confirmation</code> · validation:{' '}
+                      <code className="bg-white px-1 rounded">…/api/mpesa/c2b-validation</code> (base from org callback)
+                    </div>
+                    <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Override Confirmation URL (optional)</label>
+                        <input
+                          type="url"
+                          value={c2bConfirmationOverride}
+                          onChange={(e) => setC2bConfirmationOverride(e.target.value)}
+                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                          placeholder="https://your-app.com/api/mpesa/c2b-confirmation"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Override Validation URL (optional)</label>
+                        <input
+                          type="url"
+                          value={c2bValidationOverride}
+                          onChange={(e) => setC2bValidationOverride(e.target.value)}
+                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                          placeholder="https://your-app.com/api/mpesa/c2b-validation"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRegisterC2BUrls}
+                    disabled={mpesaRegisteringC2BUrls}
+                    className="px-4 py-2 rounded-lg text-sm font-medium bg-emerald-700 text-white hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {mpesaRegisteringC2BUrls ? 'Registering with Safaricom…' : 'Register C2B URLs (till)'}
+                  </button>
+                </div>
+
+                <div className="mt-4 p-3 rounded-lg border border-gray-200 bg-white space-y-2">
+                  <p className="text-sm font-semibold text-gray-900">Pull transactions API (separate)</p>
+                  <p className="text-xs text-gray-600">
+                    Registers the nominated number for the Pull API callback — not the same as C2B registerurl above.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="text"
+                      value={mpesaPullNominatedNumber}
+                      onChange={(e) => setMpesaPullNominatedNumber(e.target.value)}
+                      className="min-w-[12rem] flex-1 max-w-sm px-3 py-1.5 border border-gray-300 rounded text-sm"
+                      placeholder="Nominated number (2547...)"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleRegisterPullTransactions}
+                      disabled={mpesaRegisteringPull}
+                      className="px-4 py-1.5 rounded-lg text-sm font-medium bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {mpesaRegisteringPull ? 'Registering…' : 'Register Pull'}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="mt-4 pt-4 border-t border-gray-200">

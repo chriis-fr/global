@@ -31,6 +31,14 @@ function normalizeShortCode(shortCode: string): number {
   return n;
 }
 
+function parseDarajaEnvironment(value: unknown): 'sandbox' | 'production' {
+  return String(value ?? '')
+    .toLowerCase()
+    .trim() === 'sandbox'
+    ? 'sandbox'
+    : 'production';
+}
+
 async function getDarajaAccessToken(opts: {
   environment: 'sandbox' | 'production';
   consumerKey: string;
@@ -96,7 +104,7 @@ export async function registerPullTransactions(input: {
   const creds = await getOrganizationMpesaCredentialsDecrypted(input.organizationId);
   const consumerKey = creds?.consumerKey ?? process.env.DARAJA_CONSUMER_KEY ?? '';
   const consumerSecret = creds?.consumerSecret ?? process.env.DARAJA_CONSUMER_SECRET ?? '';
-  const environment: 'sandbox' | 'production' = (creds?.environment ?? process.env.DARAJA_ENV ?? 'production') as any;
+  const environment = parseDarajaEnvironment(creds?.environment ?? process.env.DARAJA_ENV ?? 'production');
   if (!consumerKey || !consumerSecret) throw new Error('Consumer key/secret not configured');
 
   const { accessToken, darajaBase } = await getDarajaAccessToken({ environment, consumerKey, consumerSecret });
@@ -140,7 +148,8 @@ export async function registerPullTransactions(input: {
   });
 
   if (!res.ok) {
-    throw new Error((data as any)?.ResponseDescription || 'Pull registration failed');
+    const desc = data.ResponseDescription;
+    throw new Error(typeof desc === 'string' && desc ? desc : 'Pull registration failed');
   }
   return { response: data, environment };
 }
@@ -182,7 +191,7 @@ export async function queryPullTransactionsAndIngest(input: {
   const creds = await getOrganizationMpesaCredentialsDecrypted(input.organizationId);
   const consumerKey = creds?.consumerKey ?? process.env.DARAJA_CONSUMER_KEY ?? '';
   const consumerSecret = creds?.consumerSecret ?? process.env.DARAJA_CONSUMER_SECRET ?? '';
-  const environment: 'sandbox' | 'production' = (creds?.environment ?? process.env.DARAJA_ENV ?? 'production') as any;
+  const environment = parseDarajaEnvironment(creds?.environment ?? process.env.DARAJA_ENV ?? 'production');
   if (!consumerKey || !consumerSecret) throw new Error('Consumer key/secret not configured');
 
   const { accessToken, darajaBase } = await getDarajaAccessToken({ environment, consumerKey, consumerSecret });
@@ -225,13 +234,14 @@ export async function queryPullTransactionsAndIngest(input: {
   console.log('[Daraja Pull] Query response:', {
     status: res.status,
     ok: res.ok,
-    responseCode: (data as any)?.ResponseCode,
-    responseMessage: (data as any)?.ResponseMessage,
+    responseCode: data.ResponseCode,
+    responseMessage: data.ResponseMessage,
     bodySnippet: raw.slice(0, 1500),
   });
 
   if (!res.ok) {
-    throw new Error((data as any)?.ResponseMessage || 'Failed to query pull transactions');
+    const errMsg = data.ResponseMessage;
+    throw new Error(typeof errMsg === 'string' && errMsg ? errMsg : 'Failed to query pull transactions');
   }
 
   const rows = (data.Response ?? []).flat().filter(Boolean) as PulledTransaction[];

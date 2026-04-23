@@ -13,7 +13,7 @@ import { OrganizationService } from '@/lib/services/organizationService';
  * Must be called ONCE per shortcode in production (Safaricom allows re-registration
  * only after deletion via their portal).
  *
- * Body: { organizationId: string, confirmationUrl?: string, validationUrl?: string }
+ * Body: { organizationId: string, confirmationUrl?: string, validationUrl?: string, responseType?: 'Completed' | 'Cancelled' }
  *
  * If confirmationUrl is omitted, we derive it from the org's callbackUrl base.
  */
@@ -25,10 +25,11 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { organizationId, confirmationUrl: bodyConfirmUrl, validationUrl: bodyValidUrl } = body as {
+    const { organizationId, confirmationUrl: bodyConfirmUrl, validationUrl: bodyValidUrl, responseType: bodyResponseType } = body as {
       organizationId: string;
       confirmationUrl?: string;
       validationUrl?: string;
+      responseType?: 'Completed' | 'Cancelled';
     };
 
     if (!organizationId) {
@@ -82,9 +83,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Failed to get Daraja access token', raw: tokenData }, { status: 500 });
     }
 
+    const responseType: 'Completed' | 'Cancelled' =
+      bodyResponseType === 'Cancelled' || bodyResponseType === 'Completed' ? bodyResponseType : 'Completed';
+
     const registerPayload = {
       ShortCode: shortCode,
-      ResponseType: 'Completed',
+      ResponseType: responseType,
       ConfirmationURL: confirmationUrl,
       ValidationURL: validationUrl,
     };
