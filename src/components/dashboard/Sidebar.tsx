@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useSession, signOut } from '@/lib/auth-client';
 import {
   FileText,
+  Home,
   Menu,
   X,
   User,
@@ -248,6 +249,10 @@ function Sidebar() {
   }, [router]);
 
   const SidebarContent = () => {
+    const pathNorm = (pathname ?? '').replace(/\/$/, '') || '/';
+    const isDashboardHome = pathNorm === '/dashboard';
+    const showHomeNav = !isDashboardHome;
+
     return (
       <>
         {/* Header */}
@@ -320,6 +325,48 @@ function Sidebar() {
 
         {/* Scrollable Nav */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {/* Home: back to dashboard overview when not on /dashboard */}
+          {showHomeNav && (() => {
+            const collapsed = isCollapsed && !isAutoHidden;
+            if (isMobile) {
+              return (
+                <div className="mb-2">
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleMobileNavigation('/dashboard');
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleMobileNavigation('/dashboard');
+                      }
+                    }}
+                    className={`flex items-center rounded-lg text-sm font-medium cursor-pointer text-white/70 hover:bg-white/10 ${collapsed ? 'p-1.5 justify-center' : 'px-3 py-3'}`}
+                    style={{ touchAction: 'manipulation' }}
+                  >
+                    <Home className={`${collapsed ? 'h-11 w-11 shrink-0' : 'h-5 w-5 mr-3'}`} aria-hidden />
+                    {(!isCollapsed || isAutoHidden) && 'Home'}
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <div className="mb-2">
+                <Link
+                  href="/dashboard"
+                  className={`flex items-center rounded-lg text-sm font-medium text-white/70 hover:bg-white/10 ${collapsed ? 'p-2 justify-center' : 'px-3 py-3'}`}
+                >
+                  <Home className={`${collapsed ? 'h-11 w-11 shrink-0' : 'h-5 w-5 mr-3'}`} aria-hidden />
+                  {(!isCollapsed || isAutoHidden) && 'Home'}
+                </Link>
+              </div>
+            );
+          })()}
+
           {/* Services */}
           <div>
             {(!isCollapsed || isAutoHidden) && (

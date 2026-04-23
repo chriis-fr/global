@@ -4,6 +4,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
+import type { ReconTransaction } from '@/models/ReconTransaction';
+import { reconTillAttributedNoStkLink } from '@/lib/mpesa/reconTillMatch';
 
 export interface WaiterMpesaStats {
   totalAmount: number;
@@ -82,11 +84,31 @@ export async function getWaiterMpesaStats(): Promise<{
       failedCount: 0,
     };
 
+    const reconCol = db.collection<ReconTransaction>('recon_transactions');
+    const reconAgg = await reconCol
+      .aggregate<{ totalAmount: number; count: number }>([
+        {
+          $match: {
+            ...reconTillAttributedNoStkLink(new ObjectId(organizationId)),
+            waiterUserId: new ObjectId(userId),
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalAmount: { $sum: { $ifNull: ['$mpesaAmount', '$expectedAmount'] } },
+            count: { $sum: 1 },
+          },
+        },
+      ])
+      .toArray();
+    const r = reconAgg[0] ?? { totalAmount: 0, count: 0 };
+
     return {
       success: true,
       data: {
-        totalAmount: totals.totalAmount ?? 0,
-        successCount: totals.successCount ?? 0,
+        totalAmount: (totals.totalAmount ?? 0) + (r.totalAmount ?? 0),
+        successCount: (totals.successCount ?? 0) + (r.count ?? 0),
         failedCount: totals.failedCount ?? 0,
       },
     };
@@ -207,12 +229,14 @@ export async function getMpesaTotalByPeriod(period: MpesaTotalPeriod): Promise<{
     const { start } = getPeriodRange(period);
     const db = await connectToDatabase();
     const sessions = db.collection('mpesa_stk_sessions');
+    const reconCol = db.collection<ReconTransaction>('recon_transactions');
+    const orgOid = new ObjectId(organizationId);
 
     const agg = await sessions
       .aggregate<{ totalAmount: number }>([
         {
           $match: {
-            organizationId: new ObjectId(organizationId),
+            organizationId: orgOid,
             status: 'success',
             createdAt: { $gte: start },
           },
@@ -226,11 +250,105 @@ export async function getMpesaTotalByPeriod(period: MpesaTotalPeriod): Promise<{
       ])
       .toArray();
 
-    const totalAmount = agg[0]?.totalAmount ?? 0;
+    const stkAmount = agg[0]?.totalAmount ?? 0;
+
+    const reconAgg = await reconCol
+      .aggregate<{ totalAmount: number }>([
+        { $match: reconTillAttributedNoStkLink(orgOid) },
+        {
+          $addFields: {
+            at: { $ifNull: ['$mpesaTimestamp', '$createdAt'] },
+          },
+        },
+        { $match: { at: { $gte: start } } },
+        {
+          $group: {
+            _id: null,
+            totalAmount: { $sum: { $ifNull: ['$mpesaAmount', '$expectedAmount'] } },
+          },
+        },
+      ])
+      .toArray();
+
+    const totalAmount = stkAmount + (reconAgg[0]?.totalAmount ?? 0);
 
     return { success: true, data: { totalAmount } };
   } catch (error) {
     console.error('[getMpesaTotalByPeriod] Error:', error);
     return { success: false, error: 'Failed to load total by period' };
+  }
+}
+
+/** STK + claimed till totals for the signed-in waiter (M-Pesa service page overview). */
+export async function getWaiterMpesaPaymentOverview(): Promise<{
+  success: boolean;
+  data?: {
+    stkSuccessTotal: number;
+    stkSessionCount: number;
+    tillClaimedTotal: number;
+    tillClaimCount: number;
+  };
+  error?: string;
+}> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id || !session.user.organizationId) {
+      return { success: false, error: 'Not in an organization.' };
+    }
+    const organizationId = session.user.organizationId;
+    const userId = session.user.id;
+    const db = await connectToDatabase();
+    const orgOid = new ObjectId(organizationId);
+    const waiterOid = new ObjectId(userId);
+    const sessions = db.collection('mpesa_stk_sessions');
+    const reconCol = db.collection<ReconTransaction>('recon_transactions');
+
+    const stkAgg = await sessions
+      .aggregate<{ successTotal: number; count: number }>([
+        { $match: { organizationId: orgOid, waiterUserId: waiterOid } },
+        {
+          $group: {
+            _id: null,
+            successTotal: {
+              $sum: { $cond: [{ $eq: ['$status', 'success'] }, '$amount', 0] },
+            },
+            count: { $sum: 1 },
+          },
+        },
+      ])
+      .toArray();
+    const s = stkAgg[0] ?? { successTotal: 0, count: 0 };
+
+    const reconAgg = await reconCol
+      .aggregate<{ totalAmount: number; count: number }>([
+        {
+          $match: {
+            ...reconTillAttributedNoStkLink(orgOid),
+            waiterUserId: waiterOid,
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalAmount: { $sum: { $ifNull: ['$mpesaAmount', '$expectedAmount'] } },
+            count: { $sum: 1 },
+          },
+        },
+      ])
+      .toArray();
+    const r = reconAgg[0] ?? { totalAmount: 0, count: 0 };
+
+    return {
+      success: true,
+      data: {
+        stkSuccessTotal: Number(s.successTotal ?? 0),
+        stkSessionCount: Number(s.count ?? 0),
+        tillClaimedTotal: Number(r.totalAmount ?? 0),
+        tillClaimCount: Number(r.count ?? 0),
+      },
+    };
+  } catch (error) {
+    console.error('[getWaiterMpesaPaymentOverview] Error:', error);
+    return { success: false, error: 'Failed to load payment overview' };
   }
 }

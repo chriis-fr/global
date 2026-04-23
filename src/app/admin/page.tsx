@@ -127,6 +127,9 @@ export default function AdminDashboard() {
     businessShortCode?: string;
     accountReference?: string;
     transactionType?: 'CustomerPayBillOnline' | 'CustomerBuyGoodsOnline';
+    pullApiRegistered?: boolean;
+    pullApiRegisteredAt?: Date;
+    pullApiNominatedNumber?: string;
   } | null>(null);
   const mpesaOrgDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [mpesaToggling, setMpesaToggling] = useState(false);
@@ -139,6 +142,13 @@ export default function AdminDashboard() {
     callbackUrl: '',
     environment: 'production' as 'sandbox' | 'production',
     partyBShortCode: '',
+    balanceInitiator: '',
+    balanceSecurityCredential: '',
+    balanceIdentifierType: '',
+    balanceCommandId: '',
+    balanceRemarks: '',
+    balanceQueueTimeoutUrl: '',
+    balanceResultUrl: '',
   });
   const [mpesaBusinessForm, setMpesaBusinessForm] = useState({
     businessShortCode: '',
@@ -476,7 +486,11 @@ export default function AdminDashboard() {
           businessShortCode: statusRes.data.businessShortCode,
           accountReference: statusRes.data.accountReference,
           transactionType: statusRes.data.transactionType,
+          pullApiRegistered: statusRes.data.pullApiRegistered,
+          pullApiRegisteredAt: statusRes.data.pullApiRegisteredAt,
+          pullApiNominatedNumber: statusRes.data.pullApiNominatedNumber,
         });
+        setMpesaPullNominatedNumber(statusRes.data.pullApiNominatedNumber ?? '');
         setMpesaBusinessForm({
           businessShortCode: statusRes.data.businessShortCode ?? '',
           accountReference: statusRes.data.accountReference ?? '',
@@ -528,10 +542,7 @@ export default function AdminDashboard() {
         return;
       }
 
-      const callbackUrl =
-        typeof window !== 'undefined'
-          ? `${window.location.origin.replace(/\/$/, '')}/api/mpesa/pulltransactions/callback`
-          : 'http://localhost:3000/api/mpesa/pulltransactions/callback';
+      const callbackUrl = `${window.location.origin.replace(/\/$/, '')}/api/mpesa/pulltransactions/callback`;
 
       const { registerC2B } = await import('@/app/actions/register-c2b');
       const result = await registerC2B({
@@ -542,6 +553,7 @@ export default function AdminDashboard() {
       });
       if (result?.success) {
         toast.success('Pull registration requested');
+        await loadMpesaOrgDetail(mpesaOrgSelected.organizationId);
       } else {
         toast.error(result?.error || 'Failed to register pull transactions');
       }
@@ -612,10 +624,31 @@ export default function AdminDashboard() {
         callbackUrl: mpesaCredentialsForm.callbackUrl,
         environment: mpesaCredentialsForm.environment,
         partyBShortCode: mpesaCredentialsForm.partyBShortCode,
+        balanceInitiator: mpesaCredentialsForm.balanceInitiator,
+        balanceSecurityCredential: mpesaCredentialsForm.balanceSecurityCredential,
+        balanceIdentifierType: mpesaCredentialsForm.balanceIdentifierType,
+        balanceCommandId: mpesaCredentialsForm.balanceCommandId,
+        balanceRemarks: mpesaCredentialsForm.balanceRemarks,
+        balanceQueueTimeoutUrl: mpesaCredentialsForm.balanceQueueTimeoutUrl,
+        balanceResultUrl: mpesaCredentialsForm.balanceResultUrl,
       });
       if (result.success) {
         await loadMpesaOrgDetail(mpesaOrgSelected.organizationId);
-        setMpesaCredentialsForm({ consumerKey: '', consumerSecret: '', passkey: '', callbackUrl: '', environment: 'sandbox', partyBShortCode: '' });
+        setMpesaCredentialsForm({
+          consumerKey: '',
+          consumerSecret: '',
+          passkey: '',
+          callbackUrl: '',
+          environment: 'sandbox',
+          partyBShortCode: '',
+          balanceInitiator: '',
+          balanceSecurityCredential: '',
+          balanceIdentifierType: '',
+          balanceCommandId: '',
+          balanceRemarks: '',
+          balanceQueueTimeoutUrl: '',
+          balanceResultUrl: '',
+        });
         setMpesaCredentialsShowForm(false);
         toast.success('Daraja credentials saved (stored encrypted). They are never shown in the UI.');
       } else if (result.error) {
@@ -1371,23 +1404,33 @@ export default function AdminDashboard() {
                   <p className="text-xs text-gray-600">
                     Registers the nominated number for the Pull API callback — not the same as C2B registerurl above.
                   </p>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <input
-                      type="text"
-                      value={mpesaPullNominatedNumber}
-                      onChange={(e) => setMpesaPullNominatedNumber(e.target.value)}
-                      className="min-w-[12rem] flex-1 max-w-sm px-3 py-1.5 border border-gray-300 rounded text-sm"
-                      placeholder="Nominated number (2547...)"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleRegisterPullTransactions}
-                      disabled={mpesaRegisteringPull}
-                      className="px-4 py-1.5 rounded-lg text-sm font-medium bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {mpesaRegisteringPull ? 'Registering…' : 'Register Pull'}
-                    </button>
-                  </div>
+                  {mpesaOrgDetail?.pullApiRegistered ? (
+                    <div className="rounded border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-800">
+                      Pull API already registered for this business
+                      {mpesaOrgDetail.pullApiNominatedNumber ? ` (nominated: ${mpesaOrgDetail.pullApiNominatedNumber})` : ''}.
+                      {mpesaOrgDetail.pullApiRegisteredAt
+                        ? ` Last registration: ${new Date(mpesaOrgDetail.pullApiRegisteredAt).toLocaleString()}.`
+                        : ''}
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="text"
+                        value={mpesaPullNominatedNumber}
+                        onChange={(e) => setMpesaPullNominatedNumber(e.target.value)}
+                        className="min-w-[12rem] flex-1 max-w-sm px-3 py-1.5 border border-gray-300 rounded text-sm"
+                        placeholder="Nominated number (2547...)"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleRegisterPullTransactions}
+                        disabled={mpesaRegisteringPull}
+                        className="px-4 py-1.5 rounded-lg text-sm font-medium bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {mpesaRegisteringPull ? 'Registering…' : 'Register Pull'}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-4 pt-4 border-t border-gray-200">
@@ -1526,6 +1569,83 @@ export default function AdminDashboard() {
                           autoComplete="off"
                         />
                       </div>
+                      <div className="pt-2 border-t border-gray-200">
+                        <p className="text-xs font-semibold text-gray-700 mb-2">Account balance credentials (per business)</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-0.5">Balance Initiator</label>
+                            <input
+                              type="text"
+                              value={mpesaCredentialsForm.balanceInitiator}
+                              onChange={(e) => setMpesaCredentialsForm((p) => ({ ...p, balanceInitiator: e.target.value }))}
+                              className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm"
+                              placeholder="Daraja initiator username"
+                              autoComplete="off"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-0.5">Balance Security Credential</label>
+                            <input
+                              type="password"
+                              value={mpesaCredentialsForm.balanceSecurityCredential}
+                              onChange={(e) => setMpesaCredentialsForm((p) => ({ ...p, balanceSecurityCredential: e.target.value }))}
+                              className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm"
+                              placeholder="Encrypted security credential"
+                              autoComplete="off"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-0.5">Identifier Type (optional)</label>
+                            <input
+                              type="text"
+                              value={mpesaCredentialsForm.balanceIdentifierType}
+                              onChange={(e) => setMpesaCredentialsForm((p) => ({ ...p, balanceIdentifierType: e.target.value }))}
+                              className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm"
+                              placeholder="Default: 4"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-0.5">Command ID (optional)</label>
+                            <input
+                              type="text"
+                              value={mpesaCredentialsForm.balanceCommandId}
+                              onChange={(e) => setMpesaCredentialsForm((p) => ({ ...p, balanceCommandId: e.target.value }))}
+                              className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm"
+                              placeholder="Default: AccountBalance"
+                            />
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="block text-xs font-medium text-gray-600 mb-0.5">Remarks (optional)</label>
+                            <input
+                              type="text"
+                              value={mpesaCredentialsForm.balanceRemarks}
+                              onChange={(e) => setMpesaCredentialsForm((p) => ({ ...p, balanceRemarks: e.target.value }))}
+                              className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm"
+                              placeholder="Default: ok"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-0.5">Queue Timeout URL (optional)</label>
+                            <input
+                              type="url"
+                              value={mpesaCredentialsForm.balanceQueueTimeoutUrl}
+                              onChange={(e) => setMpesaCredentialsForm((p) => ({ ...p, balanceQueueTimeoutUrl: e.target.value }))}
+                              className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm"
+                              placeholder="Fallback: /api/mpesa/account-balance/callback"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-0.5">Result URL (optional)</label>
+                            <input
+                              type="url"
+                              value={mpesaCredentialsForm.balanceResultUrl}
+                              onChange={(e) => setMpesaCredentialsForm((p) => ({ ...p, balanceResultUrl: e.target.value }))}
+                              className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm"
+                              placeholder="Fallback: /api/mpesa/account-balance/callback"
+                            />
+                          </div>
+                        </div>
+                      </div>
                       <div className="flex gap-2">
                         <button
                           type="submit"
@@ -1536,7 +1656,24 @@ export default function AdminDashboard() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => { setMpesaCredentialsShowForm(false); setMpesaCredentialsForm({ consumerKey: '', consumerSecret: '', passkey: '', callbackUrl: '', environment: 'sandbox', partyBShortCode: '' }); }}
+                          onClick={() => {
+                            setMpesaCredentialsShowForm(false);
+                            setMpesaCredentialsForm({
+                              consumerKey: '',
+                              consumerSecret: '',
+                              passkey: '',
+                              callbackUrl: '',
+                              environment: 'sandbox',
+                              partyBShortCode: '',
+                              balanceInitiator: '',
+                              balanceSecurityCredential: '',
+                              balanceIdentifierType: '',
+                              balanceCommandId: '',
+                              balanceRemarks: '',
+                              balanceQueueTimeoutUrl: '',
+                              balanceResultUrl: '',
+                            });
+                          }}
                           className="px-3 py-1.5 border border-gray-300 rounded text-sm hover:bg-gray-50"
                         >
                           Cancel

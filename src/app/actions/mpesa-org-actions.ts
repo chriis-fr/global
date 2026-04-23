@@ -13,6 +13,16 @@ export interface MpesaCredentialsInput {
   environment: 'sandbox' | 'production';
   /** Optional override for PartyB (till/store/agent) – stored encrypted */
   partyBShortCode?: string;
+  /** Account balance API Initiator username */
+  balanceInitiator?: string;
+  /** Account balance API security credential */
+  balanceSecurityCredential?: string;
+  /** Optional account balance request overrides */
+  balanceIdentifierType?: string;
+  balanceCommandId?: string;
+  balanceRemarks?: string;
+  balanceQueueTimeoutUrl?: string;
+  balanceResultUrl?: string;
 }
 
 /** Partial credentials for saving only what the admin has entered; rest stay from existing or env. */
@@ -79,6 +89,9 @@ export async function getOrganizationMpesaStatus(
     businessShortCode?: string;
     accountReference?: string;
     transactionType?: 'CustomerPayBillOnline' | 'CustomerBuyGoodsOnline';
+    pullApiRegistered?: boolean;
+    pullApiRegisteredAt?: Date;
+    pullApiNominatedNumber?: string;
   };
   error?: string;
 }> {
@@ -106,6 +119,9 @@ export async function getOrganizationMpesaStatus(
         businessShortCode: mpesa?.businessShortCode,
         accountReference: mpesa?.accountReference,
         transactionType: mpesa?.transactionType,
+        pullApiRegistered: mpesa?.pullApiRegistered === true,
+        pullApiRegisteredAt: mpesa?.pullApiRegisteredAt,
+        pullApiNominatedNumber: mpesa?.pullApiNominatedNumber,
       },
     };
   } catch (error) {
@@ -189,7 +205,14 @@ export async function setOrganizationMpesaCredentials(
     if (credentials.passkey != null && credentials.passkey.trim()) trimmed.passkey = credentials.passkey.trim();
     if (credentials.callbackUrl != null && credentials.callbackUrl.trim()) trimmed.callbackUrl = credentials.callbackUrl.trim();
     if (credentials.environment != null) trimmed.environment = credentials.environment === 'production' ? 'production' : 'sandbox';
-   if (credentials.partyBShortCode != null && credentials.partyBShortCode.trim()) trimmed.partyBShortCode = credentials.partyBShortCode.trim();
+    if (credentials.partyBShortCode != null && credentials.partyBShortCode.trim()) trimmed.partyBShortCode = credentials.partyBShortCode.trim();
+    if (credentials.balanceInitiator != null && credentials.balanceInitiator.trim()) trimmed.balanceInitiator = credentials.balanceInitiator.trim();
+    if (credentials.balanceSecurityCredential != null && credentials.balanceSecurityCredential.trim()) trimmed.balanceSecurityCredential = credentials.balanceSecurityCredential.trim();
+    if (credentials.balanceIdentifierType != null && credentials.balanceIdentifierType.trim()) trimmed.balanceIdentifierType = credentials.balanceIdentifierType.trim();
+    if (credentials.balanceCommandId != null && credentials.balanceCommandId.trim()) trimmed.balanceCommandId = credentials.balanceCommandId.trim();
+    if (credentials.balanceRemarks != null && credentials.balanceRemarks.trim()) trimmed.balanceRemarks = credentials.balanceRemarks.trim();
+    if (credentials.balanceQueueTimeoutUrl != null && credentials.balanceQueueTimeoutUrl.trim()) trimmed.balanceQueueTimeoutUrl = credentials.balanceQueueTimeoutUrl.trim();
+    if (credentials.balanceResultUrl != null && credentials.balanceResultUrl.trim()) trimmed.balanceResultUrl = credentials.balanceResultUrl.trim();
 
     if (Object.keys(trimmed).length === 0) {
       return { success: false, error: 'Enter at least one field to save.' };
@@ -281,6 +304,13 @@ export async function getOrganizationMpesaCredentialsDecrypted(
     if (parsed.callbackUrl) out.callbackUrl = parsed.callbackUrl;
     if (parsed.environment) out.environment = parsed.environment === 'production' ? 'production' : 'sandbox';
     if (parsed.partyBShortCode) out.partyBShortCode = parsed.partyBShortCode;
+    if (parsed.balanceInitiator) out.balanceInitiator = parsed.balanceInitiator;
+    if (parsed.balanceSecurityCredential) out.balanceSecurityCredential = parsed.balanceSecurityCredential;
+    if (parsed.balanceIdentifierType) out.balanceIdentifierType = parsed.balanceIdentifierType;
+    if (parsed.balanceCommandId) out.balanceCommandId = parsed.balanceCommandId;
+    if (parsed.balanceRemarks) out.balanceRemarks = parsed.balanceRemarks;
+    if (parsed.balanceQueueTimeoutUrl) out.balanceQueueTimeoutUrl = parsed.balanceQueueTimeoutUrl;
+    if (parsed.balanceResultUrl) out.balanceResultUrl = parsed.balanceResultUrl;
     return Object.keys(out).length > 0 ? out : null;
   } catch {
     return null;

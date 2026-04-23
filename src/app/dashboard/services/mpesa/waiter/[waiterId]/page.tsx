@@ -6,6 +6,8 @@ import { Suspense } from 'react';
 import { connectToDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
 import { OrganizationService } from '@/lib/services/organizationService';
+import { reconTillAttributedNoStkLink } from '@/lib/mpesa/reconTillMatch';
+import type { ReconTransaction } from '@/models/ReconTransaction';
 import {
   ArrowLeft,
   User,
@@ -105,7 +107,9 @@ export default async function WaiterDetailPage({ params, searchParams }: WaiterD
                   {waiterEmail}
                 </div>
               )}
-              <p className="text-xs text-blue-300 mt-1">Waiter · Collections are read-only</p>
+              <p className="text-xs text-blue-300 mt-1">
+                Waiter · STK prompts and claimed till payments (read-only)
+              </p>
             </div>
           </div>
         </div>
@@ -152,39 +156,211 @@ export default async function WaiterDetailPage({ params, searchParams }: WaiterD
   );
 }
 
-type WaiterSessionDoc = {
-  _id: ObjectId;
-  amount?: number;
-  createdAt?: Date;
-  status?: string;
-  phoneNumber?: string;
-  mpesaReceiptNumber?: string;
+type UnifiedPaymentRow = {
+  kind: 'stk' | 'till';
+  id: string;
+  sortAt: Date;
+  amount: number;
+  status: string;
+  phoneNumber: string;
+  mpesaReceiptNumber: string;
 };
 
-async function fetchWaiterSessions(
+async function fetchWaiterPaymentsMerged(
   organizationId: string,
   waiterId: string,
   limit: number,
   page: number
-): Promise<{ sessions: WaiterSessionDoc[]; totalSessions: number }> {
+): Promise<{ rows: UnifiedPaymentRow[]; total: number }> {
   const db = await connectToDatabase();
   const sessionsCol = db.collection('mpesa_stk_sessions');
-
   const orgObjectId = new ObjectId(organizationId);
   const waiterObjectId = new ObjectId(waiterId);
-
-  const cursor = sessionsCol
-    .find({
-      organizationId: orgObjectId,
-      waiterUserId: waiterObjectId,
-    })
-    .sort({ createdAt: -1 });
-
-  const totalSessions = await cursor.count();
   const skip = (page - 1) * limit;
-  const sessions = (await cursor.skip(skip).limit(limit).toArray()) as WaiterSessionDoc[];
 
-  return { sessions, totalSessions };
+  const pipeline: object[] = [
+    { $match: { organizationId: orgObjectId, waiterUserId: waiterObjectId } },
+    {
+      $project: {
+        kind: { $literal: 'stk' },
+        rawId: '$_id',
+        sortAt: '$createdAt',
+        amount: '$amount',
+        status: '$status',
+        phoneNumber: '$phoneNumber',
+        mpesaReceiptNumber: '$mpesaReceiptNumber',
+      },
+    },
+    {
+      $unionWith: {
+        coll: 'recon_transactions',
+        pipeline: [
+          {
+            $match: {
+              ...reconTillAttributedNoStkLink(orgObjectId),
+              waiterUserId: waiterObjectId,
+            },
+          },
+          {
+            $project: {
+              kind: { $literal: 'till' },
+              rawId: '$_id',
+              sortAt: { $ifNull: ['$mpesaTimestamp', '$createdAt'] },
+              amount: { $ifNull: ['$mpesaAmount', '$expectedAmount'] },
+              status: { $literal: 'success' },
+              phoneNumber: '$phoneNumber',
+              mpesaReceiptNumber: '$mpesaReceiptNumber',
+            },
+          },
+        ],
+      },
+    },
+    { $sort: { sortAt: -1 } },
+    {
+      $project: {
+        kind: 1,
+        id: { $toString: '$rawId' },
+        sortAt: 1,
+        amount: 1,
+        status: 1,
+        phoneNumber: { $ifNull: ['$phoneNumber', ''] },
+        mpesaReceiptNumber: { $ifNull: ['$mpesaReceiptNumber', ''] },
+      },
+    },
+    {
+      $facet: {
+        rows: [{ $skip: skip }, { $limit: limit }],
+        total: [{ $count: 'n' }],
+      },
+    },
+  ];
+
+  const out = await sessionsCol.aggregate(pipeline).toArray();
+  const facet = out[0] as {
+    rows: UnifiedPaymentRow[];
+    total: { n: number }[];
+  };
+  const total = facet?.total?.[0]?.n ?? 0;
+  const rows = (facet?.rows ?? []).map((r) => ({
+    ...r,
+    sortAt: r.sortAt ? new Date(r.sortAt as unknown as string) : new Date(0),
+    amount: Number(r.amount ?? 0),
+    phoneNumber: String(r.phoneNumber ?? ''),
+    mpesaReceiptNumber: String(r.mpesaReceiptNumber ?? ''),
+    status: String(r.status ?? ''),
+  }));
+  return { rows, total };
+}
+
+async function sumStkSuccessInRange(
+  orgOid: ObjectId,
+  waiterOid: ObjectId,
+  start: Date
+): Promise<{ total: number; count: number }> {
+  const db = await connectToDatabase();
+  const agg = await db
+    .collection('mpesa_stk_sessions')
+    .aggregate<{ total: number; count: number }>([
+      {
+        $match: {
+          organizationId: orgOid,
+          waiterUserId: waiterOid,
+          status: 'success',
+          createdAt: { $gte: start },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: '$amount' },
+          count: { $sum: 1 },
+        },
+      },
+    ])
+    .toArray();
+  return { total: agg[0]?.total ?? 0, count: agg[0]?.count ?? 0 };
+}
+
+async function sumStkSuccessAllTime(
+  orgOid: ObjectId,
+  waiterOid: ObjectId
+): Promise<{ total: number; count: number }> {
+  const db = await connectToDatabase();
+  const agg = await db
+    .collection('mpesa_stk_sessions')
+    .aggregate<{ total: number; count: number }>([
+      {
+        $match: {
+          organizationId: orgOid,
+          waiterUserId: waiterOid,
+          status: 'success',
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: '$amount' },
+          count: { $sum: 1 },
+        },
+      },
+    ])
+    .toArray();
+  return { total: agg[0]?.total ?? 0, count: agg[0]?.count ?? 0 };
+}
+
+async function sumReconTillInRange(
+  orgOid: ObjectId,
+  waiterOid: ObjectId,
+  start: Date
+): Promise<{ total: number; count: number }> {
+  const db = await connectToDatabase();
+  const reconCol = db.collection<ReconTransaction>('recon_transactions');
+  const agg = await reconCol
+    .aggregate<{ total: number; count: number }>([
+      {
+        $match: {
+          ...reconTillAttributedNoStkLink(orgOid),
+          waiterUserId: waiterOid,
+        },
+      },
+      { $addFields: { at: { $ifNull: ['$mpesaTimestamp', '$createdAt'] } } },
+      { $match: { at: { $gte: start } } },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: { $ifNull: ['$mpesaAmount', '$expectedAmount'] } },
+          count: { $sum: 1 },
+        },
+      },
+    ])
+    .toArray();
+  return { total: agg[0]?.total ?? 0, count: agg[0]?.count ?? 0 };
+}
+
+async function sumReconTillAllTime(
+  orgOid: ObjectId,
+  waiterOid: ObjectId
+): Promise<{ total: number; count: number }> {
+  const db = await connectToDatabase();
+  const reconCol = db.collection<ReconTransaction>('recon_transactions');
+  const agg = await reconCol
+    .aggregate<{ total: number; count: number }>([
+      {
+        $match: {
+          ...reconTillAttributedNoStkLink(orgOid),
+          waiterUserId: waiterOid,
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: { $ifNull: ['$mpesaAmount', '$expectedAmount'] } },
+          count: { $sum: 1 },
+        },
+      },
+    ])
+    .toArray();
+  return { total: agg[0]?.total ?? 0, count: agg[0]?.count ?? 0 };
 }
 
 async function WaiterStatsSection({
@@ -194,38 +370,42 @@ async function WaiterStatsSection({
   organizationId: string;
   waiterId: string;
 }) {
-  const { sessions } = await fetchWaiterSessions(organizationId, waiterId, 10, 1);
-
+  const orgOid = new ObjectId(organizationId);
+  const waiterOid = new ObjectId(waiterId);
   const now = new Date();
   const todayStart = startOfDay(now);
   const weekStart = startOfWeek(now);
   const monthStart = startOfMonth(now);
 
-  const successfulSessions = sessions.filter((s) => s.status === 'success');
-  const totalAmount = (s: { amount?: number }[]) =>
-    s.reduce((sum, x) => sum + (Number(x.amount) || 0), 0);
+  const [
+    stkToday,
+    reconToday,
+    stkWeek,
+    reconWeek,
+    stkMonth,
+    reconMonth,
+    stkAll,
+    reconAll,
+  ] = await Promise.all([
+    sumStkSuccessInRange(orgOid, waiterOid, todayStart),
+    sumReconTillInRange(orgOid, waiterOid, todayStart),
+    sumStkSuccessInRange(orgOid, waiterOid, weekStart),
+    sumReconTillInRange(orgOid, waiterOid, weekStart),
+    sumStkSuccessInRange(orgOid, waiterOid, monthStart),
+    sumReconTillInRange(orgOid, waiterOid, monthStart),
+    sumStkSuccessAllTime(orgOid, waiterOid),
+    sumReconTillAllTime(orgOid, waiterOid),
+  ]);
 
-  const inRange = (createdAt: Date, start: Date) => new Date(createdAt) >= start;
+  const todayAmount = stkToday.total + reconToday.total;
+  const weekAmount = stkWeek.total + reconWeek.total;
+  const monthAmount = stkMonth.total + reconMonth.total;
+  const allTimeAmount = stkAll.total + reconAll.total;
 
-  const todaySessions = successfulSessions.filter((s) =>
-    inRange(s.createdAt as Date, todayStart)
-  );
-  const weekSessions = successfulSessions.filter((s) =>
-    inRange(s.createdAt as Date, weekStart)
-  );
-  const monthSessions = successfulSessions.filter((s) =>
-    inRange(s.createdAt as Date, monthStart)
-  );
-
-  const todayAmount = totalAmount(todaySessions);
-  const weekAmount = totalAmount(weekSessions);
-  const monthAmount = totalAmount(monthSessions);
-  const allTimeAmount = totalAmount(successfulSessions);
-
-  const todayCount = todaySessions.length;
-  const weekCount = weekSessions.length;
-  const monthCount = monthSessions.length;
-  const allTimeCount = successfulSessions.length;
+  const todayCount = stkToday.count + reconToday.count;
+  const weekCount = stkWeek.count + reconWeek.count;
+  const monthCount = stkMonth.count + reconMonth.count;
+  const allTimeCount = stkAll.count + reconAll.count;
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -237,7 +417,7 @@ async function WaiterStatsSection({
         <p className="text-2xl font-semibold text-white">
           KES {todayAmount.toLocaleString()}
         </p>
-        <p className="text-xs text-blue-300">{todayCount} successful</p>
+        <p className="text-xs text-blue-300">{todayCount} payments</p>
       </div>
       <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4">
         <div className="flex items-center gap-2 text-blue-200 text-sm mb-1">
@@ -247,7 +427,7 @@ async function WaiterStatsSection({
         <p className="text-2xl font-semibold text-white">
           KES {weekAmount.toLocaleString()}
         </p>
-        <p className="text-xs text-blue-300">{weekCount} successful</p>
+        <p className="text-xs text-blue-300">{weekCount} payments</p>
       </div>
       <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4">
         <div className="flex items-center gap-2 text-blue-200 text-sm mb-1">
@@ -257,7 +437,7 @@ async function WaiterStatsSection({
         <p className="text-2xl font-semibold text-white">
           KES {monthAmount.toLocaleString()}
         </p>
-        <p className="text-xs text-blue-300">{monthCount} successful</p>
+        <p className="text-xs text-blue-300">{monthCount} payments</p>
       </div>
       <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4">
         <div className="flex items-center gap-2 text-blue-200 text-sm mb-1">
@@ -267,7 +447,7 @@ async function WaiterStatsSection({
         <p className="text-2xl font-semibold text-white">
           KES {allTimeAmount.toLocaleString()}
         </p>
-        <p className="text-xs text-blue-300">{allTimeCount} successful</p>
+        <p className="text-xs text-blue-300">{allTimeCount} payments</p>
       </div>
     </div>
   );
@@ -282,15 +462,15 @@ async function WaiterCollectionsSection({
   waiterId: string;
   page: number;
 }) {
-  const { sessions, totalSessions } = await fetchWaiterSessions(
+  const pageSize = 10;
+  const { rows, total } = await fetchWaiterPaymentsMerged(
     organizationId,
     waiterId,
-    10,
+    pageSize,
     page
   );
 
-  const pageSize = 10;
-  const totalPages = Math.max(1, Math.ceil(totalSessions / pageSize));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const currentPage = Math.min(Math.max(page, 1), totalPages);
   const hasPrev = currentPage > 1;
   const hasNext = currentPage < totalPages;
@@ -300,12 +480,11 @@ async function WaiterCollectionsSection({
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-sm font-semibold text-white flex items-center gap-2">
           <Receipt className="h-5 w-5 text-blue-300" />
-          Collections (saved, read-only)
+          Payments (STK + till, read-only)
         </h2>
         <div className="flex items-center gap-3">
           <p className="text-xs text-blue-200">
-            {totalSessions} prompt{totalSessions !== 1 ? 's' : ''} total (page{' '}
-            {currentPage} of {totalPages})
+            {total} item{total !== 1 ? 's' : ''} total (page {currentPage} of {totalPages})
           </p>
           <div className="flex items-center gap-1">
             {hasPrev && (
@@ -328,9 +507,9 @@ async function WaiterCollectionsSection({
         </div>
       </div>
 
-      {sessions.length === 0 ? (
+      {rows.length === 0 ? (
         <p className="text-sm text-blue-200">
-          No M-Pesa prompts recorded for this waiter yet.
+          No M-Pesa prompts or claimed till payments for this waiter yet.
         </p>
       ) : (
         <div className="overflow-x-auto">
@@ -338,6 +517,7 @@ async function WaiterCollectionsSection({
             <thead>
               <tr className="text-blue-200 border-b border-white/10">
                 <th className="py-2 pr-4 text-left font-medium">Date / Time</th>
+                <th className="py-2 px-4 text-left font-medium">Source</th>
                 <th className="py-2 px-4 text-left font-medium">Amount (KES)</th>
                 <th className="py-2 px-4 text-left font-medium">Status</th>
                 <th className="py-2 px-4 text-left font-medium">Phone</th>
@@ -345,11 +525,11 @@ async function WaiterCollectionsSection({
               </tr>
             </thead>
             <tbody>
-              {sessions.map((s) => {
-                const createdAt = s.createdAt as Date;
+              {rows.map((s) => {
+                const createdAt = s.sortAt;
                 const isSuccess = s.status === 'success';
                 return (
-                  <tr key={s._id.toString()} className="border-b border-white/5">
+                  <tr key={`${s.kind}-${s.id}`} className="border-b border-white/5">
                     <td className="py-2 pr-4 text-blue-100">
                       {createdAt
                         ? createdAt.toLocaleString(undefined, {
@@ -357,6 +537,9 @@ async function WaiterCollectionsSection({
                             timeStyle: 'short',
                           })
                         : '—'}
+                    </td>
+                    <td className="py-2 px-4 text-blue-200 text-xs uppercase tracking-wide">
+                      {s.kind === 'till' ? 'Till' : 'STK'}
                     </td>
                     <td className="py-2 px-4 text-blue-100 font-medium">
                       {Number(s.amount ?? 0).toLocaleString()}

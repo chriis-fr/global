@@ -9,7 +9,10 @@ import { WaiterPromptCard } from '@/components/mpesa/WaiterPrompt';
 import { RecentPromptsList } from '@/components/mpesa/RecentPromptsList';
 import { MpesaTotalAmountCard } from '@/components/mpesa/MpesaTotalAmountCard';
 import { AdminMpesaPrompt } from '@/components/mpesa/AdminMpesaPrompt';
-import { Waves, Users, Clock, XCircle, ChevronRight, BarChart3 } from 'lucide-react';
+import { Waves, Users, Clock, XCircle, ChevronRight, BarChart3, Receipt } from 'lucide-react';
+import { getWaiterMpesaPaymentOverview } from '@/app/actions/mpesa-waiter-stats';
+import type { ReconTransaction } from '@/models/ReconTransaction';
+import { reconTillAttributedNoStkLink } from '@/lib/mpesa/reconTillMatch';
 
 interface MpesaWaiterSummary {
   waiterUserId: string;
@@ -34,6 +37,7 @@ async function getMpesaDashboardData(
 ): Promise<MpesaDashboardData> {
   const db = await connectToDatabase();
   const sessions = db.collection('mpesa_stk_sessions');
+  const reconCol = db.collection<ReconTransaction>('recon_transactions');
 
   const orgObjectId = new ObjectId(organizationId);
 
@@ -98,45 +102,132 @@ async function getMpesaDashboardData(
     failedCount: 0,
   };
 
-  // Load waiter user info
-  const waiterIds = agg
-    .map((g) => g._id)
-    .filter((id): id is ObjectId => !!id);
+  const reconOrgAgg = await reconCol
+    .aggregate<{ _id: null; totalAmount: number; count: number }>([
+      { $match: reconTillAttributedNoStkLink(orgObjectId) },
+      {
+        $group: {
+          _id: null,
+          totalAmount: { $sum: { $ifNull: ['$mpesaAmount', '$expectedAmount'] } },
+          count: { $sum: 1 },
+        },
+      },
+    ])
+    .toArray();
+  const reconOrg = reconOrgAgg[0] ?? { totalAmount: 0, count: 0 };
+
+  const reconPerWaiterPipeline: object[] = [
+    { $match: reconTillAttributedNoStkLink(orgObjectId) },
+  ];
+  if (waiterOnlyUserIds && waiterOnlyUserIds.length > 0) {
+    reconPerWaiterPipeline.push({
+      $match: {
+        waiterUserId: {
+          $in: waiterOnlyUserIds.map((id) => new ObjectId(id)),
+        },
+      },
+    });
+  }
+  reconPerWaiterPipeline.push(
+    {
+      $group: {
+        _id: '$waiterUserId',
+        totalAmount: { $sum: { $ifNull: ['$mpesaAmount', '$expectedAmount'] } },
+        count: { $sum: 1 },
+        lastActivity: { $max: { $ifNull: ['$mpesaTimestamp', '$createdAt'] } },
+      },
+    },
+    { $sort: { totalAmount: -1 } },
+  );
+
+  const reconAgg = await reconCol
+    .aggregate<{
+      _id: ObjectId;
+      totalAmount: number;
+      count: number;
+      lastActivity?: Date;
+    }>(reconPerWaiterPipeline)
+    .toArray();
+
+  type StkRow = {
+    id: string;
+    totalAmount: number;
+    count: number;
+    lastActivity?: Date;
+  };
+  const stkByWaiter = new Map<string, StkRow>();
+  for (const g of agg) {
+    if (!g._id) continue;
+    const id = (g._id as ObjectId).toString();
+    stkByWaiter.set(id, {
+      id,
+      totalAmount: g.totalAmount ?? 0,
+      count: g.count ?? 0,
+      lastActivity: g.lastActivity,
+    });
+  }
+
+  const reconByWaiter = new Map<string, StkRow>();
+  for (const g of reconAgg) {
+    if (!g._id) continue;
+    const id = g._id.toString();
+    reconByWaiter.set(id, {
+      id,
+      totalAmount: g.totalAmount ?? 0,
+      count: g.count ?? 0,
+      lastActivity: g.lastActivity,
+    });
+  }
+
+  const unionIds = new Set<string>([...stkByWaiter.keys(), ...reconByWaiter.keys()]);
+  let waiterIds = [...unionIds].filter((id) => ObjectId.isValid(id));
+  if (waiterOnlyUserIds && waiterOnlyUserIds.length > 0) {
+    const allowed = new Set(waiterOnlyUserIds);
+    waiterIds = waiterIds.filter((id) => allowed.has(id));
+  }
 
   let waiterSummaries: MpesaWaiterSummary[] = [];
 
   if (waiterIds.length > 0) {
+    const oids = waiterIds.map((id) => new ObjectId(id));
     const users = await db
       .collection('users')
-      .find({ _id: { $in: waiterIds } })
+      .find({ _id: { $in: oids } })
       .project({ _id: 1, name: 1, email: 1 })
       .toArray();
 
-    waiterSummaries = agg.map((g) => {
-      const user =
-        users.find(
-          (u) => g._id && u._id.toString() === (g._id as ObjectId).toString()
-        ) || null;
+    waiterSummaries = waiterIds.map((wid) => {
+      const stk = stkByWaiter.get(wid);
+      const recon = reconByWaiter.get(wid);
+      const user = users.find((u) => u._id.toString() === wid) || null;
+      const stkAmt = stk?.totalAmount ?? 0;
+      const reconAmt = recon?.totalAmount ?? 0;
+      const stkCnt = stk?.count ?? 0;
+      const reconCnt = recon?.count ?? 0;
+      const lastStk = stk?.lastActivity;
+      const lastRecon = recon?.lastActivity;
+      let lastActivity: Date | undefined;
+      if (lastStk && lastRecon) {
+        lastActivity = new Date(lastStk) > new Date(lastRecon) ? lastStk : lastRecon;
+      } else {
+        lastActivity = lastStk ?? lastRecon;
+      }
       return {
-        waiterUserId: g._id ? (g._id as ObjectId).toString() : 'unknown',
-        waiterName: user?.name || 'Waiter',
+        waiterUserId: wid,
+        waiterName: (user?.name as string) || 'Waiter',
         waiterEmail: user?.email as string | undefined,
-        totalAmount: g.totalAmount ?? 0,
-        count: g.count ?? 0,
-        lastActivity: g.lastActivity,
+        totalAmount: stkAmt + reconAmt,
+        count: stkCnt + reconCnt,
+        lastActivity,
       };
     });
 
-    // Show only actual waiters in Waiter Summary (exclude owner/admin)
-    if (waiterOnlyUserIds && waiterOnlyUserIds.length > 0) {
-      const set = new Set(waiterOnlyUserIds);
-      waiterSummaries = waiterSummaries.filter((w) => set.has(w.waiterUserId));
-    }
+    waiterSummaries.sort((a, b) => b.totalAmount - a.totalAmount);
   }
 
   return {
-    totalAmount: totals.totalAmount ?? 0,
-    successCount: totals.successCount ?? 0,
+    totalAmount: (totals.totalAmount ?? 0) + (reconOrg.totalAmount ?? 0),
+    successCount: (totals.successCount ?? 0) + (reconOrg.count ?? 0),
     failedCount: totals.failedCount ?? 0,
     waiterSummaries,
   };
@@ -228,6 +319,18 @@ export default async function MpesaServicePage() {
 
   // Waiters: show prompt UI immediately (having a waiter means org has M-Pesa enabled)
   if (orgRole === 'waiter') {
+    const overviewRes = await getWaiterMpesaPaymentOverview();
+    const o = overviewRes.success && overviewRes.data
+      ? overviewRes.data
+      : {
+          stkSuccessTotal: 0,
+          stkSessionCount: 0,
+          tillClaimedTotal: 0,
+          tillClaimCount: 0,
+        };
+    const combinedSuccess = o.stkSuccessTotal + o.tillClaimedTotal;
+    const waiterSelfId = session.user.id ?? '';
+
     return (
       <div className="space-y-6">
         <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 flex items-center justify-between">
@@ -238,14 +341,60 @@ export default async function MpesaServicePage() {
             <div>
               <h1 className="text-lg font-semibold text-white">M-Pesa Prompt</h1>
               <p className="text-blue-200 text-sm">
-                Send payment prompts to customers. Your activity is tracked for
-                end-of-day reports.
+                Send payment prompts to customers. Till payments you claim from the dashboard appear
+                here with your STK prompts.
               </p>
             </div>
           </div>
         </div>
 
-        <WaiterPromptCard />
+        <WaiterPromptCard currentUserId={session.user.id ?? undefined} />
+
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-lg bg-emerald-500/20 border border-emerald-500/30">
+                <Receipt className="h-5 w-5 text-emerald-300" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-white">Your payments</h2>
+                <p className="text-xs text-blue-200 mt-1 max-w-xl">
+                  Successful STK collections plus till payments you claimed (same totals as your detail page).
+                </p>
+                <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                  <div>
+                    <dt className="text-blue-300">STK success (KES)</dt>
+                    <dd className="text-white font-medium tabular-nums">{o.stkSuccessTotal.toLocaleString()}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-blue-300">Till claimed (KES)</dt>
+                    <dd className="text-white font-medium tabular-nums">{o.tillClaimedTotal.toLocaleString()}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-blue-300">STK prompts</dt>
+                    <dd className="text-white font-medium">{o.stkSessionCount}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-blue-300">Till claims</dt>
+                    <dd className="text-white font-medium">{o.tillClaimCount}</dd>
+                  </div>
+                </dl>
+                <p className="text-xs text-blue-200 mt-3">
+                  Combined successful total:{' '}
+                  <span className="text-white font-semibold">KES {combinedSuccess.toLocaleString()}</span>
+                </p>
+              </div>
+            </div>
+            {waiterSelfId && (
+              <Link
+                href={`/dashboard/services/mpesa/waiter/${waiterSelfId}`}
+                className="shrink-0 inline-flex items-center justify-center px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors"
+              >
+                Full history
+              </Link>
+            )}
+          </div>
+        </div>
       </div>
     );
   }
@@ -291,7 +440,7 @@ export default async function MpesaServicePage() {
               M-Pesa Payments
             </h1>
             <p className="text-blue-200 text-sm">
-              Track STK prompts by waiter, table, and status.
+              Track STK prompts and till payments claimed by each waiter.
             </p>
           </div>
         </div>
@@ -314,7 +463,10 @@ export default async function MpesaServicePage() {
               <p className="text-2xl font-semibold text-white mt-1">
                 {dashboardData.successCount}
               </p>
-              <p className="text-xs text-blue-300 mt-0.5">{dashboardData.successCount} prompt{dashboardData.successCount !== 1 ? 's' : ''}</p>
+              <p className="text-xs text-blue-300 mt-0.5">
+                Successful STK + claimed till ({dashboardData.successCount} item
+                {dashboardData.successCount !== 1 ? 's' : ''})
+              </p>
             </div>
             <Clock className="h-8 w-8 text-blue-300" />
           </div>
@@ -344,7 +496,7 @@ export default async function MpesaServicePage() {
                 </h2>
               </div>
               <p className="text-xs text-blue-200">
-                Per-waiter totals across all prompts
+                STK prompts (all statuses) + successful till claims per waiter
               </p>
             </div>
             {dashboardData.waiterSummaries.length === 0 ? (
@@ -357,7 +509,7 @@ export default async function MpesaServicePage() {
                   <thead>
                     <tr className="text-blue-200 border-b border-white/10">
                       <th className="py-2 pr-4 text-left font-medium">Waiter</th>
-                      <th className="py-2 px-4 text-left font-medium">Prompts</th>
+                      <th className="py-2 px-4 text-left font-medium">Count</th>
                       <th className="py-2 px-4 text-left font-medium">Total (KES)</th>
                       <th className="py-2 px-4 text-left font-medium">Last Activity</th>
                       <th className="py-2 pl-4 w-8" aria-hidden />
@@ -427,7 +579,7 @@ export default async function MpesaServicePage() {
         </div>
 
         <div className="order-1 lg:order-2">
-          <WaiterPromptCard />
+          <WaiterPromptCard currentUserId={session.user.id ?? undefined} />
         </div>
       </div>
     </div>

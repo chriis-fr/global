@@ -116,7 +116,7 @@ export function MpesaTotalAmountCard() {
     <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-4 flex items-center justify-between relative">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <p className="text-sm text-blue-200">Total Successful Amount</p>
+          <p className="text-sm text-blue-200">Total successful (STK + claimed till)</p>
           <div className="relative" ref={ref}>
             <button
               type="button"

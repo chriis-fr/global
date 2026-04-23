@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { registerPullTransactions } from '@/lib/services/darajaPullTransactionsService';
+import { isLocalhostUrl, resolvePublicBaseUrl } from '@/lib/utils/publicBaseUrl';
 
 /**
  * POST /api/mpesa/pulltransactions/register
@@ -22,10 +23,24 @@ export async function POST(req: NextRequest) {
     const organizationId = String(body?.organizationId || '').trim();
     const nominatedNumber = String(body?.nominatedNumber || '').trim();
     const shortCode = body?.shortCode ? String(body.shortCode).trim() : undefined;
-    const callbackUrl = String(body?.callbackUrl || 'http://localhost:3000/api/mpesa/pulltransactions/callback').trim();
+    const requestedCallbackUrl = String(body?.callbackUrl || '').trim();
+    const fallbackBase = resolvePublicBaseUrl({ requestOrigin: req.nextUrl.origin });
+    const callbackUrl = requestedCallbackUrl || (fallbackBase ? `${fallbackBase}/api/mpesa/pulltransactions/callback` : '');
 
     if (!organizationId) return NextResponse.json({ success: false, error: 'organizationId is required' }, { status: 400 });
     if (!nominatedNumber) return NextResponse.json({ success: false, error: 'nominatedNumber is required' }, { status: 400 });
+    if (!callbackUrl) {
+      return NextResponse.json(
+        { success: false, error: 'No callback URL available. Set FRONTEND_URL/NEXT_PUBLIC_BASE_URL or provide callbackUrl.' },
+        { status: 400 }
+      );
+    }
+    if (process.env.NODE_ENV === 'production' && isLocalhostUrl(callbackUrl)) {
+      return NextResponse.json(
+        { success: false, error: 'Production callback URL cannot be localhost.' },
+        { status: 400 }
+      );
+    }
 
     const result = await registerPullTransactions({
       organizationId,

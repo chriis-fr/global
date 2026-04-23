@@ -8,6 +8,26 @@ import { ObjectId } from 'mongodb'
 import { defaultCountry } from '@/data/countries'
 import bcrypt from 'bcryptjs'
 
+type OrgForMemberContext = {
+  members?: Array<{ userId?: { toString: () => string }; role?: string }>
+  settings?: { mpesa?: { enabled?: boolean } }
+}
+
+/** Match org.members to the signed-in user so API routes see the same role as RSC pages. */
+function orgMemberContextFromDoc(
+  org: OrgForMemberContext | null | undefined,
+  userId: string | undefined
+): { organizationRole: string | null; mpesaEnabled: boolean } {
+  if (!org || !userId) {
+    return { organizationRole: null, mpesaEnabled: false }
+  }
+  const member = org.members?.find((m) => m.userId?.toString() === userId)
+  return {
+    organizationRole: member?.role ?? null,
+    mpesaEnabled: org.settings?.mpesa?.enabled === true,
+  }
+}
+
 // Extended Google user interface with additional fields
 interface GoogleUserExtended {
   email: string
@@ -220,14 +240,18 @@ export const authOptions: NextAuthOptions = {
         }
         session.user.services = (token.services as Record<string, boolean>) || createDefaultServices()
         session.user.organizationId = token.organizationId as string
-        session.user.organizationRole = (token.organizationRole as string | null) ?? undefined
-        session.user.mpesaEnabled = token.mpesaEnabled === true
+        if (token.organizationRole !== undefined) {
+          session.user.organizationRole = token.organizationRole as string | null
+        }
+        if (token.mpesaEnabled !== undefined) {
+          session.user.mpesaEnabled = token.mpesaEnabled === true
+        }
       }
       return session
     },
     async jwt({ token, user, trigger }) {
       if (user) {
-        // Add custom user data to token (initial login)
+        // Add custom user data to token
         token.userType = user.userType
         token.role = user.role
         token.address = user.address
@@ -237,28 +261,13 @@ export const authOptions: NextAuthOptions = {
         token.organizationId = user.organizationId
         token.picture = (user as { image?: string }).image ?? token.picture
         token.name = user.name ?? token.name
-        // Ensure session.user.id is always the MongoDB id from the start (credentials return user.id = _id)
-        if ((user as { id?: string }).id) {
-          token.mongoId = (user as { id: string }).id
-        }
 
-        // For OAuth (Google) users, the token has no organizationId or mongoId from the provider.
-        // Fetch from DB and set them so the session is complete on first request (avoids 403 on save draft).
+        // For OAuth users, we need to get the MongoDB ObjectId from the database
         if (user.email && !token.mongoId) {
           try {
             const dbUser = await UserService.getUserByEmail(user.email)
             if (dbUser?._id) {
               token.mongoId = dbUser._id.toString()
-              token.organizationId = dbUser.organizationId?.toString()
-              token.role = dbUser.role
-              token.userType = ((dbUser as unknown as Record<string, unknown>).userType as 'individual' | 'business') || 'individual'
-              token.onboarding = {
-                completed: dbUser.onboarding?.isCompleted || false,
-                currentStep: dbUser.onboarding?.currentStep || 0,
-                completedSteps: dbUser.onboarding?.completedSteps || [],
-                serviceOnboarding: dbUser.onboarding?.data || {}
-              }
-              token.services = (dbUser.services ? { ...createDefaultServices(), ...dbUser.services } : createDefaultServices()) as unknown as Record<string, boolean>
             }
           } catch {
             // Error fetching user for JWT
@@ -348,18 +357,21 @@ export const authOptions: NextAuthOptions = {
                   }
                 }
                 token.services = effectiveServices
-                // Org role and M-Pesa for sidebar: avoid second request and waiter flash
-                const member = (org?.members as Array<{ userId: { toString: () => string }; role: string }> | undefined)?.find(
-                  (m) => m.userId.toString() === dbUser._id?.toString()
+                const uid = dbUser._id?.toString()
+                const { organizationRole, mpesaEnabled } = orgMemberContextFromDoc(
+                  org as OrgForMemberContext,
+                  uid
                 )
-                token.organizationRole = member?.role ?? null
-                token.mpesaEnabled = (org?.settings as { mpesa?: { enabled?: boolean } } | undefined)?.mpesa?.enabled === true
+                token.organizationRole = organizationRole
+                token.mpesaEnabled = mpesaEnabled
               } catch (err) {
                 console.error('[Services→Dashboard] JWT callback: org lookup failed, using user.services', { organizationId: dbUser.organizationId?.toString(), error: err })
                 token.services = { ...(dbUser.services || createDefaultServices()) } as Record<string, boolean>
               }
             } else {
               token.services = { ...(dbUser.services || createDefaultServices()) } as Record<string, boolean>
+              token.organizationRole = null
+              token.mpesaEnabled = false
             }
             token.mongoId = dbUser._id?.toString()
             token.adminTag = dbUser.adminTag || false
@@ -408,12 +420,15 @@ export const authOptions: NextAuthOptions = {
           if (hasAnyEnabled && orgServices) {
             token.services = { ...createDefaultServices(), ...orgServices } as Record<string, boolean>
           }
-          const currentUserId = dbUser?._id?.toString() ?? (token.mongoId as string)
-          const member = (org?.members as Array<{ userId: { toString: () => string }; role: string }> | undefined)?.find(
-            (m) => m.userId.toString() === currentUserId
-          )
-          token.organizationRole = member?.role ?? null
-          token.mpesaEnabled = (org?.settings as { mpesa?: { enabled?: boolean } } | undefined)?.mpesa?.enabled === true
+          const uid = token.mongoId as string | undefined
+          if (uid) {
+            const { organizationRole, mpesaEnabled } = orgMemberContextFromDoc(
+              org as OrgForMemberContext,
+              uid
+            )
+            token.organizationRole = organizationRole
+            token.mpesaEnabled = mpesaEnabled
+          }
         } catch {
           // non-blocking; keep existing token
         }

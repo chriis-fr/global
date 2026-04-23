@@ -3,6 +3,7 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { registerPullTransactions } from '@/lib/services/darajaPullTransactionsService';
+import { isLocalhostUrl, resolvePublicBaseUrl } from '@/lib/utils/publicBaseUrl';
 
 export interface RegisterPullTransactionsInput {
   organizationId: string;
@@ -10,7 +11,7 @@ export interface RegisterPullTransactionsInput {
   shortCode?: string;
   /** Safaricom MSISDN in 2547XXXXXXXX format (recommended). */
   nominatedNumber: string;
-  /** Optional override. Default is `http://localhost:3000/api/mpesa/pulltransactions/callback`. */
+  /** Optional override. If omitted, derived from public app base URL env vars. */
   callbackUrl?: string;
 }
 
@@ -21,7 +22,14 @@ export async function registerC2B(input: RegisterPullTransactionsInput) {
     return { success: false, error: 'Admin only' };
   }
 
-  const callbackUrl = input.callbackUrl?.trim() || 'http://localhost:3000/api/mpesa/pulltransactions/callback';
+  const callbackBase = resolvePublicBaseUrl();
+  const callbackUrl = input.callbackUrl?.trim() || (callbackBase ? `${callbackBase}/api/mpesa/pulltransactions/callback` : '');
+  if (!callbackUrl) {
+    return { success: false, error: 'No callback URL available. Set FRONTEND_URL/NEXT_PUBLIC_BASE_URL or provide callbackUrl.' };
+  }
+  if (process.env.NODE_ENV === 'production' && isLocalhostUrl(callbackUrl)) {
+    return { success: false, error: 'Production callback URL cannot be localhost.' };
+  }
 
   try {
     const result = await registerPullTransactions({

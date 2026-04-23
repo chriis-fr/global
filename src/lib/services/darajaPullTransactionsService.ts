@@ -151,6 +151,25 @@ export async function registerPullTransactions(input: {
     const desc = data.ResponseDescription;
     throw new Error(typeof desc === 'string' && desc ? desc : 'Pull registration failed');
   }
+
+  const currentSettings = org.settings || {};
+  const currentMpesa =
+    currentSettings.mpesa && typeof currentSettings.mpesa === 'object'
+      ? currentSettings.mpesa
+      : { enabled: false };
+  await OrganizationService.updateOrganization(input.organizationId, {
+    settings: {
+      ...currentSettings,
+      mpesa: {
+        ...currentMpesa,
+        pullApiRegistered: true,
+        pullApiRegisteredAt: new Date(),
+        pullApiNominatedNumber: normalizeMsisdn(input.nominatedNumber),
+        pullApiCallbackUrl: input.callbackUrl,
+      },
+    },
+  });
+
   return { response: data, environment };
 }
 
@@ -171,7 +190,21 @@ export type QueryPullResponse = {
   ResponseCode?: string;
   ResponseMessage?: string;
   Response?: Array<Array<PulledTransaction>>;
+  CurrentPage?: number;
+  PageSize?: number;
+  TotalPages?: number;
+  HasNext?: boolean;
+  HasPrevious?: boolean;
+  TotalRecords?: number;
   [k: string]: unknown;
+};
+
+type QueryPullPageResult = {
+  data: QueryPullResponse;
+  rows: PulledTransaction[];
+  pageSize?: number;
+  hasNext?: boolean;
+  totalRecords?: number;
 };
 
 export async function queryPullTransactionsAndIngest(input: {
@@ -199,52 +232,142 @@ export async function queryPullTransactionsAndIngest(input: {
   const end = input.endDate ?? new Date();
   const start = input.startDate ?? new Date(end.getTime() - 48 * 60 * 60 * 1000);
 
-  const payload = {
-    ShortCode: shortCode,
-    StartDate: fmtDarajaDate(start),
-    EndDate: fmtDarajaDate(end),
-    OffSetValue: input.offsetValue ?? '0',
+  const queryPullPage = async (rangeStart: Date, rangeEnd: Date, offset: number): Promise<QueryPullPageResult> => {
+    const payload = {
+      ShortCode: shortCode,
+      StartDate: fmtDarajaDate(rangeStart),
+      EndDate: fmtDarajaDate(rangeEnd),
+      OffSetValue: String(offset),
+    };
+
+    console.log('[Daraja Pull] Query request:', {
+      environment,
+      url: `https://${darajaBase}/pulltransactions/v1/query`,
+      payload,
+    });
+
+    const res = await fetch(`https://${darajaBase}/pulltransactions/v1/query`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken.trim()}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(payload),
+      cache: 'no-store',
+    });
+
+    const raw = await res.text().catch(() => '');
+    let data: QueryPullResponse = {};
+    try {
+      data = JSON.parse(raw) as QueryPullResponse;
+    } catch {
+      data = { raw };
+    }
+
+    const rows = (data.Response ?? []).flat().filter(Boolean) as PulledTransaction[];
+
+    console.log('[Daraja Pull] Query response:', {
+      status: res.status,
+      ok: res.ok,
+      offset,
+      fetchedRows: rows.length,
+      responseCode: data.ResponseCode,
+      responseMessage: data.ResponseMessage,
+      bodySnippet: raw.slice(0, 1500),
+    });
+
+    if (!res.ok) {
+      const errMsg = data.ResponseMessage;
+      throw new Error(typeof errMsg === 'string' && errMsg ? errMsg : 'Failed to query pull transactions');
+    }
+
+    return {
+      data,
+      rows,
+      pageSize: typeof data.PageSize === 'number' ? data.PageSize : undefined,
+      hasNext: typeof data.HasNext === 'boolean' ? data.HasNext : undefined,
+      totalRecords: typeof data.TotalRecords === 'number' ? data.TotalRecords : undefined,
+    };
   };
 
-  console.log('[Daraja Pull] Query request:', {
-    environment,
-    url: `https://${darajaBase}/pulltransactions/v1/query`,
-    payload,
-  });
+  const fetchRangeWithPagination = async (rangeStart: Date, rangeEnd: Date): Promise<{ rows: PulledTransaction[]; last: QueryPullResponse }> => {
+    let offset = Number(input.offsetValue ?? '0');
+    if (!Number.isFinite(offset) || offset < 0) offset = 0;
 
-  const res = await fetch(`https://${darajaBase}/pulltransactions/v1/query`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken.trim()}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify(payload),
-    cache: 'no-store',
-  });
+    const rows: PulledTransaction[] = [];
+    let last: QueryPullResponse = {};
+    const MAX_PAGES = 40;
 
-  const raw = await res.text().catch(() => '');
-  let data: QueryPullResponse = {};
-  try {
-    data = JSON.parse(raw) as QueryPullResponse;
-  } catch {
-    data = { raw };
+    for (let i = 0; i < MAX_PAGES; i++) {
+      const page = await queryPullPage(rangeStart, rangeEnd, offset);
+      last = page.data;
+      const pageRows = page.rows;
+
+      if (pageRows.length === 0) break;
+      rows.push(...pageRows);
+
+      // Explicit pagination flags from Safaricom response (when provided)
+      if (page.hasNext === false) break;
+
+      // If total records is known and we have all of them, stop.
+      if (typeof page.totalRecords === 'number' && rows.length >= page.totalRecords) break;
+
+      // Otherwise, continue with offset progression.
+      const nextStep = page.pageSize && page.pageSize > 0 ? page.pageSize : pageRows.length;
+      if (!nextStep) break;
+      offset += nextStep;
+    }
+
+    return { rows, last };
+  };
+
+  // Some pull responses are incomplete on broad windows; segment long periods and merge.
+  const durationMs = Math.max(0, end.getTime() - start.getTime());
+  const segmentMs = 60 * 60 * 1000; // 1-hour windows for better completeness
+  const useSegments = durationMs > 2 * segmentMs;
+
+  let combinedRows: PulledTransaction[] = [];
+  let lastData: QueryPullResponse = {};
+
+  if (!useSegments) {
+    const single = await fetchRangeWithPagination(start, end);
+    combinedRows = single.rows;
+    lastData = single.last;
+  } else {
+    let cursor = new Date(start);
+    while (cursor < end) {
+      const windowStart = new Date(cursor);
+      const windowEnd = new Date(Math.min(end.getTime(), windowStart.getTime() + segmentMs));
+      const seg = await fetchRangeWithPagination(windowStart, windowEnd);
+      combinedRows.push(...seg.rows);
+      lastData = seg.last;
+      cursor = windowEnd;
+    }
   }
 
-  console.log('[Daraja Pull] Query response:', {
-    status: res.status,
-    ok: res.ok,
-    responseCode: data.ResponseCode,
-    responseMessage: data.ResponseMessage,
-    bodySnippet: raw.slice(0, 1500),
-  });
-
-  if (!res.ok) {
-    const errMsg = data.ResponseMessage;
-    throw new Error(typeof errMsg === 'string' && errMsg ? errMsg : 'Failed to query pull transactions');
+  // Deduplicate by transactionId across pages/windows.
+  const byId = new Map<string, PulledTransaction>();
+  for (const row of combinedRows) {
+    const id = String(row.transactionId || '').trim();
+    if (!id) continue;
+    const prev = byId.get(id);
+    if (!prev) {
+      byId.set(id, row);
+      continue;
+    }
+    const prevTime = prev.trxDate ? new Date(prev.trxDate).getTime() : 0;
+    const nextTime = row.trxDate ? new Date(row.trxDate).getTime() : 0;
+    if (nextTime >= prevTime) byId.set(id, row);
   }
+  const rows = [...byId.values()];
 
-  const rows = (data.Response ?? []).flat().filter(Boolean) as PulledTransaction[];
+  console.log('[Daraja Pull] Aggregation summary:', {
+    segmented: useSegments,
+    totalRawRows: combinedRows.length,
+    uniqueRows: rows.length,
+    range: { start: fmtDarajaDate(start), end: fmtDarajaDate(end) },
+  });
   const db = await connectToDatabase();
   const sessionsCol = db.collection('mpesa_stk_sessions');
   const reconCol = db.collection<ReconTransaction>('recon_transactions');
@@ -291,8 +414,10 @@ export async function queryPullTransactionsAndIngest(input: {
       if (!existingRecon) {
         await reconCol.insertOne({
           organizationId: orgObjectId,
+          expectedAmount: Number.isFinite(amountNum) ? amountNum : undefined,
           currency: 'KES',
           phoneNumber: msisdn || '—',
+          tableRef: tx.billreference ? String(tx.billreference) : undefined,
           mpesaReceiptNumber: receipt,
           mpesaAmount: Number.isFinite(amountNum) ? amountNum : undefined,
           mpesaTimestamp: trxDate,
@@ -312,7 +437,7 @@ export async function queryPullTransactionsAndIngest(input: {
   }
 
   return {
-    response: data,
+    response: lastData,
     environment,
     fetched: rows.length,
     updatedSessions,

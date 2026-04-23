@@ -28,6 +28,7 @@ export interface ReconTransaction {
   phoneNumber: string;
   initiatedAt?: Date;
   waiterUserId?: ObjectId;
+  externalWaiterName?: string;
   tableRef?: string;
 
   // ── Confirmation layer (M-Pesa callback) ──────────────────────────────────
@@ -45,6 +46,12 @@ export interface ReconTransaction {
   settled: boolean;
   settledAt?: Date;
   settlementBatchId?: string;
+
+  // ── Claiming (manual attachment from reconciliation UI) ───────────────────
+  claimedAt?: Date;
+  claimedByUserId?: ObjectId;
+  claimedByName?: string;
+  claimType?: 'waiter' | 'external';
 
   // ── Meta ──────────────────────────────────────────────────────────────────
   source: TransactionSource;

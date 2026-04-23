@@ -162,6 +162,14 @@ export interface Organization {
       accountReference?: string;
       /** CustomerPayBillOnline for Paybill, CustomerBuyGoodsOnline for Till. */
       transactionType?: 'CustomerPayBillOnline' | 'CustomerBuyGoodsOnline';
+      /** Pull Transactions API registration status for this shortcode/org. */
+      pullApiRegistered?: boolean;
+      /** Last successful Pull API registration timestamp. */
+      pullApiRegisteredAt?: Date;
+      /** Safaricom nominated number used during pull registration. */
+      pullApiNominatedNumber?: string;
+      /** Callback URL used during pull registration. */
+      pullApiCallbackUrl?: string;
     };
   };
   
@@ -229,6 +237,10 @@ export interface UpdateOrganizationInput {
       businessShortCode?: string;
       accountReference?: string;
       transactionType?: 'CustomerPayBillOnline' | 'CustomerBuyGoodsOnline';
+      pullApiRegistered?: boolean;
+      pullApiRegisteredAt?: Date;
+      pullApiNominatedNumber?: string;
+      pullApiCallbackUrl?: string;
     };
   };
 }

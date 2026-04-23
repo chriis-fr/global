@@ -4,7 +4,6 @@ import { useState, useTransition, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { CheckCircle2, X } from 'lucide-react';
-import { useSession } from '@/lib/auth-client';
 import { sendWaiterStkPush } from '@/app/actions/mpesa-stk';
 
 const MESSAGE_DISMISS_MS = 5000;
@@ -38,7 +37,12 @@ function normalizeKenyanPhone(input: string): string | null {
   return null;
 }
 
-export function WaiterPromptCard() {
+type WaiterPromptCardProps = {
+  /** From server session — avoids client SessionContext during RSC/streaming. */
+  currentUserId?: string;
+};
+
+export function WaiterPromptCard({ currentUserId }: WaiterPromptCardProps) {
   const [phone, setPhone] = useState('');
   const [amount, setAmount] = useState<number | ''>('');
   const [tableRef, setTableRef] = useState('');
@@ -57,7 +61,6 @@ export function WaiterPromptCard() {
   // Tracks the specific session ID returned when a prompt is sent.
   // Polling uses this ID so feedback always maps to the exact prompt this component initiated.
   const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
-  const { data: session } = useSession();
 
   useEffect(() => {
     if (!errorMessage && !statusMessage) return;
@@ -249,9 +252,9 @@ export function WaiterPromptCard() {
     <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-white">Prompt via M-pesa</h2>
-        {session?.user?.id && (
+        {currentUserId && (
           <Link
-            href={`/dashboard/services/mpesa/waiter/${session.user.id}`}
+            href={`/dashboard/services/mpesa/waiter/${currentUserId}`}
             className="text-xs font-medium text-blue-300 hover:text-white underline-offset-2 hover:underline"
           >
             View all
@@ -290,7 +293,7 @@ export function WaiterPromptCard() {
           />
         </div>
         <div>
-          <label className="block text-sm text-blue-200 mb-1">Notes (optional)</label>
+          <label className="block text-sm text-blue-200 mb-1">Reference (optional)</label>
           <input
             type="text"
             value={tableRef}

@@ -16,6 +16,7 @@ import { useSubscription } from '@/lib/contexts/SubscriptionContext';
 import StatsCards from '@/components/dashboard/StatsCards';
 import RecentInvoices from '@/components/dashboard/RecentInvoices';
 import RecentPayables from '@/components/dashboard/RecentPayables';
+import WaiterTillClaimCard from '@/components/dashboard/WaiterTillClaimCard';
 import { getUserSettings } from '@/app/actions/user-actions';
 
 export default function DashboardPage() {
@@ -268,7 +269,7 @@ export default function DashboardPage() {
             </div>
         </div>
         {/* Trial indicator - top right on desktop, fixed beside menu button on mobile */}
-        {mounted && subscription?.isTrialActive && (
+        {mounted && subscription?.isTrialActive && !isWaiter && !roleUnknown && (
           <>
             {/* Mobile: Fixed position to the left of menu button */}
             <div className="lg:hidden fixed top-4 right-[4.5rem] z-[60] flex items-center gap-1.5 px-2 py-1.5 bg-blue-500/20 border border-blue-400/30 rounded-lg">
@@ -318,7 +319,12 @@ export default function DashboardPage() {
       )}
 
       {/* Plan Status Banner - Only show for receivables free users (defer until mounted to avoid hydration mismatch) */}
-      {mounted && subscription && subscription.plan?.planId === 'receivables-free' && hasReceivablesAccess && (
+      {mounted &&
+        subscription &&
+        subscription.plan?.planId === 'receivables-free' &&
+        hasReceivablesAccess &&
+        !isWaiter &&
+        !roleUnknown && (
         <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-3 md:p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2 md:space-x-3">
@@ -457,6 +463,10 @@ export default function DashboardPage() {
       {/* Recent Activity / Recent Prompts - for waiters OR while role is unknown, only show waiter prompts area */}
       {isWaiter || roleUnknown ? (
         <div className="grid gap-6 grid-cols-1">
+          <WaiterTillClaimCard
+            canClaim={isWaiter && !roleUnknown}
+            roleLoadingMessage="Checking your role… You can claim till payments once this finishes."
+          />
           <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-white">Recent M-Pesa Prompts</h3>

@@ -63,6 +63,7 @@ export default function ProfileSettingsPage() {
   const { subscription } = useSubscription();
   const { update: updateSession } = useSession();
   const isAdmin = session?.user?.adminTag === true;
+  const isOrgWaiter = session?.user?.organizationRole === 'waiter';
   const [formData, setFormData] = useState<ProfileData>({
     name: '',
     email: '',
@@ -484,7 +485,8 @@ export default function ProfileSettingsPage() {
         </div>
       </form>
 
-      {/* Subscription Plan Section */}
+      {/* Subscription Plan Section — org waiters use the business subscription; hide quota/plan UI */}
+      {!isOrgWaiter && (
       <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 mb-8">
         <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
           <div className="flex items-center space-x-3">
@@ -605,6 +607,7 @@ export default function ProfileSettingsPage() {
           </div>
         )}
       </div>
+      )}
 
       {/* Profile Photo Section */}
       {!isGoogleUser && (

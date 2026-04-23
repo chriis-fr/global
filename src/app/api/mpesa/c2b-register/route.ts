@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { getOrganizationMpesaCredentialsDecrypted } from '@/app/actions/mpesa-org-actions';
 import { OrganizationService } from '@/lib/services/organizationService';
+import { isLocalhostUrl, resolvePublicBaseUrl } from '@/lib/utils/publicBaseUrl';
 
 /**
  * POST /api/mpesa/c2b-register
@@ -54,11 +55,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Consumer key/secret not configured' }, { status: 400 });
     }
 
-    // Derive base URL from the org's existing callback URL or env
-    const existingCallback = creds?.callbackUrl ?? process.env.NEXT_PUBLIC_DARAJA_CALLBACK_URL ?? '';
-    const baseUrl = existingCallback
-      ? existingCallback.replace(/\/api\/mpesa\/callback\/?$/, '')
-      : '';
+    // Derive base URL from explicit input, org callback, or public app URL env.
+    const existingCallback = String(creds?.callbackUrl ?? process.env.NEXT_PUBLIC_DARAJA_CALLBACK_URL ?? '').trim();
+    const orgBaseUrl = existingCallback ? existingCallback.replace(/\/api\/mpesa\/callback\/?$/, '') : '';
+    const fallbackBase = resolvePublicBaseUrl({ requestOrigin: req.nextUrl.origin });
+    const baseUrl = bodyConfirmUrl
+      ? ''
+      : orgBaseUrl || fallbackBase || '';
 
     if (!baseUrl && !bodyConfirmUrl) {
       return NextResponse.json({
@@ -69,6 +72,12 @@ export async function POST(req: NextRequest) {
 
     const confirmationUrl = bodyConfirmUrl || `${baseUrl}/api/mpesa/c2b-confirmation`;
     const validationUrl   = bodyValidUrl   || `${baseUrl}/api/mpesa/c2b-validation`;
+    if (process.env.NODE_ENV === 'production' && (isLocalhostUrl(confirmationUrl) || isLocalhostUrl(validationUrl))) {
+      return NextResponse.json(
+        { success: false, error: 'Production C2B callback URLs cannot be localhost.' },
+        { status: 400 }
+      );
+    }
 
     // Get OAuth token
     const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64');
