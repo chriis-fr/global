@@ -75,9 +75,10 @@ interface PayableFormData {
   };
   currency: string;
   paymentMethod: 'fiat' | 'crypto';
-  fiatPaymentSubtype?: 'bank' | 'mpesa_paybill' | 'mpesa_till';
+  fiatPaymentSubtype?: 'bank' | 'mpesa_paybill' | 'mpesa_till' | 'phone';
   paymentNetwork?: string;
   paymentAddress?: string;
+  paymentPhoneNumber?: string;
   bankName?: string;
   swiftCode?: string;
   bankCode?: string;
@@ -203,6 +204,7 @@ export default function CreatePayablePage() {
     currency: 'USD',
     paymentMethod: 'fiat',
     fiatPaymentSubtype: 'bank',
+    paymentPhoneNumber: '',
     enableMultiCurrency: false,
     payableType: 'regular',
     items: [{
@@ -1009,6 +1011,205 @@ export default function CreatePayablePage() {
                   </div>
                 </div>
               </div>
+
+              {formData.paymentMethod === 'fiat' && (
+                <div className="mt-6 space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Payment Details</label>
+                    <div className="space-y-2 text-gray-700">
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          value="bank"
+                          checked={formData.fiatPaymentSubtype === 'bank'}
+                          onChange={(e) => handleInputChange('fiatPaymentSubtype', e.target.value)}
+                          className="mr-2"
+                        />
+                        <CreditCard className="h-4 w-4 text-green-600 mr-2" />
+                        Bank Transfer
+                      </label>
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          value="phone"
+                          checked={formData.fiatPaymentSubtype === 'phone'}
+                          onChange={(e) => handleInputChange('fiatPaymentSubtype', e.target.value)}
+                          className="mr-2"
+                        />
+                        <CreditCard className="h-4 w-4 text-blue-600 mr-2" />
+                        Phone Number
+                      </label>
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          value="mpesa_paybill"
+                          checked={formData.fiatPaymentSubtype === 'mpesa_paybill'}
+                          onChange={(e) => handleInputChange('fiatPaymentSubtype', e.target.value)}
+                          className="mr-2"
+                        />
+                        <CreditCard className="h-4 w-4 text-orange-600 mr-2" />
+                        M-Pesa Paybill
+                      </label>
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          value="mpesa_till"
+                          checked={formData.fiatPaymentSubtype === 'mpesa_till'}
+                          onChange={(e) => handleInputChange('fiatPaymentSubtype', e.target.value)}
+                          className="mr-2"
+                        />
+                        <CreditCard className="h-4 w-4 text-orange-600 mr-2" />
+                        M-Pesa Till Number
+                      </label>
+                    </div>
+                  </div>
+
+                  {(!formData.fiatPaymentSubtype || formData.fiatPaymentSubtype === 'bank') && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Bank Name</label>
+                        <input
+                          type="text"
+                          value={formData.bankName || ''}
+                          onChange={(e) => handleInputChange('bankName', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="e.g. Equity Bank"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Account Name</label>
+                        <input
+                          type="text"
+                          value={formData.accountName || ''}
+                          onChange={(e) => handleInputChange('accountName', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Account holder name"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Account Number</label>
+                        <input
+                          type="text"
+                          value={formData.accountNumber || ''}
+                          onChange={(e) => handleInputChange('accountNumber', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Account number"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">SWIFT Code</label>
+                        <input
+                          type="text"
+                          value={formData.swiftCode || ''}
+                          onChange={(e) => handleInputChange('swiftCode', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Optional"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {formData.fiatPaymentSubtype === 'phone' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
+                        <input
+                          type="tel"
+                          value={formData.paymentPhoneNumber || ''}
+                          onChange={(e) => handleInputChange('paymentPhoneNumber', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="e.g. +254712345678"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Business Name (Optional)</label>
+                        <input
+                          type="text"
+                          value={formData.businessName || ''}
+                          onChange={(e) => handleInputChange('businessName', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Business name"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {formData.fiatPaymentSubtype === 'mpesa_paybill' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Paybill Number</label>
+                        <input
+                          type="text"
+                          value={formData.paybillNumber || ''}
+                          onChange={(e) => handleInputChange('paybillNumber', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="e.g. 400200"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Account Number</label>
+                        <input
+                          type="text"
+                          value={formData.mpesaAccountNumber || ''}
+                          onChange={(e) => handleInputChange('mpesaAccountNumber', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="M-Pesa account reference"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {formData.fiatPaymentSubtype === 'mpesa_till' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Till Number</label>
+                        <input
+                          type="text"
+                          value={formData.tillNumber || ''}
+                          onChange={(e) => handleInputChange('tillNumber', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Till number"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Business Name</label>
+                        <input
+                          type="text"
+                          value={formData.businessName || ''}
+                          onChange={(e) => handleInputChange('businessName', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Business name"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {formData.paymentMethod === 'crypto' && (
+                <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Network</label>
+                    <input
+                      type="text"
+                      value={formData.paymentNetwork || ''}
+                      onChange={(e) => handleInputChange('paymentNetwork', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="e.g. Ethereum, Tron, Solana"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Wallet Address</label>
+                    <input
+                      type="text"
+                      value={formData.paymentAddress || ''}
+                      onChange={(e) => handleInputChange('paymentAddress', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Recipient wallet address"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Memo */}

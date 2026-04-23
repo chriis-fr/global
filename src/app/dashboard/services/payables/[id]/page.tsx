@@ -50,8 +50,18 @@ interface Payable {
   vendorAddress?: Record<string, unknown>;
   currency: string;
   paymentMethod: string;
+  fiatPaymentSubtype?: 'bank' | 'mpesa_paybill' | 'mpesa_till' | 'phone';
   paymentNetwork?: string;
   paymentAddress?: string;
+  paymentPhoneNumber?: string;
+  bankName?: string;
+  accountName?: string;
+  accountNumber?: string;
+  swiftCode?: string;
+  paybillNumber?: string;
+  mpesaAccountNumber?: string;
+  tillNumber?: string;
+  businessName?: string;
   externalInvoiceNumber?: string | null;
   invoiceFileUrl?: string | null;
   vendorPaymentDetails?: Record<string, unknown> | null;
@@ -853,6 +863,84 @@ export default function PayableViewPage() {
                   <p className="text-sm text-gray-500">Payment Method</p>
                   <p className="font-medium text-gray-900 capitalize">{payable.paymentMethod}</p>
                 </div>
+
+                {payable.paymentMethod === 'fiat' && payable.fiatPaymentSubtype && (
+                  <div>
+                    <p className="text-sm text-gray-500">Fiat Type</p>
+                    <p className="font-medium text-gray-900 capitalize">
+                      {payable.fiatPaymentSubtype === 'mpesa_paybill'
+                        ? 'M-Pesa Paybill'
+                        : payable.fiatPaymentSubtype === 'mpesa_till'
+                          ? 'M-Pesa Till'
+                          : payable.fiatPaymentSubtype === 'phone'
+                            ? 'Phone Number'
+                            : 'Bank Transfer'}
+                    </p>
+                  </div>
+                )}
+
+                {payable.paymentPhoneNumber && (
+                  <div>
+                    <p className="text-sm text-gray-500">Phone Number</p>
+                    <p className="font-medium text-gray-900">{payable.paymentPhoneNumber}</p>
+                  </div>
+                )}
+
+                {payable.bankName && (
+                  <div>
+                    <p className="text-sm text-gray-500">Bank Name</p>
+                    <p className="font-medium text-gray-900">{payable.bankName}</p>
+                  </div>
+                )}
+
+                {payable.accountName && (
+                  <div>
+                    <p className="text-sm text-gray-500">Account Name</p>
+                    <p className="font-medium text-gray-900">{payable.accountName}</p>
+                  </div>
+                )}
+
+                {payable.accountNumber && (
+                  <div>
+                    <p className="text-sm text-gray-500">Account Number</p>
+                    <p className="font-medium text-gray-900">{payable.accountNumber}</p>
+                  </div>
+                )}
+
+                {payable.swiftCode && (
+                  <div>
+                    <p className="text-sm text-gray-500">SWIFT Code</p>
+                    <p className="font-medium text-gray-900">{payable.swiftCode}</p>
+                  </div>
+                )}
+
+                {payable.paybillNumber && (
+                  <div>
+                    <p className="text-sm text-gray-500">Paybill Number</p>
+                    <p className="font-medium text-gray-900">{payable.paybillNumber}</p>
+                  </div>
+                )}
+
+                {payable.mpesaAccountNumber && (
+                  <div>
+                    <p className="text-sm text-gray-500">M-Pesa Account Number</p>
+                    <p className="font-medium text-gray-900">{payable.mpesaAccountNumber}</p>
+                  </div>
+                )}
+
+                {payable.tillNumber && (
+                  <div>
+                    <p className="text-sm text-gray-500">Till Number</p>
+                    <p className="font-medium text-gray-900">{payable.tillNumber}</p>
+                  </div>
+                )}
+
+                {payable.businessName && (
+                  <div>
+                    <p className="text-sm text-gray-500">Business Name</p>
+                    <p className="font-medium text-gray-900">{payable.businessName}</p>
+                  </div>
+                )}
                 
                 {payable.paymentNetwork && (
                   <div>
