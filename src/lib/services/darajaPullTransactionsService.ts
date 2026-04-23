@@ -48,12 +48,6 @@ async function getDarajaAccessToken(opts: {
   const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64');
   const darajaBase = environment === 'production' ? DARAJA_PRODUCTION_BASE : DARAJA_SANDBOX_BASE;
 
-  console.log('[Daraja Pull] OAuth request:', {
-    environment,
-    url: `https://${darajaBase}/oauth/v1/generate?grant_type=client_credentials`,
-    auth: 'Basic ***',
-  });
-
   const tokenRes = await fetch(
     `https://${darajaBase}/oauth/v1/generate?grant_type=client_credentials`,
     { headers: { Authorization: `Basic ${auth}` } }
@@ -66,14 +60,6 @@ async function getDarajaAccessToken(opts: {
     tokenData = {};
   }
   const token = typeof tokenData.access_token === 'string' ? tokenData.access_token.trim() : '';
-  console.log('[Daraja Pull] OAuth response:', {
-    status: tokenRes.status,
-    ok: tokenRes.ok,
-    bodySnippet: tokenRaw.slice(0, 500),
-    accessTokenMeta: token
-      ? { length: token.length, head: `${token.slice(0, 4)}***${token.slice(-4)}` }
-      : null,
-  });
   if (!tokenRes.ok || !token) {
     throw new Error('Failed to get Daraja access token');
   }
@@ -116,12 +102,6 @@ export async function registerPullTransactions(input: {
     CallBackURL: input.callbackUrl,
   };
 
-  console.log('[Daraja Pull] Register request:', {
-    environment,
-    url: `https://${darajaBase}/pulltransactions/v1/register`,
-    payload,
-  });
-
   const res = await fetch(`https://${darajaBase}/pulltransactions/v1/register`, {
     method: 'POST',
     headers: {
@@ -140,12 +120,6 @@ export async function registerPullTransactions(input: {
   } catch {
     data = { raw };
   }
-
-  console.log('[Daraja Pull] Register response:', {
-    status: res.status,
-    ok: res.ok,
-    body: data,
-  });
 
   if (!res.ok) {
     const desc = data.ResponseDescription;
@@ -240,12 +214,6 @@ export async function queryPullTransactionsAndIngest(input: {
       OffSetValue: String(offset),
     };
 
-    console.log('[Daraja Pull] Query request:', {
-      environment,
-      url: `https://${darajaBase}/pulltransactions/v1/query`,
-      payload,
-    });
-
     const res = await fetch(`https://${darajaBase}/pulltransactions/v1/query`, {
       method: 'POST',
       headers: {
@@ -266,16 +234,6 @@ export async function queryPullTransactionsAndIngest(input: {
     }
 
     const rows = (data.Response ?? []).flat().filter(Boolean) as PulledTransaction[];
-
-    console.log('[Daraja Pull] Query response:', {
-      status: res.status,
-      ok: res.ok,
-      offset,
-      fetchedRows: rows.length,
-      responseCode: data.ResponseCode,
-      responseMessage: data.ResponseMessage,
-      bodySnippet: raw.slice(0, 1500),
-    });
 
     if (!res.ok) {
       const errMsg = data.ResponseMessage;
@@ -362,12 +320,6 @@ export async function queryPullTransactionsAndIngest(input: {
   }
   const rows = [...byId.values()];
 
-  console.log('[Daraja Pull] Aggregation summary:', {
-    segmented: useSegments,
-    totalRawRows: combinedRows.length,
-    uniqueRows: rows.length,
-    range: { start: fmtDarajaDate(start), end: fmtDarajaDate(end) },
-  });
   const db = await connectToDatabase();
   const sessionsCol = db.collection('mpesa_stk_sessions');
   const reconCol = db.collection<ReconTransaction>('recon_transactions');
